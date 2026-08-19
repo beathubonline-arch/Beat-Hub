@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -42,7 +43,7 @@ def signup_submit(
     agree_terms: str = Form(None),
 ):
     def error(msg: str):
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(request,
             "signup.html",
             {"request": request, "error": msg, "current_user": None, "current_year": datetime.utcnow().year},
             status_code=400,
@@ -68,7 +69,17 @@ def signup_submit(
         role=user_role,
     )
     db.add(user)
-    db.flush()
+
+    try:
+        db.flush()
+    except IntegrityError:
+        # Race condition: another request inserted this email between our
+        # SELECT check above and this INSERT. Roll back so the session/
+        # connection isn't left in an aborted-transaction state for the
+        # next request that reuses it, then show a normal error instead
+        # of crashing to the global 500 handler.
+        db.rollback()
+        return error("An account with this email already exists.")
 
     # Every account gets a public profile (buyers can still be discoverable
     # if they later start uploading; producers need it immediately).
@@ -87,7 +98,12 @@ def signup_submit(
         is_producer=(user_role == UserRole.CREATOR),
     )
     db.add(profile)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return error("Could not create account. Please try again.")
 
     token = create_access_token(subject=user.id)
     response = RedirectResponse(url="/?success=Account created. Welcome to BeatHub!", status_code=303)
@@ -114,7 +130,7 @@ def login_submit(
     password: str = Form(...),
 ):
     def error(msg: str):
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(request,
             "login.html",
             {"request": request, "error": msg, "current_user": None, "current_year": datetime.utcnow().year},
             status_code=401,
@@ -166,7 +182,7 @@ def logout_get(request: Request):
 
 @router.get("/forgot-password")
 def forgot_password_page(request: Request):
-    return templates.TemplateResponse(request, 
+    return templates.TemplateResponse(request,
         "forgot_password.html", {"request": request, "current_user": None, "current_year": datetime.utcnow().year}
     )
 
@@ -188,7 +204,7 @@ def forgot_password_submit(request: Request, db: Session = Depends(get_db), emai
         reset_link = f"/reset-password?token={token}"
         print(f"[BeatHub] Password reset link for {email_norm}: {reset_link}")
 
-    return templates.TemplateResponse(request, 
+    return templates.TemplateResponse(request,
         "forgot_password.html",
         {
             "request": request,
@@ -203,7 +219,7 @@ def forgot_password_submit(request: Request, db: Session = Depends(get_db), emai
 def reset_password_page(request: Request, token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.reset_token == token).first()
     valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
-    return templates.TemplateResponse(request, 
+    return templates.TemplateResponse(request,
         "reset_password.html",
         {"request": request, "current_user": None, "current_year": datetime.utcnow().year, "token": token, "valid": valid},
     )
@@ -221,7 +237,7 @@ def reset_password_submit(
     valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
 
     if not valid:
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(request,
             "reset_password.html",
             {"request": request, "current_user": None, "current_year": datetime.utcnow().year, "token": token, "valid": False,
              "error": "This reset link is invalid or has expired."},
@@ -229,7 +245,7 @@ def reset_password_submit(
         )
 
     if len(password) < 8 or password != confirm_password:
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(request,
             "reset_password.html",
             {"request": request, "current_user": None, "current_year": datetime.utcnow().year, "token": token, "valid": True,
              "error": "Passwords must match and be at least 8 characters."},
