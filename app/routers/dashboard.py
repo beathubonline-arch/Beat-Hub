@@ -3,10 +3,19 @@ from decimal import Decimal, InvalidOperation
 import os
 import re
 import uuid
-from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+import boto3
+from botocore.exceptions import ClientError
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -20,9 +29,100 @@ from app.models.order import Order, OrderStatus
 from app.models.user import User
 from app.utils.deps import require_creator
 
-router = APIRouter(tags=["dashboard"])
-templates = Jinja2Templates(directory="app/templates")
 
+router = APIRouter(tags=["dashboard"])
+
+templates = Jinja2Templates(
+    directory="app/templates"
+)
+
+
+# ----------------------------------------------------------------------
+# R2
+# ----------------------------------------------------------------------
+
+def get_r2_client():
+    if not settings.r2_enabled:
+        raise RuntimeError(
+            "Cloudflare R2 is not configured."
+        )
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.r2_endpoint_url,
+        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+        region_name="auto",
+    )
+
+
+def upload_to_r2(
+    upload: UploadFile,
+    key: str,
+    content_type: Optional[str] = None,
+):
+    client = get_r2_client()
+
+    upload.file.seek(0)
+
+    extra_args = {}
+
+    if content_type:
+        extra_args["ContentType"] = content_type
+
+    client.upload_fileobj(
+        upload.file,
+        settings.R2_BUCKET_NAME,
+        key,
+        ExtraArgs=extra_args or None,
+    )
+
+
+def r2_key(path: Optional[str]) -> Optional[str]:
+    if not path:
+        return None
+
+    value = str(path).strip()
+
+    if value.startswith("r2://"):
+        parts = value[5:].split("/", 1)
+
+        if len(parts) == 2:
+            return parts[1]
+
+    return value.lstrip("/")
+
+
+def r2_presigned_url(
+    path: Optional[str],
+) -> Optional[str]:
+    key = r2_key(path)
+
+    if not key:
+        return None
+
+    if settings.R2_PUBLIC_URL:
+        return (
+            settings.R2_PUBLIC_URL.rstrip("/")
+            + "/"
+            + key
+        )
+
+    client = get_r2_client()
+
+    return client.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.R2_BUCKET_NAME,
+            "Key": key,
+        },
+        ExpiresIn=settings.R2_PUBLIC_URL_EXPIRES,
+    )
+
+
+# ----------------------------------------------------------------------
+# CONTEXT
+# ----------------------------------------------------------------------
 
 def ctx(request: Request, current_user, **extra):
     data = {
@@ -30,7 +130,9 @@ def ctx(request: Request, current_user, **extra):
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
+
     data.update(extra)
+
     return data
 
 
@@ -40,67 +142,62 @@ def ctx(request: Request, current_user, **extra):
 
 def safe_filename(filename: str) -> str:
     filename = os.path.basename(filename or "")
-    filename = re.sub(r"[^a-zA-Z0-9._-]+", "_", filename)
+    filename = re.sub(
+        r"[^a-zA-Z0-9.\_-]+",
+        "_",
+        filename,
+    )
+
     return filename or "upload"
 
 
 def make_slug(value: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip()).strip("-").lower()
+    slug = re.sub(
+        r"[^a-zA-Z0-9]+",
+        "-",
+        value.strip(),
+    ).strip("-").lower()
+
     return slug or f"track-{uuid.uuid4().hex[:8]}"
 
 
-def unique_track_slug(db: Session, title: str) -> str:
+def unique_track_slug(
+    db: Session,
+    title: str,
+) -> str:
     base = make_slug(title)
     slug = base
     number = 2
 
-    while db.query(Track).filter(Track.slug == slug).first():
+    while db.query(Track).filter(
+        Track.slug == slug
+    ).first():
         slug = f"{base}-{number}"
         number += 1
 
     return slug
 
 
-def ensure_media_dirs():
-    root = Path(settings.MEDIA_ROOT)
-
-    audio_dir = root / "audio"
-    preview_dir = root / "previews"
-    cover_dir = root / "covers"
-
-    audio_dir.mkdir(parents=True, exist_ok=True)
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    cover_dir.mkdir(parents=True, exist_ok=True)
-
-    return audio_dir, preview_dir, cover_dir
-
-
-async def save_upload(upload: UploadFile, destination: Path) -> str:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    with destination.open("wb") as output:
-        while True:
-            chunk = await upload.read(1024 * 1024)
-            if not chunk:
-                break
-            output.write(chunk)
-
-    await upload.close()
-    return str(destination)
-
-
 def extension(filename: str) -> str:
-    return Path(filename or "").suffix.lower()
+    return os.path.splitext(
+        filename or ""
+    )[1].lower()
 
 
 # ----------------------------------------------------------------------
 # STATS
 # ----------------------------------------------------------------------
 
-def get_stats(db: Session, profile_id: str):
+def get_stats(
+    db: Session,
+    profile_id: str,
+):
     completed_orders = (
         db.query(Order)
-        .join(Track, Order.track_id == Track.id)
+        .join(
+            Track,
+            Order.track_id == Track.id,
+        )
         .filter(
             Track.creator_profile_id == profile_id,
             Order.status == OrderStatus.COMPLETED,
@@ -112,33 +209,55 @@ def get_stats(db: Session, profile_id: str):
     total_sales = len(completed_orders)
 
     gross = sum(
-        (Decimal(str(o.gross_amount or 0)) for o in completed_orders),
+        (
+            Decimal(str(o.gross_amount or 0))
+            for o in completed_orders
+        ),
         Decimal("0"),
     )
 
     commission = sum(
-        (Decimal(str(o.commission_amount or 0)) for o in completed_orders),
+        (
+            Decimal(str(o.commission_amount or 0))
+            for o in completed_orders
+        ),
         Decimal("0"),
     )
 
     net = sum(
-        (Decimal(str(o.net_amount or 0)) for o in completed_orders),
+        (
+            Decimal(str(o.net_amount or 0))
+            for o in completed_orders
+        ),
         Decimal("0"),
     )
 
     paid_withdrawals = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
+        db.query(
+            func.coalesce(
+                func.sum(WithdrawalRequest.amount),
+                0,
+            )
+        )
         .filter(
-            WithdrawalRequest.creator_profile_id == profile_id,
-            WithdrawalRequest.status == WithdrawalStatus.PAID,
+            WithdrawalRequest.creator_profile_id
+            == profile_id,
+            WithdrawalRequest.status
+            == WithdrawalStatus.PAID,
         )
         .scalar()
     )
 
     pending_withdrawals = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
+        db.query(
+            func.coalesce(
+                func.sum(WithdrawalRequest.amount),
+                0,
+            )
+        )
         .filter(
-            WithdrawalRequest.creator_profile_id == profile_id,
+            WithdrawalRequest.creator_profile_id
+            == profile_id,
             WithdrawalRequest.status.in_(
                 [
                     WithdrawalStatus.PENDING,
@@ -150,10 +269,19 @@ def get_stats(db: Session, profile_id: str):
         .scalar()
     )
 
-    paid_withdrawals = Decimal(str(paid_withdrawals or 0))
-    pending_withdrawals = Decimal(str(pending_withdrawals or 0))
+    paid_withdrawals = Decimal(
+        str(paid_withdrawals or 0)
+    )
 
-    available_balance = net - paid_withdrawals - pending_withdrawals
+    pending_withdrawals = Decimal(
+        str(pending_withdrawals or 0)
+    )
+
+    available_balance = (
+        net
+        - paid_withdrawals
+        - pending_withdrawals
+    )
 
     if available_balance < 0:
         available_balance = Decimal("0")
@@ -190,23 +318,28 @@ def dashboard_home(
             status_code=303,
         )
 
-    stats = get_stats(db, profile.id)
+    stats = get_stats(
+        db,
+        profile.id,
+    )
 
     track_count = (
         db.query(Track)
-        .filter(Track.creator_profile_id == profile.id)
+        .filter(
+            Track.creator_profile_id
+            == profile.id
+        )
         .count()
     )
 
     album_count = (
         db.query(Album)
-        .filter(Album.creator_profile_id == profile.id)
+        .filter(
+            Album.creator_profile_id
+            == profile.id
+        )
         .count()
     )
-
-    # --------------------------------------------------------------
-    # Dashboard track browser / search / pagination
-    # --------------------------------------------------------------
 
     try:
         page = int(page)
@@ -220,13 +353,17 @@ def dashboard_home(
 
     tracks_query = (
         db.query(Track)
-        .filter(Track.creator_profile_id == profile.id)
+        .filter(
+            Track.creator_profile_id
+            == profile.id
+        )
     )
 
     q = (q or "").strip()
 
     if q:
         search_term = f"%{q}%"
+
         tracks_query = tracks_query.filter(
             Track.title.ilike(search_term)
             | Track.genre.ilike(search_term)
@@ -237,32 +374,58 @@ def dashboard_home(
 
     track_total_pages = max(
         1,
-        (track_total + track_per_page - 1) // track_per_page,
+        (
+            track_total
+            + track_per_page
+            - 1
+        )
+        // track_per_page,
     )
 
     if page > track_total_pages:
         page = track_total_pages
 
-    track_offset = (page - 1) * track_per_page
+    track_offset = (
+        page - 1
+    ) * track_per_page
 
     tracks = (
         tracks_query
-        .order_by(Track.created_at.desc())
+        .order_by(
+            Track.created_at.desc()
+        )
         .offset(track_offset)
         .limit(track_per_page)
         .all()
     )
 
-    # Keep all pagination/search values available to the existing
-    # dashboard template.
+    # Generate temporary R2 URLs for dashboard artwork.
+    for track in tracks:
+        if track.cover_art_path:
+            try:
+                track.cover_art_path = (
+                    r2_presigned_url(
+                        track.cover_art_path
+                    )
+                )
+            except Exception:
+                pass
+
     track_page = page
     track_search = q
     track_total_count = track_total
-    track_start = track_offset + 1 if track_total else 0
-    track_end = min(track_offset + len(tracks), track_total)
+    track_start = (
+        track_offset + 1
+        if track_total
+        else 0
+    )
+    track_end = min(
+        track_offset + len(tracks),
+        track_total,
+    )
 
     youtube_url = (
-        f"https://www.youtube.com/channel/"
+        "https://www.youtube.com/channel/"
         f"{settings.YOUTUBE_CHANNEL_ID}"
     )
 
@@ -279,8 +442,6 @@ def dashboard_home(
             track_count=track_count,
             album_count=album_count,
             tracks=tracks,
-
-            # Existing dashboard pagination/search variables
             track_page=track_page,
             track_total_pages=track_total_pages,
             track_total=track_total,
@@ -290,7 +451,6 @@ def dashboard_home(
             track_start=track_start,
             track_end=track_end,
             q=q,
-
             youtube_url=youtube_url,
             discord_url=settings.DISCORD_INVITE_URL,
             store_url=store_url,
@@ -323,7 +483,6 @@ async def upload_tracks(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
-
     titles: List[str] = Form(...),
     descriptions: List[str] = Form(default=[]),
     genres: List[str] = Form(default=[]),
@@ -331,9 +490,10 @@ async def upload_tracks(
     tags_list: List[str] = Form(default=[]),
     prices: List[str] = Form(...),
     sales_models: List[str] = Form(default=[]),
-
     audio_files: List[UploadFile] = File(...),
-    cover_files: List[Optional[UploadFile]] = File(default=[]),
+    cover_files: List[Optional[UploadFile]] = File(
+        default=[]
+    ),
 ):
     profile = user.profile
 
@@ -347,6 +507,21 @@ async def upload_tracks(
                 error="Creator profile not found.",
             ),
             status_code=400,
+        )
+
+    if not settings.r2_enabled:
+        return templates.TemplateResponse(
+            request,
+            "upload_track.html",
+            ctx(
+                request,
+                user,
+                error=(
+                    "Cloud storage is not configured. "
+                    "Please configure Cloudflare R2."
+                ),
+            ),
+            status_code=500,
         )
 
     count = len(titles)
@@ -375,8 +550,6 @@ async def upload_tracks(
             status_code=400,
         )
 
-    audio_dir, _, cover_dir = ensure_media_dirs()
-
     created_tracks = []
 
     try:
@@ -395,7 +568,9 @@ async def upload_tracks(
                     f"Track {index + 1}: audio file is required."
                 )
 
-            audio_ext = extension(audio.filename)
+            audio_ext = extension(
+                audio.filename
+            )
 
             if audio_ext not in {
                 ".mp3",
@@ -411,7 +586,10 @@ async def upload_tracks(
                 price_value = Decimal(
                     prices[index].strip()
                 )
-            except (InvalidOperation, ValueError):
+            except (
+                InvalidOperation,
+                ValueError,
+            ):
                 raise ValueError(
                     f"Track {index + 1}: invalid price."
                 )
@@ -422,7 +600,9 @@ async def upload_tracks(
                 )
 
             sales_value = (
-                sales_models[index].strip().lower()
+                sales_models[index]
+                .strip()
+                .lower()
                 if index < len(sales_models)
                 else "non_exclusive"
             )
@@ -435,23 +615,48 @@ async def upload_tracks(
 
             bpm_value = None
 
-            if index < len(bpms) and bpms[index].strip():
+            if (
+                index < len(bpms)
+                and bpms[index].strip()
+            ):
                 try:
-                    bpm_value = int(bpms[index].strip())
+                    bpm_value = int(
+                        bpms[index].strip()
+                    )
                 except ValueError:
                     raise ValueError(
                         f"Track {index + 1}: BPM must be a number."
                     )
 
             track_id = str(uuid.uuid4())
-            slug = unique_track_slug(db, title)
 
-            audio_path = audio_dir / f"{track_id}{audio_ext}"
-
-            await save_upload(
-                audio,
-                audio_path,
+            slug = unique_track_slug(
+                db,
+                title,
             )
+
+            # ------------------------------------------------------
+            # R2 AUDIO KEY
+            # ------------------------------------------------------
+
+            audio_key = (
+                f"audio/{track_id}{audio_ext}"
+            )
+
+            content_type = (
+                audio.content_type
+                or "application/octet-stream"
+            )
+
+            upload_to_r2(
+                audio,
+                audio_key,
+                content_type,
+            )
+
+            # ------------------------------------------------------
+            # R2 COVER
+            # ------------------------------------------------------
 
             cover_path = None
 
@@ -462,7 +667,9 @@ async def upload_tracks(
             )
 
             if cover and cover.filename:
-                cover_ext = extension(cover.filename)
+                cover_ext = extension(
+                    cover.filename
+                )
 
                 if cover_ext not in {
                     ".jpg",
@@ -474,16 +681,18 @@ async def upload_tracks(
                         f"Track {index + 1}: unsupported cover-art format."
                     )
 
-                cover_path_disk = (
-                    cover_dir / f"{track_id}{cover_ext}"
+                cover_key = (
+                    f"covers/{track_id}{cover_ext}"
                 )
 
-                await save_upload(
+                upload_to_r2(
                     cover,
-                    cover_path_disk,
+                    cover_key,
+                    cover.content_type
+                    or "application/octet-stream",
                 )
 
-                cover_path = str(cover_path_disk)
+                cover_path = f"r2://{settings.R2_BUCKET_NAME}/{cover_key}"
 
             description = (
                 descriptions[index].strip()
@@ -508,12 +717,16 @@ async def upload_tracks(
                 creator_profile_id=profile.id,
                 title=title,
                 slug=slug,
-                description=description or None,
+                description=(
+                    description or None
+                ),
                 genre=genre or None,
                 bpm=bpm_value,
                 tags=tags or None,
                 cover_art_path=cover_path,
-                audio_file_path=str(audio_path),
+                audio_file_path=(
+                    f"r2://{settings.R2_BUCKET_NAME}/{audio_key}"
+                ),
                 preview_file_path=None,
                 price=price_value,
                 sales_model=(
@@ -574,8 +787,13 @@ def new_album_page(
 
     tracks = (
         db.query(Track)
-        .filter(Track.creator_profile_id == profile.id)
-        .order_by(Track.created_at.desc())
+        .filter(
+            Track.creator_profile_id
+            == profile.id
+        )
+        .order_by(
+            Track.created_at.desc()
+        )
         .all()
     )
 
@@ -609,12 +827,26 @@ async def create_album(
             status_code=303,
         )
 
+    if not settings.r2_enabled:
+        return RedirectResponse(
+            url=(
+                "/dashboard?"
+                "error=Cloud storage is not configured."
+            ),
+            status_code=303,
+        )
+
     title = title.strip()
 
     existing_tracks = (
         db.query(Track)
-        .filter(Track.creator_profile_id == profile.id)
-        .order_by(Track.created_at.desc())
+        .filter(
+            Track.creator_profile_id
+            == profile.id
+        )
+        .order_by(
+            Track.created_at.desc()
+        )
         .all()
     )
 
@@ -647,7 +879,8 @@ async def create_album(
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id == profile.id,
+            Track.creator_profile_id
+            == profile.id,
             Track.id.in_(track_ids),
         )
         .all()
@@ -670,7 +903,9 @@ async def create_album(
     slug = base_slug
     suffix = 2
 
-    while db.query(Album).filter(Album.slug == slug).first():
+    while db.query(Album).filter(
+        Album.slug == slug
+    ).first():
         slug = f"{base_slug}-{suffix}"
         suffix += 1
 
@@ -678,7 +913,9 @@ async def create_album(
 
     try:
         if artwork and artwork.filename:
-            artwork_ext = extension(artwork.filename)
+            artwork_ext = extension(
+                artwork.filename
+            )
 
             if artwork_ext not in {
                 ".jpg",
@@ -690,25 +927,33 @@ async def create_album(
                     "Unsupported album artwork format."
                 )
 
-            _, _, cover_dir = ensure_media_dirs()
-
-            artwork_disk_path = (
-                cover_dir / f"{uuid.uuid4()}{artwork_ext}"
+            artwork_key = (
+                f"covers/albums/"
+                f"{uuid.uuid4()}{artwork_ext}"
             )
 
-            await save_upload(
+            upload_to_r2(
                 artwork,
-                artwork_disk_path,
+                artwork_key,
+                artwork.content_type
+                or "application/octet-stream",
             )
 
-            artwork_path = str(artwork_disk_path)
+            artwork_path = (
+                f"r2://"
+                f"{settings.R2_BUCKET_NAME}/"
+                f"{artwork_key}"
+            )
 
         album = Album(
             id=str(uuid.uuid4()),
             creator_profile_id=profile.id,
             title=title,
             slug=slug,
-            description=description.strip() or None,
+            description=(
+                description.strip()
+                or None
+            ),
             genre=genre.strip() or None,
             artwork_path=artwork_path,
             is_published=True,
@@ -717,9 +962,14 @@ async def create_album(
         db.add(album)
         db.flush()
 
-        track_map = {track.id: track for track in tracks}
+        track_map = {
+            track.id: track
+            for track in tracks
+        }
 
-        for position, track_id in enumerate(track_ids):
+        for position, track_id in enumerate(
+            track_ids
+        ):
             track = track_map.get(track_id)
 
             if track:
@@ -744,7 +994,9 @@ async def create_album(
                 request,
                 user,
                 tracks=existing_tracks,
-                error=f"Album creation failed: {str(exc)}",
+                error=(
+                    f"Album creation failed: {str(exc)}"
+                ),
             ),
             status_code=400,
         )
@@ -789,7 +1041,10 @@ def request_withdrawal(
             status_code=303,
         )
 
-    stats = get_stats(db, profile.id)
+    stats = get_stats(
+        db,
+        profile.id,
+    )
 
     if amount_value > stats["available_balance"]:
         return RedirectResponse(
