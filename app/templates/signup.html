@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Join BeatHub{% endblock %}
+{% block content %}
+<div class="form-page">
+  <div class="form-card">
+    <div class="brand">BEAT<span class="hub">HUB</span></div>
+    <h2>Create your account</h2>
+    <p class="subtitle">Join BeatHub and start sharing your beats, building your audience and earning from your music.</p>
+
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+    <form action="/signup" method="post">
+      <div class="field">
+        <label>Your Producer / Stage Name</label>
+        <input type="text" name="stage_name" placeholder="e.g. Mr Mapema" required autofocus>
+      </div>
+      <div class="field">
+        <label>Email Address</label>
+        <input type="email" name="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="At least 8 characters" minlength="8" required>
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <input type="password" name="confirm_password" placeholder="Repeat your password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label>Account Type</label>
+        <select name="role">
+          <option value="buyer">Buyer / Artist — I want to purchase music</option>
+          <option value="creator">Producer / Artist / DJ — I want to sell music</option>
+        </select>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="terms" name="agree_terms" required>
+        <label for="terms" style="margin:0;text-transform:none;">I agree to the <a href="/terms">Terms &amp; Conditions</a>.</label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Create account</button>
+    </form>
+    <p class="sub" style="margin-top:18px;">
+      Already have an account? <a href="/login" style="color:var(--gold);">Login</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

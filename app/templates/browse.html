@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ title or 'Browse Beats' }} — BeatHub{% endblock %}
+{% block content %}
+<section style="padding: 40px 0;">
+  <h1 style="font-size: 30px;">{{ title or 'Browse Beats' }}</h1>
+  <div class="results-grid" style="margin-top: 20px;">
+    {% for track in tracks %}
+      <a href="/track/{{ track.slug }}" class="result-card">
+        <div class="kind">{{ track.genre or 'Beat' }}</div>
+        <div class="title">{{ track.title }}</div>
+        <div class="sub">{{ track.creator_profile.stage_name }} &middot; KSh {{ '%.0f'|format(track.price) }}</div>
+        <div style="margin-top:8px;">
+          {% if track.sales_model.value == 'exclusive' %}
+            {% if track.is_sold %}
+              <span class="badge badge-sold">SOLD</span>
+            {% else %}
+              <span class="badge badge-exclusive">EXCLUSIVE</span>
+            {% endif %}
+          {% else %}
+            <span class="badge badge-nonexclusive">NON-EXCLUSIVE</span>
+          {% endif %}
+        </div>
+      </a>
+    {% else %}
+      <p class="sub">No beats published yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

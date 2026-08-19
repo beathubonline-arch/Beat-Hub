@@ -1,0 +1,44 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<h1 style="font-size: 26px;">Platform Overview</h1>
+
+<div class="dashboard-grid">
+  <div class="stat-card"><div class="label">Total Sales Volume</div><div class="value">KSh {{ '%.2f'|format(total_sales_volume) }}</div></div>
+  <div class="stat-card"><div class="label">BeatHub Commission</div><div class="value gold">KSh {{ '%.2f'|format(total_commission) }}</div></div>
+  <div class="stat-card"><div class="label">Creator Earnings</div><div class="value teal">KSh {{ '%.2f'|format(total_creator_earnings) }}</div></div>
+  <div class="stat-card"><div class="label">Successful Txns</div><div class="value">{{ successful }}</div></div>
+  <div class="stat-card"><div class="label">Pending Txns</div><div class="value">{{ pending }}</div></div>
+  <div class="stat-card"><div class="label">Failed Txns</div><div class="value">{{ failed }}</div></div>
+  <div class="stat-card"><div class="label">Pending Withdrawals</div><div class="value">{{ pending_withdrawals }}</div></div>
+</div>
+
+<h2 style="font-size: 20px; margin-top: 30px;">Recent Orders</h2>
+<table class="data-table">
+  <thead><tr><th>Order</th><th>Status</th><th>Gross</th><th>Date</th></tr></thead>
+  <tbody>
+    {% for o in recent_orders %}
+      <tr><td>{{ o.order_number }}</td><td>{{ o.status.value }}</td><td>KSh {{ '%.2f'|format(o.gross_amount) }}</td><td>{{ o.created_at.strftime('%d %b %Y %H:%M') }}</td></tr>
+    {% else %}<tr><td colspan="4" class="sub">No orders yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2 style="font-size: 20px; margin-top: 30px;">Recent Users</h2>
+<table class="data-table">
+  <thead><tr><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
+  <tbody>
+    {% for u in recent_users %}
+      <tr><td>{{ u.email }}</td><td>{{ u.role.value }}</td><td>{{ u.created_at.strftime('%d %b %Y') }}</td></tr>
+    {% else %}<tr><td colspan="3" class="sub">No users yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2 style="font-size: 20px; margin-top: 30px;">Recent Failed M-Pesa Transactions</h2>
+<table class="data-table">
+  <thead><tr><th>Checkout Ref</th><th>Status</th><th>Result</th></tr></thead>
+  <tbody>
+    {% for p in failed_payments %}
+      <tr><td>{{ p.checkout_request_id }}</td><td>{{ p.status.value }}</td><td>{{ p.result_desc or '' }}</td></tr>
+    {% else %}<tr><td colspan="3" class="sub">No failed transactions.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

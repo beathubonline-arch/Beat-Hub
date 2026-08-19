@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; gap:30px; padding: 30px 0;">
+  <aside style="width:200px; flex-shrink:0;">
+    <div class="eyebrow" style="margin-bottom:14px;">ADMIN</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <a href="/admin" class="btn btn-outline" style="text-align:left;">Overview</a>
+      <a href="/admin/users" class="btn btn-outline" style="text-align:left;">Users</a>
+      <a href="/admin/content" class="btn btn-outline" style="text-align:left;">Content</a>
+      <a href="/admin/sales" class="btn btn-outline" style="text-align:left;">Sales</a>
+      <a href="/admin/withdrawals" class="btn btn-outline" style="text-align:left;">Withdrawals</a>
+    </div>
+  </aside>
+  <main style="flex:1; min-width:0;">
+    {% block admin_content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

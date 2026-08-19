@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }} — BeatHub{% endblock %}
+{% block content %}
+<div class="form-page">
+  <div class="form-card" id="status-card">
+    <h2>Order {{ order.order_number }}</h2>
+    <p class="subtitle">Check your phone and enter your M-Pesa PIN to complete payment.</p>
+
+    <div class="stat-card" style="margin-top:10px;">
+      <div class="label">Status</div>
+      <div class="value" id="status-value" style="text-transform:uppercase;">{{ order.status.value }}</div>
+    </div>
+
+    <p class="sub" style="margin-top:20px;" id="status-message">
+      {% if order.status.value == 'pending' %}
+        Waiting for payment confirmation...
+      {% elif order.status.value == 'completed' %}
+        Payment confirmed! Your purchase is ready.
+      {% elif order.status.value == 'failed' %}
+        Payment was not completed. You can try again.
+      {% elif order.status.value == 'rejected' %}
+        This item was sold to another buyer moments before your payment confirmed. Contact support for a refund.
+      {% endif %}
+    </p>
+
+    {% if order.status.value == 'completed' and order.track %}
+      <a href="/track/{{ order.track.slug }}" class="btn btn-primary btn-block" style="margin-top:16px;">View your purchase</a>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  const orderId = "{{ order.id }}";
+  const currentStatus = "{{ order.status.value }}";
+
+  if (currentStatus === "pending") {
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status !== "pending") {
+          window.location.reload();
+          clearInterval(poll);
+        }
+      } catch (e) { /* keep polling silently */ }
+    }, 3000);
+  }
+</script>
+{% endblock %}

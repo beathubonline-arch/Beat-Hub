@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.stage_name }} — BeatHub{% endblock %}
+{% block content %}
+<section style="padding: 40px 0;">
+  <div class="eyebrow">
+    {% if profile.is_producer %}PRODUCER{% endif %}
+    {% if profile.is_dj %} &middot; DJ{% endif %}
+    {% if profile.is_artist %} &middot; ARTIST{% endif %}
+  </div>
+  <h1 style="font-size: 36px; margin: 6px 0;">{{ profile.stage_name }}</h1>
+  {% if profile.bio %}<p class="sub" style="color: var(--text-muted); max-width: 600px; line-height:1.6;">{{ profile.bio }}</p>{% endif %}
+
+  <h2 style="font-size: 20px; margin-top: 36px;">Beats &amp; Tracks</h2>
+  <div class="results-grid">
+    {% for track in tracks %}
+      <a href="/track/{{ track.slug }}" class="result-card">
+        <div class="title">{{ track.title }}</div>
+        <div class="sub">KSh {{ '%.0f'|format(track.price) }}</div>
+      </a>
+    {% else %}
+      <p class="sub">No tracks published yet.</p>
+    {% endfor %}
+  </div>
+
+  <h2 style="font-size: 20px; margin-top: 36px;">Albums</h2>
+  <div class="results-grid">
+    {% for album in albums %}
+      <a href="/album/{{ album.slug }}" class="result-card">
+        <div class="title">{{ album.title }}</div>
+      </a>
+    {% else %}
+      <p class="sub">No albums published yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<h1 style="font-size: 26px;">Withdrawal Requests</h1>
+
+<table class="data-table">
+  <thead><tr><th>Creator</th><th>Amount</th><th>Phone</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for w in withdrawals %}
+      <tr>
+        <td>{{ w.creator_profile.stage_name }}</td>
+        <td>KSh {{ '%.2f'|format(w.amount) }}</td>
+        <td>{{ w.phone_number }}</td>
+        <td>{{ w.status.value }}</td>
+        <td>{{ w.created_at.strftime('%d %b %Y') }}</td>
+        <td>
+          {% if w.status.value in ['pending', 'approved', 'processing'] %}
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              {% if w.status.value == 'pending' %}
+                <form action="/admin/withdrawals/{{ w.id }}/update" method="post"><input type="hidden" name="action" value="approve"><button class="btn btn-outline">Approve</button></form>
+                <form action="/admin/withdrawals/{{ w.id }}/update" method="post"><input type="hidden" name="action" value="reject"><button class="btn btn-outline">Reject</button></form>
+              {% elif w.status.value == 'approved' %}
+                <form action="/admin/withdrawals/{{ w.id }}/update" method="post"><input type="hidden" name="action" value="process"><button class="btn btn-outline">Mark Processing</button></form>
+              {% elif w.status.value == 'processing' %}
+                <form action="/admin/withdrawals/{{ w.id }}/update" method="post" style="display:flex; gap:6px;">
+                  <input type="hidden" name="action" value="mark_paid">
+                  <input type="text" name="payout_reference" placeholder="Payout ref" style="width:120px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px;">
+                  <button class="btn btn-primary">Mark Paid</button>
+                </form>
+              {% endif %}
+            </div>
+          {% else %}
+            <span class="sub">{{ w.payout_reference or '—' }}</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="sub">No withdrawal requests.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

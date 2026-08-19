@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Checkout — {{ track.title }}{% endblock %}
+{% block content %}
+<div class="form-page">
+  <div class="form-card">
+    <h2>Checkout</h2>
+    <p class="subtitle">{{ track.title }} — KSh {{ '%.2f'|format(track.price) }}</p>
+
+    {% if track.sales_model.value == 'exclusive' %}
+      <span class="badge badge-exclusive">EXCLUSIVE — ONE-TIME PURCHASE</span>
+    {% else %}
+      <span class="badge badge-nonexclusive">NON-EXCLUSIVE LICENSE</span>
+    {% endif %}
+
+    {% if error %}<div class="alert alert-error" style="margin-top:18px;">{{ error }}</div>{% endif %}
+
+    <form action="/checkout/track/{{ track.slug }}" method="post" style="margin-top:24px;">
+      <div class="field">
+        <label>M-Pesa Phone Number</label>
+        <input type="tel" name="phone_number" placeholder="07XX XXX XXX" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Pay with M-Pesa</button>
+    </form>
+    <p class="sub" style="margin-top:16px;">
+      You'll receive an STK push prompt on your phone. Ownership is only granted
+      after payment is confirmed.
+    </p>
+  </div>
+</div>
+{% endblock %}

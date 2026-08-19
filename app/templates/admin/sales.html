@@ -1,0 +1,30 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<h1 style="font-size: 26px;">Sales &amp; Transactions</h1>
+
+<div style="display:flex; gap:10px; margin: 16px 0;">
+  <a href="/admin/sales" class="btn {{ 'btn-primary' if not status else 'btn-outline' }}">All</a>
+  <a href="/admin/sales?status=completed" class="btn {{ 'btn-primary' if status=='completed' else 'btn-outline' }}">Completed</a>
+  <a href="/admin/sales?status=pending" class="btn {{ 'btn-primary' if status=='pending' else 'btn-outline' }}">Pending</a>
+  <a href="/admin/sales?status=failed" class="btn {{ 'btn-primary' if status=='failed' else 'btn-outline' }}">Failed</a>
+  <a href="/admin/sales?status=rejected" class="btn {{ 'btn-primary' if status=='rejected' else 'btn-outline' }}">Rejected</a>
+</div>
+
+<table class="data-table">
+  <thead><tr><th>Order</th><th>Buyer</th><th>Item</th><th>Gross</th><th>Commission</th><th>Net</th><th>Status</th><th>Date</th></tr></thead>
+  <tbody>
+    {% for o in orders %}
+      <tr>
+        <td>{{ o.order_number }}</td>
+        <td>{{ o.buyer.email }}</td>
+        <td>{{ o.track.title if o.track else (o.album.title if o.album else '—') }}</td>
+        <td>KSh {{ '%.2f'|format(o.gross_amount) }}</td>
+        <td>KSh {{ '%.2f'|format(o.commission_amount) }}</td>
+        <td>KSh {{ '%.2f'|format(o.net_amount) }}</td>
+        <td>{{ o.status.value }}</td>
+        <td>{{ o.created_at.strftime('%d %b %Y %H:%M') }}</td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="sub">No transactions found.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

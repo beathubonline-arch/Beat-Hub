@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}BeatHub — The Home of Beats{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="eyebrow">THE HOME OF COOL BEATS &amp; DOPE TRACKS</div>
+  <h1>SELL THE <span class="gold">SOUND.</span><br>KEEP YOUR <span class="teal">FLOW.</span></h1>
+  <p>Discover beats, connect with producers, and build your sound.</p>
+  <div class="hero-actions">
+    <a href="/signup" class="btn btn-primary">Create your producer store</a>
+    <a href="/terms" class="btn btn-outline">Read the rules</a>
+  </div>
+
+  <div class="search-panel">
+    <form action="/search" method="get" class="search-input-row">
+      <input
+        type="text"
+        name="q"
+        class="search-input"
+        placeholder="Search artists, producers, DJs, beats, tracks, albums..."
+        value="{{ query or '' }}"
+        autofocus
+      >
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if query %}
+      {% for group_name, items in results.items() %}
+        {% if items %}
+          <div style="margin-top:22px;">
+            <div class="eyebrow" style="margin-bottom:10px;">{{ group_name }}</div>
+            <div class="results-grid">
+              {% for item in items %}
+                <a href="{{ item.url }}" class="result-card">
+                  <div class="kind">{{ group_name }}</div>
+                  <div class="title">{{ item.title }}</div>
+                  <div class="sub">{{ item.subtitle }}</div>
+                </a>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+      {% if total_results == 0 %}
+        <p class="sub" style="margin-top:16px;">No results for "{{ query }}".</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

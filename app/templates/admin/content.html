@@ -1,0 +1,45 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_content %}
+<h1 style="font-size: 26px;">Content</h1>
+<form method="get" style="margin: 16px 0; max-width:400px;" class="search-input-row">
+  <input type="text" name="q" class="search-input" placeholder="Search tracks/albums" value="{{ q }}">
+  <button type="submit" class="btn btn-primary">Search</button>
+</form>
+
+<h2 style="font-size: 20px;">Tracks</h2>
+<table class="data-table">
+  <thead><tr><th>Title</th><th>Creator</th><th>Price</th><th>Type</th><th>Status</th><th>Sold</th><th></th></tr></thead>
+  <tbody>
+    {% for t in tracks %}
+      <tr>
+        <td><a href="/track/{{ t.slug }}" style="color:var(--teal);">{{ t.title }}</a></td>
+        <td>{{ t.creator_profile.stage_name }}</td>
+        <td>KSh {{ '%.2f'|format(t.price) }}</td>
+        <td>{{ 'Exclusive' if t.sales_model.value == 'exclusive' else 'Non-Exclusive' }}</td>
+        <td>{{ 'Published' if t.is_published else 'Hidden' }}</td>
+        <td>{{ 'Yes' if t.is_sold else 'No' }}</td>
+        <td>
+          <form action="/admin/content/track/{{ t.id }}/toggle-published" method="post">
+            <button type="submit" class="btn btn-outline">{{ 'Hide' if t.is_published else 'Publish' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="sub">No tracks found.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2 style="font-size: 20px; margin-top: 30px;">Albums</h2>
+<table class="data-table">
+  <thead><tr><th>Title</th><th>Creator</th><th>Tracks</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for a in albums %}
+      <tr>
+        <td><a href="/album/{{ a.slug }}" style="color:var(--teal);">{{ a.title }}</a></td>
+        <td>{{ a.creator_profile.stage_name }}</td>
+        <td>{{ a.album_tracks|length }}</td>
+        <td>{{ 'Published' if a.is_published else 'Hidden' }}</td>
+      </tr>
+    {% else %}<tr><td colspan="4" class="sub">No albums found.</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}
