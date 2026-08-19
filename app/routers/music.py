@@ -20,13 +20,13 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 def ctx(request: Request, current_user, **extra):
-    base = {
+    data = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
-    base.update(extra)
-    return base
+    data.update(extra)
+    return data
 
 
 # ----------------------------------------------------------------------
@@ -92,6 +92,10 @@ def sessions_page(
     )
 
 
+# ----------------------------------------------------------------------
+# TRACK DETAIL
+# ----------------------------------------------------------------------
+
 @router.get("/track/{slug}")
 def track_detail(
     slug: str,
@@ -116,7 +120,10 @@ def track_detail(
     if current_user:
         purchased = (
             db.query(License)
-            .join(Order, License.order_id == Order.id)
+            .join(
+                Order,
+                License.order_id == Order.id,
+            )
             .filter(
                 License.buyer_id == current_user.id,
                 License.track_id == track.id,
@@ -137,6 +144,10 @@ def track_detail(
         ),
     )
 
+
+# ----------------------------------------------------------------------
+# ALBUM
+# ----------------------------------------------------------------------
 
 @router.get("/album/{slug}")
 def album_detail(
@@ -167,6 +178,10 @@ def album_detail(
         ),
     )
 
+
+# ----------------------------------------------------------------------
+# CREATOR PROFILE
+# ----------------------------------------------------------------------
 
 @router.get("/profile/{slug}")
 def profile_detail(
@@ -213,26 +228,68 @@ def profile_detail(
 
 
 # ----------------------------------------------------------------------
-# PROTECTED PURCHASE DOWNLOAD
+# PURCHASE DOWNLOAD
+# ----------------------------------------------------------------------
+#
+# Supports BOTH:
+#
+#   /download/track/{track_id}
+#   /download/{track_id}
+#   /download/track/{track_slug}
+#   /download/{track_slug}
+#
+# This prevents the download button from breaking if the template
+# passes either the Track ID or the Track slug.
 # ----------------------------------------------------------------------
 
-@router.get("/download/track/{track_id}")
+@router.get("/download/track/{track_ref}")
+@router.get("/download/{track_ref}")
 def download_track(
-    track_id: str,
+    track_ref: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """
-    Allow only a buyer with a completed order/license
-    to download the purchased original audio file.
-    """
+    # --------------------------------------------------------------
+    # Find track by ID OR slug.
+    # --------------------------------------------------------------
+
+    track = (
+        db.query(Track)
+        .filter(Track.id == track_ref)
+        .first()
+    )
+
+    if not track:
+        track = (
+            db.query(Track)
+            .filter(Track.slug == track_ref)
+            .first()
+        )
+
+    if not track:
+        raise HTTPException(
+            status_code=404,
+            detail="Track not found.",
+        )
+
+    # --------------------------------------------------------------
+    # Verify actual ownership.
+    #
+    # A download is allowed ONLY when:
+    # - this user owns the license
+    # - the license belongs to this track
+    # - the underlying order is COMPLETED
+    # --------------------------------------------------------------
 
     license_record = (
         db.query(License)
-        .join(Order, License.order_id == Order.id)
+        .join(
+            Order,
+            License.order_id == Order.id,
+        )
         .filter(
             License.buyer_id == user.id,
-            License.track_id == track_id,
+            License.track_id == track.id,
             Order.status == OrderStatus.COMPLETED,
         )
         .first()
@@ -244,17 +301,9 @@ def download_track(
             detail="You do not own this track.",
         )
 
-    track = (
-        db.query(Track)
-        .filter(Track.id == track_id)
-        .first()
-    )
-
-    if not track:
-        raise HTTPException(
-            status_code=404,
-            detail="Track not found.",
-        )
+    # --------------------------------------------------------------
+    # Validate stored audio path.
+    # --------------------------------------------------------------
 
     if not track.audio_file_path:
         raise HTTPException(
@@ -262,23 +311,66 @@ def download_track(
             detail="Audio file is not available.",
         )
 
-    audio_path = Path(track.audio_file_path)
+    stored_path = Path(track.audio_file_path)
 
-    # Track paths are normally stored as:
-    # media/audio/<uuid>.mp3
-    #
-    # Also support paths that are already absolute.
-    if not audio_path.is_absolute():
-        audio_path = Path.cwd() / audio_path
+    media_root = Path(settings.MEDIA_ROOT)
+
+    if not media_root.is_absolute():
+        media_root = Path.cwd() / media_root
+
+    media_root = media_root.resolve()
+
+    # First try the exact stored path.
+    if stored_path.is_absolute():
+        audio_path = stored_path
+    else:
+        audio_path = Path.cwd() / stored_path
 
     audio_path = audio_path.resolve()
-    media_root = Path(settings.MEDIA_ROOT).resolve()
 
-    # If MEDIA_ROOT is relative, resolve it from the application root.
-    if not media_root.is_absolute():
-        media_root = (Path.cwd() / settings.MEDIA_ROOT).resolve()
+    # --------------------------------------------------------------
+    # Compatibility with paths stored in different formats:
+    #
+    # media/audio/file.mp3
+    # audio/file.mp3
+    # /.../media/audio/file.mp3
+    # --------------------------------------------------------------
 
-    # Security: never allow a purchased download to escape MEDIA_ROOT.
+    if not audio_path.exists() or not audio_path.is_file():
+        filename = stored_path.name
+
+        candidates = [
+            media_root / stored_path,
+            media_root / "audio" / filename,
+            Path.cwd() / "media" / "audio" / filename,
+        ]
+
+        found = None
+
+        for candidate in candidates:
+            candidate = candidate.resolve()
+
+            try:
+                candidate.relative_to(media_root)
+            except ValueError:
+                continue
+
+            if candidate.exists() and candidate.is_file():
+                found = candidate
+                break
+
+        if found is None:
+            raise HTTPException(
+                status_code=404,
+                detail="The purchased audio file is missing from storage.",
+            )
+
+        audio_path = found
+
+    # --------------------------------------------------------------
+    # Security: never serve a file outside MEDIA_ROOT.
+    # --------------------------------------------------------------
+
     try:
         audio_path.relative_to(media_root)
     except ValueError:
@@ -287,17 +379,15 @@ def download_track(
             detail="Invalid audio file location.",
         )
 
-    if not audio_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Audio file is missing from storage.",
-        )
-
     if not audio_path.is_file():
         raise HTTPException(
             status_code=404,
-            detail="Audio file is invalid.",
+            detail="Audio file is unavailable.",
         )
+
+    # --------------------------------------------------------------
+    # Clean download filename.
+    # --------------------------------------------------------------
 
     safe_title = "".join(
         character
@@ -309,10 +399,26 @@ def download_track(
     if not safe_title:
         safe_title = "BeatHub-Track"
 
-    download_name = f"{safe_title}{audio_path.suffix.lower()}"
+    extension = audio_path.suffix.lower()
+
+    download_name = (
+        f"{safe_title}{extension}"
+        if extension
+        else safe_title
+    )
+
+    # --------------------------------------------------------------
+    # Force browser download.
+    # --------------------------------------------------------------
 
     return FileResponse(
         path=str(audio_path),
         filename=download_name,
         media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{download_name}"'
+            ),
+            "Cache-Control": "private, no-store",
+        },
     )
