@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.ledger import WithdrawalRequest, WithdrawalStatus
-from app.models.music import Album, Track, SalesModel, AlbumTrack
+from app.models.music import Album, AlbumTrack, SalesModel, Track
 from app.models.order import Order, OrderStatus
 from app.models.user import User
 from app.utils.deps import require_creator
@@ -63,6 +63,7 @@ def unique_track_slug(db: Session, title: str) -> str:
 
 def ensure_media_dirs():
     root = Path(settings.MEDIA_ROOT)
+
     audio_dir = root / "audio"
     preview_dir = root / "previews"
     cover_dir = root / "covers"
@@ -75,10 +76,6 @@ def ensure_media_dirs():
 
 
 async def save_upload(upload: UploadFile, destination: Path) -> str:
-    """
-    Streams the uploaded file to disk instead of loading the entire
-    audio file into memory.
-    """
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     with destination.open("wb") as output:
@@ -173,7 +170,7 @@ def get_stats(db: Session, profile_id: str):
 
 
 # ----------------------------------------------------------------------
-# MAIN DASHBOARD
+# DASHBOARD
 # ----------------------------------------------------------------------
 
 @router.get("/dashboard")
@@ -182,6 +179,8 @@ def dashboard_home(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
+    page: int = 1,
+    q: str = "",
 ):
     profile = user.profile
 
@@ -205,21 +204,68 @@ def dashboard_home(
         .count()
     )
 
-    # Dashboard tracks, newest first.
-    tracks = (
+    # --------------------------------------------------------------
+    # Dashboard track browser / search / pagination
+    # --------------------------------------------------------------
+
+    try:
+        page = int(page)
+    except (TypeError, ValueError):
+        page = 1
+
+    if page < 1:
+        page = 1
+
+    track_per_page = 12
+
+    tracks_query = (
         db.query(Track)
         .filter(Track.creator_profile_id == profile.id)
+    )
+
+    q = (q or "").strip()
+
+    if q:
+        search_term = f"%{q}%"
+        tracks_query = tracks_query.filter(
+            Track.title.ilike(search_term)
+            | Track.genre.ilike(search_term)
+            | Track.tags.ilike(search_term)
+        )
+
+    track_total = tracks_query.count()
+
+    track_total_pages = max(
+        1,
+        (track_total + track_per_page - 1) // track_per_page,
+    )
+
+    if page > track_total_pages:
+        page = track_total_pages
+
+    track_offset = (page - 1) * track_per_page
+
+    tracks = (
+        tracks_query
         .order_by(Track.created_at.desc())
-        .limit(1000)
+        .offset(track_offset)
+        .limit(track_per_page)
         .all()
     )
+
+    # Keep all pagination/search values available to the existing
+    # dashboard template.
+    track_page = page
+    track_search = q
+    track_total_count = track_total
+    track_start = track_offset + 1 if track_total else 0
+    track_end = min(track_offset + len(tracks), track_total)
 
     youtube_url = (
         f"https://www.youtube.com/channel/"
         f"{settings.YOUTUBE_CHANNEL_ID}"
     )
 
-    # Public creator/store URL that can be copied and shared.
     store_url = f"/profile/{profile.slug}"
 
     return templates.TemplateResponse(
@@ -233,6 +279,18 @@ def dashboard_home(
             track_count=track_count,
             album_count=album_count,
             tracks=tracks,
+
+            # Existing dashboard pagination/search variables
+            track_page=track_page,
+            track_total_pages=track_total_pages,
+            track_total=track_total,
+            track_total_count=track_total_count,
+            track_per_page=track_per_page,
+            track_search=track_search,
+            track_start=track_start,
+            track_end=track_end,
+            q=q,
+
             youtube_url=youtube_url,
             discord_url=settings.DISCORD_INVITE_URL,
             store_url=store_url,
@@ -323,10 +381,12 @@ async def upload_tracks(
 
     try:
         for index in range(count):
-            title = titles[index].strip() if index < len(titles) else ""
+            title = titles[index].strip()
 
             if not title:
-                raise ValueError(f"Track {index + 1}: title is required.")
+                raise ValueError(
+                    f"Track {index + 1}: title is required."
+                )
 
             audio = audio_files[index]
 
@@ -337,14 +397,12 @@ async def upload_tracks(
 
             audio_ext = extension(audio.filename)
 
-            allowed_audio = {
+            if audio_ext not in {
                 ".mp3",
                 ".wav",
                 ".m4a",
                 ".flac",
-            }
-
-            if audio_ext not in allowed_audio:
+            }:
                 raise ValueError(
                     f"Track {index + 1}: unsupported audio format."
                 )
@@ -352,8 +410,6 @@ async def upload_tracks(
             try:
                 price_value = Decimal(
                     prices[index].strip()
-                    if index < len(prices)
-                    else "0"
                 )
             except (InvalidOperation, ValueError):
                 raise ValueError(
@@ -377,27 +433,25 @@ async def upload_tracks(
             }:
                 sales_value = "non_exclusive"
 
-            try:
-                bpm_value = (
-                    int(bpms[index])
-                    if index < len(bpms)
-                    and bpms[index].strip()
-                    else None
-                )
-            except ValueError:
-                bpm_value = None
+            bpm_value = None
 
-            slug = unique_track_slug(db, title)
+            if index < len(bpms) and bpms[index].strip():
+                try:
+                    bpm_value = int(bpms[index].strip())
+                except ValueError:
+                    raise ValueError(
+                        f"Track {index + 1}: BPM must be a number."
+                    )
 
             track_id = str(uuid.uuid4())
+            slug = unique_track_slug(db, title)
 
-            audio_name = (
-                f"{track_id}{audio_ext}"
+            audio_path = audio_dir / f"{track_id}{audio_ext}"
+
+            await save_upload(
+                audio,
+                audio_path,
             )
-
-            audio_path = audio_dir / audio_name
-
-            await save_upload(audio, audio_path)
 
             cover_path = None
 
@@ -410,30 +464,26 @@ async def upload_tracks(
             if cover and cover.filename:
                 cover_ext = extension(cover.filename)
 
-                allowed_cover = {
+                if cover_ext not in {
                     ".jpg",
                     ".jpeg",
                     ".png",
                     ".webp",
-                }
-
-                if cover_ext not in allowed_cover:
+                }:
                     raise ValueError(
                         f"Track {index + 1}: unsupported cover-art format."
                     )
 
-                cover_name = (
-                    f"{track_id}{cover_ext}"
+                cover_path_disk = (
+                    cover_dir / f"{track_id}{cover_ext}"
                 )
-
-                cover_disk_path = cover_dir / cover_name
 
                 await save_upload(
                     cover,
-                    cover_disk_path,
+                    cover_path_disk,
                 )
 
-                cover_path = str(cover_disk_path)
+                cover_path = str(cover_path_disk)
 
             description = (
                 descriptions[index].strip()
@@ -495,8 +545,11 @@ async def upload_tracks(
         )
 
     return RedirectResponse(
-        url="/dashboard?success="
-            f"{len(created_tracks)} track(s) uploaded successfully.",
+        url=(
+            "/dashboard?"
+            f"success={len(created_tracks)} "
+            "track(s) uploaded successfully."
+        ),
         status_code=303,
     )
 
@@ -542,7 +595,6 @@ async def create_album(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
-
     title: str = Form(...),
     description: str = Form(""),
     genre: str = Form(""),
@@ -559,6 +611,13 @@ async def create_album(
 
     title = title.strip()
 
+    existing_tracks = (
+        db.query(Track)
+        .filter(Track.creator_profile_id == profile.id)
+        .order_by(Track.created_at.desc())
+        .all()
+    )
+
     if not title:
         return templates.TemplateResponse(
             request,
@@ -566,27 +625,11 @@ async def create_album(
             ctx(
                 request,
                 user,
-                tracks=[],
+                tracks=existing_tracks,
                 error="Album title is required.",
             ),
             status_code=400,
         )
-
-    tracks = (
-        db.query(Track)
-        .filter(
-            Track.creator_profile_id == profile.id,
-            Track.id.in_(track_ids) if track_ids else False,
-        )
-        .all()
-    )
-
-    existing_tracks = (
-        db.query(Track)
-        .filter(Track.creator_profile_id == profile.id)
-        .order_by(Track.created_at.desc())
-        .all()
-    )
 
     if not track_ids:
         return templates.TemplateResponse(
@@ -600,6 +643,15 @@ async def create_album(
             ),
             status_code=400,
         )
+
+    tracks = (
+        db.query(Track)
+        .filter(
+            Track.creator_profile_id == profile.id,
+            Track.id.in_(track_ids),
+        )
+        .all()
+    )
 
     if len(tracks) != len(set(track_ids)):
         return templates.TemplateResponse(
@@ -640,11 +692,9 @@ async def create_album(
 
             _, _, cover_dir = ensure_media_dirs()
 
-            artwork_name = (
-                f"{uuid.uuid4()}{artwork_ext}"
+            artwork_disk_path = (
+                cover_dir / f"{uuid.uuid4()}{artwork_ext}"
             )
-
-            artwork_disk_path = cover_dir / artwork_name
 
             await save_upload(
                 artwork,
@@ -667,15 +717,20 @@ async def create_album(
         db.add(album)
         db.flush()
 
-        for position, track in enumerate(tracks):
-            db.add(
-                AlbumTrack(
-                    id=str(uuid.uuid4()),
-                    album_id=album.id,
-                    track_id=track.id,
-                    position=position,
+        track_map = {track.id: track for track in tracks}
+
+        for position, track_id in enumerate(track_ids):
+            track = track_map.get(track_id)
+
+            if track:
+                db.add(
+                    AlbumTrack(
+                        id=str(uuid.uuid4()),
+                        album_id=album.id,
+                        track_id=track.id,
+                        position=position,
+                    )
                 )
-            )
 
         db.commit()
 
