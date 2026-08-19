@@ -3,9 +3,10 @@ BeatHub — main application entrypoint.
 """
 
 import logging
+import os
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,36 +34,70 @@ APP_DIR = BASE_DIR / "app"
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
-# --------------------------------------------------------------
-# PERSISTENT MEDIA DIRECTORY
-# --------------------------------------------------------------
 
-MEDIA_DIR = Path(settings.MEDIA_ROOT)
+# ------------------------------------------------------------------
+# MEDIA STORAGE
+#
+# Render may provide MEDIA_ROOT=/var/data/... when a persistent disk
+# is configured. If that location is unavailable/unwritable, fall
+# back safely to the application's local media directory.
+# ------------------------------------------------------------------
 
-if not MEDIA_DIR.is_absolute():
-    MEDIA_DIR = BASE_DIR / MEDIA_DIR
+def get_writable_media_dir() -> Path:
+    configured = str(getattr(settings, "MEDIA_ROOT", "") or "").strip()
 
-MEDIA_DIR = MEDIA_DIR.resolve()
+    candidates = []
 
-AUDIO_DIR = MEDIA_DIR / "audio"
-COVERS_DIR = MEDIA_DIR / "covers"
-PREVIEWS_DIR = MEDIA_DIR / "previews"
+    if configured:
+        configured_path = Path(configured)
 
-for directory in (
-    MEDIA_DIR,
-    AUDIO_DIR,
-    COVERS_DIR,
-    PREVIEWS_DIR,
-):
-    directory.mkdir(
-        parents=True,
-        exist_ok=True,
+        if not configured_path.is_absolute():
+            configured_path = BASE_DIR / configured_path
+
+        candidates.append(configured_path)
+
+    # Normal application storage.
+    candidates.append(BASE_DIR / "media")
+
+    # Last-resort writable temporary storage.
+    candidates.append(Path("/tmp/beathub-media"))
+
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+
+            # Verify that the directory is actually writable.
+            test_file = candidate / ".beathub_write_test"
+
+            with open(test_file, "a", encoding="utf-8"):
+                pass
+
+            try:
+                test_file.unlink()
+            except OSError:
+                pass
+
+            logger.info("BeatHub media directory: %s", candidate)
+            return candidate.resolve()
+
+        except (PermissionError, OSError) as exc:
+            logger.warning(
+                "Media directory unavailable: %s (%s)",
+                candidate,
+                exc,
+            )
+
+    raise RuntimeError(
+        "No writable media directory is available."
     )
 
-logger.info("BeatHub MEDIA_ROOT: %s", MEDIA_DIR)
-logger.info("BeatHub AUDIO_DIR: %s", AUDIO_DIR)
-logger.info("BeatHub COVERS_DIR: %s", COVERS_DIR)
-logger.info("BeatHub PREVIEWS_DIR: %s", PREVIEWS_DIR)
+
+MEDIA_DIR = get_writable_media_dir()
+
+
+# ------------------------------------------------------------------
+# APPLICATION
+# ------------------------------------------------------------------
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -70,9 +105,10 @@ templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
 
-# --------------------------------------------------------------
-# STATIC
-# --------------------------------------------------------------
+
+# ------------------------------------------------------------------
+# STATIC FILES
+# ------------------------------------------------------------------
 
 if STATIC_DIR.exists():
     app.mount(
@@ -81,9 +117,22 @@ if STATIC_DIR.exists():
         name="static",
     )
 
-# --------------------------------------------------------------
-# PUBLIC COVER ART
-# --------------------------------------------------------------
+
+# ------------------------------------------------------------------
+# PUBLIC MEDIA
+#
+# Covers and previews are public.
+# Purchased master audio is NOT publicly mounted.
+# ------------------------------------------------------------------
+
+COVERS_DIR = MEDIA_DIR / "covers"
+PREVIEWS_DIR = MEDIA_DIR / "previews"
+AUDIO_DIR = MEDIA_DIR / "audio"
+
+COVERS_DIR.mkdir(parents=True, exist_ok=True)
+PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
 
 app.mount(
     "/media/covers",
@@ -91,33 +140,23 @@ app.mount(
     name="media-covers",
 )
 
-# --------------------------------------------------------------
-# PUBLIC PREVIEWS
-# --------------------------------------------------------------
-
 app.mount(
     "/media/previews",
     StaticFiles(directory=str(PREVIEWS_DIR)),
     name="media-previews",
 )
 
-# --------------------------------------------------------------
-# IMPORTANT:
-# DO NOT mount /media/audio.
-#
-# Full purchased audio is protected by music.py and is delivered
-# only after checking the user's License + completed Order.
-# --------------------------------------------------------------
 
-# --------------------------------------------------------------
+# ------------------------------------------------------------------
 # DATABASE
-# --------------------------------------------------------------
+# ------------------------------------------------------------------
 
 Base.metadata.create_all(bind=engine)
 
-# --------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # ROUTERS
-# --------------------------------------------------------------
+# ------------------------------------------------------------------
 
 app.include_router(auth.router)
 app.include_router(pages.router)
@@ -127,9 +166,10 @@ app.include_router(mpesa_callback.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 
-# --------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # DASHBOARD COMPATIBILITY
-# --------------------------------------------------------------
+# ------------------------------------------------------------------
 
 @app.get("/artist/dashboard", include_in_schema=False)
 @app.get("/creator/dashboard", include_in_schema=False)
@@ -144,9 +184,10 @@ def dashboard_alias(
         status_code=303,
     )
 
-# --------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # HEALTH
-# --------------------------------------------------------------
+# ------------------------------------------------------------------
 
 @app.get("/healthz")
 def healthz():
@@ -155,14 +196,12 @@ def healthz():
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
         "media_root": str(MEDIA_DIR),
-        "audio_directory_exists": AUDIO_DIR.exists(),
-        "covers_directory_exists": COVERS_DIR.exists(),
-        "previews_directory_exists": PREVIEWS_DIR.exists(),
     }
 
-# --------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # ERRORS
-# --------------------------------------------------------------
+# ------------------------------------------------------------------
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
