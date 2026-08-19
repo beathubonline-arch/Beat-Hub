@@ -1,8 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, File
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -10,227 +9,211 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.ledger import CreatorLedgerEntry, WithdrawalRequest, WithdrawalStatus
-from app.models.music import Album, AlbumTrack, SalesModel, Track
+from app.models.ledger import WithdrawalRequest, WithdrawalStatus
+from app.models.music import Album, Track
 from app.models.order import Order, OrderStatus
 from app.models.user import User
-from app.services.storage import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, UploadValidationError, save_upload
 from app.utils.deps import require_creator
-from app.utils.text import unique_slug
 
 router = APIRouter(tags=["dashboard"])
 templates = Jinja2Templates(directory="app/templates")
 
 
 def ctx(request: Request, current_user, **extra):
-    base = {"request": request, "current_user": current_user, "current_year": datetime.utcnow().year}
-    base.update(extra)
-    return base
+    data = {
+        "request": request,
+        "current_user": current_user,
+        "current_year": datetime.utcnow().year,
+    }
+    data.update(extra)
+    return data
 
 
-def _creator_stats(db: Session, profile_id: str) -> dict:
-    orders = (
+def get_stats(db: Session, profile_id: str):
+    completed_orders = (
         db.query(Order)
         .join(Track, Order.track_id == Track.id)
-        .filter(Track.creator_profile_id == profile_id, Order.status == OrderStatus.COMPLETED)
+        .filter(
+            Track.creator_profile_id == profile_id,
+            Order.status == OrderStatus.COMPLETED,
+        )
+        .order_by(Order.completed_at.desc())
         .all()
     )
-    gross = sum((o.gross_amount for o in orders), Decimal("0"))
-    commission = sum((o.commission_amount for o in orders), Decimal("0"))
-    net = sum((o.net_amount for o in orders), Decimal("0"))
 
-    withdrawn = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
+    total_sales = len(completed_orders)
+
+    gross = sum(
+        (Decimal(str(o.gross_amount or 0)) for o in completed_orders),
+        Decimal("0"),
+    )
+
+    commission = sum(
+        (Decimal(str(o.commission_amount or 0)) for o in completed_orders),
+        Decimal("0"),
+    )
+
+    net = sum(
+        (Decimal(str(o.net_amount or 0)) for o in completed_orders),
+        Decimal("0"),
+    )
+
+    paid_withdrawals = (
+        db.query(
+            func.coalesce(func.sum(WithdrawalRequest.amount), 0)
+        )
         .filter(
             WithdrawalRequest.creator_profile_id == profile_id,
-            WithdrawalRequest.status.in_([WithdrawalStatus.APPROVED, WithdrawalStatus.PROCESSING, WithdrawalStatus.PAID]),
+            WithdrawalRequest.status == WithdrawalStatus.PAID,
         )
         .scalar()
     )
-    pending_withdrawal = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
-        .filter(WithdrawalRequest.creator_profile_id == profile_id, WithdrawalRequest.status == WithdrawalStatus.PENDING)
+
+    pending_withdrawals = (
+        db.query(
+            func.coalesce(func.sum(WithdrawalRequest.amount), 0)
+        )
+        .filter(
+            WithdrawalRequest.creator_profile_id == profile_id,
+            WithdrawalRequest.status.in_(
+                [
+                    WithdrawalStatus.PENDING,
+                    WithdrawalStatus.APPROVED,
+                    WithdrawalStatus.PROCESSING,
+                ]
+            ),
+        )
         .scalar()
     )
 
-    available_balance = net - Decimal(str(withdrawn or 0)) - Decimal(str(pending_withdrawal or 0))
+    paid_withdrawals = Decimal(str(paid_withdrawals or 0))
+    pending_withdrawals = Decimal(str(pending_withdrawals or 0))
+
+    available_balance = net - paid_withdrawals - pending_withdrawals
+
+    if available_balance < 0:
+        available_balance = Decimal("0")
 
     return {
-        "total_sales": len(orders),
+        "total_sales": total_sales,
         "gross_revenue": gross,
         "platform_commission": commission,
         "net_earnings": net,
         "available_balance": available_balance,
-        "pending_withdrawal": Decimal(str(pending_withdrawal or 0)),
-        "recent_orders": sorted(orders, key=lambda o: o.completed_at or o.created_at, reverse=True)[:8],
+        "pending_withdrawal": pending_withdrawals,
+        "recent_orders": completed_orders[:8],
     }
 
 
+# ----------------------------------------------------------------------
+# MAIN DASHBOARD
+# ----------------------------------------------------------------------
+
 @router.get("/dashboard")
-def dashboard_home(request: Request, db: Session = Depends(get_db), user: User = Depends(require_creator)):
+@router.get("/dashboard/")
+def dashboard_home(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+):
     profile = user.profile
+
     if not profile:
-        raise HTTPException(status_code=400, detail="Creator profile missing.")
+        return RedirectResponse(
+            url="/?error=Creator profile not found.",
+            status_code=303,
+        )
 
-    stats = _creator_stats(db, profile.id)
-    track_count = db.query(Track).filter(Track.creator_profile_id == profile.id).count()
-    album_count = db.query(Album).filter(Album.creator_profile_id == profile.id).count()
+    stats = get_stats(db, profile.id)
 
-    youtube_url = f"https://www.youtube.com/channel/{settings.YOUTUBE_CHANNEL_ID}"
+    track_count = (
+        db.query(Track)
+        .filter(Track.creator_profile_id == profile.id)
+        .count()
+    )
 
-    return templates.TemplateResponse(request, 
+    album_count = (
+        db.query(Album)
+        .filter(Album.creator_profile_id == profile.id)
+        .count()
+    )
+
+    youtube_url = (
+        f"https://www.youtube.com/channel/"
+        f"{settings.YOUTUBE_CHANNEL_ID}"
+    )
+
+    return templates.TemplateResponse(
+        request,
         "dashboard.html",
         ctx(
-            request, user,
-            profile=profile, stats=stats, track_count=track_count, album_count=album_count,
-            youtube_url=youtube_url, discord_url=settings.DISCORD_INVITE_URL,
-            commission_percent=settings.PLATFORM_COMMISSION_PERCENT,
+            request,
+            user,
+            profile=profile,
+            stats=stats,
+            track_count=track_count,
+            album_count=album_count,
+            youtube_url=youtube_url,
+            discord_url=settings.DISCORD_INVITE_URL,
         ),
     )
 
 
+# ----------------------------------------------------------------------
+# UPLOAD
+# ----------------------------------------------------------------------
+
 @router.get("/dashboard/upload")
-def upload_page(request: Request, user: User = Depends(require_creator)):
-    return templates.TemplateResponse(request, "upload_track.html", ctx(request, user))
-
-
-@router.post("/dashboard/upload")
-async def upload_submit(
+def upload_page(
     request: Request,
-    db: Session = Depends(get_db),
     user: User = Depends(require_creator),
-    titles: List[str] = Form(...),
-    descriptions: List[str] = Form(...),
-    genres: List[str] = Form(...),
-    bpms: List[str] = Form(...),
-    tags_list: List[str] = Form(...),
-    prices: List[str] = Form(...),
-    sales_models: List[str] = Form(...),
-    audio_files: List[UploadFile] = File(...),
-    cover_files: List[Optional[UploadFile]] = File(None),
 ):
-    """
-    Handles both single-track and multi-track uploads via the same endpoint —
-    the form always submits arrays, even for a single track.
-    """
-    profile = user.profile
+    return templates.TemplateResponse(
+        request,
+        "upload_track.html",
+        ctx(request, user),
+    )
 
-    def error(msg: str):
-        return templates.TemplateResponse(request, "upload_track.html", ctx(request, user, error=msg), status_code=400)
 
-    if not titles or not audio_files:
-        return error("At least one track with an audio file is required.")
-    if len(titles) != len(audio_files):
-        return error("Track details and audio files don't match up. Please try again.")
-
-    created = []
-    try:
-        for i, title in enumerate(titles):
-            if not title.strip():
-                return error("Every track needs a title.")
-
-            bpm_raw = bpms[i].strip() if i < len(bpms) else ""
-            bpm_val = None
-            if bpm_raw:
-                if not bpm_raw.isdigit():
-                    return error(f"BPM for '{title}' must be a whole number.")
-                bpm_val = int(bpm_raw)
-
-            price_raw = prices[i].strip() if i < len(prices) else "0"
-            try:
-                price_val = Decimal(price_raw)
-                if price_val < 0:
-                    raise ValueError
-            except Exception:
-                return error(f"Price for '{title}' is invalid.")
-
-            model_raw = sales_models[i] if i < len(sales_models) else "non_exclusive"
-            sales_model = SalesModel.EXCLUSIVE if model_raw == "exclusive" else SalesModel.NON_EXCLUSIVE
-
-            audio_path = await save_upload(audio_files[i], "audio", ALLOWED_AUDIO_EXT)
-            cover_path = None
-            if cover_files and i < len(cover_files) and cover_files[i] is not None and cover_files[i].filename:
-                cover_path = await save_upload(cover_files[i], "covers", ALLOWED_IMAGE_EXT)
-
-            slug = unique_slug(db, Track, title, "track")
-            track = Track(
-                creator_profile_id=profile.id,
-                title=title.strip(),
-                slug=slug,
-                description=(descriptions[i].strip() if i < len(descriptions) else None) or None,
-                genre=(genres[i].strip() if i < len(genres) else None) or None,
-                bpm=bpm_val,
-                tags=(tags_list[i].strip() if i < len(tags_list) else None) or None,
-                audio_file_path=audio_path,
-                cover_art_path=cover_path,
-                price=price_val,
-                sales_model=sales_model,
-            )
-            db.add(track)
-            created.append(track)
-
-        db.commit()
-    except UploadValidationError as exc:
-        db.rollback()
-        return error(str(exc))
-
-    return RedirectResponse(url="/dashboard?success=" + f"{len(created)} track(s) uploaded successfully.", status_code=303)
-
+# ----------------------------------------------------------------------
+# ALBUMS
+# ----------------------------------------------------------------------
 
 @router.get("/dashboard/albums/new")
-def new_album_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_creator)):
-    tracks = db.query(Track).filter(Track.creator_profile_id == user.profile.id).order_by(Track.created_at.desc()).all()
-    return templates.TemplateResponse(request, "upload_album.html", ctx(request, user, tracks=tracks))
-
-
-@router.post("/dashboard/albums/new")
-async def new_album_submit(
+def new_album_page(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
-    title: str = Form(...),
-    description: str = Form(""),
-    genre: str = Form(""),
-    artwork: UploadFile = File(None),
-    track_ids: List[str] = Form([]),
 ):
     profile = user.profile
 
-    def error(msg: str):
-        tracks = db.query(Track).filter(Track.creator_profile_id == profile.id).all()
-        return templates.TemplateResponse(request, "upload_album.html", ctx(request, user, tracks=tracks, error=msg), status_code=400)
+    if not profile:
+        return RedirectResponse(
+            url="/dashboard?error=Creator profile not found.",
+            status_code=303,
+        )
 
-    if not title.strip():
-        return error("Album title is required.")
-    if not track_ids:
-        return error("Select at least one track for this album.")
-
-    artwork_path = None
-    if artwork and artwork.filename:
-        try:
-            artwork_path = await save_upload(artwork, "artwork", ALLOWED_IMAGE_EXT)
-        except UploadValidationError as exc:
-            return error(str(exc))
-
-    slug = unique_slug(db, Album, title, "album")
-    album = Album(
-        creator_profile_id=profile.id,
-        title=title.strip(),
-        slug=slug,
-        description=description.strip() or None,
-        genre=genre.strip() or None,
-        artwork_path=artwork_path,
+    tracks = (
+        db.query(Track)
+        .filter(Track.creator_profile_id == profile.id)
+        .order_by(Track.created_at.desc())
+        .all()
     )
-    db.add(album)
-    db.flush()
 
-    valid_tracks = db.query(Track).filter(Track.id.in_(track_ids), Track.creator_profile_id == profile.id).all()
-    for position, track in enumerate(valid_tracks):
-        db.add(AlbumTrack(album_id=album.id, track_id=track.id, position=position))
+    return templates.TemplateResponse(
+        request,
+        "upload_album.html",
+        ctx(
+            request,
+            user,
+            tracks=tracks,
+        ),
+    )
 
-    db.commit()
-    return RedirectResponse(url=f"/album/{album.slug}?success=Album created.", status_code=303)
 
+# ----------------------------------------------------------------------
+# WITHDRAWAL
+# ----------------------------------------------------------------------
 
 @router.post("/dashboard/withdraw")
 def request_withdrawal(
@@ -241,25 +224,54 @@ def request_withdrawal(
     phone_number: str = Form(...),
 ):
     profile = user.profile
-    stats = _creator_stats(db, profile.id)
+
+    if not profile:
+        return RedirectResponse(
+            url="/dashboard?error=Creator profile not found.",
+            status_code=303,
+        )
 
     try:
-        amount_val = Decimal(amount)
+        amount_value = Decimal(amount)
     except Exception:
-        return RedirectResponse(url="/dashboard?error=Invalid withdrawal amount.", status_code=303)
+        return RedirectResponse(
+            url="/dashboard?error=Invalid withdrawal amount.",
+            status_code=303,
+        )
 
-    if amount_val <= 0:
-        return RedirectResponse(url="/dashboard?error=Withdrawal amount must be positive.", status_code=303)
-    if amount_val > stats["available_balance"]:
-        return RedirectResponse(url="/dashboard?error=Withdrawal exceeds your available balance.", status_code=303)
+    if amount_value <= 0:
+        return RedirectResponse(
+            url="/dashboard?error=Amount must be greater than zero.",
+            status_code=303,
+        )
 
-    wr = WithdrawalRequest(
+    stats = get_stats(db, profile.id)
+
+    if amount_value > stats["available_balance"]:
+        return RedirectResponse(
+            url="/dashboard?error=Insufficient available balance.",
+            status_code=303,
+        )
+
+    phone_number = phone_number.strip()
+
+    if not phone_number:
+        return RedirectResponse(
+            url="/dashboard?error=M-Pesa phone number is required.",
+            status_code=303,
+        )
+
+    withdrawal = WithdrawalRequest(
         creator_profile_id=profile.id,
-        amount=amount_val,
+        amount=amount_value,
         phone_number=phone_number,
         status=WithdrawalStatus.PENDING,
     )
-    db.add(wr)
+
+    db.add(withdrawal)
     db.commit()
 
-    return RedirectResponse(url="/dashboard?success=Withdrawal request submitted.", status_code=303)
+    return RedirectResponse(
+        url="/dashboard?success=Withdrawal request submitted.",
+        status_code=303,
+    )
