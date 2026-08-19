@@ -116,9 +116,11 @@ def track_detail(
     if current_user:
         purchased = (
             db.query(License)
+            .join(Order, License.order_id == Order.id)
             .filter(
                 License.buyer_id == current_user.id,
                 License.track_id == track.id,
+                Order.status == OrderStatus.COMPLETED,
             )
             .first()
             is not None
@@ -221,10 +223,8 @@ def download_track(
     user: User = Depends(require_user),
 ):
     """
-    Download a purchased track.
-
-    A user must have a License for the track.
-    The associated order must also be COMPLETED.
+    Allow only a buyer with a completed order/license
+    to download the purchased original audio file.
     """
 
     license_record = (
@@ -264,15 +264,21 @@ def download_track(
 
     audio_path = Path(track.audio_file_path)
 
-    # Handle both absolute paths and paths stored relative to the project.
+    # Track paths are normally stored as:
+    # media/audio/<uuid>.mp3
+    #
+    # Also support paths that are already absolute.
     if not audio_path.is_absolute():
         audio_path = Path.cwd() / audio_path
 
     audio_path = audio_path.resolve()
-
     media_root = Path(settings.MEDIA_ROOT).resolve()
 
-    # Security: downloaded file must be inside MEDIA_ROOT.
+    # If MEDIA_ROOT is relative, resolve it from the application root.
+    if not media_root.is_absolute():
+        media_root = (Path.cwd() / settings.MEDIA_ROOT).resolve()
+
+    # Security: never allow a purchased download to escape MEDIA_ROOT.
     try:
         audio_path.relative_to(media_root)
     except ValueError:
@@ -281,15 +287,18 @@ def download_track(
             detail="Invalid audio file location.",
         )
 
-    if not audio_path.exists() or not audio_path.is_file():
+    if not audio_path.exists():
         raise HTTPException(
             status_code=404,
             detail="Audio file is missing from storage.",
         )
 
-    filename = audio_path.name
+    if not audio_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file is invalid.",
+        )
 
-    # Give the buyer a clean download filename.
     safe_title = "".join(
         character
         for character in track.title
@@ -300,17 +309,10 @@ def download_track(
     if not safe_title:
         safe_title = "BeatHub-Track"
 
-    extension = audio_path.suffix.lower()
-
-    download_name = f"{safe_title}{extension}"
+    download_name = f"{safe_title}{audio_path.suffix.lower()}"
 
     return FileResponse(
         path=str(audio_path),
         filename=download_name,
         media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{download_name}"'
-            )
-        },
     )
