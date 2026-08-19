@@ -1,7 +1,6 @@
 """
 Central application configuration.
 All values are sourced from environment variables / .env.
-Never hard-code secrets here.
 """
 
 from functools import lru_cache
@@ -21,8 +20,6 @@ class Settings(BaseSettings):
     APP_NAME: str = "BeatHub"
     SECRET_KEY: str = "change-me-in-production"
 
-    # Production must provide DATABASE_URL through Render.
-    # SQLite remains available for local development only.
     DATABASE_URL: str = "sqlite:///./beathub.db"
     BASE_URL: str = "http://localhost:8000"
 
@@ -33,7 +30,7 @@ class Settings(BaseSettings):
     # Platform economics
     PLATFORM_COMMISSION_PERCENT: float = 10.0
 
-    # M-Pesa Daraja
+    # M-Pesa
     MPESA_ENVIRONMENT: str = "sandbox"
     MPESA_CONSUMER_KEY: str = ""
     MPESA_CONSUMER_SECRET: str = ""
@@ -53,9 +50,16 @@ class Settings(BaseSettings):
     EMAIL_PASSWORD: str = ""
     EMAIL_FROM: str = ""
 
-    # Storage
+    # --------------------------------------------------------------
+    # STORAGE
+    # --------------------------------------------------------------
     MEDIA_STORAGE: str = "local"
-    MEDIA_ROOT: str = "media"
+
+    # IMPORTANT:
+    # On Render this MUST be /var/data/media when the Persistent
+    # Disk is mounted at /var/data.
+    MEDIA_ROOT: str = "/var/data/media"
+
     MAX_UPLOAD_MB: int = 50
 
     @property
