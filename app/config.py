@@ -3,31 +3,38 @@ Central application configuration.
 All values are sourced from environment variables / .env.
 Never hard-code secrets here.
 """
+
 from functools import lru_cache
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # Core
     APP_ENV: str = "development"
     APP_NAME: str = "BeatHub"
     SECRET_KEY: str = "change-me-in-production"
+
+    # Production must provide DATABASE_URL through Render.
+    # SQLite remains available for local development only.
     DATABASE_URL: str = "sqlite:///./beathub.db"
     BASE_URL: str = "http://localhost:8000"
 
     # Auth
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     JWT_ALGORITHM: str = "HS256"
 
     # Platform economics
     PLATFORM_COMMISSION_PERCENT: float = 10.0
 
     # M-Pesa Daraja
-    MPESA_ENVIRONMENT: str = "sandbox"  # sandbox | production
+    MPESA_ENVIRONMENT: str = "sandbox"
     MPESA_CONSUMER_KEY: str = ""
     MPESA_CONSUMER_SECRET: str = ""
     MPESA_SHORTCODE: str = ""
@@ -38,7 +45,7 @@ class Settings(BaseSettings):
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
 
-    # Email (optional)
+    # Email
     EMAIL_ENABLED: bool = False
     EMAIL_HOST: str = ""
     EMAIL_PORT: int = 587
@@ -47,22 +54,23 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     # Storage
-    MEDIA_STORAGE: str = "local"  # local | s3 (future)
+    MEDIA_STORAGE: str = "local"
     MEDIA_ROOT: str = "media"
     MAX_UPLOAD_MB: int = 50
 
     @property
     def mpesa_base_url(self) -> str:
-        if self.MPESA_ENVIRONMENT == "production":
+        if self.MPESA_ENVIRONMENT.lower() == "production":
             return "https://api.safaricom.co.ke"
+
         return "https://sandbox.safaricom.co.ke"
 
     @property
     def is_production(self) -> bool:
-        return self.APP_ENV == "production"
+        return self.APP_ENV.lower() == "production"
 
 
-@lru_cache
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
 
