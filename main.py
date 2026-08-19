@@ -4,7 +4,7 @@ BeatHub — main application entrypoint.
 Run locally:
     uvicorn main:app --reload
 
-Production / Render:
+Production:
     uvicorn main:app --host 0.0.0.0 --port $PORT
 """
 
@@ -33,10 +33,6 @@ from app.utils.deps import require_creator
 
 logger = logging.getLogger("beathub")
 
-# ---------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------
-
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
 
@@ -46,19 +42,15 @@ MEDIA_DIR = BASE_DIR / settings.MEDIA_ROOT
 
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------------------------------------------------
-# Application
-# ---------------------------------------------------------------------
-
 app = FastAPI(title=settings.APP_NAME)
 
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
 
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Static files
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 if STATIC_DIR.exists():
     app.mount(
@@ -73,60 +65,50 @@ app.mount(
     name="media",
 )
 
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Database
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 Base.metadata.create_all(bind=engine)
 
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Routers
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
 app.include_router(mpesa_callback.router)
-
-# Dashboard router MUST be mounted.
 app.include_router(dashboard.router)
-
-# Admin router MUST remain mounted.
 app.include_router(admin.router)
 
-# ---------------------------------------------------------------------
-# Dashboard safety routes
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Dashboard URL compatibility
+# ------------------------------------------------------------------
 #
-# The real dashboard route is already supplied by dashboard.router.
-# These aliases protect against an older navigation link using
-# /artist/dashboard or /creator/dashboard.
-#
+# The actual upgraded dashboard is /dashboard.
+# These aliases prevent an older navigation template from producing
+# a 404 if its button still points to an alternate dashboard URL.
+# ------------------------------------------------------------------
 
 @app.get("/artist/dashboard", include_in_schema=False)
-def artist_dashboard_alias(
-    user=Depends(require_creator),
-):
-    return RedirectResponse(
-        url="/dashboard",
-        status_code=307,
-    )
-
-
 @app.get("/creator/dashboard", include_in_schema=False)
-def creator_dashboard_alias(
+@app.get("/producer/dashboard", include_in_schema=False)
+@app.get("/dashboard/home", include_in_schema=False)
+@app.get("/dashboard/index", include_in_schema=False)
+def dashboard_alias(
     user=Depends(require_creator),
 ):
     return RedirectResponse(
         url="/dashboard",
-        status_code=307,
+        status_code=303,
     )
 
 
-# ---------------------------------------------------------------------
-# Health check
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Health
+# ------------------------------------------------------------------
 
 @app.get("/healthz")
 def healthz():
@@ -137,9 +119,9 @@ def healthz():
     }
 
 
-# ---------------------------------------------------------------------
-# Error handlers
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Error handling
+# ------------------------------------------------------------------
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
