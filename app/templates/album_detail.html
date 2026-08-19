@@ -1,35 +1,127 @@
 {% extends "base.html" %}
-{% block title %}{{ album.title }} — BeatHub{% endblock %}
-{% block content %}
-<section style="padding: 40px 0; max-width: 760px;">
-  <div class="eyebrow">{{ album.genre or 'ALBUM' }}</div>
-  <h1 style="font-size: 36px; margin: 6px 0;">{{ album.title }}</h1>
-  <p class="sub">
-    By <a href="/profile/{{ album.creator_profile.slug }}" style="color: var(--teal);">{{ album.creator_profile.stage_name }}</a>
-  </p>
-  {% if album.description %}<p class="sub" style="color: var(--text-muted); line-height:1.6;">{{ album.description }}</p>{% endif %}
 
-  <div style="margin-top: 28px;">
-    <table class="data-table">
-      <thead><tr><th>#</th><th>Track</th><th>Price</th><th>Type</th><th></th></tr></thead>
-      <tbody>
-        {% for at in album.album_tracks %}
-          <tr>
-            <td>{{ loop.index }}</td>
-            <td>{{ at.track.title }}</td>
-            <td>KSh {{ '%.2f'|format(at.track.price) }}</td>
-            <td>
-              {% if at.track.sales_model.value == 'exclusive' %}
-                {% if at.track.is_sold %}<span class="badge badge-sold">SOLD</span>{% else %}<span class="badge badge-exclusive">EXCLUSIVE</span>{% endif %}
-              {% else %}
-                <span class="badge badge-nonexclusive">NON-EXCLUSIVE</span>
-              {% endif %}
-            </td>
-            <td><a href="/track/{{ at.track.slug }}" class="btn btn-outline">View</a></td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+{% block title %}{{ album.title }} — BeatHub{% endblock %}
+
+{% block content %}
+
+<section style="padding:40px 0; max-width:760px;">
+
+  <div class="eyebrow">
+    {{ album.genre or 'ALBUM' }}
   </div>
+
+  <h1 style="font-size:36px; margin:6px 0;">
+    {{ album.title }}
+  </h1>
+
+  <p class="sub">
+
+    By
+
+    <a
+      href="/profile/{{ album.creator_profile.slug }}"
+      style="color:var(--teal);"
+    >
+      {{ album.creator_profile.stage_name }}
+    </a>
+
+  </p>
+
+  {% if album.description %}
+
+    <p
+      class="sub"
+      style="
+        color:var(--text-muted);
+        line-height:1.6;
+      "
+    >
+      {{ album.description }}
+    </p>
+
+  {% endif %}
+
+  <div style="margin-top:28px;">
+
+    <table class="data-table">
+
+      <thead>
+
+        <tr>
+          <th>#</th>
+          <th>Track</th>
+          <th>Price</th>
+          <th>Type</th>
+          <th></th>
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for at in album.album_tracks %}
+
+          <tr>
+
+            <td>{{ loop.index }}</td>
+
+            <td>
+              {{ at.track.title }}
+            </td>
+
+            <td>
+              KSh {{ '%.2f'|format(at.track.price) }}
+            </td>
+
+            <td>
+
+              {% if at.track.sales_model.value == 'exclusive' %}
+
+                {% if at.track.is_sold %}
+
+                  <span class="badge badge-sold">
+                    SOLD
+                  </span>
+
+                {% else %}
+
+                  <span class="badge badge-exclusive">
+                    EXCLUSIVE
+                  </span>
+
+                {% endif %}
+
+              {% else %}
+
+                <span class="badge badge-nonexclusive">
+                  NON-EXCLUSIVE
+                </span>
+
+              {% endif %}
+
+            </td>
+
+            <td>
+
+              <a
+                href="/track/{{ at.track.slug }}"
+                class="btn btn-outline"
+              >
+                View
+              </a>
+
+            </td>
+
+          </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
 </section>
+
 {% endblock %}
