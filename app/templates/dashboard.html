@@ -1,66 +1,70 @@
-{% extends "base.html" %}
-{% block title %}Dashboard — BeatHub{% endblock %}
-{% block content %}
-<section style="padding: 30px 0;">
-  <h1 style="font-size: 28px;">Welcome back, {{ profile.stage_name }}</h1>
-  <p class="sub" style="color: var(--text-muted);">
-    Platform commission: {{ commission_percent }}% &middot; You keep {{ 100 - commission_percent }}% of every sale.
-  </p>
+"""
+Central application configuration.
+All values are sourced from environment variables / .env.
+Never hard-code secrets here.
+"""
+from functools import lru_cache
+from typing import Optional
 
-  <div class="dashboard-grid">
-    <div class="stat-card"><div class="label">Total Sales</div><div class="value">{{ stats.total_sales }}</div></div>
-    <div class="stat-card"><div class="label">Gross Revenue</div><div class="value">KSh {{ '%.2f'|format(stats.gross_revenue) }}</div></div>
-    <div class="stat-card"><div class="label">BeatHub Commission</div><div class="value">KSh {{ '%.2f'|format(stats.platform_commission) }}</div></div>
-    <div class="stat-card"><div class="label">Net Earnings</div><div class="value teal">KSh {{ '%.2f'|format(stats.net_earnings) }}</div></div>
-    <div class="stat-card"><div class="label">Available Balance</div><div class="value gold">KSh {{ '%.2f'|format(stats.available_balance) }}</div></div>
-    <div class="stat-card"><div class="label">Pending Withdrawal</div><div class="value">KSh {{ '%.2f'|format(stats.pending_withdrawal) }}</div></div>
-    <div class="stat-card"><div class="label">Tracks</div><div class="value">{{ track_count }}</div></div>
-    <div class="stat-card"><div class="label">Albums</div><div class="value">{{ album_count }}</div></div>
-  </div>
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-  <div style="display:flex; gap:14px; margin: 24px 0;">
-    <a href="/dashboard/upload" class="btn btn-primary">Upload Track(s)</a>
-    <a href="/dashboard/albums/new" class="btn btn-outline">Create Album</a>
-  </div>
 
-  <div class="social-links">
-    <a href="{{ youtube_url }}" target="_blank" class="social-pill youtube">▶ YouTube Channel</a>
-    {% if discord_url %}
-      <a href="{{ discord_url }}" target="_blank" class="social-pill discord">💬 Join our Discord</a>
-    {% else %}
-      <span class="social-pill discord" style="opacity:0.5;">💬 Discord link not configured</span>
-    {% endif %}
-  </div>
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-  <h2 style="font-size: 20px; margin-top: 40px;">Recent Sales</h2>
-  <table class="data-table">
-    <thead><tr><th>Order</th><th>Date</th><th>Gross</th><th>Commission</th><th>Net</th></tr></thead>
-    <tbody>
-      {% for o in stats.recent_orders %}
-        <tr>
-          <td>{{ o.order_number }}</td>
-          <td>{{ o.completed_at.strftime('%d %b %Y') if o.completed_at else '' }}</td>
-          <td>KSh {{ '%.2f'|format(o.gross_amount) }}</td>
-          <td>KSh {{ '%.2f'|format(o.commission_amount) }}</td>
-          <td>KSh {{ '%.2f'|format(o.net_amount) }}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="5" class="sub">No sales yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+    # Core
+    APP_ENV: str = "development"
+    APP_NAME: str = "BeatHub"
+    SECRET_KEY: str = "change-me-in-production"
+    DATABASE_URL: str = "sqlite:///./beathub.db"
+    BASE_URL: str = "http://localhost:8000"
 
-  <h2 style="font-size: 20px; margin-top: 40px;">Request Withdrawal</h2>
-  <form action="/dashboard/withdraw" method="post" style="max-width: 420px;">
-    <div class="field">
-      <label>Amount (KSh)</label>
-      <input type="number" step="0.01" min="0" name="amount" required>
-    </div>
-    <div class="field">
-      <label>M-Pesa Phone Number</label>
-      <input type="tel" name="phone_number" placeholder="07XX XXX XXX" required>
-    </div>
-    <button type="submit" class="btn btn-primary">Request Withdrawal</button>
-  </form>
-</section>
-{% endblock %}
+    # Auth
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    JWT_ALGORITHM: str = "HS256"
+
+    # Platform economics
+    PLATFORM_COMMISSION_PERCENT: float = 10.0
+
+    # M-Pesa Daraja
+    MPESA_ENVIRONMENT: str = "sandbox"  # sandbox | production
+    MPESA_CONSUMER_KEY: str = ""
+    MPESA_CONSUMER_SECRET: str = ""
+    MPESA_SHORTCODE: str = ""
+    MPESA_PASSKEY: str = ""
+    MPESA_CALLBACK_URL: str = ""
+
+    # Social
+    YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
+    DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
+
+    # Email (optional)
+    EMAIL_ENABLED: bool = False
+    EMAIL_HOST: str = ""
+    EMAIL_PORT: int = 587
+    EMAIL_USERNAME: str = ""
+    EMAIL_PASSWORD: str = ""
+    EMAIL_FROM: str = ""
+
+    # Storage
+    MEDIA_STORAGE: str = "local"  # local | s3 (future)
+    MEDIA_ROOT: str = "media"
+    MAX_UPLOAD_MB: int = 50
+
+    @property
+    def mpesa_base_url(self) -> str:
+        if self.MPESA_ENVIRONMENT == "production":
+            return "https://api.safaricom.co.ke"
+        return "https://sandbox.safaricom.co.ke"
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV == "production"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
