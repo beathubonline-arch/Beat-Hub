@@ -10,6 +10,87 @@
     Welcome back, {{ profile.stage_name }}
   </h1>
 
+  <!-- SHARE PRODUCER PAGE -->
+  <div
+    class="form-card"
+    style="
+      margin:24px 0 30px;
+      padding:24px;
+      border:1px solid rgba(255,255,255,.08);
+    "
+  >
+
+    <div class="eyebrow">SHARE YOUR MUSIC</div>
+
+    <h2 style="font-size:22px; margin:6px 0 8px;">
+      Share your Producer Page
+    </h2>
+
+    <p class="sub" style="margin-bottom:16px;">
+      Send this link to artists, fans, or share it on your social media.
+      Anyone with the link can view your public BeatHub profile and your
+      published music.
+    </p>
+
+    <div
+      style="
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        align-items:center;
+      "
+    >
+
+      <input
+        id="producer-share-link"
+        type="text"
+        readonly
+        value="{{ request.url.scheme }}://{{ request.url.netloc }}/producer/{{ profile.slug }}"
+        style="
+          flex:1;
+          min-width:240px;
+          padding:12px 14px;
+          border-radius:8px;
+          border:1px solid rgba(255,255,255,.12);
+          background:rgba(255,255,255,.04);
+        "
+      >
+
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick="copyProducerLink()"
+      >
+        📋 Copy Link
+      </button>
+
+      <a
+        href="/producer/{{ profile.slug }}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-outline"
+      >
+        View Page
+      </a>
+
+    </div>
+
+    <div
+      id="copy-message"
+      style="
+        display:none;
+        margin-top:12px;
+        font-size:14px;
+      "
+    >
+      ✓ Link copied — share it with artists or on social media.
+    </div>
+
+  </div>
+
+
+  <!-- DASHBOARD STATS -->
+
   <div class="dashboard-grid">
 
     <div class="stat-card">
@@ -50,17 +131,36 @@
 
   </div>
 
-  <div style="display:flex; gap:14px; margin:24px 0; flex-wrap:wrap;">
 
-    <a href="/dashboard/upload" class="btn btn-primary">
+  <!-- ACTIONS -->
+
+  <div
+    style="
+      display:flex;
+      gap:14px;
+      margin:24px 0;
+      flex-wrap:wrap;
+    "
+  >
+
+    <a
+      href="/dashboard/upload"
+      class="btn btn-primary"
+    >
       Upload Track(s)
     </a>
 
-    <a href="/dashboard/albums/new" class="btn btn-outline">
+    <a
+      href="/dashboard/albums/new"
+      class="btn btn-outline"
+    >
       Create Album
     </a>
 
   </div>
+
+
+  <!-- SOCIAL LINKS -->
 
   <div class="social-links">
 
@@ -74,6 +174,7 @@
     </a>
 
     {% if discord_url %}
+
       <a
         href="{{ discord_url }}"
         target="_blank"
@@ -82,16 +183,22 @@
       >
         💬 Join our Discord
       </a>
+
     {% else %}
+
       <span
         class="social-pill discord"
-        style="opacity:0.5;"
+        style="opacity:.5;"
       >
         💬 Discord link not configured
       </span>
+
     {% endif %}
 
   </div>
+
+
+  <!-- RECENT SALES -->
 
   <h2 style="font-size:20px; margin-top:40px;">
     Recent Sales
@@ -112,7 +219,10 @@
       {% for o in stats.recent_orders %}
 
         <tr>
-          <td>{{ o.order_number }}</td>
+
+          <td>
+            {{ o.order_number }}
+          </td>
 
           <td>
             {{ o.completed_at.strftime('%d %b %Y')
@@ -122,6 +232,7 @@
           <td>
             KSh {{ '%.2f'|format(o.net_amount) }}
           </td>
+
         </tr>
 
       {% else %}
@@ -137,6 +248,9 @@
     </tbody>
 
   </table>
+
+
+  <!-- WITHDRAWAL -->
 
   <h2 style="font-size:20px; margin-top:40px;">
     Request Withdrawal
@@ -185,5 +299,30 @@
   </form>
 
 </section>
+
+
+<script>
+function copyProducerLink() {
+    const input = document.getElementById("producer-share-link");
+    const message = document.getElementById("copy-message");
+
+    navigator.clipboard.writeText(input.value).then(function () {
+        message.style.display = "block";
+
+        setTimeout(function () {
+            message.style.display = "none";
+        }, 3000);
+    }).catch(function () {
+        input.select();
+        document.execCommand("copy");
+
+        message.style.display = "block";
+
+        setTimeout(function () {
+            message.style.display = "none";
+        }, 3000);
+    });
+}
+</script>
 
 {% endblock %}
