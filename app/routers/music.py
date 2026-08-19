@@ -1,9 +1,11 @@
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
+import boto3
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -15,8 +17,78 @@ from app.models.profile import Profile
 from app.models.user import User
 from app.utils.deps import get_optional_user, require_user
 
+
 router = APIRouter(tags=["music"])
-templates = Jinja2Templates(directory="app/templates")
+
+templates = Jinja2Templates(
+    directory="app/templates"
+)
+
+
+# ----------------------------------------------------------------------
+# R2
+# ----------------------------------------------------------------------
+
+def get_r2_client():
+    if not settings.r2_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Cloud storage is not configured.",
+        )
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.r2_endpoint_url,
+        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+        region_name="auto",
+    )
+
+
+def r2_object_key(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+
+    value = str(value).strip()
+
+    if not value:
+        return None
+
+    if value.startswith("r2://"):
+        parts = value[5:].split("/", 1)
+
+        if len(parts) == 2:
+            return parts[1]
+
+    return value.lstrip("/")
+
+
+def r2_presigned_url(
+    value: Optional[str],
+    expires: Optional[int] = None,
+) -> Optional[str]:
+    key = r2_object_key(value)
+
+    if not key:
+        return None
+
+    if settings.R2_PUBLIC_URL:
+        return (
+            settings.R2_PUBLIC_URL.rstrip("/")
+            + "/"
+            + quote(key)
+        )
+
+    client = get_r2_client()
+
+    return client.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.R2_BUCKET_NAME,
+            "Key": key,
+        },
+        ExpiresIn=expires or settings.R2_PUBLIC_URL_EXPIRES,
+    )
 
 
 def ctx(request: Request, current_user, **extra):
@@ -25,13 +97,15 @@ def ctx(request: Request, current_user, **extra):
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
+
     data.update(extra)
+
     return data
 
 
-# ==============================================================
+# ----------------------------------------------------------------------
 # PUBLIC MUSIC
-# ==============================================================
+# ----------------------------------------------------------------------
 
 @router.get("/beats")
 def browse_beats(
@@ -41,11 +115,20 @@ def browse_beats(
 ):
     tracks = (
         db.query(Track)
-        .filter(Track.is_published.is_(True))
+        .filter(Track.is_published == True)
         .order_by(Track.created_at.desc())
         .limit(60)
         .all()
     )
+
+    for track in tracks:
+        if track.cover_art_path:
+            try:
+                track.cover_art_path = r2_presigned_url(
+                    track.cover_art_path
+                )
+            except Exception:
+                pass
 
     return templates.TemplateResponse(
         request,
@@ -66,11 +149,20 @@ def hot_picks(
 ):
     tracks = (
         db.query(Track)
-        .filter(Track.is_published.is_(True))
+        .filter(Track.is_published == True)
         .order_by(Track.created_at.desc())
         .limit(12)
         .all()
     )
+
+    for track in tracks:
+        if track.cover_art_path:
+            try:
+                track.cover_art_path = r2_presigned_url(
+                    track.cover_art_path
+                )
+            except Exception:
+                pass
 
     return templates.TemplateResponse(
         request,
@@ -96,9 +188,9 @@ def sessions_page(
     )
 
 
-# ==============================================================
+# ----------------------------------------------------------------------
 # TRACK DETAIL
-# ==============================================================
+# ----------------------------------------------------------------------
 
 @router.get("/track/{slug}")
 def track_detail(
@@ -137,6 +229,14 @@ def track_detail(
             is not None
         )
 
+    if track.cover_art_path:
+        try:
+            track.cover_art_path = r2_presigned_url(
+                track.cover_art_path
+            )
+        except Exception:
+            pass
+
     return templates.TemplateResponse(
         request,
         "track_detail.html",
@@ -149,9 +249,9 @@ def track_detail(
     )
 
 
-# ==============================================================
+# ----------------------------------------------------------------------
 # ALBUM
-# ==============================================================
+# ----------------------------------------------------------------------
 
 @router.get("/album/{slug}")
 def album_detail(
@@ -172,6 +272,14 @@ def album_detail(
             detail="Album not found.",
         )
 
+    if album.artwork_path:
+        try:
+            album.artwork_path = r2_presigned_url(
+                album.artwork_path
+            )
+        except Exception:
+            pass
+
     return templates.TemplateResponse(
         request,
         "album_detail.html",
@@ -183,9 +291,9 @@ def album_detail(
     )
 
 
-# ==============================================================
+# ----------------------------------------------------------------------
 # CREATOR PROFILE
-# ==============================================================
+# ----------------------------------------------------------------------
 
 @router.get("/profile/{slug}")
 def profile_detail(
@@ -218,6 +326,24 @@ def profile_detail(
         if album.is_published
     ]
 
+    for track in tracks:
+        if track.cover_art_path:
+            try:
+                track.cover_art_path = r2_presigned_url(
+                    track.cover_art_path
+                )
+            except Exception:
+                pass
+
+    for album in albums:
+        if album.artwork_path:
+            try:
+                album.artwork_path = r2_presigned_url(
+                    album.artwork_path
+                )
+            except Exception:
+                pass
+
     return templates.TemplateResponse(
         request,
         "profile_detail.html",
@@ -231,19 +357,20 @@ def profile_detail(
     )
 
 
-# ==============================================================
+# ----------------------------------------------------------------------
 # PURCHASE DOWNLOAD
-# ==============================================================
+# ----------------------------------------------------------------------
 
-def _find_track(
+@router.get("/download/track/{track_ref}")
+@router.get("/download/{track_ref}")
+def download_track(
     track_ref: str,
-    db: Session,
-) -> Optional[Track]:
-    """
-    Accept either:
-        - Track UUID
-        - Track slug
-    """
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    # --------------------------------------------------------------
+    # Find by UUID or slug.
+    # --------------------------------------------------------------
 
     track = (
         db.query(Track)
@@ -251,146 +378,22 @@ def _find_track(
         .first()
     )
 
-    if track:
-        return track
-
-    return (
-        db.query(Track)
-        .filter(Track.slug == track_ref)
-        .first()
-    )
-
-
-def _find_audio_file(track: Track) -> Optional[Path]:
-    """
-    Resolve the stored audio path safely.
-
-    Supports paths stored as:
-        media/audio/file.mp3
-        audio/file.mp3
-        /absolute/path/media/audio/file.mp3
-        /opt/render/project/src/media/audio/file.mp3
-    """
-
-    if not track.audio_file_path:
-        return None
-
-    stored = Path(str(track.audio_file_path))
-
-    media_root = Path(str(settings.MEDIA_ROOT))
-
-    if not media_root.is_absolute():
-        media_root = Path.cwd() / media_root
-
-    media_root = media_root.resolve()
-
-    candidates = []
-
-    # ----------------------------------------------------------
-    # Exact stored path
-    # ----------------------------------------------------------
-
-    if stored.is_absolute():
-        candidates.append(stored)
-    else:
-        candidates.append(Path.cwd() / stored)
-        candidates.append(media_root / stored)
-
-    # ----------------------------------------------------------
-    # If only filename/path was stored, look inside audio/.
-    # ----------------------------------------------------------
-
-    filename = stored.name
-
-    candidates.extend(
-        [
-            media_root / "audio" / filename,
-            Path.cwd() / "media" / "audio" / filename,
-            Path("/opt/render/project/src") / "media" / "audio" / filename,
-        ]
-    )
-
-    # ----------------------------------------------------------
-    # Also handle "media/audio/filename.mp3" correctly.
-    # ----------------------------------------------------------
-
-    stored_parts = stored.parts
-
-    if "media" in stored_parts:
-        try:
-            media_index = stored_parts.index("media")
-            relative_after_media = Path(
-                *stored_parts[media_index + 1:]
-            )
-
-            candidates.append(
-                media_root / relative_after_media
-            )
-        except (ValueError, IndexError):
-            pass
-
-    # ----------------------------------------------------------
-    # Remove duplicates while preserving order.
-    # ----------------------------------------------------------
-
-    checked = set()
-
-    for candidate in candidates:
-        try:
-            candidate = candidate.resolve()
-        except OSError:
-            continue
-
-        key = str(candidate)
-
-        if key in checked:
-            continue
-
-        checked.add(key)
-
-        if not candidate.exists():
-            continue
-
-        if not candidate.is_file():
-            continue
-
-        # Security: never serve anything outside MEDIA_ROOT.
-        try:
-            candidate.relative_to(media_root)
-        except ValueError:
-            continue
-
-        return candidate
-
-    return None
-
-
-def _download_track(
-    track_ref: str,
-    db: Session,
-    user: User,
-):
-    # ----------------------------------------------------------
-    # Find purchased track by UUID OR slug.
-    # ----------------------------------------------------------
-
-    track = _find_track(track_ref, db)
+    if not track:
+        track = (
+            db.query(Track)
+            .filter(Track.slug == track_ref)
+            .first()
+        )
 
     if not track:
         raise HTTPException(
             status_code=404,
-            detail="Purchased track was not found.",
+            detail="Track not found.",
         )
 
-    # ----------------------------------------------------------
+    # --------------------------------------------------------------
     # Verify ownership.
-    #
-    # The buyer must have:
-    #   1. A License for this track
-    #   2. A COMPLETED Order
-    #
-    # No payment confirmation = no download.
-    # ----------------------------------------------------------
+    # --------------------------------------------------------------
 
     license_record = (
         db.query(License)
@@ -412,119 +415,65 @@ def _download_track(
             detail="You do not own this track.",
         )
 
-    # ----------------------------------------------------------
-    # Locate the actual master audio file.
-    # ----------------------------------------------------------
+    # --------------------------------------------------------------
+    # R2 configuration.
+    # --------------------------------------------------------------
 
-    audio_path = _find_audio_file(track)
-
-    if audio_path is None:
+    if not settings.r2_enabled:
         raise HTTPException(
-            status_code=404,
-            detail=(
-                "Your purchase is confirmed, but the audio file "
-                "cannot be found in storage."
-            ),
+            status_code=503,
+            detail="Cloud storage is not configured.",
         )
 
-    # ----------------------------------------------------------
-    # Clean filename for buyer.
-    # ----------------------------------------------------------
+    key = r2_object_key(track.audio_file_path)
 
-    safe_title = "".join(
-        character
-        for character in track.title
-        if character.isalnum()
-        or character in (" ", "-", "_")
-    ).strip()
+    if not key:
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file is not available.",
+        )
 
-    if not safe_title:
-        safe_title = "BeatHub-Track"
+    client = get_r2_client()
 
-    file_extension = audio_path.suffix.lower()
+    # --------------------------------------------------------------
+    # Confirm the object actually exists.
+    # --------------------------------------------------------------
 
-    download_name = (
-        f"{safe_title}{file_extension}"
-        if file_extension
-        else safe_title
-    )
+    try:
+        metadata = client.head_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=key,
+        )
+    except ClientError:
+        raise HTTPException(
+            status_code=404,
+            detail="The purchased audio file is missing from storage.",
+        )
 
-    # ----------------------------------------------------------
-    # Force download.
-    # ----------------------------------------------------------
+    # --------------------------------------------------------------
+    # Generate temporary private download URL.
+    # --------------------------------------------------------------
 
-    return FileResponse(
-        path=str(audio_path),
-        filename=download_name,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{download_name}"'
+    download_url = client.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.R2_BUCKET_NAME,
+            "Key": key,
+            "ResponseContentType": (
+                metadata.get(
+                    "ContentType",
+                    "application/octet-stream",
+                )
             ),
-            "Cache-Control": "private, no-store, no-cache",
-            "Pragma": "no-cache",
         },
+        ExpiresIn=settings.R2_DOWNLOAD_URL_EXPIRES,
     )
 
+    # --------------------------------------------------------------
+    # Browser downloads directly from R2.
+    # --------------------------------------------------------------
 
-# --------------------------------------------------------------
-# PRIMARY DOWNLOAD ROUTES
-# --------------------------------------------------------------
-
-@router.get("/download/track/{track_ref}")
-def download_track(
-    track_ref: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-):
-    return _download_track(
-        track_ref=track_ref,
-        db=db,
-        user=user,
-    )
-
-
-@router.get("/download/{track_ref}")
-def download_track_short(
-    track_ref: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-):
-    return _download_track(
-        track_ref=track_ref,
-        db=db,
-        user=user,
-    )
-
-
-# --------------------------------------------------------------
-# ADDITIONAL COMPATIBILITY ROUTES
-#
-# These support older dashboard/checkout templates that may have
-# generated one of these URLs.
-# --------------------------------------------------------------
-
-@router.get("/tracks/{track_ref}/download")
-def download_track_legacy(
-    track_ref: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-):
-    return _download_track(
-        track_ref=track_ref,
-        db=db,
-        user=user,
-    )
-
-
-@router.get("/track/{track_ref}/download")
-def download_track_legacy_two(
-    track_ref: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-):
-    return _download_track(
-        track_ref=track_ref,
-        db=db,
-        user=user,
+    return RedirectResponse(
+        url=download_url,
+        status_code=307,
     )
