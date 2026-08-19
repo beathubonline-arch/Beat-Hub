@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # Social
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
-    DISCORD_INVITE_URL: str = ""
+    DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
 
     # Email (optional)
     EMAIL_ENABLED: bool = False
