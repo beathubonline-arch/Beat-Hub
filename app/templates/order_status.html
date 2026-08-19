@@ -1,50 +1,203 @@
 {% extends "base.html" %}
+
 {% block title %}Order {{ order.order_number }} — BeatHub{% endblock %}
+
 {% block content %}
+
 <div class="form-page">
   <div class="form-card" id="status-card">
+
     <h2>Order {{ order.order_number }}</h2>
-    <p class="subtitle">Check your phone and enter your M-Pesa PIN to complete payment.</p>
 
-    <div class="stat-card" style="margin-top:10px;">
-      <div class="label">Status</div>
-      <div class="value" id="status-value" style="text-transform:uppercase;">{{ order.status.value }}</div>
-    </div>
-
-    <p class="sub" style="margin-top:20px;" id="status-message">
+    <p class="subtitle">
       {% if order.status.value == 'pending' %}
-        Waiting for payment confirmation...
+        Check your phone and enter your M-Pesa PIN to complete payment.
       {% elif order.status.value == 'completed' %}
         Payment confirmed! Your purchase is ready.
       {% elif order.status.value == 'failed' %}
-        Payment was not completed. You can try again.
+        Payment was not completed.
       {% elif order.status.value == 'rejected' %}
-        This item was sold to another buyer moments before your payment confirmed. Contact support for a refund.
+        This purchase was rejected.
       {% endif %}
     </p>
 
+
+    <!-- STATUS -->
+
+    <div class="stat-card" style="margin-top:10px;">
+      <div class="label">Status</div>
+
+      <div
+        class="value"
+        id="status-value"
+        style="text-transform:uppercase;"
+      >
+        {{ order.status.value }}
+      </div>
+    </div>
+
+
+    <!-- STATUS MESSAGE -->
+
+    <p
+      class="sub"
+      style="margin-top:20px;"
+      id="status-message"
+    >
+
+      {% if order.status.value == 'pending' %}
+
+        Waiting for payment confirmation...
+
+      {% elif order.status.value == 'completed' %}
+
+        Payment confirmed! Your purchase is ready to download.
+
+      {% elif order.status.value == 'failed' %}
+
+        Payment was not completed. You can try again.
+
+      {% elif order.status.value == 'rejected' %}
+
+        This item was sold to another buyer moments before your payment
+        confirmed. Contact support for a refund.
+
+      {% endif %}
+
+    </p>
+
+
+    <!-- COMPLETED PURCHASE -->
+
     {% if order.status.value == 'completed' and order.track %}
-      <a href="/track/{{ order.track.slug }}" class="btn btn-primary btn-block" style="margin-top:16px;">View your purchase</a>
+
+      <div
+        class="form-card"
+        style="
+          margin-top:24px;
+          padding:22px;
+          text-align:center;
+        "
+      >
+
+        {% if order.track.cover_art_path %}
+
+          <div
+            style="
+              width:180px;
+              height:180px;
+              margin:0 auto 18px;
+              overflow:hidden;
+              border-radius:12px;
+              background:#111;
+            "
+          >
+
+            <img
+              src="/media/{{ order.track.cover_art_path | replace('media/', '', 1) }}"
+              alt="{{ order.track.title }}"
+              style="
+                width:100%;
+                height:100%;
+                object-fit:cover;
+              "
+            >
+
+          </div>
+
+        {% endif %}
+
+
+        <div class="eyebrow">
+          YOUR PURCHASE
+        </div>
+
+        <h3 style="margin:6px 0;">
+          {{ order.track.title }}
+        </h3>
+
+        <p class="sub">
+          Your payment has been confirmed and ownership has been granted.
+        </p>
+
+
+        <!-- DOWNLOAD BUTTON -->
+
+        <a
+          href="/orders/{{ order.id }}/download"
+          class="btn btn-primary btn-block"
+          style="margin-top:18px;"
+        >
+          Download Beat
+        </a>
+
+
+        <a
+          href="/track/{{ order.track.slug }}"
+          class="btn btn-outline btn-block"
+          style="margin-top:10px;"
+        >
+          View Track
+        </a>
+
+      </div>
+
     {% endif %}
+
+
+    {% if order.status.value == 'failed' %}
+
+      <a
+        href="/track/{{ order.track.slug }}"
+        class="btn btn-primary btn-block"
+        style="margin-top:16px;"
+      >
+        Try Again
+      </a>
+
+    {% endif %}
+
   </div>
 </div>
 
+
 <script>
+
   const orderId = "{{ order.id }}";
   const currentStatus = "{{ order.status.value }}";
 
   if (currentStatus === "pending") {
+
     const poll = setInterval(async () => {
+
       try {
-        const res = await fetch(`/api/orders/${orderId}/status`);
+
+        const res = await fetch(
+          `/api/orders/${orderId}/status`
+        );
+
         if (!res.ok) return;
+
         const data = await res.json();
+
         if (data.status !== "pending") {
-          window.location.reload();
+
           clearInterval(poll);
+
+          window.location.reload();
+
         }
-      } catch (e) { /* keep polling silently */ }
+
+      } catch (e) {
+
+        // Keep polling silently.
+
+      }
+
     }, 3000);
+
   }
+
 </script>
+
 {% endblock %}
