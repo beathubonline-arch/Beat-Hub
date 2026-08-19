@@ -1,11 +1,5 @@
 """
 BeatHub — main application entrypoint.
-
-Run locally:
-    uvicorn main:app --reload
-
-Production:
-    uvicorn main:app --host 0.0.0.0 --port $PORT
 """
 
 import logging
@@ -59,10 +53,29 @@ if STATIC_DIR.exists():
         name="static",
     )
 
+# ------------------------------------------------------------------
+# PUBLIC MEDIA
+#
+# Only cover art and previews are public.
+# Purchased full audio is NOT publicly mounted.
+# ------------------------------------------------------------------
+
+COVERS_DIR = MEDIA_DIR / "covers"
+PREVIEWS_DIR = MEDIA_DIR / "previews"
+
+COVERS_DIR.mkdir(parents=True, exist_ok=True)
+PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+
 app.mount(
-    "/media",
-    StaticFiles(directory=str(MEDIA_DIR)),
-    name="media",
+    "/media/covers",
+    StaticFiles(directory=str(COVERS_DIR)),
+    name="media-covers",
+)
+
+app.mount(
+    "/media/previews",
+    StaticFiles(directory=str(PREVIEWS_DIR)),
+    name="media-previews",
 )
 
 # ------------------------------------------------------------------
@@ -83,13 +96,9 @@ app.include_router(mpesa_callback.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 
+
 # ------------------------------------------------------------------
-# Dashboard URL compatibility
-# ------------------------------------------------------------------
-#
-# The actual upgraded dashboard is /dashboard.
-# These aliases prevent an older navigation template from producing
-# a 404 if its button still points to an alternate dashboard URL.
+# Dashboard compatibility
 # ------------------------------------------------------------------
 
 @app.get("/artist/dashboard", include_in_schema=False)
@@ -120,7 +129,7 @@ def healthz():
 
 
 # ------------------------------------------------------------------
-# Error handling
+# Errors
 # ------------------------------------------------------------------
 
 @app.exception_handler(StarletteHTTPException)
