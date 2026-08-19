@@ -4,7 +4,6 @@ Works with PostgreSQL in production and SQLite for local development.
 """
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-
 from app.config import settings
 
 connect_args = {}
@@ -19,7 +18,6 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
-
 Base = declarative_base()
 
 
@@ -28,5 +26,8 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
