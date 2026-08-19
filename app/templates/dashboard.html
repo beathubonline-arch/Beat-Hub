@@ -10,87 +10,50 @@
     Welcome back, {{ profile.stage_name }}
   </h1>
 
-  <!-- SHARE PRODUCER PAGE -->
-  <div
-    class="form-card"
-    style="
-      margin:24px 0 30px;
-      padding:24px;
-      border:1px solid rgba(255,255,255,.08);
-    "
-  >
+  <!-- PUBLIC STORE LINK -->
+  <div class="form-card" style="margin:20px 0 28px; padding:20px;">
+    <div class="eyebrow">YOUR PUBLIC STORE</div>
 
-    <div class="eyebrow">SHARE YOUR MUSIC</div>
-
-    <h2 style="font-size:22px; margin:6px 0 8px;">
-      Share your Producer Page
+    <h2 style="margin:5px 0 8px; font-size:22px;">
+      Share your BeatHub store
     </h2>
 
-    <p class="sub" style="margin-bottom:16px;">
-      Send this link to artists, fans, or share it on your social media.
-      Anyone with the link can view your public BeatHub profile and your
-      published music.
+    <p class="sub" style="margin-bottom:14px;">
+      Send this link to artists, buyers, fans or your social media followers.
+      They can browse your music and purchase available tracks.
     </p>
 
-    <div
-      style="
-        display:flex;
-        gap:10px;
-        flex-wrap:wrap;
-        align-items:center;
-      "
-    >
-
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
       <input
-        id="producer-share-link"
+        id="store-link"
         type="text"
+        value="{{ store_url }}"
         readonly
-        value="{{ request.url.scheme }}://{{ request.url.netloc }}/producer/{{ profile.slug }}"
-        style="
-          flex:1;
-          min-width:240px;
-          padding:12px 14px;
-          border-radius:8px;
-          border:1px solid rgba(255,255,255,.12);
-          background:rgba(255,255,255,.04);
-        "
+        style="flex:1; min-width:260px;"
       >
 
       <button
         type="button"
         class="btn btn-primary"
-        onclick="copyProducerLink()"
+        onclick="copyStoreLink()"
       >
-        📋 Copy Link
+        Copy Store Link
       </button>
 
       <a
-        href="/producer/{{ profile.slug }}"
+        href="/profile/{{ profile.slug }}"
         target="_blank"
-        rel="noopener noreferrer"
         class="btn btn-outline"
       >
-        View Page
+        View My Store
       </a>
-
     </div>
 
-    <div
-      id="copy-message"
-      style="
-        display:none;
-        margin-top:12px;
-        font-size:14px;
-      "
-    >
-      ✓ Link copied — share it with artists or on social media.
-    </div>
-
+    <div id="copy-message" class="sub" style="margin-top:8px;"></div>
   </div>
 
 
-  <!-- DASHBOARD STATS -->
-
+  <!-- STATS -->
   <div class="dashboard-grid">
 
     <div class="stat-card">
@@ -133,65 +96,243 @@
 
 
   <!-- ACTIONS -->
-
-  <div
-    style="
-      display:flex;
-      gap:14px;
-      margin:24px 0;
-      flex-wrap:wrap;
-    "
-  >
-
-    <a
-      href="/dashboard/upload"
-      class="btn btn-primary"
-    >
+  <div style="display:flex; gap:14px; margin:24px 0; flex-wrap:wrap;">
+    <a href="/dashboard/upload" class="btn btn-primary">
       Upload Track(s)
     </a>
 
-    <a
-      href="/dashboard/albums/new"
-      class="btn btn-outline"
-    >
+    <a href="/dashboard/albums/new" class="btn btn-outline">
       Create Album
     </a>
-
   </div>
 
 
-  <!-- SOCIAL LINKS -->
-
+  <!-- SOCIAL -->
   <div class="social-links">
-
     <a
       href="{{ youtube_url }}"
       target="_blank"
-      rel="noopener noreferrer"
       class="social-pill youtube"
     >
       ▶ YouTube Channel
     </a>
 
     {% if discord_url %}
-
       <a
         href="{{ discord_url }}"
         target="_blank"
-        rel="noopener noreferrer"
         class="social-pill discord"
       >
         💬 Join our Discord
       </a>
+    {% endif %}
+  </div>
+
+
+  <!-- TRACK LIBRARY -->
+  <div style="margin-top:45px;">
+
+    <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:end;
+      gap:15px;
+      flex-wrap:wrap;
+      margin-bottom:18px;
+    ">
+      <div>
+        <h2 style="font-size:22px; margin:0;">
+          My Tracks
+        </h2>
+
+        <p class="sub" style="margin:5px 0 0;">
+          {{ track_total }} track{{ '' if track_total == 1 else 's' }}
+          {% if track_search %}
+            matching "{{ track_search }}"
+          {% endif %}
+        </p>
+      </div>
+
+      <form
+        method="get"
+        action="/dashboard"
+        style="display:flex; gap:8px; min-width:300px;"
+      >
+        <input
+          type="search"
+          name="q"
+          value="{{ track_search }}"
+          placeholder="Search title, genre or tags..."
+          style="flex:1;"
+        >
+
+        <button type="submit" class="btn btn-outline">
+          Search
+        </button>
+
+        {% if track_search %}
+          <a href="/dashboard" class="btn btn-outline">
+            Clear
+          </a>
+        {% endif %}
+      </form>
+    </div>
+
+
+    {% if tracks %}
+
+      <div class="dashboard-grid">
+
+        {% for track in tracks %}
+
+          <div class="form-card" style="padding:18px;">
+
+            {% if track.cover_art_path %}
+              <div style="
+                width:100%;
+                aspect-ratio:1/1;
+                margin-bottom:14px;
+                overflow:hidden;
+                border-radius:10px;
+                background:#111;
+              ">
+                <img
+                  src="/media/{{ track.cover_art_path }}"
+                  alt="{{ track.title }}"
+                  style="
+                    width:100%;
+                    height:100%;
+                    object-fit:cover;
+                  "
+                >
+              </div>
+            {% endif %}
+
+            <div class="eyebrow">
+              {{ track.genre or 'BEAT' }}
+              {% if track.bpm %}
+                &middot; {{ track.bpm }} BPM
+              {% endif %}
+            </div>
+
+            <h3 style="
+              font-size:19px;
+              margin:5px 0 8px;
+            ">
+              {{ track.title }}
+            </h3>
+
+            <div class="sub">
+              KSh {{ '%.2f'|format(track.price) }}
+            </div>
+
+            <div style="
+              display:flex;
+              gap:7px;
+              flex-wrap:wrap;
+              margin-top:10px;
+            ">
+
+              {% if track.sales_model.value == 'exclusive' %}
+                {% if track.is_sold %}
+                  <span class="badge badge-sold">SOLD</span>
+                {% else %}
+                  <span class="badge badge-exclusive">EXCLUSIVE</span>
+                {% endif %}
+              {% else %}
+                <span class="badge badge-nonexclusive">
+                  NON-EXCLUSIVE
+                </span>
+              {% endif %}
+
+              {% if track.is_published %}
+                <span class="badge">PUBLISHED</span>
+              {% else %}
+                <span class="badge badge-sold">UNPUBLISHED</span>
+              {% endif %}
+
+            </div>
+
+            <div style="
+              display:flex;
+              gap:8px;
+              margin-top:16px;
+            ">
+              <a
+                href="/track/{{ track.slug }}"
+                target="_blank"
+                class="btn btn-outline"
+              >
+                View Store Page
+              </a>
+            </div>
+
+          </div>
+
+        {% endfor %}
+
+      </div>
+
+
+      <!-- PAGINATION -->
+      {% if track_total_pages > 1 %}
+
+        <div style="
+          display:flex;
+          justify-content:center;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+          margin-top:28px;
+        ">
+
+          {% if track_page > 1 %}
+            <a
+              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page - 1 }}"
+              class="btn btn-outline"
+            >
+              ← Previous
+            </a>
+          {% endif %}
+
+          <span class="sub">
+            Page {{ track_page }} of {{ track_total_pages }}
+          </span>
+
+          {% if track_page < track_total_pages %}
+            <a
+              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page + 1 }}"
+              class="btn btn-outline"
+            >
+              Next →
+            </a>
+          {% endif %}
+
+        </div>
+
+      {% endif %}
 
     {% else %}
 
-      <span
-        class="social-pill discord"
-        style="opacity:.5;"
-      >
-        💬 Discord link not configured
-      </span>
+      <div class="form-card" style="padding:30px; text-align:center;">
+        {% if track_search %}
+          <h3>No tracks found</h3>
+          <p class="sub">
+            Try another search.
+          </p>
+          <a href="/dashboard" class="btn btn-outline">
+            Show All Tracks
+          </a>
+        {% else %}
+          <h3>Your track library is empty</h3>
+          <p class="sub">
+            Upload your first beat and it will appear here.
+          </p>
+          <a href="/dashboard/upload" class="btn btn-primary">
+            Upload Track
+          </a>
+        {% endif %}
+      </div>
 
     {% endif %}
 
@@ -199,13 +340,11 @@
 
 
   <!-- RECENT SALES -->
-
-  <h2 style="font-size:20px; margin-top:40px;">
+  <h2 style="font-size:20px; margin-top:45px;">
     Recent Sales
   </h2>
 
   <table class="data-table">
-
     <thead>
       <tr>
         <th>Order</th>
@@ -215,44 +354,29 @@
     </thead>
 
     <tbody>
-
       {% for o in stats.recent_orders %}
-
         <tr>
-
+          <td>{{ o.order_number }}</td>
           <td>
-            {{ o.order_number }}
+            {{ o.completed_at.strftime('%d %b %Y') if o.completed_at else '' }}
           </td>
-
-          <td>
-            {{ o.completed_at.strftime('%d %b %Y')
-               if o.completed_at else '' }}
-          </td>
-
           <td>
             KSh {{ '%.2f'|format(o.net_amount) }}
           </td>
-
         </tr>
-
       {% else %}
-
         <tr>
           <td colspan="3" class="sub">
             No sales yet.
           </td>
         </tr>
-
       {% endfor %}
-
     </tbody>
-
   </table>
 
 
   <!-- WITHDRAWAL -->
-
-  <h2 style="font-size:20px; margin-top:40px;">
+  <h2 style="font-size:20px; margin-top:45px;">
     Request Withdrawal
   </h2>
 
@@ -261,11 +385,8 @@
     method="post"
     style="max-width:420px;"
   >
-
     <div class="field">
-
       <label>Amount (KSh)</label>
-
       <input
         type="number"
         step="0.01"
@@ -273,55 +394,38 @@
         name="amount"
         required
       >
-
     </div>
 
     <div class="field">
-
       <label>M-Pesa Phone Number</label>
-
       <input
         type="tel"
         name="phone_number"
         placeholder="07XX XXX XXX"
         required
       >
-
     </div>
 
-    <button
-      type="submit"
-      class="btn btn-primary"
-    >
+    <button type="submit" class="btn btn-primary">
       Request Withdrawal
     </button>
-
   </form>
 
 </section>
 
 
 <script>
-function copyProducerLink() {
-    const input = document.getElementById("producer-share-link");
-    const message = document.getElementById("copy-message");
+function copyStoreLink() {
+  const input = document.getElementById("store-link");
+  const message = document.getElementById("copy-message");
 
-    navigator.clipboard.writeText(input.value).then(function () {
-        message.style.display = "block";
-
-        setTimeout(function () {
-            message.style.display = "none";
-        }, 3000);
-    }).catch(function () {
-        input.select();
-        document.execCommand("copy");
-
-        message.style.display = "block";
-
-        setTimeout(function () {
-            message.style.display = "none";
-        }, 3000);
-    });
+  navigator.clipboard.writeText(input.value).then(function () {
+    message.textContent = "Store link copied. Share it anywhere.";
+  }).catch(function () {
+    input.select();
+    document.execCommand("copy");
+    message.textContent = "Store link copied. Share it anywhere.";
+  });
 }
 </script>
 
