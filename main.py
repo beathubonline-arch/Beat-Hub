@@ -3,10 +3,9 @@ BeatHub — main application entrypoint.
 """
 
 import logging
-import os
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -34,71 +33,6 @@ APP_DIR = BASE_DIR / "app"
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
-
-# ------------------------------------------------------------------
-# MEDIA STORAGE
-#
-# Render may provide MEDIA_ROOT=/var/data/... when a persistent disk
-# is configured. If that location is unavailable/unwritable, fall
-# back safely to the application's local media directory.
-# ------------------------------------------------------------------
-
-def get_writable_media_dir() -> Path:
-    configured = str(getattr(settings, "MEDIA_ROOT", "") or "").strip()
-
-    candidates = []
-
-    if configured:
-        configured_path = Path(configured)
-
-        if not configured_path.is_absolute():
-            configured_path = BASE_DIR / configured_path
-
-        candidates.append(configured_path)
-
-    # Normal application storage.
-    candidates.append(BASE_DIR / "media")
-
-    # Last-resort writable temporary storage.
-    candidates.append(Path("/tmp/beathub-media"))
-
-    for candidate in candidates:
-        try:
-            candidate.mkdir(parents=True, exist_ok=True)
-
-            # Verify that the directory is actually writable.
-            test_file = candidate / ".beathub_write_test"
-
-            with open(test_file, "a", encoding="utf-8"):
-                pass
-
-            try:
-                test_file.unlink()
-            except OSError:
-                pass
-
-            logger.info("BeatHub media directory: %s", candidate)
-            return candidate.resolve()
-
-        except (PermissionError, OSError) as exc:
-            logger.warning(
-                "Media directory unavailable: %s (%s)",
-                candidate,
-                exc,
-            )
-
-    raise RuntimeError(
-        "No writable media directory is available."
-    )
-
-
-MEDIA_DIR = get_writable_media_dir()
-
-
-# ------------------------------------------------------------------
-# APPLICATION
-# ------------------------------------------------------------------
-
 app = FastAPI(title=settings.APP_NAME)
 
 templates = Jinja2Templates(
@@ -116,35 +50,6 @@ if STATIC_DIR.exists():
         StaticFiles(directory=str(STATIC_DIR)),
         name="static",
     )
-
-
-# ------------------------------------------------------------------
-# PUBLIC MEDIA
-#
-# Covers and previews are public.
-# Purchased master audio is NOT publicly mounted.
-# ------------------------------------------------------------------
-
-COVERS_DIR = MEDIA_DIR / "covers"
-PREVIEWS_DIR = MEDIA_DIR / "previews"
-AUDIO_DIR = MEDIA_DIR / "audio"
-
-COVERS_DIR.mkdir(parents=True, exist_ok=True)
-PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
-AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-
-
-app.mount(
-    "/media/covers",
-    StaticFiles(directory=str(COVERS_DIR)),
-    name="media-covers",
-)
-
-app.mount(
-    "/media/previews",
-    StaticFiles(directory=str(PREVIEWS_DIR)),
-    name="media-previews",
-)
 
 
 # ------------------------------------------------------------------
@@ -195,7 +100,7 @@ def healthz():
         "status": "ok",
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
-        "media_root": str(MEDIA_DIR),
+        "storage": "r2" if settings.r2_enabled else "not-configured",
     }
 
 
