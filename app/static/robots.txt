@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /signup
+Disallow: /admin
+Disallow: /checkout
+Disallow: /media/
