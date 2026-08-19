@@ -11,103 +11,112 @@
   </h1>
 
   <!-- PUBLIC STORE LINK -->
+
   <div class="form-card" style="margin:20px 0 28px; padding:20px;">
     <div class="eyebrow">YOUR PUBLIC STORE</div>
 
-    <h2 style="margin:5px 0 8px; font-size:22px;">
-      Share your BeatHub store
-    </h2>
+```
+<h2 style="margin:5px 0 8px; font-size:22px;">
+  Share your BeatHub store
+</h2>
 
-    <p class="sub" style="margin-bottom:14px;">
-      Send this link to artists, buyers, fans or your social media followers.
-      They can browse your music and purchase available tracks.
-    </p>
+<p class="sub" style="margin-bottom:14px;">
+  Send this link to artists, buyers, fans or your social media followers.
+  They can browse your music and purchase available tracks.
+</p>
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <input
-        id="store-link"
-        type="text"
-        value="{{ store_url }}"
-        readonly
-        style="flex:1; min-width:260px;"
-      >
+<div style="display:flex; gap:10px; flex-wrap:wrap;">
+  <input
+    id="store-link"
+    type="text"
+    value="{{ store_url }}"
+    readonly
+    style="flex:1; min-width:260px;"
+  >
 
-      <button
-        type="button"
-        class="btn btn-primary"
-        onclick="copyStoreLink()"
-      >
-        Copy Store Link
-      </button>
+  <button
+    type="button"
+    class="btn btn-primary"
+    onclick="copyStoreLink()"
+  >
+    Copy Store Link
+  </button>
 
-      <a
-        href="/profile/{{ profile.slug }}"
-        target="_blank"
-        class="btn btn-outline"
-      >
-        View My Store
-      </a>
-    </div>
+  <a
+    href="/profile/{{ profile.slug }}"
+    target="_blank"
+    class="btn btn-outline"
+  >
+    View My Store
+  </a>
+</div>
 
-    <div id="copy-message" class="sub" style="margin-top:8px;"></div>
+<div id="copy-message" class="sub" style="margin-top:8px;"></div>
+```
+
   </div>
-
 
   <!-- STATS -->
+
   <div class="dashboard-grid">
 
-    <div class="stat-card">
-      <div class="label">Total Sales</div>
-      <div class="value">{{ stats.total_sales }}</div>
-    </div>
+```
+<div class="stat-card">
+  <div class="label">Total Sales</div>
+  <div class="value">{{ stats.total_sales }}</div>
+</div>
 
-    <div class="stat-card">
-      <div class="label">Net Earnings</div>
-      <div class="value teal">
-        KSh {{ '%.2f'|format(stats.net_earnings) }}
-      </div>
-    </div>
+<div class="stat-card">
+  <div class="label">Net Earnings</div>
+  <div class="value teal">
+    KSh {{ '%.2f'|format(stats.net_earnings) }}
+  </div>
+</div>
 
-    <div class="stat-card">
-      <div class="label">Available Balance</div>
-      <div class="value gold">
-        KSh {{ '%.2f'|format(stats.available_balance) }}
-      </div>
-    </div>
+<div class="stat-card">
+  <div class="label">Available Balance</div>
+  <div class="value gold">
+    KSh {{ '%.2f'|format(stats.available_balance) }}
+  </div>
+</div>
 
-    <div class="stat-card">
-      <div class="label">Pending Withdrawal</div>
-      <div class="value">
-        KSh {{ '%.2f'|format(stats.pending_withdrawal) }}
-      </div>
-    </div>
+<div class="stat-card">
+  <div class="label">Pending Withdrawal</div>
+  <div class="value">
+    KSh {{ '%.2f'|format(stats.pending_withdrawal) }}
+  </div>
+</div>
 
-    <div class="stat-card">
-      <div class="label">Tracks</div>
-      <div class="value">{{ track_count }}</div>
-    </div>
+<div class="stat-card">
+  <div class="label">Tracks</div>
+  <div class="value">{{ track_count }}</div>
+</div>
 
-    <div class="stat-card">
-      <div class="label">Albums</div>
-      <div class="value">{{ album_count }}</div>
-    </div>
+<div class="stat-card">
+  <div class="label">Albums</div>
+  <div class="value">{{ album_count }}</div>
+</div>
+```
 
   </div>
 
-
   <!-- ACTIONS -->
+
   <div style="display:flex; gap:14px; margin:24px 0; flex-wrap:wrap;">
     <a href="/dashboard/upload" class="btn btn-primary">
       Upload Track(s)
     </a>
 
-    <a href="/dashboard/albums/new" class="btn btn-outline">
-      Create Album
-    </a>
+```
+<a href="/dashboard/albums/new" class="btn btn-outline">
+  Create Album
+</a>
+```
+
   </div>
 
-
   <!-- SOCIAL -->
+
   <div class="social-links">
     <a
       href="{{ youtube_url }}"
@@ -117,229 +126,234 @@
       ▶ YouTube Channel
     </a>
 
-    {% if discord_url %}
-      <a
-        href="{{ discord_url }}"
-        target="_blank"
-        class="social-pill discord"
-      >
-        💬 Join our Discord
-      </a>
-    {% endif %}
+```
+{% if discord_url %}
+  <a
+    href="{{ discord_url }}"
+    target="_blank"
+    class="social-pill discord"
+  >
+    💬 Join our Discord
+  </a>
+{% endif %}
+```
+
   </div>
 
-
   <!-- TRACK LIBRARY -->
+
   <div style="margin-top:45px;">
 
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:end;
-      gap:15px;
-      flex-wrap:wrap;
-      margin-bottom:18px;
-    ">
-      <div>
-        <h2 style="font-size:22px; margin:0;">
-          My Tracks
-        </h2>
+```
+<div style="
+  display:flex;
+  justify-content:space-between;
+  align-items:end;
+  gap:15px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+">
+  <div>
+    <h2 style="font-size:22px; margin:0;">
+      My Tracks
+    </h2>
 
-        <p class="sub" style="margin:5px 0 0;">
-          {{ track_total }} track{{ '' if track_total == 1 else 's' }}
-          {% if track_search %}
-            matching "{{ track_search }}"
-          {% endif %}
-        </p>
-      </div>
+    <p class="sub" style="margin:5px 0 0;">
+      {{ track_total }} track{{ '' if track_total == 1 else 's' }}
+      {% if track_search %}
+        matching "{{ track_search }}"
+      {% endif %}
+    </p>
+  </div>
 
-      <form
-        method="get"
-        action="/dashboard"
-        style="display:flex; gap:8px; min-width:300px;"
-      >
-        <input
-          type="search"
-          name="q"
-          value="{{ track_search }}"
-          placeholder="Search title, genre or tags..."
-          style="flex:1;"
-        >
+  <form
+    method="get"
+    action="/dashboard"
+    style="display:flex; gap:8px; min-width:300px;"
+  >
+    <input
+      type="search"
+      name="q"
+      value="{{ track_search }}"
+      placeholder="Search title, genre or tags..."
+      style="flex:1;"
+    >
 
-        <button type="submit" class="btn btn-outline">
-          Search
-        </button>
+    <button type="submit" class="btn btn-outline">
+      Search
+    </button>
 
-        {% if track_search %}
-          <a href="/dashboard" class="btn btn-outline">
-            Clear
-          </a>
-        {% endif %}
-      </form>
-    </div>
+    {% if track_search %}
+      <a href="/dashboard" class="btn btn-outline">
+        Clear
+      </a>
+    {% endif %}
+  </form>
+</div>
 
 
-    {% if tracks %}
+{% if tracks %}
 
-      <div class="dashboard-grid">
+  <div class="dashboard-grid">
 
-        {% for track in tracks %}
+    {% for track in tracks %}
 
-          <div class="form-card" style="padding:18px;">
+      <div class="form-card" style="padding:18px;">
 
-            {% if track.cover_art_path %}
-              <div style="
+        {% if track.cover_art_path %}
+          <div style="
+            width:100%;
+            aspect-ratio:1/1;
+            margin-bottom:14px;
+            overflow:hidden;
+            border-radius:10px;
+            background:#111;
+          ">
+            <img
+              src="/media/{{ track.cover_art_path | replace('media/', '', 1) }}"
+              alt="{{ track.title }}"
+              style="
                 width:100%;
-                aspect-ratio:1/1;
-                margin-bottom:14px;
-                overflow:hidden;
-                border-radius:10px;
-                background:#111;
-              ">
-                <img
-                  src="/media/{{ track.cover_art_path }}"
-                  alt="{{ track.title }}"
-                  style="
-                    width:100%;
-                    height:100%;
-                    object-fit:cover;
-                  "
-                >
-              </div>
-            {% endif %}
-
-            <div class="eyebrow">
-              {{ track.genre or 'BEAT' }}
-              {% if track.bpm %}
-                &middot; {{ track.bpm }} BPM
-              {% endif %}
-            </div>
-
-            <h3 style="
-              font-size:19px;
-              margin:5px 0 8px;
-            ">
-              {{ track.title }}
-            </h3>
-
-            <div class="sub">
-              KSh {{ '%.2f'|format(track.price) }}
-            </div>
-
-            <div style="
-              display:flex;
-              gap:7px;
-              flex-wrap:wrap;
-              margin-top:10px;
-            ">
-
-              {% if track.sales_model.value == 'exclusive' %}
-                {% if track.is_sold %}
-                  <span class="badge badge-sold">SOLD</span>
-                {% else %}
-                  <span class="badge badge-exclusive">EXCLUSIVE</span>
-                {% endif %}
-              {% else %}
-                <span class="badge badge-nonexclusive">
-                  NON-EXCLUSIVE
-                </span>
-              {% endif %}
-
-              {% if track.is_published %}
-                <span class="badge">PUBLISHED</span>
-              {% else %}
-                <span class="badge badge-sold">UNPUBLISHED</span>
-              {% endif %}
-
-            </div>
-
-            <div style="
-              display:flex;
-              gap:8px;
-              margin-top:16px;
-            ">
-              <a
-                href="/track/{{ track.slug }}"
-                target="_blank"
-                class="btn btn-outline"
-              >
-                View Store Page
-              </a>
-            </div>
-
+                height:100%;
+                object-fit:cover;
+              "
+            >
           </div>
+        {% endif %}
 
-        {% endfor %}
+        <div class="eyebrow">
+          {{ track.genre or 'BEAT' }}
+          {% if track.bpm %}
+            &middot; {{ track.bpm }} BPM
+          {% endif %}
+        </div>
 
-      </div>
+        <h3 style="
+          font-size:19px;
+          margin:5px 0 8px;
+        ">
+          {{ track.title }}
+        </h3>
 
-
-      <!-- PAGINATION -->
-      {% if track_total_pages > 1 %}
+        <div class="sub">
+          KSh {{ '%.2f'|format(track.price) }}
+        </div>
 
         <div style="
           display:flex;
-          justify-content:center;
-          align-items:center;
-          gap:8px;
+          gap:7px;
           flex-wrap:wrap;
-          margin-top:28px;
+          margin-top:10px;
         ">
 
-          {% if track_page > 1 %}
-            <a
-              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page - 1 }}"
-              class="btn btn-outline"
-            >
-              ← Previous
-            </a>
+          {% if track.sales_model.value == 'exclusive' %}
+            {% if track.is_sold %}
+              <span class="badge badge-sold">SOLD</span>
+            {% else %}
+              <span class="badge badge-exclusive">EXCLUSIVE</span>
+            {% endif %}
+          {% else %}
+            <span class="badge badge-nonexclusive">
+              NON-EXCLUSIVE
+            </span>
           {% endif %}
 
-          <span class="sub">
-            Page {{ track_page }} of {{ track_total_pages }}
-          </span>
-
-          {% if track_page < track_total_pages %}
-            <a
-              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page + 1 }}"
-              class="btn btn-outline"
-            >
-              Next →
-            </a>
+          {% if track.is_published %}
+            <span class="badge">PUBLISHED</span>
+          {% else %}
+            <span class="badge badge-sold">UNPUBLISHED</span>
           {% endif %}
 
         </div>
 
-      {% endif %}
-
-    {% else %}
-
-      <div class="form-card" style="padding:30px; text-align:center;">
-        {% if track_search %}
-          <h3>No tracks found</h3>
-          <p class="sub">
-            Try another search.
-          </p>
-          <a href="/dashboard" class="btn btn-outline">
-            Show All Tracks
+        <div style="
+          display:flex;
+          gap:8px;
+          margin-top:16px;
+        ">
+          <a
+            href="/track/{{ track.slug }}"
+            target="_blank"
+            class="btn btn-outline"
+          >
+            View Store Page
           </a>
-        {% else %}
-          <h3>Your track library is empty</h3>
-          <p class="sub">
-            Upload your first beat and it will appear here.
-          </p>
-          <a href="/dashboard/upload" class="btn btn-primary">
-            Upload Track
-          </a>
-        {% endif %}
+        </div>
+
       </div>
 
-    {% endif %}
+    {% endfor %}
 
   </div>
 
 
+  <!-- PAGINATION -->
+  {% if track_total_pages > 1 %}
+
+    <div style="
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:28px;
+    ">
+
+      {% if track_page > 1 %}
+        <a
+          href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page - 1 }}"
+          class="btn btn-outline"
+        >
+          ← Previous
+        </a>
+      {% endif %}
+
+      <span class="sub">
+        Page {{ track_page }} of {{ track_total_pages }}
+      </span>
+
+      {% if track_page < track_total_pages %}
+        <a
+          href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page + 1 }}"
+          class="btn btn-outline"
+        >
+          Next →
+        </a>
+      {% endif %}
+
+    </div>
+
+  {% endif %}
+
+{% else %}
+
+  <div class="form-card" style="padding:30px; text-align:center;">
+    {% if track_search %}
+      <h3>No tracks found</h3>
+      <p class="sub">
+        Try another search.
+      </p>
+      <a href="/dashboard" class="btn btn-outline">
+        Show All Tracks
+      </a>
+    {% else %}
+      <h3>Your track library is empty</h3>
+      <p class="sub">
+        Upload your first beat and it will appear here.
+      </p>
+      <a href="/dashboard/upload" class="btn btn-primary">
+        Upload Track
+      </a>
+    {% endif %}
+  </div>
+
+{% endif %}
+```
+
+  </div>
+
   <!-- RECENT SALES -->
+
   <h2 style="font-size:20px; margin-top:45px;">
     Recent Sales
   </h2>
@@ -353,29 +367,32 @@
       </tr>
     </thead>
 
-    <tbody>
-      {% for o in stats.recent_orders %}
-        <tr>
-          <td>{{ o.order_number }}</td>
-          <td>
-            {{ o.completed_at.strftime('%d %b %Y') if o.completed_at else '' }}
-          </td>
-          <td>
-            KSh {{ '%.2f'|format(o.net_amount) }}
-          </td>
-        </tr>
-      {% else %}
-        <tr>
-          <td colspan="3" class="sub">
-            No sales yet.
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
+```
+<tbody>
+  {% for o in stats.recent_orders %}
+    <tr>
+      <td>{{ o.order_number }}</td>
+      <td>
+        {{ o.completed_at.strftime('%d %b %Y') if o.completed_at else '' }}
+      </td>
+      <td>
+        KSh {{ '%.2f'|format(o.net_amount) }}
+      </td>
+    </tr>
+  {% else %}
+    <tr>
+      <td colspan="3" class="sub">
+        No sales yet.
+      </td>
+    </tr>
+  {% endfor %}
+</tbody>
+```
+
   </table>
 
-
   <!-- WITHDRAWAL -->
+
   <h2 style="font-size:20px; margin-top:45px;">
     Request Withdrawal
   </h2>
@@ -396,23 +413,25 @@
       >
     </div>
 
-    <div class="field">
-      <label>M-Pesa Phone Number</label>
-      <input
-        type="tel"
-        name="phone_number"
-        placeholder="07XX XXX XXX"
-        required
-      >
-    </div>
+```
+<div class="field">
+  <label>M-Pesa Phone Number</label>
+  <input
+    type="tel"
+    name="phone_number"
+    placeholder="07XX XXX XXX"
+    required
+  >
+</div>
 
-    <button type="submit" class="btn btn-primary">
-      Request Withdrawal
-    </button>
+<button type="submit" class="btn btn-primary">
+  Request Withdrawal
+</button>
+```
+
   </form>
 
 </section>
-
 
 <script>
 function copyStoreLink() {
