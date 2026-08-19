@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}My Account — BeatHub{% endblock %}
+
+{% block content %}
+
+<section style="padding:40px 0; max-width:760px;">
+
+  <div class="eyebrow">MY ACCOUNT</div>
+
+  <h1 style="font-size:32px; margin:6px 0 10px;">
+    Welcome, {{ profile.stage_name if profile else current_user.email }}
+  </h1>
+
+  <p class="sub" style="color:var(--text-muted);">
+    Your BeatHub buyer account.
+  </p>
+
+  <div
+    class="dashboard-grid"
+    style="margin-top:28px;"
+  >
+
+    <div class="stat-card">
+      <div class="label">Account Email</div>
+      <div class="value" style="font-size:18px;">
+        {{ current_user.email }}
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="label">Account Type</div>
+      <div class="value" style="font-size:18px;">
+        Artist / Buyer
+      </div>
+    </div>
+
+  </div>
+
+  <div
+    style="
+      display:flex;
+      gap:14px;
+      margin-top:28px;
+      flex-wrap:wrap;
+    "
+  >
+
+    <a
+      href="/beats"
+      class="btn btn-primary"
+    >
+      Browse Beats
+    </a>
+
+    <a
+      href="/"
+      class="btn btn-outline"
+    >
+      Back to Home
+    </a>
+
+  </div>
+
+</section>
+
+{% endblock %}
