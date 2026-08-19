@@ -32,9 +32,38 @@ APP_DIR = BASE_DIR / "app"
 
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
-MEDIA_DIR = BASE_DIR / settings.MEDIA_ROOT
+
+# ------------------------------------------------------------------
+# MEDIA STORAGE
+# ------------------------------------------------------------------
+# MEDIA_ROOT comes from Render environment variables.
+#
+# Production:
+#   MEDIA_ROOT=/var/data/media
+#
+# Local development:
+#   MEDIA_ROOT=media
+#
+# This allows Render Persistent Disk storage without changing the
+# rest of the application.
+# ------------------------------------------------------------------
+
+MEDIA_DIR = Path(settings.MEDIA_ROOT)
+
+if not MEDIA_DIR.is_absolute():
+    MEDIA_DIR = BASE_DIR / MEDIA_DIR
+
+MEDIA_DIR = MEDIA_DIR.resolve()
 
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+AUDIO_DIR = MEDIA_DIR / "audio"
+COVERS_DIR = MEDIA_DIR / "covers"
+PREVIEWS_DIR = MEDIA_DIR / "previews"
+
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+COVERS_DIR.mkdir(parents=True, exist_ok=True)
+PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -43,7 +72,7 @@ templates = Jinja2Templates(
 )
 
 # ------------------------------------------------------------------
-# Static files
+# STATIC FILES
 # ------------------------------------------------------------------
 
 if STATIC_DIR.exists():
@@ -56,15 +85,10 @@ if STATIC_DIR.exists():
 # ------------------------------------------------------------------
 # PUBLIC MEDIA
 #
-# Only cover art and previews are public.
-# Purchased full audio is NOT publicly mounted.
+# Covers and previews are public.
+# Full purchased audio remains protected and is served only through
+# the authenticated download route in music.py.
 # ------------------------------------------------------------------
-
-COVERS_DIR = MEDIA_DIR / "covers"
-PREVIEWS_DIR = MEDIA_DIR / "previews"
-
-COVERS_DIR.mkdir(parents=True, exist_ok=True)
-PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
 
 app.mount(
     "/media/covers",
@@ -79,13 +103,13 @@ app.mount(
 )
 
 # ------------------------------------------------------------------
-# Database
+# DATABASE
 # ------------------------------------------------------------------
 
 Base.metadata.create_all(bind=engine)
 
 # ------------------------------------------------------------------
-# Routers
+# ROUTERS
 # ------------------------------------------------------------------
 
 app.include_router(auth.router)
@@ -96,9 +120,8 @@ app.include_router(mpesa_callback.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 
-
 # ------------------------------------------------------------------
-# Dashboard compatibility
+# DASHBOARD COMPATIBILITY
 # ------------------------------------------------------------------
 
 @app.get("/artist/dashboard", include_in_schema=False)
@@ -116,7 +139,7 @@ def dashboard_alias(
 
 
 # ------------------------------------------------------------------
-# Health
+# HEALTH
 # ------------------------------------------------------------------
 
 @app.get("/healthz")
@@ -125,11 +148,12 @@ def healthz():
         "status": "ok",
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
+        "media_root": str(MEDIA_DIR),
     }
 
 
 # ------------------------------------------------------------------
-# Errors
+# ERRORS
 # ------------------------------------------------------------------
 
 @app.exception_handler(StarletteHTTPException)
