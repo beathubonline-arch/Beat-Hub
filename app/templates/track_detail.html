@@ -5,9 +5,10 @@
 {% block content %}
 
 <section
-  style="s
+  style="
     padding:40px 0;
     max-width:700px;
+    margin:0 auto;
   "
 >
 
@@ -20,7 +21,7 @@
         width:100%;
         max-width:600px;
         aspect-ratio:1/1;
-        margin-bottom:24px;
+        margin:0 auto 24px;
         overflow:hidden;
         border-radius:14px;
         background:#111;
@@ -79,6 +80,8 @@
   </p>
 
 
+  <!-- SALES MODEL -->
+
   <div style="margin:18px 0;">
 
     {% if track.sales_model.value == 'exclusive' %}
@@ -108,6 +111,8 @@
   </div>
 
 
+  <!-- DESCRIPTION -->
+
   {% if track.description %}
 
     <p
@@ -122,6 +127,62 @@
 
   {% endif %}
 
+
+  <!-- AUDIO PREVIEW -->
+
+  {% if track.preview_file_path and not purchased %}
+
+    <div
+      class="form-card"
+      style="
+        margin-top:24px;
+        padding:20px;
+      "
+    >
+
+      <div class="eyebrow">
+        PREVIEW
+      </div>
+
+      <h2
+        style="
+          margin:5px 0 8px;
+          font-size:22px;
+        "
+      >
+        Listen before you buy
+      </h2>
+
+      <p class="sub"
+         style="
+           margin-bottom:14px;
+           line-height:1.5;
+         ">
+        Sample 30 seconds of this track before purchasing.
+      </p>
+
+      <audio
+        controls
+        preload="none"
+        style="
+          width:100%;
+          height:46px;
+        "
+      >
+        <source
+          src="/preview/track/{{ track.id }}"
+          type="audio/mpeg"
+        >
+
+        Your browser does not support audio playback.
+      </audio>
+
+    </div>
+
+  {% endif %}
+
+
+  <!-- PRICE -->
 
   <div
     class="stat-card"
@@ -187,7 +248,7 @@
 
     <a
       href="/checkout/track/{{ track.slug }}"
-      class="btn btn-primary"
+      class="btn btn-primary btn-block"
       style="margin-top:24px;"
     >
       Buy Now
@@ -211,6 +272,20 @@
     </button>
 
   {% endif %}
+
+
+  <!-- BACK TO STORE -->
+
+  <div style="margin-top:22px;">
+
+    <a
+      href="/profile/{{ track.creator_profile.slug }}"
+      class="btn btn-outline btn-block"
+    >
+      Back to Store
+    </a>
+
+  </div>
 
 </section>
 
