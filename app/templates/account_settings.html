@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Account Settings — BeatHub{% endblock %}
+
+{% block content %}
+
+<section style="padding:40px 0;">
+  <div style="max-width:760px;margin:0 auto;">
+
+    <div class="eyebrow">ACCOUNT SETTINGS</div>
+
+    <h1 style="font-size:32px;margin:6px 0 8px;">
+      Account Settings
+    </h1>
+
+    <p style="color:var(--text-muted);">
+      Your BeatHub account information.
+    </p>
+
+    <div
+      class="form-card"
+      style="
+        margin-top:28px;
+        padding:25px;
+      "
+    >
+
+      <div style="margin-bottom:22px;">
+
+        <div class="label">
+          EMAIL ADDRESS
+        </div>
+
+        <div
+          style="
+            font-size:18px;
+            margin-top:7px;
+            word-break:break-word;
+          "
+        >
+          {{ current_user.email }}
+        </div>
+
+      </div>
+
+
+      <div style="margin-bottom:22px;">
+
+        <div class="label">
+          ACCOUNT TYPE
+        </div>
+
+        <div style="font-size:18px;margin-top:7px;">
+          Artist / Buyer
+        </div>
+
+      </div>
+
+
+      <div>
+
+        <div class="label">
+          MEMBER SINCE
+        </div>
+
+        <div style="font-size:16px;margin-top:7px;">
+          {{ current_user.created_at.strftime("%d %B %Y") if current_user.created_at else "—" }}
+        </div>
+
+      </div>
+
+    </div>
+
+    <div
+      style="
+        display:flex;
+        gap:12px;
+        margin-top:25px;
+        flex-wrap:wrap;
+      "
+    >
+
+      <a href="/account" class="btn btn-outline">
+        ← Back to My Account
+      </a>
+
+      <a href="/beats" class="btn btn-primary">
+        Browse Beats
+      </a>
+
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}
