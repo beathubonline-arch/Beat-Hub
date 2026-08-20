@@ -1,4 +1,3 @@
-```text
 from datetime import datetime
 from typing import Optional
 
@@ -11,7 +10,6 @@ from app.models.profile import Profile
 from app.models.user import User
 from app.services.search import run_search
 from app.utils.deps import get_optional_user, require_user
-
 
 router = APIRouter(tags=["pages"])
 
@@ -27,10 +25,6 @@ def ctx(request: Request, current_user: Optional[User], **extra):
     base.update(extra)
     return base
 
-
-# ------------------------------------------------------------------
-# HOME
-# ------------------------------------------------------------------
 
 @router.get("/")
 def home(
@@ -67,10 +61,6 @@ def home(
     )
 
 
-# ------------------------------------------------------------------
-# SEARCH
-# ------------------------------------------------------------------
-
 @router.get("/search")
 def search(
     request: Request,
@@ -86,10 +76,6 @@ def search(
     )
 
 
-# ------------------------------------------------------------------
-# TERMS
-# ------------------------------------------------------------------
-
 @router.get("/terms")
 def terms(
     request: Request,
@@ -102,10 +88,6 @@ def terms(
     )
 
 
-# ------------------------------------------------------------------
-# PUBLIC CREATOR PROFILE / STORE
-# ------------------------------------------------------------------
-
 @router.get("/profile/{slug}")
 def public_profile(
     request: Request,
@@ -115,10 +97,7 @@ def public_profile(
 ):
     profile = (
         db.query(Profile)
-        .filter(
-            Profile.slug == slug,
-            Profile.is_producer.is_(True),
-        )
+        .filter(Profile.slug == slug)
         .first()
     )
 
@@ -160,10 +139,6 @@ def public_profile(
     )
 
 
-# ------------------------------------------------------------------
-# BUYER / ARTIST ACCOUNT
-# ------------------------------------------------------------------
-
 @router.get("/account")
 def account(
     request: Request,
@@ -197,4 +172,3 @@ def account(
             profile=profile,
         ),
     )
-```
