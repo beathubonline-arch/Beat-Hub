@@ -1,234 +1,179 @@
-from datetime import datetime
-from typing import Optional
+{% extends "base.html" %}
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+{% block title %}BeatHub — The Home of Beats{% endblock %}
 
-from app.database import get_db
-from app.models.profile import Profile
-from app.models.user import User
-from app.services.search import run_search
-from app.utils.deps import get_optional_user, require_user
+{% block content %}
 
-router = APIRouter(tags=["pages"])
+<section class="hero">
 
-templates = Jinja2Templates(directory="app/templates")
+  <div class="eyebrow">
+    THE HOME OF COOL BEATS &amp; DOPE TRACKS
+  </div>
 
+  <h1>
+    SELL THE <span class="gold">SOUND.</span><br>
+    KEEP YOUR <span class="teal">FLOW.</span>
+  </h1>
 
-def ctx(request: Request, current_user: Optional[User], **extra):
-    base = {
-        "request": request,
-        "current_user": current_user,
-        "current_year": datetime.utcnow().year,
-    }
-    base.update(extra)
-    return base
+  <p>
+    Discover beats, connect with producers, and build your sound.
+  </p>
 
+  <div class="hero-actions">
 
-@router.get("/")
-def home(
-    request: Request,
-    q: str = "",
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    if q:
-        found = run_search(db, q)
+    <a
+      href="/signup"
+      class="btn btn-primary"
+    >
+      Create your producer store
+    </a>
 
-        return templates.TemplateResponse(
-            request,
-            "home.html",
-            ctx(
-                request,
-                current_user,
-                query=q,
-                results=found["results"],
-                total_results=found["total"],
-            ),
-        )
+    <a
+      href="/terms"
+      class="btn btn-outline"
+    >
+      Read the rules
+    </a>
 
-    return templates.TemplateResponse(
-        request,
-        "home.html",
-        ctx(
-            request,
-            current_user,
-            query="",
-            results={},
-            total_results=None,
-        ),
-    )
+  </div>
 
 
-@router.get("/search")
-def search(
-    request: Request,
-    q: str = "",
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    return home(
-        request=request,
-        q=q,
-        db=db,
-        current_user=current_user,
-    )
+  <!-- QUICK NAVIGATION -->
+
+  <div
+    style="
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      flex-wrap:wrap;
+      margin:28px 0 10px;
+    "
+  >
+
+    <a
+      href="/beats"
+      class="btn btn-outline"
+    >
+      Beats
+    </a>
+
+    <a
+      href="/sessions"
+      class="btn btn-outline"
+    >
+      Sessions
+    </a>
+
+    <a
+      href="/hot-picks"
+      class="btn btn-outline"
+    >
+      Hot Picks
+    </a>
+
+  </div>
 
 
-@router.get("/beats")
-def beats(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    found = run_search(db, "beats")
+  <!-- SEARCH -->
 
-    return templates.TemplateResponse(
-        request,
-        "home.html",
-        ctx(
-            request,
-            current_user,
-            query="beats",
-            results=found["results"],
-            total_results=found["total"],
-        ),
-    )
+  <div class="search-panel">
 
+    <form
+      action="/search"
+      method="get"
+      class="search-input-row"
+    >
 
-@router.get("/sessions")
-def sessions(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    found = run_search(db, "sessions")
+      <input
+        type="text"
+        name="q"
+        class="search-input"
+        placeholder="Search artists, producers, DJs, beats, tracks, albums..."
+        value="{{ query or '' }}"
+      >
 
-    return templates.TemplateResponse(
-        request,
-        "home.html",
-        ctx(
-            request,
-            current_user,
-            query="sessions",
-            results=found["results"],
-            total_results=found["total"],
-        ),
-    )
+      <button
+        type="submit"
+        class="btn btn-primary"
+      >
+        Search
+      </button>
+
+    </form>
 
 
-@router.get("/hot-picks")
-def hot_picks(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    found = run_search(db, "hot")
+    <!-- SEARCH RESULTS -->
 
-    return templates.TemplateResponse(
-        request,
-        "home.html",
-        ctx(
-            request,
-            current_user,
-            query="hot",
-            results=found["results"],
-            total_results=found["total"],
-        ),
-    )
+    {% if query %}
 
+      {% if results %}
 
-@router.get("/terms")
-def terms(
-    request: Request,
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    return templates.TemplateResponse(
-        request,
-        "terms.html",
-        ctx(request, current_user),
-    )
+        {% for group_name, items in results.items() %}
 
+          {% if items %}
 
-@router.get("/profile/{slug}")
-def public_profile(
-    request: Request,
-    slug: str,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    profile = (
-        db.query(Profile)
-        .filter(Profile.slug == slug)
-        .first()
-    )
+            <div style="margin-top:22px;">
 
-    if not profile:
-        raise HTTPException(
-            status_code=404,
-            detail="Creator profile not found.",
-        )
+              <div
+                class="eyebrow"
+                style="margin-bottom:10px;"
+              >
+                {{ group_name }}
+              </div>
 
-    tracks = list(profile.tracks or [])
-    albums = list(profile.albums or [])
+              <div class="results-grid">
 
-    tracks = [
-        track
-        for track in tracks
-        if getattr(track, "is_available", False)
-    ]
+                {% for item in items %}
 
-    public_albums = []
+                  <a
+                    href="{{ item.url }}"
+                    class="result-card"
+                  >
 
-    for album in albums:
-        if hasattr(album, "is_published"):
-            if album.is_published:
-                public_albums.append(album)
-        else:
-            public_albums.append(album)
+                    <div class="kind">
+                      {{ group_name }}
+                    </div>
 
-    return templates.TemplateResponse(
-        request,
-        "profile.html",
-        ctx(
-            request,
-            current_user,
-            profile=profile,
-            creator=profile.user,
-            tracks=tracks,
-            albums=public_albums,
-        ),
-    )
+                    <div class="title">
+                      {{ item.title }}
+                    </div>
+
+                    {% if item.subtitle %}
+                      <div class="sub">
+                        {{ item.subtitle }}
+                      </div>
+                    {% endif %}
+
+                  </a>
+
+                {% endfor %}
+
+              </div>
+
+            </div>
+
+          {% endif %}
+
+        {% endfor %}
+
+      {% endif %}
 
 
-@router.get("/account")
-def account(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    if current_user.role.value == "creator":
-        return RedirectResponse(
-            url="/dashboard",
-            status_code=303,
-        )
+      {% if total_results == 0 %}
 
-    if current_user.role.value == "admin":
-        return RedirectResponse(
-            url="/admin",
-            status_code=303,
-        )
+        <p
+          class="sub"
+          style="margin-top:16px;"
+        >
+          No results for "{{ query }}".
+        </p>
 
-    profile = getattr(current_user, "profile", None)
+      {% endif %}
 
-    return templates.TemplateResponse(
-        request,
-        "account.html",
-        ctx(
-            request,
-            current_user,
-            profile=profile,
-        ),
-    )
+    {% endif %}
+
+  </div>
+
+</section>
+
+{% endblock %}
