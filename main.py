@@ -34,37 +34,61 @@ TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
 # --------------------------------------------------------------
-# PERSISTENT MEDIA DIRECTORY
+# LOCAL MEDIA
+#
+# Only used when MEDIA_STORAGE=local.
+#
+# R2 mode deliberately does NOT create /var/data or any
+# persistent Render filesystem directory.
 # --------------------------------------------------------------
 
-MEDIA_DIR = Path(settings.MEDIA_ROOT)
+if settings.MEDIA_STORAGE.lower() == "local":
 
-if not MEDIA_DIR.is_absolute():
-    MEDIA_DIR = BASE_DIR / MEDIA_DIR
+    MEDIA_DIR = Path(settings.MEDIA_ROOT)
 
-MEDIA_DIR = MEDIA_DIR.resolve()
+    if not MEDIA_DIR.is_absolute():
+        MEDIA_DIR = BASE_DIR / MEDIA_DIR
 
-AUDIO_DIR = MEDIA_DIR / "audio"
-COVERS_DIR = MEDIA_DIR / "covers"
-PREVIEWS_DIR = MEDIA_DIR / "previews"
+    MEDIA_DIR = MEDIA_DIR.resolve()
 
-for directory in (
-    MEDIA_DIR,
-    AUDIO_DIR,
-    COVERS_DIR,
-    PREVIEWS_DIR,
-):
-    directory.mkdir(
-        parents=True,
-        exist_ok=True,
+    AUDIO_DIR = MEDIA_DIR / "audio"
+    COVERS_DIR = MEDIA_DIR / "covers"
+    PREVIEWS_DIR = MEDIA_DIR / "previews"
+
+    for directory in (
+        MEDIA_DIR,
+        AUDIO_DIR,
+        COVERS_DIR,
+        PREVIEWS_DIR,
+    ):
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+    logger.info(
+        "BeatHub local media root: %s",
+        MEDIA_DIR,
     )
 
-logger.info("BeatHub MEDIA_ROOT: %s", MEDIA_DIR)
-logger.info("BeatHub AUDIO_DIR: %s", AUDIO_DIR)
-logger.info("BeatHub COVERS_DIR: %s", COVERS_DIR)
-logger.info("BeatHub PREVIEWS_DIR: %s", PREVIEWS_DIR)
+else:
 
-app = FastAPI(title=settings.APP_NAME)
+    # R2 mode.
+    #
+    # No /var/data.
+    # No Render persistent disk.
+    #
+    MEDIA_DIR = None
+    AUDIO_DIR = None
+    COVERS_DIR = None
+    PREVIEWS_DIR = None
+
+    logger.info("BeatHub storage: Cloudflare R2")
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+)
 
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
@@ -77,43 +101,47 @@ templates = Jinja2Templates(
 if STATIC_DIR.exists():
     app.mount(
         "/static",
-        StaticFiles(directory=str(STATIC_DIR)),
+        StaticFiles(
+            directory=str(STATIC_DIR),
+        ),
         name="static",
     )
 
 # --------------------------------------------------------------
-# PUBLIC COVER ART
-# --------------------------------------------------------------
-
-app.mount(
-    "/media/covers",
-    StaticFiles(directory=str(COVERS_DIR)),
-    name="media-covers",
-)
-
-# --------------------------------------------------------------
-# PUBLIC PREVIEWS
-# --------------------------------------------------------------
-
-app.mount(
-    "/media/previews",
-    StaticFiles(directory=str(PREVIEWS_DIR)),
-    name="media-previews",
-)
-
-# --------------------------------------------------------------
-# IMPORTANT:
-# DO NOT mount /media/audio.
+# LOCAL PUBLIC MEDIA
 #
-# Full purchased audio is protected by music.py and is delivered
-# only after checking the user's License + completed Order.
+# These mounts exist ONLY for local storage.
+#
+# R2 media is served through R2 URLs from the routers.
 # --------------------------------------------------------------
+
+if settings.MEDIA_STORAGE.lower() == "local":
+
+    if COVERS_DIR is not None:
+        app.mount(
+            "/media/covers",
+            StaticFiles(
+                directory=str(COVERS_DIR),
+            ),
+            name="media-covers",
+        )
+
+    if PREVIEWS_DIR is not None:
+        app.mount(
+            "/media/previews",
+            StaticFiles(
+                directory=str(PREVIEWS_DIR),
+            ),
+            name="media-previews",
+        )
 
 # --------------------------------------------------------------
 # DATABASE
 # --------------------------------------------------------------
 
-Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(
+    bind=engine,
+)
 
 # --------------------------------------------------------------
 # ROUTERS
@@ -131,11 +159,26 @@ app.include_router(admin.router)
 # DASHBOARD COMPATIBILITY
 # --------------------------------------------------------------
 
-@app.get("/artist/dashboard", include_in_schema=False)
-@app.get("/creator/dashboard", include_in_schema=False)
-@app.get("/producer/dashboard", include_in_schema=False)
-@app.get("/dashboard/home", include_in_schema=False)
-@app.get("/dashboard/index", include_in_schema=False)
+@app.get(
+    "/artist/dashboard",
+    include_in_schema=False,
+)
+@app.get(
+    "/creator/dashboard",
+    include_in_schema=False,
+)
+@app.get(
+    "/producer/dashboard",
+    include_in_schema=False,
+)
+@app.get(
+    "/dashboard/home",
+    include_in_schema=False,
+)
+@app.get(
+    "/dashboard/index",
+    include_in_schema=False,
+)
 def dashboard_alias(
     user=Depends(require_creator),
 ):
@@ -150,26 +193,29 @@ def dashboard_alias(
 
 @app.get("/healthz")
 def healthz():
+
     return {
         "status": "ok",
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
-        "media_root": str(MEDIA_DIR),
-        "audio_directory_exists": AUDIO_DIR.exists(),
-        "covers_directory_exists": COVERS_DIR.exists(),
-        "previews_directory_exists": PREVIEWS_DIR.exists(),
+        "storage": settings.MEDIA_STORAGE,
+        "r2_enabled": settings.r2_enabled,
     }
 
 # --------------------------------------------------------------
 # ERRORS
 # --------------------------------------------------------------
 
-@app.exception_handler(StarletteHTTPException)
+@app.exception_handler(
+    StarletteHTTPException
+)
 async def http_exception_handler(
     request: Request,
     exc: StarletteHTTPException,
 ):
+
     if exc.status_code == 404:
+
         return templates.TemplateResponse(
             request,
             "errors/404.html",
@@ -182,12 +228,17 @@ async def http_exception_handler(
         )
 
     if exc.status_code == 401:
+
         return RedirectResponse(
-            url="/login?error=Please%20log%20in%20to%20continue.",
+            url=(
+                "/login"
+                "?error=Please%20log%20in%20to%20continue."
+            ),
             status_code=303,
         )
 
     if exc.status_code == 403:
+
         return templates.TemplateResponse(
             request,
             "errors/403.html",
@@ -212,11 +263,14 @@ async def http_exception_handler(
     )
 
 
-@app.exception_handler(RequestValidationError)
+@app.exception_handler(
+    RequestValidationError
+)
 async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ):
+
     return templates.TemplateResponse(
         request,
         "errors/400.html",
@@ -235,6 +289,7 @@ async def unhandled_exception_handler(
     request: Request,
     exc: Exception,
 ):
+
     logger.exception(
         "Unhandled BeatHub error: %s",
         exc,
