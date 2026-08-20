@@ -87,14 +87,20 @@ def search(
 @router.get("/beats")
 def beats(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    found = run_search(db, "beats")
+
     return templates.TemplateResponse(
         request,
-        "beats.html",
+        "home.html",
         ctx(
             request,
             current_user,
+            query="beats",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
         ),
     )
 
@@ -102,14 +108,20 @@ def beats(
 @router.get("/sessions")
 def sessions(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    found = run_search(db, "sessions")
+
     return templates.TemplateResponse(
         request,
-        "sessions.html",
+        "home.html",
         ctx(
             request,
             current_user,
+            query="sessions",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
         ),
     )
 
@@ -117,14 +129,20 @@ def sessions(
 @router.get("/hot-picks")
 def hot_picks(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    found = run_search(db, "hot")
+
     return templates.TemplateResponse(
         request,
-        "hot-picks.html",
+        "home.html",
         ctx(
             request,
             current_user,
+            query="hot",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
         ),
     )
 
@@ -175,11 +193,10 @@ def public_profile(
     public_albums = []
 
     for album in albums:
-        if not hasattr(album, "is_published"):
-            public_albums.append(album)
-            continue
-
-        if album.is_published:
+        if hasattr(album, "is_published"):
+            if album.is_published:
+                public_albums.append(album)
+        else:
             public_albums.append(album)
 
     return templates.TemplateResponse(
@@ -202,7 +219,11 @@ def account(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    role = getattr(current_user.role, "value", current_user.role)
+    role = getattr(
+        current_user.role,
+        "value",
+        current_user.role,
+    )
 
     if role == "creator":
         return RedirectResponse(
