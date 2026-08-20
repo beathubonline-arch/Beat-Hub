@@ -1,4 +1,4 @@
-```python
+```text
 from datetime import datetime
 from typing import Optional
 
@@ -113,15 +113,6 @@ def public_profile(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """
-    Public BeatHub creator store.
-
-    Example:
-        /profile/daveevo
-
-    Uses Profile.slug as the public URL identifier.
-    """
-
     profile = (
         db.query(Profile)
         .filter(
@@ -137,19 +128,15 @@ def public_profile(
             detail="Creator profile not found.",
         )
 
-    # The Profile model already defines these relationships.
     tracks = list(profile.tracks or [])
     albums = list(profile.albums or [])
 
-    # Only show published/available content on the public store.
     tracks = [
         track
         for track in tracks
         if getattr(track, "is_available", False)
     ]
 
-    # If your Album model has a published flag, respect it.
-    # Otherwise leave the existing albums visible.
     public_albums = []
 
     for album in albums:
@@ -183,13 +170,6 @@ def account(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Buyer / Artist account page.
-
-    Buyers use this page to access their BeatHub marketplace account.
-    Creators and admins are redirected to their appropriate dashboards.
-    """
-
     if current_user.role.value == "creator":
         from fastapi.responses import RedirectResponse
 
