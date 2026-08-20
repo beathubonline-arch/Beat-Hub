@@ -4,37 +4,37 @@
 
 {% block content %}
 
-<section style="padding:30px 0;">
+<section style="padding:35px 0;">
 
   <div style="max-width:1100px; margin:0 auto;">
 
-    <!-- WELCOME -->
+    <!-- HEADER -->
 
-    <div style="margin-bottom:28px;">
+    <div style="margin-bottom:25px;">
 
       <div class="eyebrow">
-        BEATHUB ARTIST
+        ARTIST DASHBOARD
       </div>
 
       <h1 style="font-size:30px; margin:5px 0 8px;">
-        Welcome back{% if current_user %}, {{ current_user.name or current_user.email }}{% endif %}
+        Welcome back, {{ display_name }}
       </h1>
 
-      <p class="sub" style="max-width:650px; line-height:1.6;">
-        Find the perfect beats for your next song, project or performance.
-        Browse available tracks, listen to previews and purchase beats securely.
+      <p class="sub">
+        Find beats, purchase licenses and download your music.
       </p>
 
     </div>
 
 
-    <!-- BROWSE BEATS -->
+    <!-- MAIN BUY BUTTON -->
 
     <div
       class="form-card"
       style="
         padding:28px;
         margin-bottom:25px;
+        text-align:center;
       "
     >
 
@@ -43,24 +43,29 @@
       </div>
 
       <h2 style="
-        margin:6px 0 10px;
-        font-size:25px;
+        font-size:27px;
+        margin:7px 0 10px;
       ">
-        Find Your Next Beat
+        Looking for your next beat?
       </h2>
 
-      <p class="sub" style="
-        max-width:650px;
-        line-height:1.6;
-        margin-bottom:20px;
-      ">
-        Browse beats from BeatHub producers. Open any track to listen,
-        check the licensing option and purchase it when you're ready.
+      <p
+        class="sub"
+        style="
+          max-width:650px;
+          margin:0 auto 20px;
+          line-height:1.6;
+        "
+      >
+        Browse beats from BeatHub producers, listen to available
+        tracks, choose your license and purchase securely with
+        M-Pesa.
       </p>
 
       <div
         style="
           display:flex;
+          justify-content:center;
           gap:12px;
           flex-wrap:wrap;
         "
@@ -70,15 +75,60 @@
           href="/beats"
           class="btn btn-primary"
         >
-          Browse &amp; Buy Beats
+          Browse Beats &amp; Buy
         </a>
 
         <a
-          href="/"
+          href="/sessions"
           class="btn btn-outline"
         >
-          Explore BeatHub
+          Browse Sessions
         </a>
+
+      </div>
+
+    </div>
+
+
+    <!-- STATS -->
+
+    <div class="dashboard-grid">
+
+      <div class="stat-card">
+
+        <div class="label">
+          Purchased Beats
+        </div>
+
+        <div class="value">
+          {{ total_purchases }}
+        </div>
+
+      </div>
+
+
+      <div class="stat-card">
+
+        <div class="label">
+          Total Spent
+        </div>
+
+        <div class="value gold">
+          KSh {{ '%.2f'|format(total_spent) }}
+        </div>
+
+      </div>
+
+
+      <div class="stat-card">
+
+        <div class="label">
+          Downloads
+        </div>
+
+        <div class="value teal">
+          {{ total_purchases }}
+        </div>
 
       </div>
 
@@ -87,260 +137,337 @@
 
     <!-- QUICK ACTIONS -->
 
-    <h2 style="
-      font-size:22px;
-      margin:35px 0 16px;
-    ">
-      Quick Actions
-    </h2>
-
-    <div class="dashboard-grid">
-
-      <!-- BROWSE -->
-
-      <div class="form-card" style="padding:22px;">
-
-        <div class="eyebrow">
-          MUSIC
-        </div>
-
-        <h3 style="
-          font-size:20px;
-          margin:6px 0 8px;
-        ">
-          Browse Beats
-        </h3>
-
-        <p class="sub" style="line-height:1.5;">
-          Discover beats uploaded by BeatHub producers.
-        </p>
-
-        <a
-          href="/beats"
-          class="btn btn-primary btn-block"
-          style="margin-top:15px;"
-        >
-          Browse Beats
-        </a>
-
-      </div>
-
-
-      <!-- SESSIONS -->
-
-      <div class="form-card" style="padding:22px;">
-
-        <div class="eyebrow">
-          SERVICES
-        </div>
-
-        <h3 style="
-          font-size:20px;
-          margin:6px 0 8px;
-        ">
-          Find Sessions
-        </h3>
-
-        <p class="sub" style="line-height:1.5;">
-          Explore available music sessions and services from creators.
-        </p>
-
-        <a
-          href="/sessions"
-          class="btn btn-outline btn-block"
-          style="margin-top:15px;"
-        >
-          Browse Sessions
-        </a>
-
-      </div>
-
-
-      <!-- HOT PICKS -->
-
-      <div class="form-card" style="padding:22px;">
-
-        <div class="eyebrow">
-          DISCOVER
-        </div>
-
-        <h3 style="
-          font-size:20px;
-          margin:6px 0 8px;
-        ">
-          Hot Picks
-        </h3>
-
-        <p class="sub" style="line-height:1.5;">
-          Check out music currently getting attention on BeatHub.
-        </p>
-
-        <a
-          href="/hot-picks"
-          class="btn btn-outline btn-block"
-          style="margin-top:15px;"
-        >
-          View Hot Picks
-        </a>
-
-      </div>
-
-
-      <!-- ACCOUNT -->
-
-      <div class="form-card" style="padding:22px;">
-
-        <div class="eyebrow">
-          ACCOUNT
-        </div>
-
-        <h3 style="
-          font-size:20px;
-          margin:6px 0 8px;
-        ">
-          My Account
-        </h3>
-
-        <p class="sub" style="line-height:1.5;">
-          View and manage your BeatHub account information.
-        </p>
-
-        <a
-          href="/account"
-          class="btn btn-outline btn-block"
-          style="margin-top:15px;"
-        >
-          My Account
-        </a>
-
-      </div>
-
-    </div>
-
-
-    <!-- BUYING FLOW -->
-
-    <div
-      class="form-card"
-      style="
-        padding:25px;
-        margin-top:35px;
-      "
-    >
-
-      <div class="eyebrow">
-        HOW IT WORKS
-      </div>
-
-      <h2 style="
-        font-size:22px;
-        margin:6px 0 18px;
-      ">
-        Buy a Beat in 4 Steps
-      </h2>
-
-      <div
-        style="
-          display:grid;
-          grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-          gap:18px;
-        "
-      >
-
-        <div>
-
-          <div class="value gold" style="font-size:24px;">
-            01
-          </div>
-
-          <h3 style="margin:5px 0;">
-            Browse
-          </h3>
-
-          <p class="sub">
-            Explore beats from BeatHub producers.
-          </p>
-
-        </div>
-
-
-        <div>
-
-          <div class="value gold" style="font-size:24px;">
-            02
-          </div>
-
-          <h3 style="margin:5px 0;">
-            Listen
-          </h3>
-
-          <p class="sub">
-            Open a beat and listen to its preview.
-          </p>
-
-        </div>
-
-
-        <div>
-
-          <div class="value gold" style="font-size:24px;">
-            03
-          </div>
-
-          <h3 style="margin:5px 0;">
-            Purchase
-          </h3>
-
-          <p class="sub">
-            Select the available license and pay through M-Pesa.
-          </p>
-
-        </div>
-
-
-        <div>
-
-          <div class="value gold" style="font-size:24px;">
-            04
-          </div>
-
-          <h3 style="margin:5px 0;">
-            Download
-          </h3>
-
-          <p class="sub">
-            After successful payment, access your purchased beat.
-          </p>
-
-        </div>
-
-      </div>
-
-    </div>
-
-
-    <!-- MAIN CTA -->
-
     <div
       style="
-        text-align:center;
-        padding:35px 15px;
+        display:flex;
+        gap:12px;
+        flex-wrap:wrap;
+        margin:25px 0 40px;
       "
     >
-
-      <h2 style="font-size:25px; margin-bottom:8px;">
-        Ready to make music?
-      </h2>
-
-      <p class="sub" style="margin-bottom:18px;">
-        Start browsing BeatHub beats and find your sound.
-      </p>
 
       <a
         href="/beats"
         class="btn btn-primary"
       >
-        Browse &amp; Buy Beats
+        Browse Beats
+      </a>
+
+      <a
+        href="/"
+        class="btn btn-outline"
+      >
+        Back to BeatHub
+      </a>
+
+    </div>
+
+
+    <!-- PURCHASED MUSIC -->
+
+    <div style="margin-top:30px;">
+
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          align-items:end;
+          gap:15px;
+          flex-wrap:wrap;
+          margin-bottom:18px;
+        "
+      >
+
+        <div>
+
+          <h2 style="
+            font-size:23px;
+            margin:0;
+          ">
+            My Purchased Beats
+          </h2>
+
+          <p class="sub" style="margin:5px 0 0;">
+            Beats you have successfully purchased.
+          </p>
+
+        </div>
+
+        <a
+          href="/beats"
+          class="btn btn-outline"
+        >
+          Buy Another Beat
+        </a>
+
+      </div>
+
+
+      {% if purchases %}
+
+        <div class="dashboard-grid">
+
+          {% for purchase in purchases %}
+
+            <div
+              class="form-card"
+              style="padding:18px;"
+            >
+
+              {% if purchase.track %}
+
+                <!-- COVER -->
+
+                {% if purchase.track.cover_art_path %}
+
+                  <div
+                    style="
+                      width:100%;
+                      aspect-ratio:1/1;
+                      overflow:hidden;
+                      border-radius:10px;
+                      margin-bottom:14px;
+                      background:#111;
+                    "
+                  >
+
+                    <img
+                      src="/track/{{ purchase.track.slug }}"
+                      alt="{{ purchase.track.title }}"
+                      loading="lazy"
+                      style="
+                        width:100%;
+                        height:100%;
+                        object-fit:cover;
+                      "
+                      onerror="this.style.display='none';"
+                    >
+
+                  </div>
+
+                {% endif %}
+
+
+                <div class="eyebrow">
+
+                  {{ purchase.track.genre or 'BEAT' }}
+
+                  {% if purchase.track.bpm %}
+                    &middot;
+                    {{ purchase.track.bpm }} BPM
+                  {% endif %}
+
+                </div>
+
+
+                <h3 style="
+                  font-size:20px;
+                  margin:5px 0 8px;
+                ">
+                  {{ purchase.track.title }}
+                </h3>
+
+
+                {% if purchase.creator_name %}
+
+                  <p class="sub" style="margin:4px 0;">
+                    Producer:
+                    {{ purchase.creator_name }}
+                  </p>
+
+                {% endif %}
+
+
+                <p class="sub" style="margin:4px 0;">
+                  Order:
+                  {{ purchase.order_number }}
+                </p>
+
+
+                <p class="sub" style="margin:4px 0 14px;">
+
+                  Purchased:
+
+                  {{
+                    purchase.completed_at.strftime('%d %b %Y')
+                    if purchase.completed_at
+                    else ''
+                  }}
+
+                </p>
+
+
+                <!-- LICENSE -->
+
+                <div
+                  style="
+                    display:flex;
+                    gap:7px;
+                    flex-wrap:wrap;
+                    margin-bottom:15px;
+                  "
+                >
+
+                  {% if purchase.track.sales_model.value == "exclusive" %}
+
+                    <span class="badge badge-exclusive">
+                      EXCLUSIVE LICENSE
+                    </span>
+
+                  {% else %}
+
+                    <span class="badge badge-nonexclusive">
+                      NON-EXCLUSIVE LICENSE
+                    </span>
+
+                  {% endif %}
+
+                </div>
+
+
+                <!-- ACTIONS -->
+
+                <div
+                  style="
+                    display:flex;
+                    gap:8px;
+                    flex-wrap:wrap;
+                  "
+                >
+
+                  <a
+                    href="/track/{{ purchase.track.slug }}"
+                    class="btn btn-outline"
+                  >
+                    View Beat
+                  </a>
+
+
+                  {% if purchase.download_url %}
+
+                    <a
+                      href="{{ purchase.download_url }}"
+                      class="btn btn-primary"
+                      target="_blank"
+                      rel="noopener"
+                      download
+                    >
+                      Download Beat
+                    </a>
+
+                  {% else %}
+
+                    <span
+                      class="btn btn-outline"
+                      style="opacity:.6;"
+                    >
+                      Download Unavailable
+                    </span>
+
+                  {% endif %}
+
+                </div>
+
+              {% else %}
+
+                <h3>
+                  Purchased Item
+                </h3>
+
+                <p class="sub">
+                  Order {{ purchase.order_number }}
+                </p>
+
+              {% endif %}
+
+            </div>
+
+          {% endfor %}
+
+        </div>
+
+
+      {% else %}
+
+        <!-- EMPTY -->
+
+        <div
+          class="form-card"
+          style="
+            padding:40px;
+            text-align:center;
+          "
+        >
+
+          <div
+            style="
+              font-size:45px;
+              margin-bottom:10px;
+            "
+          >
+            🎵
+          </div>
+
+          <h2 style="margin:0 0 8px;">
+            You haven't bought a beat yet
+          </h2>
+
+          <p
+            class="sub"
+            style="
+              max-width:550px;
+              margin:0 auto 20px;
+              line-height:1.6;
+            "
+          >
+            Explore BeatHub's marketplace and find the perfect
+            beat for your next song.
+          </p>
+
+          <a
+            href="/beats"
+            class="btn btn-primary"
+          >
+            Browse Beats &amp; Buy
+          </a>
+
+        </div>
+
+      {% endif %}
+
+    </div>
+
+
+    <!-- ACCOUNT -->
+
+    <div
+      class="form-card"
+      style="
+        margin-top:45px;
+        padding:25px;
+      "
+    >
+
+      <div class="eyebrow">
+        ACCOUNT
+      </div>
+
+      <h2 style="
+        margin:5px 0 8px;
+        font-size:21px;
+      ">
+        {{ user.email if user is defined else current_user.email }}
+      </h2>
+
+      <p class="sub">
+        Your purchased music is connected to this BeatHub account.
+      </p>
+
+      <a
+        href="/account"
+        class="btn btn-outline"
+      >
+        Account Settings
       </a>
 
     </div>
