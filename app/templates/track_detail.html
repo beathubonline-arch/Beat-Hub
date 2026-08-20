@@ -4,41 +4,60 @@
 
 {% block content %}
 
-<section style="padding:40px 0; max-width:700px;">
+<section style="
+  padding:40px 0;
+  max-width:700px;
+">
 
   <div class="eyebrow">
+
     {{ track.genre or 'BEAT' }}
+
     {% if track.bpm %}
       &middot; {{ track.bpm }} BPM
     {% endif %}
+
   </div>
 
-  <h1 style="font-size:36px; margin:6px 0;">
+
+  <h1 style="
+    font-size:36px;
+    margin:6px 0;
+  ">
     {{ track.title }}
   </h1>
 
+
   <p class="sub">
+
     By
+
     <a
       href="/profile/{{ track.creator_profile.slug }}"
       style="color:var(--teal);"
     >
       {{ track.creator_profile.stage_name }}
     </a>
+
   </p>
+
 
   <div style="margin:18px 0;">
 
     {% if track.sales_model.value == 'exclusive' %}
 
       {% if track.is_sold %}
+
         <span class="badge badge-sold">
           SOLD — EXCLUSIVELY OWNED
         </span>
+
       {% else %}
+
         <span class="badge badge-exclusive">
           EXCLUSIVE — ONE-TIME PURCHASE
         </span>
+
       {% endif %}
 
     {% else %}
@@ -51,7 +70,9 @@
 
   </div>
 
+
   {% if track.description %}
+
     <p
       class="sub"
       style="
@@ -61,7 +82,9 @@
     >
       {{ track.description }}
     </p>
+
   {% endif %}
+
 
   <div
     class="stat-card"
@@ -70,6 +93,7 @@
       max-width:320px;
     "
   >
+
     <div class="label">
       Price
     </div>
@@ -77,6 +101,7 @@
     <div class="value gold">
       KSh {{ '%.2f'|format(track.price) }}
     </div>
+
   </div>
 
 
@@ -98,14 +123,19 @@
         PURCHASE COMPLETE
       </div>
 
-      <h2 style="margin:5px 0 8px;">
+
+      <h2 style="
+        margin:5px 0 8px;
+      ">
         You own this beat
       </h2>
 
+
       <p class="sub">
-        Your payment has been confirmed. Your purchased master
-        audio is ready to download.
+        Your payment has been confirmed.
+        Your purchased master audio is ready to download.
       </p>
+
 
       <a
         href="/download/track/{{ track.id }}"
@@ -132,6 +162,7 @@
       Buy Now
     </a>
 
+
   {% else %}
 
     <button
@@ -139,11 +170,17 @@
       disabled
       style="margin-top:24px;"
     >
+
       {% if track.sales_model.value == 'exclusive' %}
+
         Sold — Unavailable
+
       {% else %}
+
         Unavailable
+
       {% endif %}
+
     </button>
 
   {% endif %}
