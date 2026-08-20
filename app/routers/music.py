@@ -3,6 +3,7 @@ from typing import Optional
 from urllib.parse import quote
 
 import boto3
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 from fastapi import (
@@ -18,13 +19,22 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.music import Album, Track
-from app.models.order import License, Order, OrderStatus
+from app.models.order import (
+    License,
+    Order,
+    OrderStatus,
+)
 from app.models.profile import Profile
 from app.models.user import User
-from app.utils.deps import get_optional_user, require_user
+from app.utils.deps import (
+    get_optional_user,
+    require_user,
+)
 
 
-router = APIRouter(tags=["music"])
+router = APIRouter(
+    tags=["music"]
+)
 
 templates = Jinja2Templates(
     directory="app/templates"
@@ -32,78 +42,8 @@ templates = Jinja2Templates(
 
 
 # ----------------------------------------------------------------------
-# R2
+# CONTEXT
 # ----------------------------------------------------------------------
-
-def get_r2_client():
-    if not settings.r2_enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Cloud storage is not configured.",
-        )
-
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.r2_endpoint_url,
-        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-        region_name="auto",
-    )
-
-
-def r2_object_key(
-    value: Optional[str],
-) -> Optional[str]:
-    if not value:
-        return None
-
-    value = str(value).strip()
-
-    if not value:
-        return None
-
-    if value.startswith("r2://"):
-        parts = value[5:].split("/", 1)
-
-        if len(parts) == 2:
-            return parts[1]
-
-    return value.lstrip("/")
-
-
-def r2_presigned_url(
-    value: Optional[str],
-    expires: Optional[int] = None,
-) -> Optional[str]:
-    key = r2_object_key(value)
-
-    if not key:
-        return None
-
-    if settings.R2_PUBLIC_URL:
-        return (
-            settings.R2_PUBLIC_URL.rstrip("/")
-            + "/"
-            + quote(
-                key,
-                safe="/",
-            )
-        )
-
-    client = get_r2_client()
-
-    return client.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": settings.R2_BUCKET_NAME,
-            "Key": key,
-        },
-        ExpiresIn=(
-            expires
-            or settings.R2_PUBLIC_URL_EXPIRES
-        ),
-    )
-
 
 def ctx(
     request: Request,
@@ -119,6 +59,130 @@ def ctx(
     data.update(extra)
 
     return data
+
+
+# ----------------------------------------------------------------------
+# R2
+# ----------------------------------------------------------------------
+
+def get_r2_client():
+    if not settings.r2_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Cloud storage is not configured."
+            ),
+        )
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.r2_endpoint_url,
+        aws_access_key_id=(
+            settings.R2_ACCESS_KEY_ID
+        ),
+        aws_secret_access_key=(
+            settings.R2_SECRET_ACCESS_KEY
+        ),
+        region_name="auto",
+        config=BotoConfig(
+            signature_version="s3v4"
+        ),
+    )
+
+
+def r2_object_key(
+    value: Optional[str],
+) -> Optional[str]:
+    """
+    Convert database storage values into
+    an R2 object key.
+
+    Examples:
+
+        r2://beathub/audio/file.mp3
+        -> audio/file.mp3
+
+        audio/file.mp3
+        -> audio/file.mp3
+    """
+
+    if not value:
+        return None
+
+    value = str(value).strip()
+
+    if not value:
+        return None
+
+    if value.startswith("r2://"):
+
+        parts = value[5:].split(
+            "/",
+            1,
+        )
+
+        if len(parts) == 2:
+            return parts[1]
+
+        return None
+
+    return value.lstrip("/")
+
+
+def r2_presigned_url(
+    value: Optional[str],
+    expires: Optional[int] = None,
+    response_content_type: Optional[str] = None,
+    response_content_disposition: Optional[str] = None,
+) -> Optional[str]:
+
+    key = r2_object_key(value)
+
+    if not key:
+        return None
+
+    # If the bucket has a configured public/custom URL,
+    # use it directly.
+    #
+    # For private buckets, use a presigned S3 GET URL.
+    if (
+        settings.R2_PUBLIC_URL
+        and not response_content_disposition
+    ):
+        return (
+            settings.R2_PUBLIC_URL.rstrip("/")
+            + "/"
+            + quote(
+                key,
+                safe="/",
+            )
+        )
+
+    client = get_r2_client()
+
+    params = {
+        "Bucket": settings.R2_BUCKET_NAME,
+        "Key": key,
+    }
+
+    if response_content_type:
+        params[
+            "ResponseContentType"
+        ] = response_content_type
+
+    if response_content_disposition:
+        params[
+            "ResponseContentDisposition"
+        ] = response_content_disposition
+
+    return client.generate_presigned_url(
+        "get_object",
+        Params=params,
+        ExpiresIn=(
+            expires
+            or settings.R2_PUBLIC_URL_EXPIRES
+        ),
+    )
 
 
 # ----------------------------------------------------------------------
@@ -146,17 +210,19 @@ def browse_beats(
     )
 
     for track in tracks:
+
         track.cover_art_url = None
 
         if track.cover_art_path:
             try:
                 track.cover_art_url = (
                     r2_presigned_url(
-                        track.cover_art_path
+                        track.cover_art_path,
+                        settings.R2_PUBLIC_URL_EXPIRES,
                     )
                 )
             except Exception:
-                pass
+                track.cover_art_url = None
 
     return templates.TemplateResponse(
         request,
@@ -190,17 +256,19 @@ def hot_picks(
     )
 
     for track in tracks:
+
         track.cover_art_url = None
 
         if track.cover_art_path:
             try:
                 track.cover_art_url = (
                     r2_presigned_url(
-                        track.cover_art_path
+                        track.cover_art_path,
+                        settings.R2_PUBLIC_URL_EXPIRES,
                     )
                 )
             except Exception:
-                pass
+                track.cover_art_url = None
 
     return templates.TemplateResponse(
         request,
@@ -261,11 +329,13 @@ def track_detail(
     purchased = False
 
     if current_user:
+
         purchased = (
             db.query(License)
             .join(
                 Order,
-                License.order_id == Order.id,
+                License.order_id
+                == Order.id,
             )
             .filter(
                 License.buyer_id
@@ -279,17 +349,19 @@ def track_detail(
             is not None
         )
 
-    cover_art_url = None
+    track.cover_art_url = None
 
     if track.cover_art_path:
+
         try:
-            cover_art_url = (
+            track.cover_art_url = (
                 r2_presigned_url(
-                    track.cover_art_path
+                    track.cover_art_path,
+                    settings.R2_PUBLIC_URL_EXPIRES,
                 )
             )
         except Exception:
-            cover_art_url = None
+            track.cover_art_url = None
 
     return templates.TemplateResponse(
         request,
@@ -299,7 +371,6 @@ def track_detail(
             current_user,
             track=track,
             purchased=purchased,
-            cover_art_url=cover_art_url,
         ),
     )
 
@@ -331,17 +402,19 @@ def album_detail(
             detail="Album not found.",
         )
 
-    artwork_url = None
+    album.artwork_url = None
 
     if album.artwork_path:
+
         try:
-            artwork_url = (
+            album.artwork_url = (
                 r2_presigned_url(
-                    album.artwork_path
+                    album.artwork_path,
+                    settings.R2_PUBLIC_URL_EXPIRES,
                 )
             )
         except Exception:
-            artwork_url = None
+            album.artwork_url = None
 
     return templates.TemplateResponse(
         request,
@@ -350,7 +423,6 @@ def album_detail(
             request,
             current_user,
             album=album,
-            artwork_url=artwork_url,
         ),
     )
 
@@ -395,30 +467,36 @@ def profile_detail(
     ]
 
     for track in tracks:
+
         track.cover_art_url = None
 
         if track.cover_art_path:
+
             try:
                 track.cover_art_url = (
                     r2_presigned_url(
-                        track.cover_art_path
+                        track.cover_art_path,
+                        settings.R2_PUBLIC_URL_EXPIRES,
                     )
                 )
             except Exception:
-                pass
+                track.cover_art_url = None
 
     for album in albums:
+
         album.artwork_url = None
 
         if album.artwork_path:
+
             try:
                 album.artwork_url = (
                     r2_presigned_url(
-                        album.artwork_path
+                        album.artwork_path,
+                        settings.R2_PUBLIC_URL_EXPIRES,
                     )
                 )
             except Exception:
-                pass
+                album.artwork_url = None
 
     return templates.TemplateResponse(
         request,
@@ -437,15 +515,19 @@ def profile_detail(
 # PURCHASE DOWNLOAD
 # ----------------------------------------------------------------------
 
-@router.get("/download/track/{track_ref}")
-@router.get("/download/{track_ref}")
+@router.get(
+    "/download/track/{track_ref}"
+)
+@router.get(
+    "/download/{track_ref}"
+)
 def download_track(
     track_ref: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     # --------------------------------------------------------------
-    # Find by UUID or slug.
+    # Find track by UUID OR slug.
     # --------------------------------------------------------------
 
     track = (
@@ -457,6 +539,7 @@ def download_track(
     )
 
     if not track:
+
         track = (
             db.query(Track)
             .filter(
@@ -472,19 +555,23 @@ def download_track(
         )
 
     # --------------------------------------------------------------
-    # Verify completed purchase.
+    # Verify actual ownership.
     # --------------------------------------------------------------
 
     license_record = (
         db.query(License)
         .join(
             Order,
-            License.order_id == Order.id,
+            License.order_id
+            == Order.id,
         )
         .filter(
-            License.buyer_id == user.id,
-            License.track_id == track.id,
-            Order.status == OrderStatus.COMPLETED,
+            License.buyer_id
+            == user.id,
+            License.track_id
+            == track.id,
+            Order.status
+            == OrderStatus.COMPLETED,
         )
         .first()
     )
@@ -493,20 +580,34 @@ def download_track(
         raise HTTPException(
             status_code=403,
             detail=(
-                "You do not own this track. "
-                "A completed purchase is required."
+                "You do not own this track."
             ),
         )
 
     # --------------------------------------------------------------
-    # R2 configuration.
+    # R2 must be configured.
     # --------------------------------------------------------------
 
     if not settings.r2_enabled:
         raise HTTPException(
             status_code=503,
-            detail="Cloud storage is not configured.",
+            detail=(
+                "Cloud storage is not configured."
+            ),
         )
+
+    # --------------------------------------------------------------
+    # Convert stored database path into R2 key.
+    #
+    # Example:
+    #
+    # r2://beathub/audio/
+    # e4bc432a-....mp3
+    #
+    # becomes:
+    #
+    # audio/e4bc432a-....mp3
+    # --------------------------------------------------------------
 
     key = r2_object_key(
         track.audio_file_path
@@ -515,30 +616,30 @@ def download_track(
     if not key:
         raise HTTPException(
             status_code=404,
-            detail="Audio file is not available.",
+            detail=(
+                "Audio file is not available."
+            ),
         )
 
     client = get_r2_client()
 
     # --------------------------------------------------------------
-    # Confirm R2 object exists.
+    # Confirm object exists in R2.
     # --------------------------------------------------------------
 
     try:
+
         metadata = client.head_object(
             Bucket=settings.R2_BUCKET_NAME,
             Key=key,
         )
 
     except ClientError as exc:
-        error_code = str(
-            exc.response.get(
-                "Error",
-                {},
-            ).get(
-                "Code",
-                "",
-            )
+
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code")
         )
 
         if error_code in {
@@ -550,20 +651,62 @@ def download_track(
                 status_code=404,
                 detail=(
                     "The purchased audio file "
-                    "is missing from Cloudflare R2."
+                    "is missing from R2 storage."
                 ),
             )
 
         raise HTTPException(
             status_code=503,
             detail=(
-                "Cloudflare R2 could not be reached "
-                "while preparing the download."
+                "R2 could not be reached while "
+                "preparing your download."
             ),
         )
 
     # --------------------------------------------------------------
-    # Generate temporary private download URL.
+    # Build safe download filename.
+    # --------------------------------------------------------------
+
+    safe_title = "".join(
+        character
+        for character in (
+            track.title or ""
+        )
+        if (
+            character.isalnum()
+            or character in (
+                " ",
+                "-",
+                "_",
+            )
+        )
+    ).strip()
+
+    if not safe_title:
+        safe_title = "BeatHub-Track"
+
+    original_name = key.rsplit(
+        "/",
+        1,
+    )[-1]
+
+    extension = ""
+
+    if "." in original_name:
+        extension = (
+            "."
+            + original_name.rsplit(
+                ".",
+                1,
+            )[-1].lower()
+        )
+
+    download_name = (
+        f"{safe_title}{extension}"
+    )
+
+    # --------------------------------------------------------------
+    # Content type.
     # --------------------------------------------------------------
 
     content_type = (
@@ -573,27 +716,41 @@ def download_track(
         or "application/octet-stream"
     )
 
-    download_url = client.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": settings.R2_BUCKET_NAME,
-            "Key": key,
-            "ResponseContentType": content_type,
-            "ResponseContentDisposition": (
-                f'attachment; filename="{track.slug}.'
-                f'{key.rsplit(".", 1)[-1] if "." in key else "audio"}"'
-            ),
-        },
-        ExpiresIn=settings.R2_DOWNLOAD_URL_EXPIRES,
-    )
+    # --------------------------------------------------------------
+    # Force download from R2.
+    #
+    # The browser receives the signed URL and
+    # downloads the object directly from R2.
+    # --------------------------------------------------------------
 
-    if not download_url:
-        raise HTTPException(
-            status_code=503,
-            detail="Could not create the download URL.",
+    download_url = (
+        client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": (
+                    settings.R2_BUCKET_NAME
+                ),
+                "Key": key,
+                "ResponseContentType": (
+                    content_type
+                ),
+                "ResponseContentDisposition": (
+                    "attachment; "
+                    f'filename="{download_name}"'
+                ),
+            },
+            ExpiresIn=(
+                settings.R2_DOWNLOAD_URL_EXPIRES
+            ),
         )
+    )
 
     return RedirectResponse(
         url=download_url,
         status_code=307,
+        headers={
+            "Cache-Control": (
+                "private, no-store"
+            ),
+        },
     )
