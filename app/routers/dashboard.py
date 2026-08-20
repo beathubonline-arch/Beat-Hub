@@ -198,6 +198,25 @@ def extension(filename: str) -> str:
     )[1].lower()
 
 
+def build_absolute_url(request: Request, path: str) -> str:
+    """
+    Build an absolute URL using the real incoming request's host,
+    instead of relying on settings.BASE_URL (which defaults to
+    http://localhost:8000 and is easy to leave unset in production).
+
+    Forces https in production even if the ASGI server sees an
+    internal http:// connection from Render's proxy, so links like
+    the public store URL never resolve to localhost or downgrade
+    to http on a live deployment.
+    """
+    base = str(request.base_url).rstrip("/")
+
+    if settings.is_production and base.startswith("http://"):
+        base = "https://" + base[len("http://"):]
+
+    return f"{base}/{path.lstrip('/')}"
+
+
 # ----------------------------------------------------------------------
 # STATS
 # ----------------------------------------------------------------------
@@ -476,9 +495,14 @@ def dashboard_home(
         f"{settings.YOUTUBE_CHANNEL_ID}"
     )
 
-    store_url = (
-        f"{settings.BASE_URL.rstrip('/')}"
-        f"/profile/{profile.slug}"
+    # Fixed: previously built from settings.BASE_URL, which defaults
+    # to http://localhost:8000 whenever that env var isn't explicitly
+    # set on the deployment (e.g. Render) — producing broken store
+    # links (ERR_CONNECTION_RESET) for visitors. Now derived from the
+    # actual incoming request host instead.
+    store_url = build_absolute_url(
+        request,
+        f"/profile/{profile.slug}",
     )
 
     return templates.TemplateResponse(
