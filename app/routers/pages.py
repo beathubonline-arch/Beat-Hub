@@ -2,13 +2,13 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
 from app.models.profile import Profile
+from app.models.user import User
 from app.services.search import run_search
 from app.utils.deps import get_optional_user, require_user
 
@@ -103,7 +103,7 @@ def terms(
 
 
 # ------------------------------------------------------------------
-# PUBLIC CREATOR PROFILE
+# PUBLIC CREATOR PROFILE / STORE
 # ------------------------------------------------------------------
 
 @router.get("/profile/{slug}")
@@ -114,12 +114,12 @@ def public_profile(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
-    Public creator profile.
+    Public BeatHub creator store.
 
     Example:
         /profile/daveevo
 
-    Profile URLs use Profile.slug, not the user's email.
+    Uses Profile.slug as the public URL identifier.
     """
 
     profile = (
@@ -132,15 +132,32 @@ def public_profile(
     )
 
     if not profile:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=404,
             detail="Creator profile not found.",
         )
 
-    # Keep the profile's related creator available to the template.
-    creator = profile.user
+    # The Profile model already defines these relationships.
+    tracks = list(profile.tracks or [])
+    albums = list(profile.albums or [])
+
+    # Only show published/available content on the public store.
+    tracks = [
+        track
+        for track in tracks
+        if getattr(track, "is_available", False)
+    ]
+
+    # If your Album model has a published flag, respect it.
+    # Otherwise leave the existing albums visible.
+    public_albums = []
+
+    for album in albums:
+        if hasattr(album, "is_published"):
+            if album.is_published:
+                public_albums.append(album)
+        else:
+            public_albums.append(album)
 
     return templates.TemplateResponse(
         request,
@@ -149,7 +166,9 @@ def public_profile(
             request,
             current_user,
             profile=profile,
-            creator=creator,
+            creator=profile.user,
+            tracks=tracks,
+            albums=public_albums,
         ),
     )
 
