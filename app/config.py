@@ -1,8 +1,6 @@
 """
 Central application configuration.
-
 All values are sourced from environment variables / .env.
-BeatHub uses Cloudflare R2 for persistent media storage.
 """
 
 from functools import lru_cache
@@ -11,7 +9,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -80,9 +77,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     # --------------------------------------------------------------
-    # STORAGE
-    #
-    # BeatHub uses Cloudflare R2.
+    # STORAGE - CLOUDFLARE R2
     # --------------------------------------------------------------
 
     MEDIA_STORAGE: str = "r2"
@@ -92,24 +87,14 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "beathub"
 
-    # Optional public/custom R2 URL.
-    #
-    # Leave EMPTY for private R2 buckets.
-    # When empty, BeatHub generates temporary presigned URLs.
-    #
+    # Optional public R2/custom-domain URL.
+    # Leave blank when using private bucket + signed URLs.
     R2_PUBLIC_URL: str = ""
 
-    # Artwork URL lifetime.
     R2_PUBLIC_URL_EXPIRES: int = 3600
-
-    # Purchased audio download URL lifetime.
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
     MAX_UPLOAD_MB: int = 50
-
-    # --------------------------------------------------------------
-    # R2 HELPERS
-    # --------------------------------------------------------------
 
     @property
     def r2_enabled(self) -> bool:
@@ -127,8 +112,7 @@ class Settings(BaseSettings):
             return ""
 
         return (
-            f"https://{self.R2_ACCOUNT_ID}"
-            ".r2.cloudflarestorage.com"
+            f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
         )
 
     # --------------------------------------------------------------
