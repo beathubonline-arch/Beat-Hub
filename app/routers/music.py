@@ -4,6 +4,7 @@ from urllib.parse import quote
 
 import boto3
 from botocore.exceptions import ClientError
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -18,7 +19,9 @@ from app.models.user import User
 from app.utils.deps import get_optional_user, require_user
 
 
-router = APIRouter(tags=["music"])
+router = APIRouter(
+    tags=["music"]
+)
 
 templates = Jinja2Templates(
     directory="app/templates"
@@ -33,7 +36,12 @@ def get_r2_client():
     if not settings.r2_enabled:
         raise HTTPException(
             status_code=503,
-            detail="Cloud storage is not configured.",
+            detail=(
+                "Cloudflare R2 is not configured. "
+                "Check R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, "
+                "R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME "
+                "in Render Environment Variables."
+            ),
         )
 
     return boto3.client(
@@ -63,8 +71,6 @@ def r2_object_key(
         if len(parts) == 2:
             return parts[1]
 
-        return None
-
     return value.lstrip("/")
 
 
@@ -78,13 +84,16 @@ def r2_presigned_url(
     if not key:
         return None
 
-    # If a public R2/custom-domain URL is configured,
+    # If a public R2/custom domain is configured,
     # use it instead of a signed URL.
     if settings.R2_PUBLIC_URL:
         return (
             settings.R2_PUBLIC_URL.rstrip("/")
             + "/"
-            + quote(key, safe="/")
+            + quote(
+                key,
+                safe="/",
+            )
         )
 
     client = get_r2_client()
@@ -130,7 +139,6 @@ def browse_beats(
         get_optional_user
     ),
 ):
-
     tracks = (
         db.query(Track)
         .filter(
@@ -144,9 +152,7 @@ def browse_beats(
     )
 
     for track in tracks:
-
         if track.cover_art_path:
-
             try:
                 track.cover_art_path = (
                     r2_presigned_url(
@@ -154,7 +160,7 @@ def browse_beats(
                     )
                 )
             except Exception:
-                pass
+                track.cover_art_path = None
 
     return templates.TemplateResponse(
         request,
@@ -175,7 +181,6 @@ def hot_picks(
         get_optional_user
     ),
 ):
-
     tracks = (
         db.query(Track)
         .filter(
@@ -189,9 +194,7 @@ def hot_picks(
     )
 
     for track in tracks:
-
         if track.cover_art_path:
-
             try:
                 track.cover_art_path = (
                     r2_presigned_url(
@@ -199,7 +202,7 @@ def hot_picks(
                     )
                 )
             except Exception:
-                pass
+                track.cover_art_path = None
 
     return templates.TemplateResponse(
         request,
@@ -220,7 +223,6 @@ def sessions_page(
         get_optional_user
     ),
 ):
-
     return templates.TemplateResponse(
         request,
         "sessions.html",
@@ -244,7 +246,6 @@ def track_detail(
         get_optional_user
     ),
 ):
-
     track = (
         db.query(Track)
         .filter(
@@ -262,7 +263,6 @@ def track_detail(
     purchased = False
 
     if current_user:
-
         purchased = (
             db.query(License)
             .join(
@@ -270,8 +270,10 @@ def track_detail(
                 License.order_id == Order.id,
             )
             .filter(
-                License.buyer_id == current_user.id,
-                License.track_id == track.id,
+                License.buyer_id
+                == current_user.id,
+                License.track_id
+                == track.id,
                 Order.status
                 == OrderStatus.COMPLETED,
             )
@@ -280,7 +282,6 @@ def track_detail(
         )
 
     if track.cover_art_path:
-
         try:
             track.cover_art_path = (
                 r2_presigned_url(
@@ -288,7 +289,7 @@ def track_detail(
                 )
             )
         except Exception:
-            pass
+            track.cover_art_path = None
 
     return templates.TemplateResponse(
         request,
@@ -315,7 +316,6 @@ def album_detail(
         get_optional_user
     ),
 ):
-
     album = (
         db.query(Album)
         .filter(
@@ -331,7 +331,6 @@ def album_detail(
         )
 
     if album.artwork_path:
-
         try:
             album.artwork_path = (
                 r2_presigned_url(
@@ -339,7 +338,7 @@ def album_detail(
                 )
             )
         except Exception:
-            pass
+            album.artwork_path = None
 
     return templates.TemplateResponse(
         request,
@@ -365,7 +364,6 @@ def profile_detail(
         get_optional_user
     ),
 ):
-
     profile = (
         db.query(Profile)
         .filter(
@@ -393,9 +391,7 @@ def profile_detail(
     ]
 
     for track in tracks:
-
         if track.cover_art_path:
-
             try:
                 track.cover_art_path = (
                     r2_presigned_url(
@@ -403,12 +399,10 @@ def profile_detail(
                     )
                 )
             except Exception:
-                pass
+                track.cover_art_path = None
 
     for album in albums:
-
         if album.artwork_path:
-
             try:
                 album.artwork_path = (
                     r2_presigned_url(
@@ -416,7 +410,7 @@ def profile_detail(
                     )
                 )
             except Exception:
-                pass
+                album.artwork_path = None
 
     return templates.TemplateResponse(
         request,
@@ -446,9 +440,8 @@ def download_track(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-
     # --------------------------------------------------------------
-    # Find track by UUID/id or slug.
+    # FIND TRACK
     # --------------------------------------------------------------
 
     track = (
@@ -460,7 +453,6 @@ def download_track(
     )
 
     if not track:
-
         track = (
             db.query(Track)
             .filter(
@@ -476,7 +468,7 @@ def download_track(
         )
 
     # --------------------------------------------------------------
-    # Verify ownership.
+    # VERIFY OWNERSHIP
     # --------------------------------------------------------------
 
     license_record = (
@@ -501,13 +493,17 @@ def download_track(
         )
 
     # --------------------------------------------------------------
-    # R2 configuration.
+    # R2 MUST BE ENABLED
     # --------------------------------------------------------------
 
     if not settings.r2_enabled:
         raise HTTPException(
             status_code=503,
-            detail="Cloud storage is not configured.",
+            detail=(
+                "Cloudflare R2 is not configured. "
+                "Please check the R2 environment variables "
+                "in Render."
+            ),
         )
 
     key = r2_object_key(
@@ -517,58 +513,100 @@ def download_track(
     if not key:
         raise HTTPException(
             status_code=404,
-            detail="Audio file is not available.",
+            detail=(
+                "Audio file is not available "
+                "for this track."
+            ),
         )
 
     client = get_r2_client()
 
     # --------------------------------------------------------------
-    # Confirm object exists.
+    # VERIFY OBJECT EXISTS
     # --------------------------------------------------------------
 
     try:
-
         metadata = client.head_object(
             Bucket=settings.R2_BUCKET_NAME,
             Key=key,
         )
 
-    except ClientError:
+    except ClientError as exc:
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code", "")
+        )
+
+        if error_code in {
+            "404",
+            "NoSuchKey",
+            "NotFound",
+        }:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "The purchased audio file "
+                    "is missing from Cloudflare R2."
+                ),
+            )
 
         raise HTTPException(
-            status_code=404,
+            status_code=503,
             detail=(
-                "The purchased audio file is "
-                "missing from storage."
+                "Cloudflare R2 could not be reached. "
+                "Check your R2 credentials and bucket."
+            ),
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Cloudflare R2 could not be reached."
             ),
         )
 
     # --------------------------------------------------------------
-    # Generate temporary private download URL.
+    # TEMPORARY PRIVATE DOWNLOAD URL
     # --------------------------------------------------------------
 
-    content_type = metadata.get(
-        "ContentType",
-        "application/octet-stream",
-    )
+    try:
+        download_url = (
+            client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": (
+                        settings.R2_BUCKET_NAME
+                    ),
+                    "Key": key,
+                    "ResponseContentType": (
+                        metadata.get(
+                            "ContentType",
+                            "application/octet-stream",
+                        )
+                    ),
+                    "ResponseContentDisposition": (
+                        "attachment"
+                    ),
+                },
+                ExpiresIn=(
+                    settings.R2_DOWNLOAD_URL_EXPIRES
+                ),
+            )
+        )
 
-    download_url = client.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": settings.R2_BUCKET_NAME,
-            "Key": key,
-            "ResponseContentType": content_type,
-            "ResponseContentDisposition": (
-                "attachment"
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Unable to create the secure "
+                "download link."
             ),
-        },
-        ExpiresIn=(
-            settings.R2_DOWNLOAD_URL_EXPIRES
-        ),
-    )
+        )
 
     # --------------------------------------------------------------
-    # Browser downloads directly from R2.
+    # REDIRECT TO R2
     # --------------------------------------------------------------
 
     return RedirectResponse(
