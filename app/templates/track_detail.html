@@ -7,18 +7,20 @@
 <section
   style="
     padding:40px 0;
-    max-width:800px;
+    max-width:700px;
   "
 >
 
-  {% if cover_art_url %}
+  <!-- COVER ART -->
+
+  {% if track.cover_art_url %}
 
     <div
       style="
         width:100%;
         max-width:520px;
         aspect-ratio:1/1;
-        margin-bottom:24px;
+        margin-bottom:25px;
         overflow:hidden;
         border-radius:14px;
         background:#111;
@@ -26,8 +28,8 @@
     >
 
       <img
-        src="{{ cover_art_url }}"
-        alt="{{ track.title }} cover art"
+        src="{{ track.cover_art_url }}"
+        alt="{{ track.title }}"
         style="
           width:100%;
           height:100%;
@@ -158,18 +160,15 @@
       </div>
 
 
-      <h2
-        style="
-          margin:5px 0 8px;
-        "
-      >
+      <h2 style="margin:5px 0 8px;">
         You own this beat
       </h2>
 
 
       <p class="sub">
         Your payment has been confirmed.
-        Your purchased master audio is ready to download.
+        Your purchased master audio is ready
+        to download.
       </p>
 
 
@@ -208,9 +207,13 @@
     >
 
       {% if track.sales_model.value == 'exclusive' %}
+
         Sold — Unavailable
+
       {% else %}
+
         Unavailable
+
       {% endif %}
 
     </button>
