@@ -18,17 +18,18 @@
       </h1>
 
       {% if profile.bio %}
-        <p class="sub" style="
-          max-width:650px;
-          margin:10px auto;
-          line-height:1.6;
-        ">
+        <p class="sub"
+           style="
+             max-width:650px;
+             margin:10px auto;
+             line-height:1.6;
+           ">
           {{ profile.bio }}
         </p>
       {% endif %}
 
       <p class="sub">
-        Browse the music below and choose a track to view its details
+        Preview the music below and choose a track to view its details
         and purchase.
       </p>
 
@@ -65,7 +66,6 @@
 
         {% for track in tracks %}
 
-          <!-- Only show published, unsold tracks -->
           {% if track.is_published and not track.is_sold %}
 
             <div class="form-card" style="padding:18px;">
@@ -137,6 +137,51 @@
               {% endif %}
 
 
+              <!-- PREVIEW -->
+              {% if track.preview_file_path %}
+
+                <div style="
+                  margin:16px 0;
+                  padding:13px;
+                  border-radius:10px;
+                  background:rgba(255,255,255,.035);
+                  border:1px solid rgba(255,255,255,.08);
+                ">
+
+                  <div class="eyebrow"
+                       style="margin-bottom:8px;">
+                    30-SECOND PREVIEW
+                  </div>
+
+                  <audio
+                    controls
+                    preload="none"
+                    style="
+                      width:100%;
+                      height:42px;
+                    "
+                  >
+                    <source
+                      src="/preview/track/{{ track.id }}"
+                      type="audio/mpeg"
+                    >
+
+                    Your browser does not support audio playback.
+                  </audio>
+
+                  <p class="sub"
+                     style="
+                       font-size:12px;
+                       margin:8px 0 0;
+                     ">
+                    Listen to a short preview before purchasing.
+                  </p>
+
+                </div>
+
+              {% endif %}
+
+
               <!-- PRICE -->
               <div class="value gold" style="font-size:20px;">
                 KSh {{ '%.2f'|format(track.price) }}
@@ -190,13 +235,13 @@
 
       </div>
 
-
     {% else %}
 
-      <div class="form-card" style="
-        padding:35px;
-        text-align:center;
-      ">
+      <div class="form-card"
+           style="
+             padding:35px;
+             text-align:center;
+           ">
 
         <h3>No music available yet</h3>
 
@@ -224,7 +269,6 @@
 
             <div class="form-card" style="padding:18px;">
 
-              <!-- ALBUM ART -->
               {% if album.artwork_url %}
 
                 <div style="
