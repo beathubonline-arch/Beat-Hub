@@ -10,7 +10,7 @@
     Welcome back, {{ profile.stage_name }}
   </h1>
 
-  <!-- PUBLIC STORE -->
+  <!-- PUBLIC STORE LINK -->
 
   <div class="form-card" style="margin:20px 0 28px; padding:20px;">
     <div class="eyebrow">YOUR PUBLIC STORE</div>
@@ -25,10 +25,11 @@
     </p>
 
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
+
       <input
         id="store-link"
         type="text"
-        value="{{ request.url.scheme }}://{{ request.url.netloc }}{{ store_url }}"
+        value="{{ request.url_for('profile_detail', slug=profile.slug) }}"
         readonly
         style="flex:1; min-width:260px;"
       >
@@ -42,12 +43,14 @@
       </button>
 
       <a
-        href="{{ store_url }}"
+        href="/profile/{{ profile.slug }}"
         target="_blank"
+        rel="noopener"
         class="btn btn-outline"
       >
         View My Store
       </a>
+
     </div>
 
     <div
@@ -55,6 +58,7 @@
       class="sub"
       style="margin-top:8px;"
     ></div>
+
   </div>
 
 
@@ -140,6 +144,7 @@
     <a
       href="{{ youtube_url }}"
       target="_blank"
+      rel="noopener"
       class="social-pill youtube"
     >
       ▶ YouTube Channel
@@ -149,6 +154,7 @@
       <a
         href="{{ discord_url }}"
         target="_blank"
+        rel="noopener"
         class="social-pill discord"
       >
         💬 Join our Discord
@@ -187,6 +193,7 @@
         </p>
 
       </div>
+
 
       <form
         method="get"
@@ -238,6 +245,14 @@
             style="padding:18px;"
           >
 
+            <!-- ------------------------------------------------
+                 R2 COVER ART
+                 IMPORTANT:
+                 track.cover_art_path is already a direct
+                 R2 URL from dashboard.py.
+                 Do NOT prepend /media/.
+                 ------------------------------------------------ -->
+
             {% if track.cover_art_path %}
 
               <div style="
@@ -249,10 +264,6 @@
                 background:#111;
               ">
 
-                <!-- IMPORTANT:
-                     This is already an R2 URL.
-                     Do NOT prepend /media/. -->
-
                 <img
                   src="{{ track.cover_art_path }}"
                   alt="{{ track.title }}"
@@ -261,7 +272,9 @@
                     width:100%;
                     height:100%;
                     object-fit:cover;
+                    display:block;
                   "
+                  onerror="this.style.display='none';"
                 >
 
               </div>
@@ -351,6 +364,7 @@
               <a
                 href="/track/{{ track.slug }}"
                 target="_blank"
+                rel="noopener"
                 class="btn btn-outline"
               >
                 View Store Page
@@ -499,7 +513,11 @@
           </td>
 
           <td>
-            {{ o.completed_at.strftime('%d %b %Y') if o.completed_at else '' }}
+            {{
+              o.completed_at.strftime('%d %b %Y')
+              if o.completed_at
+              else ''
+            }}
           </td>
 
           <td>
@@ -594,17 +612,28 @@ function copyStoreLink() {
   const input = document.getElementById("store-link");
   const message = document.getElementById("copy-message");
 
-  navigator.clipboard.writeText(input.value).then(function () {
-    message.textContent =
-      "Store link copied. Share it anywhere.";
-  }).catch(function () {
-    input.select();
-    input.setSelectionRange(0, 99999);
-    document.execCommand("copy");
+  if (!input || !message) {
+    return;
+  }
 
-    message.textContent =
-      "Store link copied. Share it anywhere.";
-  });
+  navigator.clipboard.writeText(input.value)
+    .then(function () {
+      message.textContent =
+        "Store link copied. Share it anywhere.";
+    })
+    .catch(function () {
+      input.select();
+      input.setSelectionRange(0, 99999);
+
+      try {
+        document.execCommand("copy");
+      } catch (e) {
+        // Ignore clipboard fallback errors.
+      }
+
+      message.textContent =
+        "Store link copied. Share it anywhere.";
+    });
 }
 </script>
 
