@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.music import Track
-from app.models.order import Order, OrderStatus
+from app.models.order import Order, OrderStatus, License
 from app.models.user import User
 from app.utils.deps import get_optional_user
 
@@ -23,7 +23,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 # ============================================================
-# R2
+# CLOUDFLARE R2
 # ============================================================
 
 def get_r2_client():
@@ -48,15 +48,37 @@ def r2_key(path: Optional[str]) -> Optional[str]:
 
     value = str(path).strip()
 
+    # Handle r2://bucket/key
     if value.startswith("r2://"):
         value = value[5:]
-
         parts = value.split("/", 1)
 
         if len(parts) == 2:
-            return parts[1]
+            value = parts[1]
 
-    return value.lstrip("/")
+    # Handle full R2 URL accidentally stored in database.
+    if "://" in value:
+        try:
+            from urllib.parse import urlparse, unquote
+
+            parsed = urlparse(value)
+            value = unquote(parsed.path).lstrip("/")
+
+            # Remove bucket prefix if present.
+            bucket = getattr(settings, "R2_BUCKET_NAME", None)
+            if bucket and value.startswith(bucket + "/"):
+                value = value[len(bucket) + 1:]
+
+        except Exception:
+            pass
+
+    value = value.lstrip("/")
+
+    # Remove accidental "media/" prefix.
+    if value.startswith("media/"):
+        value = value[6:]
+
+    return value or None
 
 
 def r2_url(
@@ -68,9 +90,12 @@ def r2_url(
     if not key:
         return None
 
-    if settings.R2_PUBLIC_URL:
+    # Prefer configured public URL.
+    public_url = getattr(settings, "R2_PUBLIC_URL", None)
+
+    if public_url:
         return (
-            settings.R2_PUBLIC_URL.rstrip("/")
+            public_url.rstrip("/")
             + "/"
             + key
         )
@@ -120,7 +145,7 @@ def r2_download_url(
 
 
 # ============================================================
-# TRACK PAGE
+# TRACK DETAIL
 # ============================================================
 
 @router.get("/track/{track_ref}")
@@ -142,8 +167,12 @@ def track_detail(
     if not track:
         raise HTTPException(
             status_code=404,
-            detail="Track not found",
+            detail="Track not found.",
         )
+
+    # --------------------------------------------------------
+    # COVER ART
+    # --------------------------------------------------------
 
     cover_art_url = None
 
@@ -156,19 +185,57 @@ def track_detail(
         except Exception:
             cover_art_url = None
 
+    # --------------------------------------------------------
+    # PURCHASE CHECK
+    # --------------------------------------------------------
+
     purchased = False
 
     if user:
-        purchased = (
+        order = (
             db.query(Order)
             .filter(
                 Order.track_id == track.id,
-                Order.user_id == user.id,
+                Order.buyer_id == user.id,
                 Order.status == OrderStatus.COMPLETED,
             )
+            .order_by(Order.completed_at.desc())
             .first()
-            is not None
         )
+
+        if order:
+            purchased = True
+
+        # Compatibility with installations where an older
+        # Order model used user_id.
+        if not purchased and hasattr(Order, "user_id"):
+            order = (
+                db.query(Order)
+                .filter(
+                    Order.track_id == track.id,
+                    Order.user_id == user.id,
+                    Order.status == OrderStatus.COMPLETED,
+                )
+                .order_by(Order.completed_at.desc())
+                .first()
+            )
+
+            purchased = order is not None
+
+        # License is the authoritative ownership record when
+        # available.
+        if not purchased:
+            license_record = (
+                db.query(License)
+                .filter(
+                    License.track_id == track.id,
+                    License.buyer_id == user.id,
+                )
+                .first()
+            )
+
+            if license_record:
+                purchased = True
 
     return templates.TemplateResponse(
         request,
@@ -200,6 +267,10 @@ def download_track(
             detail="You must be logged in to download this track.",
         )
 
+    # --------------------------------------------------------
+    # FIND TRACK
+    # --------------------------------------------------------
+
     track = (
         db.query(Track)
         .filter(
@@ -215,22 +286,54 @@ def download_track(
             detail="Track not found.",
         )
 
+    # --------------------------------------------------------
+    # VERIFY PURCHASE
+    # --------------------------------------------------------
+
     order = (
         db.query(Order)
         .filter(
             Order.track_id == track.id,
-            Order.user_id == user.id,
+            Order.buyer_id == user.id,
             Order.status == OrderStatus.COMPLETED,
         )
         .order_by(Order.completed_at.desc())
         .first()
     )
 
-    if not order:
-        raise HTTPException(
-            status_code=403,
-            detail="You have not purchased this track.",
+    # Compatibility with older Order schema.
+    if not order and hasattr(Order, "user_id"):
+        order = (
+            db.query(Order)
+            .filter(
+                Order.track_id == track.id,
+                Order.user_id == user.id,
+                Order.status == OrderStatus.COMPLETED,
+            )
+            .order_by(Order.completed_at.desc())
+            .first()
         )
+
+    # License ownership is also accepted.
+    if not order:
+        license_record = (
+            db.query(License)
+            .filter(
+                License.track_id == track.id,
+                License.buyer_id == user.id,
+            )
+            .first()
+        )
+
+        if not license_record:
+            raise HTTPException(
+                status_code=403,
+                detail="You have not purchased this track.",
+            )
+
+    # --------------------------------------------------------
+    # AUDIO FILE
+    # --------------------------------------------------------
 
     if not track.audio_file_path:
         raise HTTPException(
@@ -241,15 +344,15 @@ def download_track(
     try:
         download_url = r2_download_url(
             track.audio_file_path,
-            filename=(
-                f"{track.slug}.mp3"
-            ),
+            filename=f"{track.slug}.mp3",
         )
+
     except ClientError:
         raise HTTPException(
             status_code=503,
             detail="Unable to access the purchased audio file.",
         )
+
     except Exception:
         raise HTTPException(
             status_code=503,
@@ -261,6 +364,10 @@ def download_track(
             status_code=404,
             detail="Audio file is not available.",
         )
+
+    # --------------------------------------------------------
+    # REDIRECT TO SIGNED R2 DOWNLOAD
+    # --------------------------------------------------------
 
     return RedirectResponse(
         url=download_url,
