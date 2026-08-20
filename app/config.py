@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     # --------------------------------------------------------------
-    # CLOUDFLARE R2 STORAGE
+    # CLOUDFLARE R2
     # --------------------------------------------------------------
 
     MEDIA_STORAGE: str = "r2"
@@ -88,34 +88,25 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "beathub"
 
-    # Leave empty if the bucket is private.
+    # Leave empty when bucket is private.
     R2_PUBLIC_URL: str = ""
 
-    # Public artwork/preview URL lifetime.
+    # Temporary URL for artwork/previews.
     R2_PUBLIC_URL_EXPIRES: int = 3600
 
-    # Purchased audio download URL lifetime.
+    # Temporary URL for purchased downloads.
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
     MAX_UPLOAD_MB: int = 50
 
-    # --------------------------------------------------------------
-    # R2 HELPERS
-    # --------------------------------------------------------------
-
     @property
     def r2_enabled(self) -> bool:
-        """
-        R2 is considered configured only when all required
-        credentials/settings are present.
-        """
-
         return (
             self.MEDIA_STORAGE.lower() == "r2"
-            and bool(self.R2_ACCOUNT_ID.strip())
-            and bool(self.R2_ACCESS_KEY_ID.strip())
-            and bool(self.R2_SECRET_ACCESS_KEY.strip())
-            and bool(self.R2_BUCKET_NAME.strip())
+            and bool(self.R2_ACCOUNT_ID)
+            and bool(self.R2_ACCESS_KEY_ID)
+            and bool(self.R2_SECRET_ACCESS_KEY)
+            and bool(self.R2_BUCKET_NAME)
         )
 
     @property
