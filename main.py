@@ -25,7 +25,13 @@ from app.routers import (
 )
 from app.utils.deps import require_creator
 
+
 logger = logging.getLogger("beathub")
+
+
+# --------------------------------------------------------------
+# PATHS
+# --------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
@@ -33,115 +39,43 @@ APP_DIR = BASE_DIR / "app"
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
+
 # --------------------------------------------------------------
-# LOCAL MEDIA
-#
-# Only used when MEDIA_STORAGE=local.
-#
-# R2 mode deliberately does NOT create /var/data or any
-# persistent Render filesystem directory.
+# APPLICATION
 # --------------------------------------------------------------
-
-if settings.MEDIA_STORAGE.lower() == "local":
-
-    MEDIA_DIR = Path(settings.MEDIA_ROOT)
-
-    if not MEDIA_DIR.is_absolute():
-        MEDIA_DIR = BASE_DIR / MEDIA_DIR
-
-    MEDIA_DIR = MEDIA_DIR.resolve()
-
-    AUDIO_DIR = MEDIA_DIR / "audio"
-    COVERS_DIR = MEDIA_DIR / "covers"
-    PREVIEWS_DIR = MEDIA_DIR / "previews"
-
-    for directory in (
-        MEDIA_DIR,
-        AUDIO_DIR,
-        COVERS_DIR,
-        PREVIEWS_DIR,
-    ):
-        directory.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-    logger.info(
-        "BeatHub local media root: %s",
-        MEDIA_DIR,
-    )
-
-else:
-
-    # R2 mode.
-    #
-    # No /var/data.
-    # No Render persistent disk.
-    #
-    MEDIA_DIR = None
-    AUDIO_DIR = None
-    COVERS_DIR = None
-    PREVIEWS_DIR = None
-
-    logger.info("BeatHub storage: Cloudflare R2")
-
 
 app = FastAPI(
-    title=settings.APP_NAME,
+    title=settings.APP_NAME
 )
 
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
 
+
 # --------------------------------------------------------------
 # STATIC
 # --------------------------------------------------------------
 
 if STATIC_DIR.exists():
+
     app.mount(
         "/static",
         StaticFiles(
-            directory=str(STATIC_DIR),
+            directory=str(STATIC_DIR)
         ),
         name="static",
     )
 
-# --------------------------------------------------------------
-# LOCAL PUBLIC MEDIA
-#
-# These mounts exist ONLY for local storage.
-#
-# R2 media is served through R2 URLs from the routers.
-# --------------------------------------------------------------
-
-if settings.MEDIA_STORAGE.lower() == "local":
-
-    if COVERS_DIR is not None:
-        app.mount(
-            "/media/covers",
-            StaticFiles(
-                directory=str(COVERS_DIR),
-            ),
-            name="media-covers",
-        )
-
-    if PREVIEWS_DIR is not None:
-        app.mount(
-            "/media/previews",
-            StaticFiles(
-                directory=str(PREVIEWS_DIR),
-            ),
-            name="media-previews",
-        )
 
 # --------------------------------------------------------------
 # DATABASE
 # --------------------------------------------------------------
 
 Base.metadata.create_all(
-    bind=engine,
+    bind=engine
 )
+
 
 # --------------------------------------------------------------
 # ROUTERS
@@ -154,6 +88,7 @@ app.include_router(checkout.router)
 app.include_router(mpesa_callback.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
+
 
 # --------------------------------------------------------------
 # DASHBOARD COMPATIBILITY
@@ -187,6 +122,7 @@ def dashboard_alias(
         status_code=303,
     )
 
+
 # --------------------------------------------------------------
 # HEALTH
 # --------------------------------------------------------------
@@ -198,12 +134,13 @@ def healthz():
         "status": "ok",
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
-        "storage": settings.MEDIA_STORAGE,
+        "media_storage": settings.MEDIA_STORAGE,
         "r2_enabled": settings.r2_enabled,
     }
 
+
 # --------------------------------------------------------------
-# ERRORS
+# ERROR HANDLERS
 # --------------------------------------------------------------
 
 @app.exception_handler(
