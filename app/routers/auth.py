@@ -1,3 +1,7 @@
+"""
+BeatHub authentication routes.
+"""
+
 import re
 import secrets
 import uuid
@@ -14,8 +18,7 @@ from app.models.profile import Profile
 from app.models.user import User, UserRole
 from app.utils.deps import (
     SESSION_COOKIE_NAME,
-    is_admin,
-    is_creator,
+    get_role_name,
 )
 from app.utils.security import (
     create_access_token,
@@ -47,16 +50,12 @@ def slugify(value: str) -> str:
 
 def dashboard_url_for_user(user: User) -> str:
     """
-    Central dashboard routing.
-
-    Creator/admin -> /dashboard
-    Buyer/artist  -> /artist/dashboard
-
-    Creator detection is based on profile.is_producer so that
-    UserRole enum changes cannot create redirect loops.
+    One single source of truth for post-login routing.
     """
 
-    if is_creator(user) or is_admin(user):
+    role = get_role_name(user)
+
+    if role in {"creator", "admin"}:
         return "/dashboard"
 
     return "/artist/dashboard"
@@ -83,7 +82,9 @@ def base_context(
 # ----------------------------------------------------------------------
 
 @router.get("/signup")
-def signup_page(request: Request):
+def signup_page(
+    request: Request,
+):
     return templates.TemplateResponse(
         request,
         "signup.html",
@@ -142,14 +143,23 @@ def signup_submit(
             "Passwords do not match."
         )
 
-    if role not in {"buyer", "creator"}:
-        role = "buyer"
+    # Buyer aliases are all treated as buyer.
+    if role in {
+        "artist",
+        "buyer",
+        "customer",
+        "user",
+    }:
+        user_role = UserRole.BUYER
 
-    user_role = (
-        UserRole.CREATOR
-        if role == "creator"
-        else UserRole.BUYER
-    )
+    elif role in {
+        "creator",
+        "producer",
+    }:
+        user_role = UserRole.CREATOR
+
+    else:
+        user_role = UserRole.BUYER
 
     existing_user = (
         db.query(User)
@@ -201,7 +211,9 @@ def signup_submit(
         user_id=user.id,
         stage_name=stage_name,
         slug=slug,
-        is_producer=(role == "creator"),
+        is_producer=(
+            user_role == UserRole.CREATOR
+        ),
     )
 
     db.add(profile)
@@ -215,6 +227,9 @@ def signup_submit(
         return error(
             "Could not create account. Please try again."
         )
+
+    # Reload the user after commit so role is definitive.
+    db.refresh(user)
 
     token = create_access_token(
         subject=user.id
@@ -237,6 +252,7 @@ def signup_submit(
         max_age=COOKIE_MAX_AGE,
         samesite="lax",
         secure=False,
+        path="/",
     )
 
     return response
@@ -247,7 +263,9 @@ def signup_submit(
 # ----------------------------------------------------------------------
 
 @router.get("/login")
-def login_page(request: Request):
+def login_page(
+    request: Request,
+):
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -279,24 +297,32 @@ def login_submit(
 
     user = (
         db.query(User)
-        .filter(User.email == identifier_norm)
+        .filter(
+            User.email == identifier_norm
+        )
         .first()
     )
 
     if not user and identifier_norm:
 
-        possible_slug = slugify(identifier_norm)
+        possible_slug = slugify(
+            identifier_norm
+        )
 
         profile = (
             db.query(Profile)
-            .filter(Profile.slug == possible_slug)
+            .filter(
+                Profile.slug == possible_slug
+            )
             .first()
         )
 
         if profile:
             user = (
                 db.query(User)
-                .filter(User.id == profile.user_id)
+                .filter(
+                    User.id == profile.user_id
+                )
                 .first()
             )
 
@@ -318,6 +344,8 @@ def login_submit(
             "This account has been deactivated. Contact support."
         )
 
+    db.refresh(user)
+
     token = create_access_token(
         subject=user.id
     )
@@ -336,6 +364,7 @@ def login_submit(
         max_age=COOKIE_MAX_AGE,
         samesite="lax",
         secure=False,
+        path="/",
     )
 
     return response
@@ -353,20 +382,19 @@ def perform_logout() -> RedirectResponse:
 
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
-        httponly=True,
-        samesite="lax",
+        path="/",
     )
 
     return response
 
 
 @router.post("/logout")
-def logout(request: Request):
+def logout():
     return perform_logout()
 
 
 @router.get("/logout")
-def logout_get(request: Request):
+def logout_get():
     return perform_logout()
 
 
@@ -375,7 +403,9 @@ def logout_get(request: Request):
 # ----------------------------------------------------------------------
 
 @router.get("/forgot-password")
-def forgot_password_page(request: Request):
+def forgot_password_page(
+    request: Request,
+):
     return templates.TemplateResponse(
         request,
         "forgot_password.html",
@@ -395,7 +425,9 @@ def forgot_password_submit(
 
     user = (
         db.query(User)
-        .filter(User.email == email_norm)
+        .filter(
+            User.email == email_norm
+        )
         .first()
     )
 
@@ -447,14 +479,17 @@ def reset_password_page(
 ):
     user = (
         db.query(User)
-        .filter(User.reset_token == token)
+        .filter(
+            User.reset_token == token
+        )
         .first()
     )
 
     valid = bool(
         user
         and user.reset_token_expires
-        and user.reset_token_expires > datetime.utcnow()
+        and user.reset_token_expires
+        > datetime.utcnow()
     )
 
     return templates.TemplateResponse(
@@ -478,14 +513,17 @@ def reset_password_submit(
 ):
     user = (
         db.query(User)
-        .filter(User.reset_token == token)
+        .filter(
+            User.reset_token == token
+        )
         .first()
     )
 
     valid = bool(
         user
         and user.reset_token_expires
-        and user.reset_token_expires > datetime.utcnow()
+        and user.reset_token_expires
+        > datetime.utcnow()
     )
 
     if not valid:
@@ -523,7 +561,10 @@ def reset_password_submit(
             status_code=400,
         )
 
-    user.hashed_password = hash_password(password)
+    user.hashed_password = hash_password(
+        password
+    )
+
     user.reset_token = None
     user.reset_token_expires = None
 
