@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}My Orders — BeatHub{% endblock %}
+
+{% block content %}
+
+<section style="padding:40px 0;">
+  <div style="max-width:1000px;margin:0 auto;">
+
+    <div class="eyebrow">MY ORDERS</div>
+
+    <h1 style="font-size:32px;margin:6px 0 8px;">
+      Order History
+    </h1>
+
+    <p style="color:var(--text-muted);">
+      Your BeatHub purchases and payment status.
+    </p>
+
+    {% if orders %}
+
+      <div style="margin-top:28px;display:grid;gap:14px;">
+
+        {% for order in orders %}
+
+          <div class="stat-card">
+
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                gap:20px;
+                flex-wrap:wrap;
+              "
+            >
+
+              <div>
+
+                <div class="label">
+                  {{ order.order_number }}
+                </div>
+
+                <h2 style="margin:5px 0;">
+
+                  {% if order.track %}
+                    {{ order.track.title }}
+                  {% elif order.album %}
+                    {{ order.album.title }}
+                  {% else %}
+                    BeatHub Purchase
+                  {% endif %}
+
+                </h2>
+
+                <div style="color:var(--text-muted);font-size:14px;">
+                  {{ order.created_at.strftime("%d %b %Y, %H:%M") if order.created_at else "" }}
+                </div>
+
+              </div>
+
+              <div style="text-align:right;">
+
+                <strong style="font-size:18px;">
+                  KSh {{ "{:,.2f}".format(order.gross_amount|float) }}
+                </strong>
+
+                <div style="margin-top:7px;">
+
+                  {% if order.status.value == "completed" %}
+
+                    <span style="font-weight:600;">
+                      ✓ Completed
+                    </span>
+
+                  {% elif order.status.value == "pending" %}
+
+                    <span style="font-weight:600;">
+                      Pending
+                    </span>
+
+                  {% elif order.status.value == "failed" %}
+
+                    <span style="font-weight:600;">
+                      Failed
+                    </span>
+
+                  {% else %}
+
+                    <span style="font-weight:600;">
+                      {{ order.status.value|title }}
+                    </span>
+
+                  {% endif %}
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {% if order.status.value == "pending" %}
+
+              <div style="margin-top:18px;">
+                <a
+                  href="/orders/{{ order.id }}/status"
+                  class="btn btn-outline"
+                >
+                  Check Payment
+                </a>
+              </div>
+
+            {% endif %}
+
+          </div>
+
+        {% endfor %}
+
+      </div>
+
+    {% else %}
+
+      <div class="form-card" style="margin-top:28px;padding:30px;text-align:center;">
+
+        <div style="font-size:40px;">📋</div>
+
+        <h2>No orders yet</h2>
+
+        <p style="color:var(--text-muted);">
+          Your BeatHub order history will appear here.
+        </p>
+
+        <a href="/beats" class="btn btn-primary">
+          Browse Beats
+        </a>
+
+      </div>
+
+    {% endif %}
+
+    <div style="margin-top:25px;">
+      <a href="/account" class="btn btn-outline">
+        ← Back to My Account
+      </a>
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}
