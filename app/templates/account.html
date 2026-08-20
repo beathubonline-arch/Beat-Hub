@@ -4,61 +4,331 @@
 
 {% block content %}
 
-<section style="padding:40px 0; max-width:760px;">
+<section style="padding:40px 0;">
 
-  <div class="eyebrow">MY ACCOUNT</div>
+  <div style="max-width:1000px; margin:0 auto;">
 
-  <h1 style="font-size:32px; margin:6px 0 10px;">
-    Welcome, {{ profile.stage_name if profile else current_user.email }}
-  </h1>
+    <div class="eyebrow">MY ACCOUNT</div>
 
-  <p class="sub" style="color:var(--text-muted);">
-    Your BeatHub buyer account.
-  </p>
+    <h1 style="font-size:34px; margin:6px 0 8px;">
+      Welcome back, {{ profile.stage_name if profile else current_user.email.split('@')[0] }} 👋
+    </h1>
 
-  <div
-    class="dashboard-grid"
-    style="margin-top:28px;"
-  >
+    <p style="color:var(--text-muted); margin-bottom:30px;">
+      Manage your BeatHub purchases, downloads and account.
+    </p>
 
-    <div class="stat-card">
-      <div class="label">Account Email</div>
-      <div class="value" style="font-size:18px;">
-        {{ current_user.email }}
+
+    <!-- ACCOUNT SUMMARY -->
+
+    <div
+      class="dashboard-grid"
+      style="
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:16px;
+        margin-bottom:30px;
+      "
+    >
+
+      <div class="stat-card">
+        <div class="label">Account Email</div>
+        <div
+          class="value"
+          style="font-size:17px; word-break:break-word;"
+        >
+          {{ current_user.email }}
+        </div>
       </div>
+
+      <div class="stat-card">
+        <div class="label">Account Type</div>
+        <div class="value" style="font-size:17px;">
+          Artist / Buyer
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="label">Purchases</div>
+        <div class="value" style="font-size:22px;">
+          {{ purchase_count }}
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="label">Total Spent</div>
+        <div class="value" style="font-size:22px;">
+          KSh {{ "{:,.2f}".format(total_spent|float) }}
+        </div>
+      </div>
+
     </div>
 
-    <div class="stat-card">
-      <div class="label">Account Type</div>
-      <div class="value" style="font-size:18px;">
-        Artist / Buyer
-      </div>
+
+    <!-- MAIN ACCOUNT MENU -->
+
+    <div
+      style="
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+        gap:18px;
+      "
+    >
+
+      <!-- BROWSE -->
+
+      <a
+        href="/beats"
+        class="stat-card"
+        style="
+          text-decoration:none;
+          display:block;
+          transition:transform .15s ease;
+        "
+      >
+        <div style="font-size:28px; margin-bottom:10px;">🎵</div>
+
+        <div
+          class="value"
+          style="font-size:19px;"
+        >
+          Browse Beats
+        </div>
+
+        <div
+          style="
+            color:var(--text-muted);
+            margin-top:6px;
+            font-size:14px;
+          "
+        >
+          Discover beats, tracks and producers.
+        </div>
+      </a>
+
+
+      <!-- PURCHASES -->
+
+      <a
+        href="/account/purchases"
+        class="stat-card"
+        style="
+          text-decoration:none;
+          display:block;
+        "
+      >
+        <div style="font-size:28px; margin-bottom:10px;">🛒</div>
+
+        <div
+          class="value"
+          style="font-size:19px;"
+        >
+          My Purchases
+        </div>
+
+        <div
+          style="
+            color:var(--text-muted);
+            margin-top:6px;
+            font-size:14px;
+          "
+        >
+          View beats and licenses you own.
+        </div>
+      </a>
+
+
+      <!-- DOWNLOADS -->
+
+      <a
+        href="/account/downloads"
+        class="stat-card"
+        style="
+          text-decoration:none;
+          display:block;
+        "
+      >
+        <div style="font-size:28px; margin-bottom:10px;">📥</div>
+
+        <div
+          class="value"
+          style="font-size:19px;"
+        >
+          My Downloads
+        </div>
+
+        <div
+          style="
+            color:var(--text-muted);
+            margin-top:6px;
+            font-size:14px;
+          "
+        >
+          Access audio files from completed purchases.
+        </div>
+      </a>
+
+
+      <!-- ORDERS -->
+
+      <a
+        href="/account/orders"
+        class="stat-card"
+        style="
+          text-decoration:none;
+          display:block;
+        "
+      >
+        <div style="font-size:28px; margin-bottom:10px;">📋</div>
+
+        <div
+          class="value"
+          style="font-size:19px;"
+        >
+          My Orders
+        </div>
+
+        <div
+          style="
+            color:var(--text-muted);
+            margin-top:6px;
+            font-size:14px;
+          "
+        >
+          View your payment and order history.
+        </div>
+      </a>
+
+
+      <!-- SETTINGS -->
+
+      <a
+        href="/account/settings"
+        class="stat-card"
+        style="
+          text-decoration:none;
+          display:block;
+        "
+      >
+        <div style="font-size:28px; margin-bottom:10px;">⚙️</div>
+
+        <div
+          class="value"
+          style="font-size:19px;"
+        >
+          Account Settings
+        </div>
+
+        <div
+          style="
+            color:var(--text-muted);
+            margin-top:6px;
+            font-size:14px;
+          "
+        >
+          View your account information.
+        </div>
+      </a>
+
     </div>
 
-  </div>
 
-  <div
-    style="
-      display:flex;
-      gap:14px;
-      margin-top:28px;
-      flex-wrap:wrap;
-    "
-  >
+    <!-- PENDING ORDERS -->
 
-    <a
-      href="/beats"
-      class="btn btn-primary"
+    {% if pending_orders %}
+
+    <div
+      class="form-card"
+      style="
+        margin-top:30px;
+        padding:22px;
+      "
     >
-      Browse Beats
-    </a>
 
-    <a
-      href="/"
-      class="btn btn-outline"
+      <h2 style="margin:0 0 14px;">
+        Pending Payments
+      </h2>
+
+      {% for order in pending_orders %}
+
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          gap:15px;
+          padding:14px 0;
+          border-bottom:1px solid rgba(255,255,255,.08);
+          flex-wrap:wrap;
+        "
+      >
+
+        <div>
+
+          <strong>
+            {% if order.track %}
+              {{ order.track.title }}
+            {% elif order.album %}
+              {{ order.album.title }}
+            {% else %}
+              BeatHub Purchase
+            {% endif %}
+          </strong>
+
+          <div
+            style="
+              color:var(--text-muted);
+              font-size:13px;
+              margin-top:4px;
+            "
+          >
+            {{ order.order_number }}
+          </div>
+
+        </div>
+
+        <a
+          href="/orders/{{ order.id }}/status"
+          class="btn btn-outline"
+        >
+          Check Payment
+        </a>
+
+      </div>
+
+      {% endfor %}
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- QUICK ACTIONS -->
+
+    <div
+      style="
+        display:flex;
+        gap:12px;
+        margin-top:30px;
+        flex-wrap:wrap;
+      "
     >
-      Back to Home
-    </a>
+
+      <a
+        href="/beats"
+        class="btn btn-primary"
+      >
+        Browse Beats
+      </a>
+
+      <a
+        href="/"
+        class="btn btn-outline"
+      >
+        Back to Home
+      </a>
+
+    </div>
 
   </div>
 
