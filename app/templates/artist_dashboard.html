@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block title %}Artist Dashboard - BeatHub{% endblock %}
+
+{% block content %}
+
+<section style="padding:30px 0;">
+
+  <div style="max-width:1100px; margin:0 auto;">
+
+    <!-- WELCOME -->
+
+    <div style="margin-bottom:28px;">
+
+      <div class="eyebrow">
+        BEATHUB ARTIST
+      </div>
+
+      <h1 style="font-size:30px; margin:5px 0 8px;">
+        Welcome back{% if current_user %}, {{ current_user.name or current_user.email }}{% endif %}
+      </h1>
+
+      <p class="sub" style="max-width:650px; line-height:1.6;">
+        Find the perfect beats for your next song, project or performance.
+        Browse available tracks, listen to previews and purchase beats securely.
+      </p>
+
+    </div>
+
+
+    <!-- BROWSE BEATS -->
+
+    <div
+      class="form-card"
+      style="
+        padding:28px;
+        margin-bottom:25px;
+      "
+    >
+
+      <div class="eyebrow">
+        BEAT MARKETPLACE
+      </div>
+
+      <h2 style="
+        margin:6px 0 10px;
+        font-size:25px;
+      ">
+        Find Your Next Beat
+      </h2>
+
+      <p class="sub" style="
+        max-width:650px;
+        line-height:1.6;
+        margin-bottom:20px;
+      ">
+        Browse beats from BeatHub producers. Open any track to listen,
+        check the licensing option and purchase it when you're ready.
+      </p>
+
+      <div
+        style="
+          display:flex;
+          gap:12px;
+          flex-wrap:wrap;
+        "
+      >
+
+        <a
+          href="/beats"
+          class="btn btn-primary"
+        >
+          Browse &amp; Buy Beats
+        </a>
+
+        <a
+          href="/"
+          class="btn btn-outline"
+        >
+          Explore BeatHub
+        </a>
+
+      </div>
+
+    </div>
+
+
+    <!-- QUICK ACTIONS -->
+
+    <h2 style="
+      font-size:22px;
+      margin:35px 0 16px;
+    ">
+      Quick Actions
+    </h2>
+
+    <div class="dashboard-grid">
+
+      <!-- BROWSE -->
+
+      <div class="form-card" style="padding:22px;">
+
+        <div class="eyebrow">
+          MUSIC
+        </div>
+
+        <h3 style="
+          font-size:20px;
+          margin:6px 0 8px;
+        ">
+          Browse Beats
+        </h3>
+
+        <p class="sub" style="line-height:1.5;">
+          Discover beats uploaded by BeatHub producers.
+        </p>
+
+        <a
+          href="/beats"
+          class="btn btn-primary btn-block"
+          style="margin-top:15px;"
+        >
+          Browse Beats
+        </a>
+
+      </div>
+
+
+      <!-- SESSIONS -->
+
+      <div class="form-card" style="padding:22px;">
+
+        <div class="eyebrow">
+          SERVICES
+        </div>
+
+        <h3 style="
+          font-size:20px;
+          margin:6px 0 8px;
+        ">
+          Find Sessions
+        </h3>
+
+        <p class="sub" style="line-height:1.5;">
+          Explore available music sessions and services from creators.
+        </p>
+
+        <a
+          href="/sessions"
+          class="btn btn-outline btn-block"
+          style="margin-top:15px;"
+        >
+          Browse Sessions
+        </a>
+
+      </div>
+
+
+      <!-- HOT PICKS -->
+
+      <div class="form-card" style="padding:22px;">
+
+        <div class="eyebrow">
+          DISCOVER
+        </div>
+
+        <h3 style="
+          font-size:20px;
+          margin:6px 0 8px;
+        ">
+          Hot Picks
+        </h3>
+
+        <p class="sub" style="line-height:1.5;">
+          Check out music currently getting attention on BeatHub.
+        </p>
+
+        <a
+          href="/hot-picks"
+          class="btn btn-outline btn-block"
+          style="margin-top:15px;"
+        >
+          View Hot Picks
+        </a>
+
+      </div>
+
+
+      <!-- ACCOUNT -->
+
+      <div class="form-card" style="padding:22px;">
+
+        <div class="eyebrow">
+          ACCOUNT
+        </div>
+
+        <h3 style="
+          font-size:20px;
+          margin:6px 0 8px;
+        ">
+          My Account
+        </h3>
+
+        <p class="sub" style="line-height:1.5;">
+          View and manage your BeatHub account information.
+        </p>
+
+        <a
+          href="/account"
+          class="btn btn-outline btn-block"
+          style="margin-top:15px;"
+        >
+          My Account
+        </a>
+
+      </div>
+
+    </div>
+
+
+    <!-- BUYING FLOW -->
+
+    <div
+      class="form-card"
+      style="
+        padding:25px;
+        margin-top:35px;
+      "
+    >
+
+      <div class="eyebrow">
+        HOW IT WORKS
+      </div>
+
+      <h2 style="
+        font-size:22px;
+        margin:6px 0 18px;
+      ">
+        Buy a Beat in 4 Steps
+      </h2>
+
+      <div
+        style="
+          display:grid;
+          grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+          gap:18px;
+        "
+      >
+
+        <div>
+
+          <div class="value gold" style="font-size:24px;">
+            01
+          </div>
+
+          <h3 style="margin:5px 0;">
+            Browse
+          </h3>
+
+          <p class="sub">
+            Explore beats from BeatHub producers.
+          </p>
+
+        </div>
+
+
+        <div>
+
+          <div class="value gold" style="font-size:24px;">
+            02
+          </div>
+
+          <h3 style="margin:5px 0;">
+            Listen
+          </h3>
+
+          <p class="sub">
+            Open a beat and listen to its preview.
+          </p>
+
+        </div>
+
+
+        <div>
+
+          <div class="value gold" style="font-size:24px;">
+            03
+          </div>
+
+          <h3 style="margin:5px 0;">
+            Purchase
+          </h3>
+
+          <p class="sub">
+            Select the available license and pay through M-Pesa.
+          </p>
+
+        </div>
+
+
+        <div>
+
+          <div class="value gold" style="font-size:24px;">
+            04
+          </div>
+
+          <h3 style="margin:5px 0;">
+            Download
+          </h3>
+
+          <p class="sub">
+            After successful payment, access your purchased beat.
+          </p>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- MAIN CTA -->
+
+    <div
+      style="
+        text-align:center;
+        padding:35px 15px;
+      "
+    >
+
+      <h2 style="font-size:25px; margin-bottom:8px;">
+        Ready to make music?
+      </h2>
+
+      <p class="sub" style="margin-bottom:18px;">
+        Start browsing BeatHub beats and find your sound.
+      </p>
+
+      <a
+        href="/beats"
+        class="btn btn-primary"
+      >
+        Browse &amp; Buy Beats
+      </a>
+
+    </div>
+
+  </div>
+
+</section>
+
+{% endblock %}
