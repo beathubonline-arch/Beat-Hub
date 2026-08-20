@@ -39,8 +39,6 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------
 
     PLATFORM_COMMISSION_PERCENT: float = 10.0
-
-    # Backward-compatible alias if other code uses this name.
     PLATFORM_COMMISSION_RATE: float = 10.0
 
     # --------------------------------------------------------------
@@ -80,10 +78,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     # --------------------------------------------------------------
-    # STORAGE
-    #
-    # BeatHub uses Cloudflare R2 for uploaded media.
-    # No Render /var/data directory is required.
+    # CLOUDFLARE R2 STORAGE
     # --------------------------------------------------------------
 
     MEDIA_STORAGE: str = "r2"
@@ -93,22 +88,34 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "beathub"
 
-    # Leave empty when the R2 bucket is private.
+    # Leave empty if the bucket is private.
     R2_PUBLIC_URL: str = ""
 
+    # Public artwork/preview URL lifetime.
     R2_PUBLIC_URL_EXPIRES: int = 3600
+
+    # Purchased audio download URL lifetime.
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
     MAX_UPLOAD_MB: int = 50
 
+    # --------------------------------------------------------------
+    # R2 HELPERS
+    # --------------------------------------------------------------
+
     @property
     def r2_enabled(self) -> bool:
+        """
+        R2 is considered configured only when all required
+        credentials/settings are present.
+        """
+
         return (
             self.MEDIA_STORAGE.lower() == "r2"
-            and bool(self.R2_ACCOUNT_ID)
-            and bool(self.R2_ACCESS_KEY_ID)
-            and bool(self.R2_SECRET_ACCESS_KEY)
-            and bool(self.R2_BUCKET_NAME)
+            and bool(self.R2_ACCOUNT_ID.strip())
+            and bool(self.R2_ACCESS_KEY_ID.strip())
+            and bool(self.R2_SECRET_ACCESS_KEY.strip())
+            and bool(self.R2_BUCKET_NAME.strip())
         )
 
     @property
@@ -117,7 +124,9 @@ class Settings(BaseSettings):
             return ""
 
         return (
-            f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+            f"https://"
+            f"{self.R2_ACCOUNT_ID}"
+            f".r2.cloudflarestorage.com"
         )
 
     # --------------------------------------------------------------
