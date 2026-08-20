@@ -28,7 +28,9 @@ def ctx(
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
+
     context.update(extra)
+
     return context
 
 
@@ -155,37 +157,29 @@ def public_profile(
         .first()
     )
 
-    if profile is None:
+    if not profile:
         raise HTTPException(
             status_code=404,
             detail="Creator profile not found.",
         )
 
-    tracks = list(
-        getattr(profile, "tracks", None) or []
-    )
-
-    albums = list(
-        getattr(profile, "albums", None) or []
-    )
+    tracks = list(profile.tracks or [])
+    albums = list(profile.albums or [])
 
     tracks = [
         track
         for track in tracks
-        if getattr(
-            track,
-            "is_available",
-            False,
-        )
+        if getattr(track, "is_available", False)
     ]
 
     public_albums = []
 
     for album in albums:
-        if hasattr(album, "is_published"):
-            if album.is_published:
-                public_albums.append(album)
-        else:
+        if not hasattr(album, "is_published"):
+            public_albums.append(album)
+            continue
+
+        if album.is_published:
             public_albums.append(album)
 
     return templates.TemplateResponse(
@@ -205,13 +199,10 @@ def public_profile(
 @router.get("/account")
 def account(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    role = getattr(
-        current_user.role,
-        "value",
-        str(current_user.role),
-    )
+    role = getattr(current_user.role, "value", current_user.role)
 
     if role == "creator":
         return RedirectResponse(
