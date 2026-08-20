@@ -22,13 +22,26 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.ledger import WithdrawalRequest, WithdrawalStatus
-from app.models.music import Album, AlbumTrack, SalesModel, Track
-from app.models.order import Order, OrderStatus
-from app.models.user import User
+from app.models.ledger import (
+    WithdrawalRequest,
+    WithdrawalStatus,
+)
+from app.models.music import (
+    Album,
+    AlbumTrack,
+    SalesModel,
+    Track,
+)
+from app.models.order import (
+    Order,
+    OrderStatus,
+)
+from app.models.user import (
+    User,
+)
 from app.utils.deps import (
-    is_admin,
-    is_creator,
+    get_role_name,
+    is_creator_or_admin,
     require_creator,
     require_user,
 )
@@ -36,7 +49,21 @@ from app.utils.deps import (
 
 router = APIRouter(tags=["dashboard"])
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(
+    directory="app/templates"
+)
+
+
+# ======================================================================
+# ROLE HELPERS
+# ======================================================================
+
+def role_name(user: User) -> str:
+    """
+    Normalize role regardless of whether SQLAlchemy returns
+    an enum or a string.
+    """
+    return get_role_name(user)
 
 
 # ======================================================================
@@ -87,19 +114,29 @@ def upload_to_r2(
         )
 
 
-def r2_key(path: Optional[str]) -> Optional[str]:
+def r2_key(
+    path: Optional[str],
+) -> Optional[str]:
+
     if not path:
         return None
 
     value = str(path).strip()
 
     if value.startswith("r2://"):
-        parts = value[5:].split("/", 1)
+
+        parts = value[5:].split(
+            "/",
+            1,
+        )
 
         if len(parts) == 2:
             return parts[1]
 
-    if value.startswith("http://") or value.startswith("https://"):
+    if (
+        value.startswith("http://")
+        or value.startswith("https://")
+    ):
         return None
 
     return value.lstrip("/")
@@ -161,8 +198,13 @@ def ctx(
 # HELPERS
 # ======================================================================
 
-def safe_filename(filename: str) -> str:
-    filename = os.path.basename(filename or "")
+def safe_filename(
+    filename: str,
+) -> str:
+
+    filename = os.path.basename(
+        filename or ""
+    )
 
     filename = re.sub(
         r"[^a-zA-Z0-9._-]+",
@@ -173,14 +215,20 @@ def safe_filename(filename: str) -> str:
     return filename or "upload"
 
 
-def make_slug(value: str) -> str:
+def make_slug(
+    value: str,
+) -> str:
+
     slug = re.sub(
         r"[^a-zA-Z0-9]+",
         "-",
-        (value or "").strip(),
+        value.strip(),
     ).strip("-").lower()
 
-    return slug or f"track-{uuid.uuid4().hex[:8]}"
+    return (
+        slug
+        or f"track-{uuid.uuid4().hex[:8]}"
+    )
 
 
 def unique_track_slug(
@@ -195,7 +243,9 @@ def unique_track_slug(
 
     while (
         db.query(Track)
-        .filter(Track.slug == slug)
+        .filter(
+            Track.slug == slug
+        )
         .first()
     ):
         slug = f"{base}-{number}"
@@ -204,7 +254,10 @@ def unique_track_slug(
     return slug
 
 
-def extension(filename: str) -> str:
+def extension(
+    filename: str,
+) -> str:
+
     return os.path.splitext(
         filename or ""
     )[1].lower()
@@ -228,7 +281,9 @@ def build_absolute_url(
             + base[len("http://"):]
         )
 
-    return f"{base}/{path.lstrip('/')}"
+    return (
+        f"{base}/{path.lstrip('/')}"
+    )
 
 
 # ======================================================================
@@ -247,8 +302,10 @@ def get_stats(
             Order.track_id == Track.id,
         )
         .filter(
-            Track.creator_profile_id == profile_id,
-            Order.status == OrderStatus.COMPLETED,
+            Track.creator_profile_id
+            == profile_id,
+            Order.status
+            == OrderStatus.COMPLETED,
         )
         .order_by(
             Order.completed_at.desc()
@@ -370,7 +427,7 @@ def get_stats(
 
 
 # ======================================================================
-# CREATOR DASHBOARD
+# MAIN DASHBOARD
 # ======================================================================
 
 @router.get("/dashboard")
@@ -383,16 +440,39 @@ def dashboard_home(
     q: str = "",
 ):
 
+    # --------------------------------------------------------------
     # IMPORTANT:
-    # Buyers/artists are NEVER redirected back and forth.
-    # A buyer goes only to /artist/dashboard.
-    if not is_creator(user) and not is_admin(user):
+    # Normalize role before making ANY redirect decision.
+    # --------------------------------------------------------------
+
+    current_role = role_name(user)
+
+    # Buyer/artist accounts ALWAYS belong on artist dashboard.
+    if current_role == "buyer":
         return RedirectResponse(
             url="/artist/dashboard",
             status_code=303,
         )
 
-    profile = user.profile
+    # Unknown public roles also safely become artist accounts.
+    if current_role not in {
+        "creator",
+        "admin",
+    }:
+        return RedirectResponse(
+            url="/artist/dashboard",
+            status_code=303,
+        )
+
+    # --------------------------------------------------------------
+    # CREATOR / ADMIN DASHBOARD
+    # --------------------------------------------------------------
+
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
         return RedirectResponse(
@@ -500,6 +580,10 @@ def dashboard_home(
             except Exception:
                 track.cover_art_url = None
 
+    track_page = page
+    track_search = q
+    track_total_count = track_total
+
     track_start = (
         track_offset + 1
         if track_total
@@ -532,12 +616,12 @@ def dashboard_home(
             track_count=track_count,
             album_count=album_count,
             tracks=tracks,
-            track_page=page,
+            track_page=track_page,
             track_total_pages=track_total_pages,
             track_total=track_total,
-            track_total_count=track_total,
+            track_total_count=track_total_count,
             track_per_page=track_per_page,
-            track_search=q,
+            track_search=track_search,
             track_start=track_start,
             track_end=track_end,
             q=q,
@@ -549,7 +633,7 @@ def dashboard_home(
 
 
 # ======================================================================
-# BUYER / ARTIST DASHBOARD
+# ARTIST / BUYER DASHBOARD
 # ======================================================================
 
 @router.get("/artist/dashboard")
@@ -560,21 +644,32 @@ def artist_dashboard(
     user: User = Depends(require_user),
 ):
 
-    # IMPORTANT:
-    # Creators/admins go ONLY to the creator dashboard.
-    if is_creator(user) or is_admin(user):
+    current_role = role_name(user)
+
+    # --------------------------------------------------------------
+    # ONLY creators/admins are redirected away from artist dashboard.
+    # Every other public account gets the artist dashboard directly.
+    # --------------------------------------------------------------
+
+    if current_role in {
+        "creator",
+        "admin",
+    }:
         return RedirectResponse(
             url="/dashboard",
             status_code=303,
         )
 
-    # Anyone reaching here is a buyer/artist account.
+    # --------------------------------------------------------------
+    # BUYER / ARTIST
+    # --------------------------------------------------------------
 
     purchases = (
         db.query(Order)
         .filter(
             Order.buyer_id == user.id,
-            Order.status == OrderStatus.COMPLETED,
+            Order.status
+            == OrderStatus.COMPLETED,
         )
         .order_by(
             Order.completed_at.desc()
@@ -654,7 +749,9 @@ def artist_dashboard(
     )
 
     if not display_name:
-        display_name = user.email.split("@")[0]
+        display_name = (
+            user.email.split("@")[0]
+        )
 
     return templates.TemplateResponse(
         request,
@@ -814,7 +911,6 @@ async def upload_tracks(
             except (
                 InvalidOperation,
                 ValueError,
-                IndexError,
             ):
                 raise ValueError(
                     f"Track {index + 1}: "
@@ -1165,7 +1261,9 @@ async def create_album(
         )
         .first()
     ):
-        slug = f"{base_slug}-{suffix}"
+        slug = (
+            f"{base_slug}-{suffix}"
+        )
         suffix += 1
 
     artwork_path = None
@@ -1185,7 +1283,8 @@ async def create_album(
                 ".webp",
             }:
                 raise ValueError(
-                    "Unsupported album artwork format."
+                    "Unsupported album "
+                    "artwork format."
                 )
 
             artwork_key = (
@@ -1236,13 +1335,16 @@ async def create_album(
             track_ids
         ):
 
-            track = track_map.get(track_id)
+            track = track_map.get(
+                track_id
+            )
 
             if track:
-
                 db.add(
                     AlbumTrack(
-                        id=str(uuid.uuid4()),
+                        id=str(
+                            uuid.uuid4()
+                        ),
                         album_id=album.id,
                         track_id=track.id,
                         position=position,
@@ -1301,14 +1403,8 @@ def request_withdrawal(
         )
 
     try:
-        amount_value = Decimal(
-            amount
-        )
-    except (
-        InvalidOperation,
-        ValueError,
-        TypeError,
-    ):
+        amount_value = Decimal(amount)
+    except Exception:
 
         return RedirectResponse(
             url=(
