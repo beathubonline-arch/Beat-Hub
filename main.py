@@ -33,16 +33,46 @@ APP_DIR = BASE_DIR / "app"
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
+# --------------------------------------------------------------
+# PERSISTENT MEDIA DIRECTORY
+# --------------------------------------------------------------
+
+MEDIA_DIR = Path(settings.MEDIA_ROOT)
+
+if not MEDIA_DIR.is_absolute():
+    MEDIA_DIR = BASE_DIR / MEDIA_DIR
+
+MEDIA_DIR = MEDIA_DIR.resolve()
+
+AUDIO_DIR = MEDIA_DIR / "audio"
+COVERS_DIR = MEDIA_DIR / "covers"
+PREVIEWS_DIR = MEDIA_DIR / "previews"
+
+for directory in (
+    MEDIA_DIR,
+    AUDIO_DIR,
+    COVERS_DIR,
+    PREVIEWS_DIR,
+):
+    directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+logger.info("BeatHub MEDIA_ROOT: %s", MEDIA_DIR)
+logger.info("BeatHub AUDIO_DIR: %s", AUDIO_DIR)
+logger.info("BeatHub COVERS_DIR: %s", COVERS_DIR)
+logger.info("BeatHub PREVIEWS_DIR: %s", PREVIEWS_DIR)
+
 app = FastAPI(title=settings.APP_NAME)
 
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
 
-
-# ------------------------------------------------------------------
-# STATIC FILES
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
+# STATIC
+# --------------------------------------------------------------
 
 if STATIC_DIR.exists():
     app.mount(
@@ -51,17 +81,43 @@ if STATIC_DIR.exists():
         name="static",
     )
 
+# --------------------------------------------------------------
+# PUBLIC COVER ART
+# --------------------------------------------------------------
 
-# ------------------------------------------------------------------
+app.mount(
+    "/media/covers",
+    StaticFiles(directory=str(COVERS_DIR)),
+    name="media-covers",
+)
+
+# --------------------------------------------------------------
+# PUBLIC PREVIEWS
+# --------------------------------------------------------------
+
+app.mount(
+    "/media/previews",
+    StaticFiles(directory=str(PREVIEWS_DIR)),
+    name="media-previews",
+)
+
+# --------------------------------------------------------------
+# IMPORTANT:
+# DO NOT mount /media/audio.
+#
+# Full purchased audio is protected by music.py and is delivered
+# only after checking the user's License + completed Order.
+# --------------------------------------------------------------
+
+# --------------------------------------------------------------
 # DATABASE
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 
 Base.metadata.create_all(bind=engine)
 
-
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # ROUTERS
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 
 app.include_router(auth.router)
 app.include_router(pages.router)
@@ -71,10 +127,9 @@ app.include_router(mpesa_callback.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 
-
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # DASHBOARD COMPATIBILITY
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 
 @app.get("/artist/dashboard", include_in_schema=False)
 @app.get("/creator/dashboard", include_in_schema=False)
@@ -89,10 +144,9 @@ def dashboard_alias(
         status_code=303,
     )
 
-
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # HEALTH
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 
 @app.get("/healthz")
 def healthz():
@@ -100,13 +154,15 @@ def healthz():
         "status": "ok",
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
-        "storage": "r2" if settings.r2_enabled else "not-configured",
+        "media_root": str(MEDIA_DIR),
+        "audio_directory_exists": AUDIO_DIR.exists(),
+        "covers_directory_exists": COVERS_DIR.exists(),
+        "previews_directory_exists": PREVIEWS_DIR.exists(),
     }
 
-
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # ERRORS
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
