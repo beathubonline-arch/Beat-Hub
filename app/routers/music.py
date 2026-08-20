@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 import boto3
@@ -13,25 +14,23 @@ from app.database import get_db
 from app.models.music import Track
 from app.models.order import Order, OrderStatus
 from app.models.user import User
-from app.utils.deps import get_current_user
+from app.utils.deps import get_optional_user
 
 
 router = APIRouter(tags=["music"])
 
-templates = Jinja2Templates(
-    directory="app/templates"
-)
+templates = Jinja2Templates(directory="app/templates")
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # R2
-# ----------------------------------------------------------------------
+# ============================================================
 
 def get_r2_client():
     if not settings.r2_enabled:
         raise HTTPException(
             status_code=503,
-            detail="Cloudflare R2 storage is not configured.",
+            detail="Cloud storage is not configured.",
         )
 
     return boto3.client(
@@ -50,20 +49,19 @@ def r2_key(path: Optional[str]) -> Optional[str]:
     value = str(path).strip()
 
     if value.startswith("r2://"):
-        parts = value[5:].split("/", 1)
+        value = value[5:]
+
+        parts = value.split("/", 1)
 
         if len(parts) == 2:
             return parts[1]
-
-    if value.startswith("http://") or value.startswith("https://"):
-        return None
 
     return value.lstrip("/")
 
 
 def r2_url(
     path: Optional[str],
-    expires: int,
+    expires: int = 3600,
 ) -> Optional[str]:
     key = r2_key(path)
 
@@ -89,77 +87,63 @@ def r2_url(
     )
 
 
-def r2_object_exists(path: Optional[str]) -> bool:
+def r2_download_url(
+    path: Optional[str],
+    filename: Optional[str] = None,
+) -> Optional[str]:
     key = r2_key(path)
 
     if not key:
-        return False
+        return None
 
     client = get_r2_client()
 
-    try:
-        client.head_object(
-            Bucket=settings.R2_BUCKET_NAME,
-            Key=key,
+    params = {
+        "Bucket": settings.R2_BUCKET_NAME,
+        "Key": key,
+    }
+
+    if filename:
+        params["ResponseContentDisposition"] = (
+            f'attachment; filename="{filename}"'
         )
-        return True
 
-    except ClientError:
-        return False
+    return client.generate_presigned_url(
+        "get_object",
+        Params=params,
+        ExpiresIn=getattr(
+            settings,
+            "R2_DOWNLOAD_URL_EXPIRES",
+            900,
+        ),
+    )
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # TRACK PAGE
-# ----------------------------------------------------------------------
+# ============================================================
 
 @router.get("/track/{track_ref}")
-def track_page(
+def track_detail(
     request: Request,
     track_ref: str,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_current_user
-    ),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     track = (
         db.query(Track)
-        .filter(Track.slug == track_ref)
+        .filter(
+            (Track.id == track_ref)
+            | (Track.slug == track_ref)
+        )
         .first()
     )
 
     if not track:
-        track = (
-            db.query(Track)
-            .filter(Track.id == track_ref)
-            .first()
-        )
-
-    if not track:
         raise HTTPException(
             status_code=404,
-            detail="Track not found.",
+            detail="Track not found",
         )
-
-    purchased = False
-
-    if current_user:
-        try:
-            purchased = (
-                db.query(Order)
-                .filter(
-                    Order.track_id == track.id,
-                    Order.status
-                    == OrderStatus.COMPLETED,
-                )
-                .filter(
-                    Order.user_id
-                    == current_user.id
-                )
-                .first()
-                is not None
-            )
-        except Exception:
-            purchased = False
 
     cover_art_url = None
 
@@ -167,18 +151,32 @@ def track_page(
         try:
             cover_art_url = r2_url(
                 track.cover_art_path,
-                settings.R2_PUBLIC_URL_EXPIRES,
+                expires=3600,
             )
         except Exception:
             cover_art_url = None
 
+    purchased = False
+
+    if user:
+        purchased = (
+            db.query(Order)
+            .filter(
+                Order.track_id == track.id,
+                Order.user_id == user.id,
+                Order.status == OrderStatus.COMPLETED,
+            )
+            .first()
+            is not None
+        )
+
     return templates.TemplateResponse(
         request,
-        "track.html",
+        "track_detail.html",
         {
             "request": request,
-            "current_user": current_user,
-            "current_year": 2026,
+            "current_user": user,
+            "current_year": datetime.utcnow().year,
             "track": track,
             "purchased": purchased,
             "cover_art_url": cover_art_url,
@@ -186,38 +184,30 @@ def track_page(
     )
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # DOWNLOAD PURCHASED TRACK
-# ----------------------------------------------------------------------
+# ============================================================
 
 @router.get("/download/track/{track_ref}")
 def download_track(
-    request: Request,
     track_ref: str,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_current_user
-    ),
+    user: Optional[User] = Depends(get_optional_user),
 ):
-    if not current_user:
-        return RedirectResponse(
-            url="/login?next="
-            f"/download/track/{track_ref}",
-            status_code=303,
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="You must be logged in to download this track.",
         )
 
     track = (
         db.query(Track)
-        .filter(Track.id == track_ref)
+        .filter(
+            (Track.id == track_ref)
+            | (Track.slug == track_ref)
+        )
         .first()
     )
-
-    if not track:
-        track = (
-            db.query(Track)
-            .filter(Track.slug == track_ref)
-            .first()
-        )
 
     if not track:
         raise HTTPException(
@@ -225,103 +215,51 @@ def download_track(
             detail="Track not found.",
         )
 
-    # --------------------------------------------------------------
-    # PURCHASE VERIFICATION
-    # --------------------------------------------------------------
-
-    try:
-        order = (
-            db.query(Order)
-            .filter(
-                Order.track_id == track.id,
-                Order.user_id == current_user.id,
-                Order.status == OrderStatus.COMPLETED,
-            )
-            .order_by(
-                Order.completed_at.desc()
-            )
-            .first()
+    order = (
+        db.query(Order)
+        .filter(
+            Order.track_id == track.id,
+            Order.user_id == user.id,
+            Order.status == OrderStatus.COMPLETED,
         )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Unable to verify purchase."
-            ),
-        ) from exc
+        .order_by(Order.completed_at.desc())
+        .first()
+    )
 
     if not order:
         raise HTTPException(
             status_code=403,
-            detail=(
-                "This track has not been purchased "
-                "by the current account."
-            ),
+            detail="You have not purchased this track.",
         )
 
-    # --------------------------------------------------------------
-    # R2 CHECK
-    # --------------------------------------------------------------
-
-    if not settings.r2_enabled:
-        raise HTTPException(
-            status_code=503,
-            detail="Cloudflare R2 is not configured.",
-        )
-
-    key = r2_key(
-        track.audio_file_path
-    )
-
-    if not key:
+    if not track.audio_file_path:
         raise HTTPException(
             status_code=404,
-            detail="The purchased audio file is missing.",
+            detail="Audio file is not available.",
         )
 
     try:
-        exists = r2_object_exists(
-            track.audio_file_path
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Unable to connect to Cloudflare R2."
-            ),
-        ) from exc
-
-    if not exists:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "The audio file does not exist "
-                "in Cloudflare R2."
-            ),
-        )
-
-    # --------------------------------------------------------------
-    # SIGNED DOWNLOAD URL
-    # --------------------------------------------------------------
-
-    try:
-        download_url = r2_url(
+        download_url = r2_download_url(
             track.audio_file_path,
-            settings.R2_DOWNLOAD_URL_EXPIRES,
+            filename=(
+                f"{track.slug}.mp3"
+            ),
         )
-    except Exception as exc:
+    except ClientError:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "Unable to create the secure "
-                "download link."
-            ),
-        ) from exc
+            detail="Unable to access the purchased audio file.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to access the purchased audio file.",
+        )
 
     if not download_url:
         raise HTTPException(
             status_code=404,
-            detail="Download file is unavailable.",
+            detail="Audio file is not available.",
         )
 
     return RedirectResponse(
