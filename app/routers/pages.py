@@ -28,7 +28,9 @@ def ctx(
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
+
     context.update(extra)
+
     return context
 
 
@@ -172,7 +174,11 @@ def public_profile(
     tracks = [
         track
         for track in tracks
-        if getattr(track, "is_available", False)
+        if getattr(
+            track,
+            "is_available",
+            False,
+        )
     ]
 
     public_albums = []
