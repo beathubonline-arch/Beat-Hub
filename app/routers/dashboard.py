@@ -24,7 +24,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.ledger import WithdrawalRequest, WithdrawalStatus
 from app.models.music import Album, AlbumTrack, SalesModel, Track
-from app.models.order import License, Order, OrderStatus
+from app.models.order import Order, OrderStatus
 from app.models.user import User, UserRole
 from app.utils.deps import require_creator, require_user
 
@@ -32,6 +32,50 @@ from app.utils.deps import require_creator, require_user
 router = APIRouter(tags=["dashboard"])
 
 templates = Jinja2Templates(directory="app/templates")
+
+
+# ======================================================================
+# ROLE HELPERS
+# ======================================================================
+
+def get_role(user: User) -> str:
+    """
+    Always return the database role as a simple lowercase string.
+
+    Handles:
+        UserRole.BUYER
+        "buyer"
+        "UserRole.BUYER"
+    """
+
+    role = getattr(user, "role", None)
+
+    if isinstance(role, UserRole):
+        return role.value.lower()
+
+    value = getattr(role, "value", role)
+
+    if value is None:
+        return ""
+
+    value = str(value).strip().lower()
+
+    if value.startswith("userrole."):
+        value = value.split(".", 1)[1]
+
+    return value
+
+
+def is_buyer(user: User) -> bool:
+    return get_role(user) == "buyer"
+
+
+def is_creator(user: User) -> bool:
+    return get_role(user) == "creator"
+
+
+def is_admin(user: User) -> bool:
+    return get_role(user) == "admin"
 
 
 # ----------------------------------------------------------------------
@@ -110,7 +154,6 @@ def r2_presigned_url(
     if not key:
         return None
 
-    # If you have configured a public R2 URL, use it.
     if settings.R2_PUBLIC_URL:
         return (
             settings.R2_PUBLIC_URL.rstrip("/")
@@ -223,14 +266,12 @@ def build_absolute_url(
             + base[len("http://"):]
         )
 
-    return (
-        f"{base}/{path.lstrip('/')}"
-    )
+    return f"{base}/{path.lstrip('/')}"
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # CREATOR STATS
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def get_stats(
     db: Session,
@@ -253,16 +294,12 @@ def get_stats(
         .all()
     )
 
-    total_sales = len(
-        completed_orders
-    )
+    total_sales = len(completed_orders)
 
     gross = sum(
         (
             Decimal(
-                str(
-                    o.gross_amount or 0
-                )
+                str(o.gross_amount or 0)
             )
             for o in completed_orders
         ),
@@ -272,9 +309,7 @@ def get_stats(
     commission = sum(
         (
             Decimal(
-                str(
-                    o.commission_amount or 0
-                )
+                str(o.commission_amount or 0)
             )
             for o in completed_orders
         ),
@@ -284,9 +319,7 @@ def get_stats(
     net = sum(
         (
             Decimal(
-                str(
-                    o.net_amount or 0
-                )
+                str(o.net_amount or 0)
             )
             for o in completed_orders
         ),
@@ -303,10 +336,8 @@ def get_stats(
             )
         )
         .filter(
-            WithdrawalRequest.creator_profile_id
-            == profile_id,
-            WithdrawalRequest.status
-            == WithdrawalStatus.PAID,
+            WithdrawalRequest.creator_profile_id == profile_id,
+            WithdrawalRequest.status == WithdrawalStatus.PAID,
         )
         .scalar()
     )
@@ -321,8 +352,7 @@ def get_stats(
             )
         )
         .filter(
-            WithdrawalRequest.creator_profile_id
-            == profile_id,
+            WithdrawalRequest.creator_profile_id == profile_id,
             WithdrawalRequest.status.in_(
                 [
                     WithdrawalStatus.PENDING,
@@ -335,15 +365,11 @@ def get_stats(
     )
 
     paid_withdrawals = Decimal(
-        str(
-            paid_withdrawals or 0
-        )
+        str(paid_withdrawals or 0)
     )
 
     pending_withdrawals = Decimal(
-        str(
-            pending_withdrawals or 0
-        )
+        str(pending_withdrawals or 0)
     )
 
     available_balance = (
@@ -367,7 +393,7 @@ def get_stats(
 
 
 # ======================================================================
-# MAIN DASHBOARD
+# MAIN CREATOR DASHBOARD
 # ======================================================================
 
 @router.get("/dashboard")
@@ -380,30 +406,29 @@ def dashboard_home(
     q: str = "",
 ):
 
-    # --------------------------------------------------------------
-    # BUYER / ARTIST
-    # --------------------------------------------------------------
+    # ==============================================================
+    # IMPORTANT:
+    # Use normalized database role.
+    # Do NOT compare directly against SQLAlchemy Enum here.
+    # ==============================================================
 
-    if user.role == UserRole.BUYER:
+    role = get_role(user)
+
+    # Buyer goes ONLY to buyer dashboard.
+    if role == "buyer":
         return RedirectResponse(
             url="/artist/dashboard",
             status_code=303,
         )
 
-    # --------------------------------------------------------------
-    # CREATOR / ADMIN
-    # --------------------------------------------------------------
-
-    if user.role not in (
-        UserRole.CREATOR,
-        UserRole.ADMIN,
-    ):
+    # Unknown roles go to account rather than creating a loop.
+    if role not in {"creator", "admin"}:
         return RedirectResponse(
             url="/account",
             status_code=303,
         )
 
-    profile = user.profile
+    profile = getattr(user, "profile", None)
 
     if not profile:
         return RedirectResponse(
@@ -419,8 +444,7 @@ def dashboard_home(
     track_count = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
         .count()
     )
@@ -428,18 +452,14 @@ def dashboard_home(
     album_count = (
         db.query(Album)
         .filter(
-            Album.creator_profile_id
-            == profile.id
+            Album.creator_profile_id == profile.id
         )
         .count()
     )
 
     try:
         page = int(page)
-    except (
-        TypeError,
-        ValueError,
-    ):
+    except (TypeError, ValueError):
         page = 1
 
     if page < 1:
@@ -450,8 +470,7 @@ def dashboard_home(
     tracks_query = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
     )
 
@@ -496,13 +515,11 @@ def dashboard_home(
         .all()
     )
 
-    # Cover art URLs
     for track in tracks:
 
         track.cover_art_url = None
 
         if track.cover_art_path:
-
             try:
                 track.cover_art_url = (
                     r2_presigned_url(
@@ -565,7 +582,7 @@ def dashboard_home(
 
 
 # ======================================================================
-# ARTIST / BUYER DASHBOARD
+# BUYER / ARTIST DASHBOARD
 # ======================================================================
 
 @router.get("/artist/dashboard")
@@ -576,18 +593,24 @@ def artist_dashboard(
     user: User = Depends(require_user),
 ):
 
-    # A creator should remain on the creator dashboard.
-    if user.role in (
-        UserRole.CREATOR,
-        UserRole.ADMIN,
-    ):
+    # ==============================================================
+    # CRITICAL FIX
+    #
+    # Use exactly the same role-normalization function as /dashboard.
+    # A buyer is NEVER redirected back to /dashboard.
+    # ==============================================================
+
+    role = get_role(user)
+
+    # Creator/admin must use creator dashboard.
+    if role in {"creator", "admin"}:
         return RedirectResponse(
             url="/dashboard",
             status_code=303,
         )
 
-    # Only buyers should use this dashboard.
-    if user.role != UserRole.BUYER:
+    # Any non-buyer/non-creator account gets a safe destination.
+    if role != "buyer":
         return RedirectResponse(
             url="/account",
             status_code=303,
@@ -610,7 +633,7 @@ def artist_dashboard(
     )
 
     # --------------------------------------------------------------
-    # PREPARE DOWNLOAD URLS
+    # DOWNLOAD URLS
     # --------------------------------------------------------------
 
     for purchase in purchases:
@@ -620,54 +643,48 @@ def artist_dashboard(
 
         track = purchase.track
 
-        if track:
+        if not track:
+            continue
 
-            # Creator name
-            creator_profile = getattr(
-                track,
-                "creator_profile",
-                None,
+        creator_profile = getattr(
+            track,
+            "creator_profile",
+            None,
+        )
+
+        if creator_profile:
+            purchase.creator_name = (
+                getattr(
+                    creator_profile,
+                    "stage_name",
+                    None,
+                )
+                or "BeatHub Creator"
             )
 
-            if creator_profile:
+        if track.audio_file_path:
 
-                purchase.creator_name = (
-                    getattr(
-                        creator_profile,
-                        "stage_name",
-                        None,
+            try:
+                purchase.download_url = (
+                    r2_presigned_url(
+                        track.audio_file_path,
+                        expires=3600,
                     )
-                    or "BeatHub Creator"
                 )
-
-            # Only completed orders should receive
-            # an actual download URL.
-            if track.audio_file_path:
-
-                try:
-                    purchase.download_url = (
-                        r2_presigned_url(
-                            track.audio_file_path,
-                            expires=3600,
-                        )
-                    )
-                except Exception:
-                    purchase.download_url = None
+            except Exception:
+                purchase.download_url = None
 
     # --------------------------------------------------------------
     # PURCHASE STATS
     # --------------------------------------------------------------
 
-    total_purchases = len(
-        purchases
-    )
+    total_purchases = len(purchases)
 
     total_spent = sum(
         (
             Decimal(
                 str(
-                    purchase.gross_amount
-                    or 0
+                    purchase.gross_amount or 0
                 )
             )
             for purchase in purchases
@@ -699,7 +716,7 @@ def artist_dashboard(
         display_name = user.email.split("@")[0]
 
     # --------------------------------------------------------------
-    # DASHBOARD
+    # RENDER
     # --------------------------------------------------------------
 
     return templates.TemplateResponse(
@@ -754,9 +771,7 @@ async def upload_tracks(
     prices: List[str] = Form(...),
     sales_models: List[str] = Form(default=[]),
     audio_files: List[UploadFile] = File(...),
-    cover_files: List[Optional[UploadFile]] = File(
-        default=[]
-    ),
+    cover_files: List[Optional[UploadFile]] = File(default=[]),
 ):
 
     profile = user.profile
@@ -809,9 +824,7 @@ async def upload_tracks(
             ctx(
                 request,
                 user,
-                error=(
-                    "Each track must have an audio file."
-                ),
+                error="Each track must have an audio file.",
             ),
             status_code=400,
         )
@@ -826,21 +839,17 @@ async def upload_tracks(
 
             if not title:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "title is required."
+                    f"Track {index + 1}: title is required."
                 )
 
             audio = audio_files[index]
 
             if not audio or not audio.filename:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "audio file is required."
+                    f"Track {index + 1}: audio file is required."
                 )
 
-            audio_ext = extension(
-                audio.filename
-            )
+            audio_ext = extension(audio.filename)
 
             if audio_ext not in {
                 ".mp3",
@@ -849,33 +858,25 @@ async def upload_tracks(
                 ".flac",
             }:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "unsupported audio format."
+                    f"Track {index + 1}: unsupported audio format."
                 )
 
             try:
                 price_value = Decimal(
                     prices[index].strip()
                 )
-            except (
-                InvalidOperation,
-                ValueError,
-            ):
+            except (InvalidOperation, ValueError):
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "invalid price."
+                    f"Track {index + 1}: invalid price."
                 )
 
             if price_value < 0:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "price cannot be negative."
+                    f"Track {index + 1}: price cannot be negative."
                 )
 
             sales_value = (
-                sales_models[index]
-                .strip()
-                .lower()
+                sales_models[index].strip().lower()
                 if index < len(sales_models)
                 else "non_exclusive"
             )
@@ -892,20 +893,16 @@ async def upload_tracks(
                 index < len(bpms)
                 and bpms[index].strip()
             ):
-
                 try:
                     bpm_value = int(
                         bpms[index].strip()
                     )
                 except ValueError:
                     raise ValueError(
-                        f"Track {index + 1}: "
-                        "BPM must be a number."
+                        f"Track {index + 1}: BPM must be a number."
                     )
 
-            track_id = str(
-                uuid.uuid4()
-            )
+            track_id = str(uuid.uuid4())
 
             slug = unique_track_slug(
                 db,
@@ -913,18 +910,14 @@ async def upload_tracks(
             )
 
             audio_key = (
-                f"audio/"
-                f"{track_id}"
-                f"{audio_ext}"
+                f"audio/{track_id}{audio_ext}"
             )
 
             upload_to_r2(
                 audio,
                 audio_key,
-                (
-                    audio.content_type
-                    or "application/octet-stream"
-                ),
+                audio.content_type
+                or "application/octet-stream",
             )
 
             cover_path = None
@@ -953,18 +946,14 @@ async def upload_tracks(
                     )
 
                 cover_key = (
-                    f"covers/"
-                    f"{track_id}"
-                    f"{cover_ext}"
+                    f"covers/{track_id}{cover_ext}"
                 )
 
                 upload_to_r2(
                     cover,
                     cover_key,
-                    (
-                        cover.content_type
-                        or "application/octet-stream"
-                    ),
+                    cover.content_type
+                    or "application/octet-stream",
                 )
 
                 cover_path = (
@@ -996,9 +985,7 @@ async def upload_tracks(
                 creator_profile_id=profile.id,
                 title=title,
                 slug=slug,
-                description=(
-                    description or None
-                ),
+                description=description or None,
                 genre=genre or None,
                 bpm=bpm_value,
                 tags=tags or None,
@@ -1034,9 +1021,7 @@ async def upload_tracks(
             ctx(
                 request,
                 user,
-                error=(
-                    f"Upload failed: {str(exc)}"
-                ),
+                error=f"Upload failed: {str(exc)}",
             ),
             status_code=400,
         )
@@ -1066,18 +1051,14 @@ def new_album_page(
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Creator profile not found."
-            ),
+            url="/dashboard?error=Creator profile not found.",
             status_code=303,
         )
 
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
         .order_by(
             Track.created_at.desc()
@@ -1116,19 +1097,13 @@ async def create_album(
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Creator profile not found."
-            ),
+            url="/dashboard?error=Creator profile not found.",
             status_code=303,
         )
 
     if not settings.r2_enabled:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Cloud storage is not configured."
-            ),
+            url="/dashboard?error=Cloud storage is not configured.",
             status_code=303,
         )
 
@@ -1137,8 +1112,7 @@ async def create_album(
     existing_tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
         .order_by(
             Track.created_at.desc()
@@ -1167,10 +1141,7 @@ async def create_album(
                 request,
                 user,
                 tracks=existing_tracks,
-                error=(
-                    "Select at least one "
-                    "track for the album."
-                ),
+                error="Select at least one track for the album.",
             ),
             status_code=400,
         )
@@ -1178,16 +1149,13 @@ async def create_album(
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id,
+            Track.creator_profile_id == profile.id,
             Track.id.in_(track_ids),
         )
         .all()
     )
 
-    if len(tracks) != len(
-        set(track_ids)
-    ):
+    if len(tracks) != len(set(track_ids)):
         return templates.TemplateResponse(
             request,
             "upload_album.html",
@@ -1195,10 +1163,7 @@ async def create_album(
                 request,
                 user,
                 tracks=existing_tracks,
-                error=(
-                    "One or more selected "
-                    "tracks are invalid."
-                ),
+                error="One or more selected tracks are invalid.",
             ),
             status_code=400,
         )
@@ -1209,14 +1174,10 @@ async def create_album(
 
     while (
         db.query(Album)
-        .filter(
-            Album.slug == slug
-        )
+        .filter(Album.slug == slug)
         .first()
     ):
-        slug = (
-            f"{base_slug}-{suffix}"
-        )
+        slug = f"{base_slug}-{suffix}"
         suffix += 1
 
     artwork_path = None
@@ -1236,8 +1197,7 @@ async def create_album(
                 ".webp",
             }:
                 raise ValueError(
-                    "Unsupported album "
-                    "artwork format."
+                    "Unsupported album artwork format."
                 )
 
             artwork_key = (
@@ -1249,10 +1209,8 @@ async def create_album(
             upload_to_r2(
                 artwork,
                 artwork_key,
-                (
-                    artwork.content_type
-                    or "application/octet-stream"
-                ),
+                artwork.content_type
+                or "application/octet-stream",
             )
 
             artwork_path = (
@@ -1266,12 +1224,8 @@ async def create_album(
             creator_profile_id=profile.id,
             title=title,
             slug=slug,
-            description=(
-                description.strip()
-                or None
-            ),
-            genre=genre.strip()
-            or None,
+            description=description.strip() or None,
+            genre=genre.strip() or None,
             artwork_path=artwork_path,
             is_published=True,
         )
@@ -1284,21 +1238,14 @@ async def create_album(
             for track in tracks
         }
 
-        for position, track_id in enumerate(
-            track_ids
-        ):
+        for position, track_id in enumerate(track_ids):
 
-            track = track_map.get(
-                track_id
-            )
+            track = track_map.get(track_id)
 
             if track:
-
                 db.add(
                     AlbumTrack(
-                        id=str(
-                            uuid.uuid4()
-                        ),
+                        id=str(uuid.uuid4()),
                         album_id=album.id,
                         track_id=track.id,
                         position=position,
@@ -1319,8 +1266,7 @@ async def create_album(
                 user,
                 tracks=existing_tracks,
                 error=(
-                    f"Album creation failed: "
-                    f"{str(exc)}"
+                    f"Album creation failed: {str(exc)}"
                 ),
             ),
             status_code=400,
@@ -1349,34 +1295,21 @@ def request_withdrawal(
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Creator profile not found."
-            ),
+            url="/dashboard?error=Creator profile not found.",
             status_code=303,
         )
 
     try:
-        amount_value = Decimal(
-            amount
-        )
+        amount_value = Decimal(amount)
     except Exception:
-
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Invalid withdrawal amount."
-            ),
+            url="/dashboard?error=Invalid withdrawal amount.",
             status_code=303,
         )
 
     if amount_value <= 0:
-
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Amount must be greater than zero."
-            ),
+            url="/dashboard?error=Amount must be greater than zero.",
             status_code=303,
         )
 
@@ -1385,30 +1318,17 @@ def request_withdrawal(
         profile.id,
     )
 
-    if (
-        amount_value
-        > stats["available_balance"]
-    ):
-
+    if amount_value > stats["available_balance"]:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Insufficient available balance."
-            ),
+            url="/dashboard?error=Insufficient available balance.",
             status_code=303,
         )
 
-    phone_number = (
-        phone_number.strip()
-    )
+    phone_number = phone_number.strip()
 
     if not phone_number:
-
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=M-Pesa phone number is required."
-            ),
+            url="/dashboard?error=M-Pesa phone number is required.",
             status_code=303,
         )
 
@@ -1423,9 +1343,6 @@ def request_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url=(
-            "/dashboard?"
-            "success=Withdrawal request submitted."
-        ),
+        url="/dashboard?success=Withdrawal request submitted.",
         status_code=303,
     )
