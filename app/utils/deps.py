@@ -1,5 +1,5 @@
 """
-FastAPI authentication and role-based authorization dependencies.
+FastAPI authentication and authorization dependencies for BeatHub.
 """
 
 from typing import Optional
@@ -19,17 +19,14 @@ def get_optional_user(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    """Return the authenticated user or None."""
+    """Return the authenticated user, or None."""
 
     token = request.cookies.get(SESSION_COOKIE_NAME)
 
     if not token:
         return None
 
-    try:
-        payload = decode_access_token(token)
-    except Exception:
-        return None
+    payload = decode_access_token(token)
 
     if not payload:
         return None
@@ -39,10 +36,7 @@ def get_optional_user(
     if not user_id:
         return None
 
-    try:
-        user = db.get(User, str(user_id))
-    except Exception:
-        return None
+    user = db.get(User, user_id)
 
     if not user or not user.is_active:
         return None
@@ -53,9 +47,9 @@ def get_optional_user(
 def require_user(
     user: Optional[User] = Depends(get_optional_user),
 ) -> User:
-    """Require a valid authenticated user."""
+    """Require an authenticated user."""
 
-    if user is None:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -64,50 +58,60 @@ def require_user(
     return user
 
 
-def get_role_value(user: User) -> str:
-    """
-    Normalize SQLAlchemy Enum/string roles.
-
-    This prevents routing problems when role is returned as
-    UserRole.BUYER versus 'buyer'.
-    """
+def is_admin(user: User) -> bool:
+    """Safely determine whether the account is an administrator."""
 
     role = getattr(user, "role", None)
 
-    if isinstance(role, UserRole):
-        return role.value.lower()
+    if role is None:
+        return False
 
-    value = getattr(role, "value", role)
+    role_name = getattr(role, "name", "")
+    role_value = getattr(role, "value", "")
 
-    if value is None:
-        return ""
-
-    value = str(value).strip().lower()
-
-    if value.startswith("userrole."):
-        value = value.split(".", 1)[1]
-
-    return value
-
-
-def is_buyer(user: User) -> bool:
-    return get_role_value(user) == "buyer"
+    return (
+        str(role_name).upper() == "ADMIN"
+        or str(role_value).upper() == "ADMIN"
+    )
 
 
 def is_creator(user: User) -> bool:
-    return get_role_value(user) == "creator"
+    """
+    Determine creator status from the user's profile.
+
+    This intentionally uses profile.is_producer rather than relying
+    exclusively on UserRole values, preventing buyer/creator routing
+    loops if enum values change or overlap.
+    """
+
+    if is_admin(user):
+        return True
+
+    profile = getattr(user, "profile", None)
+
+    if not profile:
+        return False
+
+    return bool(
+        getattr(profile, "is_producer", False)
+    )
 
 
-def is_admin(user: User) -> bool:
-    return get_role_value(user) == "admin"
+def is_buyer(user: User) -> bool:
+    """Determine whether the account is a normal buyer/artist account."""
+
+    if is_admin(user):
+        return False
+
+    return not is_creator(user)
 
 
 def require_creator(
     user: User = Depends(require_user),
 ) -> User:
-    """Allow creators and administrators."""
+    """Require a creator or administrator account."""
 
-    if not (is_creator(user) or is_admin(user)):
+    if not is_creator(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Creator account required",
@@ -119,7 +123,7 @@ def require_creator(
 def require_admin(
     user: User = Depends(require_user),
 ) -> User:
-    """Require administrator access."""
+    """Require an administrator account."""
 
     if not is_admin(user):
         raise HTTPException(
