@@ -1,3 +1,4 @@
+```python
 from datetime import datetime
 from typing import Optional
 
@@ -7,8 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
+from app.models.profile import Profile
 from app.services.search import run_search
 from app.utils.deps import get_optional_user, require_user
+
 
 router = APIRouter(tags=["pages"])
 
@@ -24,6 +27,10 @@ def ctx(request: Request, current_user: Optional[User], **extra):
     base.update(extra)
     return base
 
+
+# ------------------------------------------------------------------
+# HOME
+# ------------------------------------------------------------------
 
 @router.get("/")
 def home(
@@ -60,6 +67,10 @@ def home(
     )
 
 
+# ------------------------------------------------------------------
+# SEARCH
+# ------------------------------------------------------------------
+
 @router.get("/search")
 def search(
     request: Request,
@@ -75,6 +86,10 @@ def search(
     )
 
 
+# ------------------------------------------------------------------
+# TERMS
+# ------------------------------------------------------------------
+
 @router.get("/terms")
 def terms(
     request: Request,
@@ -84,6 +99,58 @@ def terms(
         request,
         "terms.html",
         ctx(request, current_user),
+    )
+
+
+# ------------------------------------------------------------------
+# PUBLIC CREATOR PROFILE
+# ------------------------------------------------------------------
+
+@router.get("/profile/{slug}")
+def public_profile(
+    request: Request,
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """
+    Public creator profile.
+
+    Example:
+        /profile/daveevo
+
+    Profile URLs use Profile.slug, not the user's email.
+    """
+
+    profile = (
+        db.query(Profile)
+        .filter(
+            Profile.slug == slug,
+            Profile.is_producer.is_(True),
+        )
+        .first()
+    )
+
+    if not profile:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=404,
+            detail="Creator profile not found.",
+        )
+
+    # Keep the profile's related creator available to the template.
+    creator = profile.user
+
+    return templates.TemplateResponse(
+        request,
+        "profile.html",
+        ctx(
+            request,
+            current_user,
+            profile=profile,
+            creator=creator,
+        ),
     )
 
 
@@ -131,3 +198,4 @@ def account(
             profile=profile,
         ),
     )
+```
