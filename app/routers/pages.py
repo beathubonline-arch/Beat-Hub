@@ -23,15 +23,13 @@ def ctx(
     current_user: Optional[User],
     **extra,
 ):
-    context = {
+    base = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
-
-    context.update(extra)
-
-    return context
+    base.update(extra)
+    return base
 
 
 @router.get("/")
