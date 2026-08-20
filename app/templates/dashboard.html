@@ -10,18 +10,19 @@
     Welcome back, {{ profile.stage_name }}
   </h1>
 
-  <!-- PUBLIC STORE LINK -->
-
   <div class="form-card" style="margin:20px 0 28px; padding:20px;">
-    <div class="eyebrow">YOUR PUBLIC STORE</div>
+
+    <div class="eyebrow">
+      YOUR PUBLIC STORE
+    </div>
 
     <h2 style="margin:5px 0 8px; font-size:22px;">
       Share your BeatHub store
     </h2>
 
     <p class="sub" style="margin-bottom:14px;">
-      Send this link to artists, buyers, fans or your social media followers.
-      They can browse your music and purchase available tracks.
+      Send this link to artists, buyers, fans or your social media
+      followers. They can browse your music and purchase available tracks.
     </p>
 
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -29,7 +30,7 @@
       <input
         id="store-link"
         type="text"
-        value="{{ request.url_for('profile_detail', slug=profile.slug) }}"
+        value="{{ request.base_url }}profile/{{ profile.slug }}"
         readonly
         style="flex:1; min-width:260px;"
       >
@@ -45,7 +46,6 @@
       <a
         href="/profile/{{ profile.slug }}"
         target="_blank"
-        rel="noopener"
         class="btn btn-outline"
       >
         View My Store
@@ -113,12 +113,14 @@
 
   <!-- ACTIONS -->
 
-  <div style="
-    display:flex;
-    gap:14px;
-    margin:24px 0;
-    flex-wrap:wrap;
-  ">
+  <div
+    style="
+      display:flex;
+      gap:14px;
+      margin:24px 0;
+      flex-wrap:wrap;
+    "
+  >
 
     <a
       href="/dashboard/upload"
@@ -144,7 +146,6 @@
     <a
       href="{{ youtube_url }}"
       target="_blank"
-      rel="noopener"
       class="social-pill youtube"
     >
       ▶ YouTube Channel
@@ -154,7 +155,6 @@
       <a
         href="{{ discord_url }}"
         target="_blank"
-        rel="noopener"
         class="social-pill discord"
       >
         💬 Join our Discord
@@ -168,14 +168,16 @@
 
   <div style="margin-top:45px;">
 
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:end;
-      gap:15px;
-      flex-wrap:wrap;
-      margin-bottom:18px;
-    ">
+    <div
+      style="
+        display:flex;
+        justify-content:space-between;
+        align-items:end;
+        gap:15px;
+        flex-wrap:wrap;
+        margin-bottom:18px;
+      "
+    >
 
       <div>
 
@@ -184,12 +186,14 @@
         </h2>
 
         <p class="sub" style="margin:5px 0 0;">
+
           {{ track_total }}
           track{{ '' if track_total == 1 else 's' }}
 
           {% if track_search %}
             matching "{{ track_search }}"
           {% endif %}
+
         </p>
 
       </div>
@@ -245,27 +249,21 @@
             style="padding:18px;"
           >
 
-            <!-- ------------------------------------------------
-                 R2 COVER ART
-                 IMPORTANT:
-                 track.cover_art_path is already a direct
-                 R2 URL from dashboard.py.
-                 Do NOT prepend /media/.
-                 ------------------------------------------------ -->
+            {% if track.cover_url %}
 
-            {% if track.cover_art_path %}
-
-              <div style="
-                width:100%;
-                aspect-ratio:1/1;
-                margin-bottom:14px;
-                overflow:hidden;
-                border-radius:10px;
-                background:#111;
-              ">
+              <div
+                style="
+                  width:100%;
+                  aspect-ratio:1/1;
+                  margin-bottom:14px;
+                  overflow:hidden;
+                  border-radius:10px;
+                  background:#111;
+                "
+              >
 
                 <img
-                  src="{{ track.cover_art_path }}"
+                  src="{{ track.cover_url }}"
                   alt="{{ track.title }}"
                   loading="lazy"
                   style="
@@ -274,7 +272,6 @@
                     object-fit:cover;
                     display:block;
                   "
-                  onerror="this.style.display='none';"
                 >
 
               </div>
@@ -293,10 +290,12 @@
             </div>
 
 
-            <h3 style="
-              font-size:19px;
-              margin:5px 0 8px;
-            ">
+            <h3
+              style="
+                font-size:19px;
+                margin:5px 0 8px;
+              "
+            >
               {{ track.title }}
             </h3>
 
@@ -306,12 +305,14 @@
             </div>
 
 
-            <div style="
-              display:flex;
-              gap:7px;
-              flex-wrap:wrap;
-              margin-top:10px;
-            ">
+            <div
+              style="
+                display:flex;
+                gap:7px;
+                flex-wrap:wrap;
+                margin-top:10px;
+              "
+            >
 
               {% if track.sales_model.value == 'exclusive' %}
 
@@ -355,16 +356,17 @@
             </div>
 
 
-            <div style="
-              display:flex;
-              gap:8px;
-              margin-top:16px;
-            ">
+            <div
+              style="
+                display:flex;
+                gap:8px;
+                margin-top:16px;
+              "
+            >
 
               <a
                 href="/track/{{ track.slug }}"
                 target="_blank"
-                rel="noopener"
                 class="btn btn-outline"
               >
                 View Store Page
@@ -383,14 +385,16 @@
 
       {% if track_total_pages > 1 %}
 
-        <div style="
-          display:flex;
-          justify-content:center;
-          align-items:center;
-          gap:8px;
-          flex-wrap:wrap;
-          margin-top:28px;
-        ">
+        <div
+          style="
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            gap:8px;
+            flex-wrap:wrap;
+            margin-top:28px;
+          "
+        >
 
           {% if track_page > 1 %}
 
@@ -481,10 +485,12 @@
 
   <!-- RECENT SALES -->
 
-  <h2 style="
-    font-size:20px;
-    margin-top:45px;
-  ">
+  <h2
+    style="
+      font-size:20px;
+      margin-top:45px;
+    "
+  >
     Recent Sales
   </h2>
 
@@ -548,10 +554,12 @@
 
   <!-- WITHDRAWAL -->
 
-  <h2 style="
-    font-size:20px;
-    margin-top:45px;
-  ">
+  <h2
+    style="
+      font-size:20px;
+      margin-top:45px;
+    "
+  >
     Request Withdrawal
   </h2>
 
@@ -612,10 +620,6 @@ function copyStoreLink() {
   const input = document.getElementById("store-link");
   const message = document.getElementById("copy-message");
 
-  if (!input || !message) {
-    return;
-  }
-
   navigator.clipboard.writeText(input.value)
     .then(function () {
       message.textContent =
@@ -623,14 +627,7 @@ function copyStoreLink() {
     })
     .catch(function () {
       input.select();
-      input.setSelectionRange(0, 99999);
-
-      try {
-        document.execCommand("copy");
-      } catch (e) {
-        // Ignore clipboard fallback errors.
-      }
-
+      document.execCommand("copy");
       message.textContent =
         "Store link copied. Share it anywhere.";
     });
