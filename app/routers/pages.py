@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -11,19 +12,26 @@ from app.models.user import User
 from app.services.search import run_search
 from app.utils.deps import get_optional_user, require_user
 
+
 router = APIRouter(tags=["pages"])
 
 templates = Jinja2Templates(directory="app/templates")
 
 
-def ctx(request: Request, current_user: Optional[User], **extra):
-    base = {
+def ctx(
+    request: Request,
+    current_user: Optional[User],
+    **extra,
+):
+    context = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
-    base.update(extra)
-    return base
+
+    context.update(extra)
+
+    return context
 
 
 @router.get("/")
@@ -43,8 +51,8 @@ def home(
                 request,
                 current_user,
                 query=q,
-                results=found["results"],
-                total_results=found["total"],
+                results=found.get("results", {}),
+                total_results=found.get("total", 0),
             ),
         )
 
@@ -76,6 +84,69 @@ def search(
     )
 
 
+@router.get("/beats")
+def beats(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    found = run_search(db, "beats")
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        ctx(
+            request,
+            current_user,
+            query="beats",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
+        ),
+    )
+
+
+@router.get("/sessions")
+def sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    found = run_search(db, "sessions")
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        ctx(
+            request,
+            current_user,
+            query="sessions",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
+        ),
+    )
+
+
+@router.get("/hot-picks")
+def hot_picks(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    found = run_search(db, "hot")
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        ctx(
+            request,
+            current_user,
+            query="hot",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
+        ),
+    )
+
+
 @router.get("/terms")
 def terms(
     request: Request,
@@ -84,7 +155,10 @@ def terms(
     return templates.TemplateResponse(
         request,
         "terms.html",
-        ctx(request, current_user),
+        ctx(
+            request,
+            current_user,
+        ),
     )
 
 
@@ -145,23 +219,29 @@ def account(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    if current_user.role.value == "creator":
-        from fastapi.responses import RedirectResponse
+    role = (
+        current_user.role.value
+        if hasattr(current_user.role, "value")
+        else str(current_user.role)
+    )
 
+    if role == "creator":
         return RedirectResponse(
             url="/dashboard",
             status_code=303,
         )
 
-    if current_user.role.value == "admin":
-        from fastapi.responses import RedirectResponse
-
+    if role == "admin":
         return RedirectResponse(
             url="/admin",
             status_code=303,
         )
 
-    profile = getattr(current_user, "profile", None)
+    profile = getattr(
+        current_user,
+        "profile",
+        None,
+    )
 
     return templates.TemplateResponse(
         request,
