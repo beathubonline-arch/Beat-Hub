@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard — BeatHub{% endblock %}
+{% block title %}Dashboard - BeatHub{% endblock %}
 
 {% block content %}
 
@@ -10,7 +10,7 @@
     Welcome back, {{ profile.stage_name }}
   </h1>
 
-  <!-- PUBLIC STORE LINK -->
+  <!-- PUBLIC STORE -->
 
   <div class="form-card" style="margin:20px 0 28px; padding:20px;">
 
@@ -23,8 +23,8 @@
     </h2>
 
     <p class="sub" style="margin-bottom:14px;">
-      Send this link to artists, buyers, fans or your social media followers.
-      They can browse your music and purchase available tracks.
+      Send this link to artists, buyers, fans or your social media
+      followers. They can browse your music and purchase available tracks.
     </p>
 
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -32,7 +32,7 @@
       <input
         id="store-link"
         type="text"
-        value="{{ request.url.scheme }}://{{ request.url.netloc }}{{ store_url }}"
+        value="{{ store_url }}"
         readonly
         style="flex:1; min-width:260px;"
       >
@@ -70,65 +70,42 @@
   <div class="dashboard-grid">
 
     <div class="stat-card">
-      <div class="label">
-        Total Sales
-      </div>
-
+      <div class="label">Total Sales</div>
       <div class="value">
         {{ stats.total_sales }}
       </div>
     </div>
 
-
     <div class="stat-card">
-      <div class="label">
-        Net Earnings
-      </div>
-
+      <div class="label">Net Earnings</div>
       <div class="value teal">
         KSh {{ '%.2f'|format(stats.net_earnings) }}
       </div>
     </div>
 
-
     <div class="stat-card">
-      <div class="label">
-        Available Balance
-      </div>
-
+      <div class="label">Available Balance</div>
       <div class="value gold">
         KSh {{ '%.2f'|format(stats.available_balance) }}
       </div>
     </div>
 
-
     <div class="stat-card">
-      <div class="label">
-        Pending Withdrawal
-      </div>
-
+      <div class="label">Pending Withdrawal</div>
       <div class="value">
         KSh {{ '%.2f'|format(stats.pending_withdrawal) }}
       </div>
     </div>
 
-
     <div class="stat-card">
-      <div class="label">
-        Tracks
-      </div>
-
+      <div class="label">Tracks</div>
       <div class="value">
         {{ track_count }}
       </div>
     </div>
 
-
     <div class="stat-card">
-      <div class="label">
-        Albums
-      </div>
-
+      <div class="label">Albums</div>
       <div class="value">
         {{ album_count }}
       </div>
@@ -175,20 +152,18 @@
       rel="noopener"
       class="social-pill youtube"
     >
-      ▶ YouTube Channel
+      YouTube Channel
     </a>
 
     {% if discord_url %}
-
       <a
         href="{{ discord_url }}"
         target="_blank"
         rel="noopener"
         class="social-pill discord"
       >
-        💬 Join our Discord
+        Join our Discord
       </a>
-
     {% endif %}
 
   </div>
@@ -281,15 +256,7 @@
             style="padding:18px;"
           >
 
-            <!-- ---------------------------------------------------
-                 COVER ART
-                 ---------------------------------------------------
-
-                 IMPORTANT:
-                 cover_art_url is already a complete R2 URL.
-
-                 DO NOT prefix it with /media/.
-            -->
+            <!-- COVER ART -->
 
             {% if track.cover_art_url %}
 
@@ -314,29 +281,9 @@
                     object-fit:cover;
                     display:block;
                   "
-                  onerror="this.style.display='none';"
+                  onerror="this.parentElement.style.display='none';"
                 >
 
-              </div>
-
-            {% else %}
-
-              <div
-                style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  margin-bottom:14px;
-                  overflow:hidden;
-                  border-radius:10px;
-                  background:#111;
-                  display:flex;
-                  align-items:center;
-                  justify-content:center;
-                "
-              >
-                <span class="sub">
-                  No Cover Art
-                </span>
               </div>
 
             {% endif %}
@@ -424,6 +371,7 @@
                 display:flex;
                 gap:8px;
                 margin-top:16px;
+                flex-wrap:wrap;
               "
             >
 
@@ -466,15 +414,14 @@
               href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page - 1 }}"
               class="btn btn-outline"
             >
-              ← Previous
+              Previous
             </a>
 
           {% endif %}
 
 
           <span class="sub">
-            Page
-            {{ track_page }}
+            Page {{ track_page }}
             of
             {{ track_total_pages }}
           </span>
@@ -486,7 +433,7 @@
               href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page + 1 }}"
               class="btn btn-outline"
             >
-              Next →
+              Next
             </a>
 
           {% endif %}
@@ -585,11 +532,13 @@
           </td>
 
           <td>
+
             {{
               o.completed_at.strftime('%d %b %Y')
               if o.completed_at
               else ''
             }}
+
           </td>
 
           <td>
@@ -686,29 +635,26 @@ function copyStoreLink() {
   const input = document.getElementById("store-link");
   const message = document.getElementById("copy-message");
 
-  if (!input || !message) {
+  if (!input) {
     return;
   }
-
-  const value = input.value;
 
   if (
     navigator.clipboard &&
     window.isSecureContext
   ) {
-    navigator.clipboard.writeText(value)
-      .then(function () {
-        message.textContent =
-          "Store link copied. Share it anywhere.";
-      })
-      .catch(function () {
-        fallbackCopy(input, message);
-      });
+    navigator.clipboard.writeText(
+      input.value
+    ).then(function () {
+      message.textContent =
+        "Store link copied. Share it anywhere.";
+    }).catch(function () {
+      fallbackCopy(input, message);
+    });
   } else {
     fallbackCopy(input, message);
   }
 }
-
 
 function fallbackCopy(input, message) {
   input.focus();
@@ -719,12 +665,9 @@ function fallbackCopy(input, message) {
 
     message.textContent =
       "Store link copied. Share it anywhere.";
-
   } catch (error) {
-
     message.textContent =
       "Copy failed. Please copy the link manually.";
-
   }
 }
 </script>
