@@ -22,27 +22,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.ledger import (
-    WithdrawalRequest,
-    WithdrawalStatus,
-)
-from app.models.music import (
-    Album,
-    AlbumTrack,
-    SalesModel,
-    Track,
-)
-from app.models.order import (
-    Order,
-    OrderStatus,
-)
+from app.models.ledger import WithdrawalRequest, WithdrawalStatus
+from app.models.music import Album, AlbumTrack, SalesModel, Track
+from app.models.order import Order, OrderStatus
 from app.models.user import User
 from app.utils.deps import require_creator
 
 
-router = APIRouter(
-    tags=["dashboard"]
-)
+router = APIRouter(tags=["dashboard"])
 
 templates = Jinja2Templates(
     directory="app/templates"
@@ -62,12 +49,8 @@ def get_r2_client():
     return boto3.client(
         "s3",
         endpoint_url=settings.r2_endpoint_url,
-        aws_access_key_id=(
-            settings.R2_ACCESS_KEY_ID
-        ),
-        aws_secret_access_key=(
-            settings.R2_SECRET_ACCESS_KEY
-        ),
+        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
         region_name="auto",
     )
 
@@ -101,10 +84,7 @@ def upload_to_r2(
         )
 
 
-def r2_key(
-    path: Optional[str],
-) -> Optional[str]:
-
+def r2_key(path: Optional[str]) -> Optional[str]:
     if not path:
         return None
 
@@ -125,7 +105,6 @@ def r2_key(
 def r2_presigned_url(
     path: Optional[str],
 ) -> Optional[str]:
-
     key = r2_key(path)
 
     if not key:
@@ -135,7 +114,7 @@ def r2_presigned_url(
         return (
             settings.R2_PUBLIC_URL.rstrip("/")
             + "/"
-            + key
+            + key.lstrip("/")
         )
 
     client = get_r2_client()
@@ -146,9 +125,7 @@ def r2_presigned_url(
             "Bucket": settings.R2_BUCKET_NAME,
             "Key": key,
         },
-        ExpiresIn=(
-            settings.R2_PUBLIC_URL_EXPIRES
-        ),
+        ExpiresIn=settings.R2_PUBLIC_URL_EXPIRES,
     )
 
 
@@ -156,11 +133,7 @@ def r2_presigned_url(
 # CONTEXT
 # ----------------------------------------------------------------------
 
-def ctx(
-    request: Request,
-    current_user,
-    **extra,
-):
+def ctx(request: Request, current_user, **extra):
     data = {
         "request": request,
         "current_user": current_user,
@@ -176,13 +149,8 @@ def ctx(
 # HELPERS
 # ----------------------------------------------------------------------
 
-def safe_filename(
-    filename: str,
-) -> str:
-
-    filename = os.path.basename(
-        filename or ""
-    )
+def safe_filename(filename: str) -> str:
+    filename = os.path.basename(filename or "")
 
     filename = re.sub(
         r"[^a-zA-Z0-9.\_-]+",
@@ -193,46 +161,35 @@ def safe_filename(
     return filename or "upload"
 
 
-def make_slug(
-    value: str,
-) -> str:
-
+def make_slug(value: str) -> str:
     slug = re.sub(
         r"[^a-zA-Z0-9]+",
         "-",
         value.strip(),
     ).strip("-").lower()
 
-    return (
-        slug
-        or f"track-{uuid.uuid4().hex[:8]}"
-    )
+    return slug or f"track-{uuid.uuid4().hex[:8]}"
 
 
 def unique_track_slug(
     db: Session,
     title: str,
 ) -> str:
-
     base = make_slug(title)
+
     slug = base
     number = 2
 
-    while (
-        db.query(Track)
-        .filter(Track.slug == slug)
-        .first()
-    ):
+    while db.query(Track).filter(
+        Track.slug == slug
+    ).first():
         slug = f"{base}-{number}"
         number += 1
 
     return slug
 
 
-def extension(
-    filename: str,
-) -> str:
-
+def extension(filename: str) -> str:
     return os.path.splitext(
         filename or ""
     )[1].lower()
@@ -253,29 +210,18 @@ def get_stats(
             Order.track_id == Track.id,
         )
         .filter(
-            Track.creator_profile_id
-            == profile_id,
-            Order.status
-            == OrderStatus.COMPLETED,
+            Track.creator_profile_id == profile_id,
+            Order.status == OrderStatus.COMPLETED,
         )
-        .order_by(
-            Order.completed_at.desc()
-        )
+        .order_by(Order.completed_at.desc())
         .all()
     )
 
-    total_sales = len(
-        completed_orders
-    )
+    total_sales = len(completed_orders)
 
     gross = sum(
         (
-            Decimal(
-                str(
-                    o.gross_amount
-                    or 0
-                )
-            )
+            Decimal(str(o.gross_amount or 0))
             for o in completed_orders
         ),
         Decimal("0"),
@@ -283,12 +229,7 @@ def get_stats(
 
     commission = sum(
         (
-            Decimal(
-                str(
-                    o.commission_amount
-                    or 0
-                )
-            )
+            Decimal(str(o.commission_amount or 0))
             for o in completed_orders
         ),
         Decimal("0"),
@@ -296,12 +237,7 @@ def get_stats(
 
     net = sum(
         (
-            Decimal(
-                str(
-                    o.net_amount
-                    or 0
-                )
-            )
+            Decimal(str(o.net_amount or 0))
             for o in completed_orders
         ),
         Decimal("0"),
@@ -310,17 +246,13 @@ def get_stats(
     paid_withdrawals = (
         db.query(
             func.coalesce(
-                func.sum(
-                    WithdrawalRequest.amount
-                ),
+                func.sum(WithdrawalRequest.amount),
                 0,
             )
         )
         .filter(
-            WithdrawalRequest.creator_profile_id
-            == profile_id,
-            WithdrawalRequest.status
-            == WithdrawalStatus.PAID,
+            WithdrawalRequest.creator_profile_id == profile_id,
+            WithdrawalRequest.status == WithdrawalStatus.PAID,
         )
         .scalar()
     )
@@ -328,15 +260,12 @@ def get_stats(
     pending_withdrawals = (
         db.query(
             func.coalesce(
-                func.sum(
-                    WithdrawalRequest.amount
-                ),
+                func.sum(WithdrawalRequest.amount),
                 0,
             )
         )
         .filter(
-            WithdrawalRequest.creator_profile_id
-            == profile_id,
+            WithdrawalRequest.creator_profile_id == profile_id,
             WithdrawalRequest.status.in_(
                 [
                     WithdrawalStatus.PENDING,
@@ -349,17 +278,11 @@ def get_stats(
     )
 
     paid_withdrawals = Decimal(
-        str(
-            paid_withdrawals
-            or 0
-        )
+        str(paid_withdrawals or 0)
     )
 
     pending_withdrawals = Decimal(
-        str(
-            pending_withdrawals
-            or 0
-        )
+        str(pending_withdrawals or 0)
     )
 
     available_balance = (
@@ -376,15 +299,9 @@ def get_stats(
         "gross_revenue": gross,
         "platform_commission": commission,
         "net_earnings": net,
-        "available_balance": (
-            available_balance
-        ),
-        "pending_withdrawal": (
-            pending_withdrawals
-        ),
-        "recent_orders": (
-            completed_orders[:8]
-        ),
+        "available_balance": available_balance,
+        "pending_withdrawal": pending_withdrawals,
+        "recent_orders": completed_orders[:8],
     }
 
 
@@ -397,9 +314,7 @@ def get_stats(
 def dashboard_home(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(
-        require_creator
-    ),
+    user: User = Depends(require_creator),
     page: int = 1,
     q: str = "",
 ):
@@ -407,10 +322,7 @@ def dashboard_home(
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/?"
-                "error=Creator%20profile%20not%20found."
-            ),
+            url="/?error=Creator profile not found.",
             status_code=303,
         )
 
@@ -422,8 +334,7 @@ def dashboard_home(
     track_count = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
         .count()
     )
@@ -431,18 +342,14 @@ def dashboard_home(
     album_count = (
         db.query(Album)
         .filter(
-            Album.creator_profile_id
-            == profile.id
+            Album.creator_profile_id == profile.id
         )
         .count()
     )
 
     try:
         page = int(page)
-    except (
-        TypeError,
-        ValueError,
-    ):
+    except (TypeError, ValueError):
         page = 1
 
     if page < 1:
@@ -453,33 +360,22 @@ def dashboard_home(
     tracks_query = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
     )
 
-    q = (
-        q or ""
-    ).strip()
+    q = (q or "").strip()
 
     if q:
         search_term = f"%{q}%"
 
         tracks_query = tracks_query.filter(
-            Track.title.ilike(
-                search_term
-            )
-            | Track.genre.ilike(
-                search_term
-            )
-            | Track.tags.ilike(
-                search_term
-            )
+            Track.title.ilike(search_term)
+            | Track.genre.ilike(search_term)
+            | Track.tags.ilike(search_term)
         )
 
-    track_total = (
-        tracks_query.count()
-    )
+    track_total = tracks_query.count()
 
     track_total_pages = max(
         1,
@@ -508,16 +404,25 @@ def dashboard_home(
         .all()
     )
 
+    # --------------------------------------------------------------
+    # Generate direct R2 URLs for dashboard artwork.
+    #
+    # IMPORTANT:
+    # The template must NOT prepend /media/ to these URLs.
+    # --------------------------------------------------------------
+
     for track in tracks:
         if track.cover_art_path:
             try:
-                track.cover_art_path = (
-                    r2_presigned_url(
-                        track.cover_art_path
-                    )
+                signed_url = r2_presigned_url(
+                    track.cover_art_path
                 )
+
+                if signed_url:
+                    track.cover_art_path = signed_url
+
             except Exception:
-                track.cover_art_path = None
+                pass
 
     track_page = page
     track_search = q
@@ -555,24 +460,16 @@ def dashboard_home(
             album_count=album_count,
             tracks=tracks,
             track_page=track_page,
-            track_total_pages=(
-                track_total_pages
-            ),
+            track_total_pages=track_total_pages,
             track_total=track_total,
-            track_total_count=(
-                track_total_count
-            ),
-            track_per_page=(
-                track_per_page
-            ),
+            track_total_count=track_total_count,
+            track_per_page=track_per_page,
             track_search=track_search,
             track_start=track_start,
             track_end=track_end,
             q=q,
             youtube_url=youtube_url,
-            discord_url=(
-                settings.DISCORD_INVITE_URL
-            ),
+            discord_url=settings.DISCORD_INVITE_URL,
             store_url=store_url,
         ),
     )
@@ -585,17 +482,12 @@ def dashboard_home(
 @router.get("/dashboard/upload")
 def upload_page(
     request: Request,
-    user: User = Depends(
-        require_creator
-    ),
+    user: User = Depends(require_creator),
 ):
     return templates.TemplateResponse(
         request,
         "upload_track.html",
-        ctx(
-            request,
-            user,
-        ),
+        ctx(request, user),
     )
 
 
@@ -607,32 +499,18 @@ def upload_page(
 async def upload_tracks(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(
-        require_creator
-    ),
+    user: User = Depends(require_creator),
     titles: List[str] = Form(...),
-    descriptions: List[str] = Form(
-        default=[]
-    ),
-    genres: List[str] = Form(
-        default=[]
-    ),
-    bpms: List[str] = Form(
-        default=[]
-    ),
-    tags_list: List[str] = Form(
-        default=[]
-    ),
+    descriptions: List[str] = Form(default=[]),
+    genres: List[str] = Form(default=[]),
+    bpms: List[str] = Form(default=[]),
+    tags_list: List[str] = Form(default=[]),
     prices: List[str] = Form(...),
-    sales_models: List[str] = Form(
+    sales_models: List[str] = Form(default=[]),
+    audio_files: List[UploadFile] = File(...),
+    cover_files: List[Optional[UploadFile]] = File(
         default=[]
     ),
-    audio_files: List[UploadFile] = File(
-        ...
-    ),
-    cover_files: List[
-        Optional[UploadFile]
-    ] = File(default=[]),
 ):
     profile = user.profile
 
@@ -643,10 +521,7 @@ async def upload_tracks(
             ctx(
                 request,
                 user,
-                error=(
-                    "Creator profile "
-                    "not found."
-                ),
+                error="Creator profile not found.",
             ),
             status_code=400,
         )
@@ -659,9 +534,8 @@ async def upload_tracks(
                 request,
                 user,
                 error=(
-                    "Cloudflare R2 is not "
-                    "configured. Check your "
-                    "Render environment variables."
+                    "Cloud storage is not configured. "
+                    "Please configure Cloudflare R2."
                 ),
             ),
             status_code=500,
@@ -676,10 +550,7 @@ async def upload_tracks(
             ctx(
                 request,
                 user,
-                error=(
-                    "Please add at least "
-                    "one track."
-                ),
+                error="Please add at least one track.",
             ),
             status_code=400,
         )
@@ -691,10 +562,7 @@ async def upload_tracks(
             ctx(
                 request,
                 user,
-                error=(
-                    "Each track must have "
-                    "an audio file."
-                ),
+                error="Each track must have an audio file.",
             ),
             status_code=400,
         )
@@ -703,27 +571,18 @@ async def upload_tracks(
 
     try:
         for index in range(count):
-
-            title = (
-                titles[index]
-                .strip()
-            )
+            title = titles[index].strip()
 
             if not title:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "title is required."
+                    f"Track {index + 1}: title is required."
                 )
 
             audio = audio_files[index]
 
-            if (
-                not audio
-                or not audio.filename
-            ):
+            if not audio or not audio.filename:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "audio file is required."
+                    f"Track {index + 1}: audio file is required."
                 )
 
             audio_ext = extension(
@@ -737,8 +596,7 @@ async def upload_tracks(
                 ".flac",
             }:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "unsupported audio format."
+                    f"Track {index + 1}: unsupported audio format."
                 )
 
             try:
@@ -750,22 +608,19 @@ async def upload_tracks(
                 ValueError,
             ):
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "invalid price."
+                    f"Track {index + 1}: invalid price."
                 )
 
             if price_value < 0:
                 raise ValueError(
-                    f"Track {index + 1}: "
-                    "price cannot be negative."
+                    f"Track {index + 1}: price cannot be negative."
                 )
 
             sales_value = (
                 sales_models[index]
                 .strip()
                 .lower()
-                if index
-                < len(sales_models)
+                if index < len(sales_models)
                 else "non_exclusive"
             )
 
@@ -773,9 +628,7 @@ async def upload_tracks(
                 "exclusive",
                 "non_exclusive",
             }:
-                sales_value = (
-                    "non_exclusive"
-                )
+                sales_value = "non_exclusive"
 
             bpm_value = None
 
@@ -789,57 +642,48 @@ async def upload_tracks(
                     )
                 except ValueError:
                     raise ValueError(
-                        f"Track {index + 1}: "
-                        "BPM must be a number."
+                        f"Track {index + 1}: BPM must be a number."
                     )
 
-            track_id = str(
-                uuid.uuid4()
+            track_id = str(uuid.uuid4())
+
+            slug = unique_track_slug(
+                db,
+                title,
             )
 
-            slug = (
-                unique_track_slug(
-                    db,
-                    title,
-                )
-            )
-
-            # --------------------------------------------------
-            # AUDIO
-            # --------------------------------------------------
+            # ------------------------------------------------------
+            # R2 AUDIO
+            # ------------------------------------------------------
 
             audio_key = (
-                f"audio/"
-                f"{track_id}"
-                f"{audio_ext}"
+                f"audio/{track_id}{audio_ext}"
+            )
+
+            content_type = (
+                audio.content_type
+                or "application/octet-stream"
             )
 
             upload_to_r2(
                 audio,
                 audio_key,
-                (
-                    audio.content_type
-                    or "application/octet-stream"
-                ),
+                content_type,
             )
 
-            # --------------------------------------------------
-            # COVER
-            # --------------------------------------------------
+            # ------------------------------------------------------
+            # R2 COVER
+            # ------------------------------------------------------
 
             cover_path = None
 
             cover = (
                 cover_files[index]
-                if index
-                < len(cover_files)
+                if index < len(cover_files)
                 else None
             )
 
-            if (
-                cover
-                and cover.filename
-            ):
+            if cover and cover.filename:
                 cover_ext = extension(
                     cover.filename
                 )
@@ -851,80 +695,58 @@ async def upload_tracks(
                     ".webp",
                 }:
                     raise ValueError(
-                        f"Track {index + 1}: "
-                        "unsupported cover-art format."
+                        f"Track {index + 1}: unsupported cover-art format."
                     )
 
                 cover_key = (
-                    f"covers/"
-                    f"{track_id}"
-                    f"{cover_ext}"
+                    f"covers/{track_id}{cover_ext}"
                 )
 
                 upload_to_r2(
                     cover,
                     cover_key,
-                    (
-                        cover.content_type
-                        or "application/octet-stream"
-                    ),
+                    cover.content_type
+                    or "application/octet-stream",
                 )
 
                 cover_path = (
-                    "r2://"
+                    f"r2://"
                     f"{settings.R2_BUCKET_NAME}/"
                     f"{cover_key}"
                 )
 
             description = (
-                descriptions[index]
-                .strip()
-                if index
-                < len(descriptions)
+                descriptions[index].strip()
+                if index < len(descriptions)
                 else ""
             )
 
             genre = (
-                genres[index]
-                .strip()
-                if index
-                < len(genres)
+                genres[index].strip()
+                if index < len(genres)
                 else ""
             )
 
             tags = (
-                tags_list[index]
-                .strip()
-                if index
-                < len(tags_list)
+                tags_list[index].strip()
+                if index < len(tags_list)
                 else ""
             )
 
             track = Track(
                 id=track_id,
-                creator_profile_id=(
-                    profile.id
-                ),
+                creator_profile_id=profile.id,
                 title=title,
                 slug=slug,
                 description=(
-                    description
-                    or None
+                    description or None
                 ),
-                genre=(
-                    genre
-                    or None
-                ),
+                genre=genre or None,
                 bpm=bpm_value,
-                tags=(
-                    tags
-                    or None
-                ),
-                cover_art_path=(
-                    cover_path
-                ),
+                tags=tags or None,
+                cover_art_path=cover_path,
                 audio_file_path=(
-                    "r2://"
+                    f"r2://"
                     f"{settings.R2_BUCKET_NAME}/"
                     f"{audio_key}"
                 ),
@@ -932,8 +754,7 @@ async def upload_tracks(
                 price=price_value,
                 sales_model=(
                     SalesModel.EXCLUSIVE
-                    if sales_value
-                    == "exclusive"
+                    if sales_value == "exclusive"
                     else SalesModel.NON_EXCLUSIVE
                 ),
                 is_sold=False,
@@ -941,9 +762,7 @@ async def upload_tracks(
             )
 
             db.add(track)
-            created_tracks.append(
-                track
-            )
+            created_tracks.append(track)
 
         db.commit()
 
@@ -956,10 +775,7 @@ async def upload_tracks(
             ctx(
                 request,
                 user,
-                error=(
-                    "Upload failed: "
-                    f"{str(exc)}"
-                ),
+                error=f"Upload failed: {str(exc)}",
             ),
             status_code=400,
         )
@@ -978,32 +794,24 @@ async def upload_tracks(
 # ALBUMS
 # ----------------------------------------------------------------------
 
-@router.get(
-    "/dashboard/albums/new"
-)
+@router.get("/dashboard/albums/new")
 def new_album_page(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(
-        require_creator
-    ),
+    user: User = Depends(require_creator),
 ):
     profile = user.profile
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Creator%20profile%20not%20found."
-            ),
+            url="/dashboard?error=Creator profile not found.",
             status_code=303,
         )
 
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
         .order_by(
             Track.created_at.desc()
@@ -1022,33 +830,22 @@ def new_album_page(
     )
 
 
-@router.post(
-    "/dashboard/albums/new"
-)
+@router.post("/dashboard/albums/new")
 async def create_album(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(
-        require_creator
-    ),
+    user: User = Depends(require_creator),
     title: str = Form(...),
     description: str = Form(""),
     genre: str = Form(""),
-    artwork: Optional[
-        UploadFile
-    ] = File(None),
-    track_ids: List[str] = Form(
-        default=[]
-    ),
+    artwork: Optional[UploadFile] = File(None),
+    track_ids: List[str] = Form(default=[]),
 ):
     profile = user.profile
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Creator%20profile%20not%20found."
-            ),
+            url="/dashboard?error=Creator profile not found.",
             status_code=303,
         )
 
@@ -1056,7 +853,7 @@ async def create_album(
         return RedirectResponse(
             url=(
                 "/dashboard?"
-                "error=Cloud%20storage%20is%20not%20configured."
+                "error=Cloud storage is not configured."
             ),
             status_code=303,
         )
@@ -1066,8 +863,7 @@ async def create_album(
     existing_tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id
+            Track.creator_profile_id == profile.id
         )
         .order_by(
             Track.created_at.desc()
@@ -1083,10 +879,7 @@ async def create_album(
                 request,
                 user,
                 tracks=existing_tracks,
-                error=(
-                    "Album title "
-                    "is required."
-                ),
+                error="Album title is required.",
             ),
             status_code=400,
         )
@@ -1099,10 +892,7 @@ async def create_album(
                 request,
                 user,
                 tracks=existing_tracks,
-                error=(
-                    "Select at least "
-                    "one track for the album."
-                ),
+                error="Select at least one track for the album.",
             ),
             status_code=400,
         )
@@ -1110,16 +900,13 @@ async def create_album(
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id
-            == profile.id,
+            Track.creator_profile_id == profile.id,
             Track.id.in_(track_ids),
         )
         .all()
     )
 
-    if len(tracks) != len(
-        set(track_ids)
-    ):
+    if len(tracks) != len(set(track_ids)):
         return templates.TemplateResponse(
             request,
             "upload_album.html",
@@ -1127,10 +914,7 @@ async def create_album(
                 request,
                 user,
                 tracks=existing_tracks,
-                error=(
-                    "One or more selected "
-                    "tracks are invalid."
-                ),
+                error="One or more selected tracks are invalid.",
             ),
             status_code=400,
         )
@@ -1139,25 +923,16 @@ async def create_album(
     slug = base_slug
     suffix = 2
 
-    while (
-        db.query(Album)
-        .filter(
-            Album.slug == slug
-        )
-        .first()
-    ):
-        slug = (
-            f"{base_slug}-{suffix}"
-        )
+    while db.query(Album).filter(
+        Album.slug == slug
+    ).first():
+        slug = f"{base_slug}-{suffix}"
         suffix += 1
 
     artwork_path = None
 
     try:
-        if (
-            artwork
-            and artwork.filename
-        ):
+        if artwork and artwork.filename:
             artwork_ext = extension(
                 artwork.filename
             )
@@ -1169,51 +944,38 @@ async def create_album(
                 ".webp",
             }:
                 raise ValueError(
-                    "Unsupported album "
-                    "artwork format."
+                    "Unsupported album artwork format."
                 )
 
             artwork_key = (
-                "covers/albums/"
-                f"{uuid.uuid4()}"
-                f"{artwork_ext}"
+                f"covers/albums/"
+                f"{uuid.uuid4()}{artwork_ext}"
             )
 
             upload_to_r2(
                 artwork,
                 artwork_key,
-                (
-                    artwork.content_type
-                    or "application/octet-stream"
-                ),
+                artwork.content_type
+                or "application/octet-stream",
             )
 
             artwork_path = (
-                "r2://"
+                f"r2://"
                 f"{settings.R2_BUCKET_NAME}/"
                 f"{artwork_key}"
             )
 
         album = Album(
-            id=str(
-                uuid.uuid4()
-            ),
-            creator_profile_id=(
-                profile.id
-            ),
+            id=str(uuid.uuid4()),
+            creator_profile_id=profile.id,
             title=title,
             slug=slug,
             description=(
                 description.strip()
                 or None
             ),
-            genre=(
-                genre.strip()
-                or None
-            ),
-            artwork_path=(
-                artwork_path
-            ),
+            genre=genre.strip() or None,
+            artwork_path=artwork_path,
             is_published=True,
         )
 
@@ -1225,21 +987,15 @@ async def create_album(
             for track in tracks
         }
 
-        for (
-            position,
-            track_id,
-        ) in enumerate(track_ids):
-
-            track = track_map.get(
-                track_id
-            )
+        for position, track_id in enumerate(
+            track_ids
+        ):
+            track = track_map.get(track_id)
 
             if track:
                 db.add(
                     AlbumTrack(
-                        id=str(
-                            uuid.uuid4()
-                        ),
+                        id=str(uuid.uuid4()),
                         album_id=album.id,
                         track_id=track.id,
                         position=position,
@@ -1259,8 +1015,7 @@ async def create_album(
                 user,
                 tracks=existing_tracks,
                 error=(
-                    "Album creation failed: "
-                    f"{str(exc)}"
+                    f"Album creation failed: {str(exc)}"
                 ),
             ),
             status_code=400,
@@ -1276,15 +1031,11 @@ async def create_album(
 # WITHDRAWAL
 # ----------------------------------------------------------------------
 
-@router.post(
-    "/dashboard/withdraw"
-)
+@router.post("/dashboard/withdraw")
 def request_withdrawal(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(
-        require_creator
-    ),
+    user: User = Depends(require_creator),
     amount: str = Form(...),
     phone_number: str = Form(...),
 ):
@@ -1292,32 +1043,21 @@ def request_withdrawal(
 
     if not profile:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Creator%20profile%20not%20found."
-            ),
+            url="/dashboard?error=Creator profile not found.",
             status_code=303,
         )
 
     try:
-        amount_value = Decimal(
-            amount
-        )
+        amount_value = Decimal(amount)
     except Exception:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Invalid%20withdrawal%20amount."
-            ),
+            url="/dashboard?error=Invalid withdrawal amount.",
             status_code=303,
         )
 
     if amount_value <= 0:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Amount%20must%20be%20greater%20than%20zero."
-            ),
+            url="/dashboard?error=Amount must be greater than zero.",
             status_code=303,
         )
 
@@ -1326,49 +1066,31 @@ def request_withdrawal(
         profile.id,
     )
 
-    if (
-        amount_value
-        > stats["available_balance"]
-    ):
+    if amount_value > stats["available_balance"]:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=Insufficient%20available%20balance."
-            ),
+            url="/dashboard?error=Insufficient available balance.",
             status_code=303,
         )
 
-    phone_number = (
-        phone_number.strip()
-    )
+    phone_number = phone_number.strip()
 
     if not phone_number:
         return RedirectResponse(
-            url=(
-                "/dashboard?"
-                "error=M-Pesa%20phone%20number%20is%20required."
-            ),
+            url="/dashboard?error=M-Pesa phone number is required.",
             status_code=303,
         )
 
     withdrawal = WithdrawalRequest(
-        creator_profile_id=(
-            profile.id
-        ),
+        creator_profile_id=profile.id,
         amount=amount_value,
         phone_number=phone_number,
-        status=(
-            WithdrawalStatus.PENDING
-        ),
+        status=WithdrawalStatus.PENDING,
     )
 
     db.add(withdrawal)
     db.commit()
 
     return RedirectResponse(
-        url=(
-            "/dashboard?"
-            "success=Withdrawal%20request%20submitted."
-        ),
+        url="/dashboard?success=Withdrawal request submitted.",
         status_code=303,
     )
