@@ -2,6 +2,9 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import uuid
 from typing import List, Optional
 
@@ -75,6 +78,29 @@ def upload_to_r2(
         )
 
 
+def upload_file_to_r2(
+    file_path: str,
+    key: str,
+    content_type: Optional[str] = None,
+):
+    client = get_r2_client()
+
+    with open(file_path, "rb") as file_obj:
+        if content_type:
+            client.upload_fileobj(
+                file_obj,
+                settings.R2_BUCKET_NAME,
+                key,
+                ExtraArgs={"ContentType": content_type},
+            )
+        else:
+            client.upload_fileobj(
+                file_obj,
+                settings.R2_BUCKET_NAME,
+                key,
+            )
+
+
 def r2_key(path: Optional[str]) -> Optional[str]:
     if not path:
         return None
@@ -123,6 +149,117 @@ def r2_presigned_url(
             or settings.R2_PUBLIC_URL_EXPIRES
         ),
     )
+
+
+# ======================================================================
+# AUDIO PREVIEW
+# ======================================================================
+
+def create_audio_preview(
+    source_path: str,
+    preview_path: str,
+    duration: int = 30,
+):
+    """
+    Creates a short MP3 preview from the uploaded master.
+
+    The master file remains separate and is never used as the public
+    preview URL.
+    """
+
+    ffmpeg = shutil.which("ffmpeg")
+
+    if not ffmpeg:
+        raise RuntimeError(
+            "FFmpeg is not installed on the server. "
+            "Please install FFmpeg on Render."
+        )
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-i",
+        source_path,
+        "-t",
+        str(duration),
+        "-vn",
+        "-ac",
+        "2",
+        "-b:a",
+        "128k",
+        "-map_metadata",
+        "-1",
+        preview_path,
+    ]
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Could not create audio preview."
+        )
+
+    if not os.path.exists(preview_path):
+        raise RuntimeError(
+            "Audio preview was not created."
+        )
+
+    if os.path.getsize(preview_path) == 0:
+        raise RuntimeError(
+            "Audio preview is empty."
+        )
+
+
+def create_and_upload_preview(
+    upload: UploadFile,
+    preview_key: str,
+):
+    """
+    Reads the uploaded audio into a temporary file, creates a 30-second
+    MP3 preview and uploads it to R2.
+    """
+
+    upload.file.seek(0)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+
+        source_ext = extension(upload.filename)
+
+        if not source_ext:
+            source_ext = ".audio"
+
+        source_path = os.path.join(
+            temp_dir,
+            f"source{source_ext}",
+        )
+
+        preview_path = os.path.join(
+            temp_dir,
+            "preview.mp3",
+        )
+
+        with open(source_path, "wb") as output_file:
+            shutil.copyfileobj(
+                upload.file,
+                output_file,
+            )
+
+        create_audio_preview(
+            source_path,
+            preview_path,
+            duration=30,
+        )
+
+        upload_file_to_r2(
+            preview_path,
+            preview_key,
+            "audio/mpeg",
+        )
 
 
 # ======================================================================
@@ -353,8 +490,6 @@ def get_stats(
 
 # ======================================================================
 # CREATOR DASHBOARD
-# IMPORTANT:
-# NO REDIRECT TO /artist/dashboard
 # ======================================================================
 
 @router.get("/dashboard")
@@ -367,26 +502,12 @@ def dashboard_home(
     q: str = "",
 ):
 
-    # --------------------------------------------------------------
-    # BUYER ACCOUNTS
-    #
-    # IMPORTANT:
-    # We do NOT redirect to /artist/dashboard here.
-    # We render the buyer dashboard directly.
-    # This prevents redirect loops.
-    # --------------------------------------------------------------
-
     if user.role == UserRole.BUYER:
-
         return artist_dashboard_content(
             request=request,
             db=db,
             user=user,
         )
-
-    # --------------------------------------------------------------
-    # ONLY CREATOR / ADMIN CONTINUE
-    # --------------------------------------------------------------
 
     if user.role not in (
         UserRole.CREATOR,
@@ -558,6 +679,57 @@ def dashboard_home(
 
 
 # ======================================================================
+# PUBLIC 30-SECOND PREVIEW
+# ======================================================================
+
+@router.get("/preview/track/{track_id}")
+def preview_track(
+    track_id: str,
+    db: Session = Depends(get_db),
+):
+
+    track = (
+        db.query(Track)
+        .filter(
+            Track.id == track_id,
+            Track.is_published.is_(True),
+        )
+        .first()
+    )
+
+    if not track:
+        return RedirectResponse(
+            url="/",
+            status_code=303,
+        )
+
+    if not track.preview_file_path:
+        return RedirectResponse(
+            url="/track/" + track.slug,
+            status_code=303,
+        )
+
+    try:
+        preview_url = r2_presigned_url(
+            track.preview_file_path,
+            expires=300,
+        )
+    except Exception:
+        preview_url = None
+
+    if not preview_url:
+        return RedirectResponse(
+            url="/track/" + track.slug,
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=preview_url,
+        status_code=307,
+    )
+
+
+# ======================================================================
 # BUYER DASHBOARD CONTENT
 # ======================================================================
 
@@ -669,8 +841,6 @@ def artist_dashboard_content(
 
 # ======================================================================
 # BUYER / ARTIST DASHBOARD
-# IMPORTANT:
-# NO REDIRECT TO /dashboard FOR CREATOR
 # ======================================================================
 
 @router.get("/artist/dashboard")
@@ -680,13 +850,6 @@ def artist_dashboard(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-
-    # --------------------------------------------------------------
-    # CREATOR / ADMIN
-    #
-    # Do NOT redirect.
-    # Render creator dashboard directly.
-    # --------------------------------------------------------------
 
     if user.role in (
         UserRole.CREATOR,
@@ -701,10 +864,6 @@ def artist_dashboard(
             q="",
         )
 
-    # --------------------------------------------------------------
-    # BUYER
-    # --------------------------------------------------------------
-
     if user.role == UserRole.BUYER:
 
         return artist_dashboard_content(
@@ -712,10 +871,6 @@ def artist_dashboard(
             db=db,
             user=user,
         )
-
-    # --------------------------------------------------------------
-    # UNKNOWN ROLE
-    # --------------------------------------------------------------
 
     return RedirectResponse(
         url="/account",
@@ -913,6 +1068,27 @@ async def upload_tracks(
                 f"{audio_ext}"
             )
 
+            preview_key = (
+                f"previews/"
+                f"{track_id}.mp3"
+            )
+
+            # ----------------------------------------------------------
+            # CREATE 30-SECOND PREVIEW
+            # ----------------------------------------------------------
+
+            create_and_upload_preview(
+                audio,
+                preview_key,
+            )
+
+            # Reset uploaded file before uploading the master.
+            audio.file.seek(0)
+
+            # ----------------------------------------------------------
+            # UPLOAD MASTER AUDIO
+            # ----------------------------------------------------------
+
             upload_to_r2(
                 audio,
                 audio_key,
@@ -997,7 +1173,11 @@ async def upload_tracks(
                     f"{settings.R2_BUCKET_NAME}/"
                     f"{audio_key}"
                 ),
-                preview_file_path=None,
+                preview_file_path=(
+                    f"r2://"
+                    f"{settings.R2_BUCKET_NAME}/"
+                    f"{preview_key}"
+                ),
                 price=price_value,
                 sales_model=(
                     SalesModel.EXCLUSIVE
