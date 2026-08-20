@@ -29,9 +29,9 @@ from app.utils.deps import require_creator
 logger = logging.getLogger("beathub")
 
 
-# --------------------------------------------------------------
-# PATHS
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
+# DIRECTORIES
+# ----------------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
@@ -40,9 +40,9 @@ TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
 
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 # APPLICATION
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 app = FastAPI(
     title=settings.APP_NAME
@@ -53,12 +53,11 @@ templates = Jinja2Templates(
 )
 
 
-# --------------------------------------------------------------
-# STATIC
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
+# STATIC FILES
+# ----------------------------------------------------------------------
 
 if STATIC_DIR.exists():
-
     app.mount(
         "/static",
         StaticFiles(
@@ -68,18 +67,30 @@ if STATIC_DIR.exists():
     )
 
 
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
+# IMPORTANT
+#
+# Do NOT create /var/data.
+# Do NOT create local audio/covers/previews directories.
+#
+# BeatHub media is stored in Cloudflare R2.
+#
+# Full purchased audio is protected by music.py.
+# ----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
 # DATABASE
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 Base.metadata.create_all(
     bind=engine
 )
 
 
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 # ROUTERS
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 app.include_router(auth.router)
 app.include_router(pages.router)
@@ -90,9 +101,9 @@ app.include_router(dashboard.router)
 app.include_router(admin.router)
 
 
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 # DASHBOARD COMPATIBILITY
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 @app.get(
     "/artist/dashboard",
@@ -123,25 +134,30 @@ def dashboard_alias(
     )
 
 
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 # HEALTH
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 @app.get("/healthz")
 def healthz():
-
     return {
         "status": "ok",
         "app": settings.APP_NAME,
         "env": settings.APP_ENV,
-        "media_storage": settings.MEDIA_STORAGE,
+        "storage": settings.MEDIA_STORAGE,
         "r2_enabled": settings.r2_enabled,
+        "r2_bucket_configured": bool(
+            settings.R2_BUCKET_NAME
+        ),
+        "r2_endpoint_configured": bool(
+            settings.r2_endpoint_url
+        ),
     }
 
 
-# --------------------------------------------------------------
-# ERROR HANDLERS
-# --------------------------------------------------------------
+# ----------------------------------------------------------------------
+# ERRORS
+# ----------------------------------------------------------------------
 
 @app.exception_handler(
     StarletteHTTPException
@@ -150,9 +166,7 @@ async def http_exception_handler(
     request: Request,
     exc: StarletteHTTPException,
 ):
-
     if exc.status_code == 404:
-
         return templates.TemplateResponse(
             request,
             "errors/404.html",
@@ -165,17 +179,15 @@ async def http_exception_handler(
         )
 
     if exc.status_code == 401:
-
         return RedirectResponse(
             url=(
-                "/login"
-                "?error=Please%20log%20in%20to%20continue."
+                "/login?"
+                "error=Please%20log%20in%20to%20continue."
             ),
             status_code=303,
         )
 
     if exc.status_code == 403:
-
         return templates.TemplateResponse(
             request,
             "errors/403.html",
@@ -207,7 +219,6 @@ async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ):
-
     return templates.TemplateResponse(
         request,
         "errors/400.html",
@@ -226,7 +237,6 @@ async def unhandled_exception_handler(
     request: Request,
     exc: Exception,
 ):
-
     logger.exception(
         "Unhandled BeatHub error: %s",
         exc,
