@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ track.title }} — BeatHub{% endblock %}
+{% block title %}{{ track.title }} - BeatHub{% endblock %}
 
 {% block content %}
 
@@ -13,14 +13,14 @@
 
   <!-- COVER ART -->
 
-  {% if track.cover_art_url %}
+  {% if cover_art_url %}
 
     <div
       style="
         width:100%;
-        max-width:520px;
+        max-width:600px;
         aspect-ratio:1/1;
-        margin-bottom:25px;
+        margin-bottom:24px;
         overflow:hidden;
         border-radius:14px;
         background:#111;
@@ -28,7 +28,7 @@
     >
 
       <img
-        src="{{ track.cover_art_url }}"
+        src="{{ cover_art_url }}"
         alt="{{ track.title }}"
         style="
           width:100%;
@@ -36,6 +36,7 @@
           object-fit:cover;
           display:block;
         "
+        onerror="this.parentElement.style.display='none';"
       >
 
     </div>
@@ -85,13 +86,13 @@
       {% if track.is_sold %}
 
         <span class="badge badge-sold">
-          SOLD — EXCLUSIVELY OWNED
+          SOLD - EXCLUSIVELY OWNED
         </span>
 
       {% else %}
 
         <span class="badge badge-exclusive">
-          EXCLUSIVE — ONE-TIME PURCHASE
+          EXCLUSIVE - ONE-TIME PURCHASE
         </span>
 
       {% endif %}
@@ -141,9 +142,7 @@
   </div>
 
 
-  <!-- =========================================================
-       PURCHASED
-       ========================================================= -->
+  <!-- PURCHASED -->
 
   {% if purchased %}
 
@@ -167,8 +166,7 @@
 
       <p class="sub">
         Your payment has been confirmed.
-        Your purchased master audio is ready
-        to download.
+        Your purchased master audio is ready to download.
       </p>
 
 
@@ -183,9 +181,7 @@
     </div>
 
 
-  <!-- =========================================================
-       NOT PURCHASED
-       ========================================================= -->
+  <!-- NOT PURCHASED -->
 
   {% elif track.is_available %}
 
@@ -207,13 +203,9 @@
     >
 
       {% if track.sales_model.value == 'exclusive' %}
-
-        Sold — Unavailable
-
+        Sold - Unavailable
       {% else %}
-
         Unavailable
-
       {% endif %}
 
     </button>
