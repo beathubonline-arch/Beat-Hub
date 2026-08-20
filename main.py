@@ -1,7 +1,3 @@
-"""
-BeatHub — main application entrypoint.
-"""
-
 import logging
 from pathlib import Path
 
@@ -23,15 +19,11 @@ from app.routers import (
     music,
     pages,
 )
-from app.utils.deps import require_creator
-
+from app.services.search import run_search
+from app.utils.deps import get_optional_user, require_creator
 
 logger = logging.getLogger("beathub")
 
-
-# ----------------------------------------------------------------------
-# DIRECTORIES
-# ----------------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
@@ -39,10 +31,6 @@ APP_DIR = BASE_DIR / "app"
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
-
-# ----------------------------------------------------------------------
-# APPLICATION
-# ----------------------------------------------------------------------
 
 app = FastAPI(
     title=settings.APP_NAME
@@ -53,44 +41,18 @@ templates = Jinja2Templates(
 )
 
 
-# ----------------------------------------------------------------------
-# STATIC FILES
-# ----------------------------------------------------------------------
-
 if STATIC_DIR.exists():
     app.mount(
         "/static",
-        StaticFiles(
-            directory=str(STATIC_DIR)
-        ),
+        StaticFiles(directory=str(STATIC_DIR)),
         name="static",
     )
 
-
-# ----------------------------------------------------------------------
-# IMPORTANT
-#
-# Do NOT create /var/data.
-# Do NOT create local audio/covers/previews directories.
-#
-# BeatHub media is stored in Cloudflare R2.
-#
-# Full purchased audio is protected by music.py.
-# ----------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------
-# DATABASE
-# ----------------------------------------------------------------------
 
 Base.metadata.create_all(
     bind=engine
 )
 
-
-# ----------------------------------------------------------------------
-# ROUTERS
-# ----------------------------------------------------------------------
 
 app.include_router(auth.router)
 app.include_router(pages.router)
@@ -99,6 +61,87 @@ app.include_router(checkout.router)
 app.include_router(mpesa_callback.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
+
+
+# ----------------------------------------------------------------------
+# HOMEPAGE COMPATIBILITY ROUTES
+# These are intentionally defined here so the public homepage links
+# always exist even if an older pages.py is deployed.
+# ----------------------------------------------------------------------
+
+@app.get(
+    "/beats",
+    include_in_schema=False,
+)
+def beats_compat(
+    request: Request,
+    db=Depends(__import__("app.database", fromlist=["get_db"]).get_db),
+    current_user=Depends(get_optional_user),
+):
+    found = run_search(db, "beats")
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "current_year": 2026,
+            "query": "beats",
+            "results": found["results"],
+            "total_results": found["total"],
+        },
+    )
+
+
+@app.get(
+    "/sessions",
+    include_in_schema=False,
+)
+def sessions_compat(
+    request: Request,
+    db=Depends(__import__("app.database", fromlist=["get_db"]).get_db),
+    current_user=Depends(get_optional_user),
+):
+    found = run_search(db, "sessions")
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "current_year": 2026,
+            "query": "sessions",
+            "results": found["results"],
+            "total_results": found["total"],
+        },
+    )
+
+
+@app.get(
+    "/hot-picks",
+    include_in_schema=False,
+)
+def hot_picks_compat(
+    request: Request,
+    db=Depends(__import__("app.database", fromlist=["get_db"]).get_db),
+    current_user=Depends(get_optional_user),
+):
+    found = run_search(db, "hot")
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "current_year": 2026,
+            "query": "hot",
+            "results": found["results"],
+            "total_results": found["total"],
+        },
+    )
 
 
 # ----------------------------------------------------------------------
@@ -138,7 +181,10 @@ def dashboard_alias(
 # HEALTH
 # ----------------------------------------------------------------------
 
-@app.get("/healthz")
+@app.api_route(
+    "/healthz",
+    methods=["GET", "HEAD"],
+)
 def healthz():
     return {
         "status": "ok",
