@@ -23,13 +23,13 @@ def ctx(
     current_user: Optional[User],
     **extra,
 ):
-    base = {
+    context = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
-    base.update(extra)
-    return base
+    context.update(extra)
+    return context
 
 
 @router.get("/")
@@ -39,8 +39,8 @@ def home(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    if q:
-        found = run_search(db, q)
+    if q.strip():
+        found = run_search(db, q.strip())
 
         return templates.TemplateResponse(
             request,
@@ -85,20 +85,14 @@ def search(
 @router.get("/beats")
 def beats(
     request: Request,
-    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    found = run_search(db, "beats")
-
     return templates.TemplateResponse(
         request,
-        "home.html",
+        "beats.html",
         ctx(
             request,
             current_user,
-            query="beats",
-            results=found.get("results", {}),
-            total_results=found.get("total", 0),
         ),
     )
 
@@ -106,20 +100,14 @@ def beats(
 @router.get("/sessions")
 def sessions(
     request: Request,
-    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    found = run_search(db, "sessions")
-
     return templates.TemplateResponse(
         request,
-        "home.html",
+        "sessions.html",
         ctx(
             request,
             current_user,
-            query="sessions",
-            results=found.get("results", {}),
-            total_results=found.get("total", 0),
         ),
     )
 
@@ -127,20 +115,14 @@ def sessions(
 @router.get("/hot-picks")
 def hot_picks(
     request: Request,
-    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    found = run_search(db, "hot")
-
     return templates.TemplateResponse(
         request,
-        "home.html",
+        "hot-picks.html",
         ctx(
             request,
             current_user,
-            query="hot",
-            results=found.get("results", {}),
-            total_results=found.get("total", 0),
         ),
     )
 
@@ -173,14 +155,19 @@ def public_profile(
         .first()
     )
 
-    if not profile:
+    if profile is None:
         raise HTTPException(
             status_code=404,
             detail="Creator profile not found.",
         )
 
-    tracks = list(profile.tracks or [])
-    albums = list(profile.albums or [])
+    tracks = list(
+        getattr(profile, "tracks", None) or []
+    )
+
+    albums = list(
+        getattr(profile, "albums", None) or []
+    )
 
     tracks = [
         track
@@ -214,13 +201,12 @@ def public_profile(
 @router.get("/account")
 def account(
     request: Request,
-    db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    role = (
-        current_user.role.value
-        if hasattr(current_user.role, "value")
-        else str(current_user.role)
+    role = getattr(
+        current_user.role,
+        "value",
+        str(current_user.role),
     )
 
     if role == "creator":
