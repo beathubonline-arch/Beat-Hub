@@ -48,7 +48,7 @@
       <a
         href="/profile/{{ profile.slug }}"
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener"
         class="btn btn-outline"
       >
         View My Store
@@ -129,7 +129,7 @@
       href="/dashboard/upload"
       class="btn btn-primary"
     >
-      Upload Track(s)
+      Upload Beat / Track
     </a>
 
     <a
@@ -149,7 +149,7 @@
     <a
       href="{{ youtube_url }}"
       target="_blank"
-      rel="noopener noreferrer"
+      rel="noopener"
       class="social-pill youtube"
     >
       ▶ YouTube Channel
@@ -160,7 +160,7 @@
       <a
         href="{{ discord_url }}"
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener"
         class="social-pill discord"
       >
         💬 Join our Discord
@@ -258,13 +258,6 @@
             style="padding:18px;"
           >
 
-            <!-- ==================================================
-                 COVER ART
-                 IMPORTANT:
-                 Use track.cover_art_url directly.
-                 DO NOT use /media/.
-                 ================================================== -->
-
             {% if track.cover_art_url %}
 
               <div
@@ -280,7 +273,7 @@
 
                 <img
                   src="{{ track.cover_art_url }}"
-                  alt="{{ track.title }}"
+                  alt="{{ track.title }} cover art"
                   loading="lazy"
                   style="
                     width:100%;
@@ -288,7 +281,6 @@
                     object-fit:cover;
                     display:block;
                   "
-                  onerror="this.style.display='none';"
                 >
 
               </div>
@@ -384,7 +376,7 @@
               <a
                 href="/track/{{ track.slug }}"
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="noopener"
                 class="btn btn-outline"
               >
                 View Store Page
@@ -427,10 +419,8 @@
 
 
           <span class="sub">
-            Page
-            {{ track_page }}
-            of
-            {{ track_total_pages }}
+            Page {{ track_page }}
+            of {{ track_total_pages }}
           </span>
 
 
@@ -539,11 +529,8 @@
           </td>
 
           <td>
-            {{
-              o.completed_at.strftime('%d %b %Y')
-              if o.completed_at
-              else ''
-            }}
+            {{ o.completed_at.strftime('%d %b %Y')
+               if o.completed_at else '' }}
           </td>
 
           <td>
@@ -636,36 +623,45 @@
 
 
 <script>
-
 function copyStoreLink() {
+  const input = document.getElementById("store-link");
+  const message = document.getElementById("copy-message");
 
-  const input =
-    document.getElementById("store-link");
+  if (!input || !message) {
+    return;
+  }
 
-  const message =
-    document.getElementById("copy-message");
-
-  navigator.clipboard
-    .writeText(input.value)
-    .then(function () {
-
+  if (
+    navigator.clipboard &&
+    window.isSecureContext
+  ) {
+    navigator.clipboard.writeText(
+      input.value
+    ).then(function () {
       message.textContent =
         "Store link copied. Share it anywhere.";
-
-    })
-    .catch(function () {
-
-      input.select();
-
-      document.execCommand("copy");
-
-      message.textContent =
-        "Store link copied. Share it anywhere.";
-
+    }).catch(function () {
+      fallbackCopy(input, message);
     });
-
+  } else {
+    fallbackCopy(input, message);
+  }
 }
 
+function fallbackCopy(input, message) {
+  input.focus();
+  input.select();
+
+  try {
+    document.execCommand("copy");
+
+    message.textContent =
+      "Store link copied. Share it anywhere.";
+  } catch (error) {
+    message.textContent =
+      "Please copy the store link manually.";
+  }
+}
 </script>
 
 {% endblock %}
