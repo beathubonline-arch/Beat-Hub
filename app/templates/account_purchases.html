@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}My Purchases — BeatHub{% endblock %}
+
+{% block content %}
+
+<section style="padding:40px 0;">
+  <div style="max-width:1000px;margin:0 auto;">
+
+    <div class="eyebrow">MY PURCHASES</div>
+
+    <h1 style="font-size:32px;margin:6px 0 8px;">
+      Your Purchases
+    </h1>
+
+    <p style="color:var(--text-muted);">
+      Beats and licenses you own.
+    </p>
+
+    {% if licenses %}
+
+      <div style="margin-top:28px;display:grid;gap:16px;">
+
+        {% for license in licenses %}
+
+          <div class="stat-card">
+
+            <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+
+              <div>
+                <div class="label">PURCHASED</div>
+
+                {% if license.order and license.order.track %}
+
+                  <h2 style="margin:5px 0;">
+                    {{ license.order.track.title }}
+                  </h2>
+
+                  <p style="color:var(--text-muted);margin:0;">
+                    {{ license.order.sales_model_at_purchase|replace("_", " ")|title }}
+                  </p>
+
+                {% elif license.order and license.order.album %}
+
+                  <h2 style="margin:5px 0;">
+                    {{ license.order.album.title }}
+                  </h2>
+
+                  <p style="color:var(--text-muted);margin:0;">
+                    Album
+                  </p>
+
+                {% else %}
+
+                  <h2 style="margin:5px 0;">
+                    BeatHub Purchase
+                  </h2>
+
+                {% endif %}
+
+              </div>
+
+              {% if license.order %}
+
+                <div style="text-align:right;">
+                  <div class="label">ORDER</div>
+
+                  <strong>
+                    {{ license.order.order_number }}
+                  </strong>
+
+                  <div style="color:var(--text-muted);margin-top:5px;">
+                    KSh {{ "{:,.2f}".format(license.order.gross_amount|float) }}
+                  </div>
+                </div>
+
+              {% endif %}
+
+            </div>
+
+            {% if license.track_id %}
+
+              <div style="margin-top:18px;">
+                <a
+                  href="/account/download/{{ license.track_id }}"
+                  class="btn btn-primary"
+                >
+                  📥 Download
+                </a>
+              </div>
+
+            {% endif %}
+
+          </div>
+
+        {% endfor %}
+
+      </div>
+
+    {% else %}
+
+      <div class="form-card" style="margin-top:28px;padding:30px;text-align:center;">
+
+        <div style="font-size:40px;">🛒</div>
+
+        <h2>No purchases yet</h2>
+
+        <p style="color:var(--text-muted);">
+          Your completed BeatHub purchases will appear here.
+        </p>
+
+        <a href="/beats" class="btn btn-primary">
+          Browse Beats
+        </a>
+
+      </div>
+
+    {% endif %}
+
+    <div style="margin-top:25px;">
+      <a href="/account" class="btn btn-outline">
+        ← Back to My Account
+      </a>
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}
