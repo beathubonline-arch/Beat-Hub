@@ -1,6 +1,8 @@
 """
 Central application configuration.
+
 All values are sourced from environment variables / .env.
+BeatHub uses Cloudflare R2 for persistent media storage.
 """
 
 from functools import lru_cache
@@ -78,7 +80,9 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     # --------------------------------------------------------------
-    # CLOUDFLARE R2
+    # STORAGE
+    #
+    # BeatHub uses Cloudflare R2.
     # --------------------------------------------------------------
 
     MEDIA_STORAGE: str = "r2"
@@ -88,16 +92,24 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "beathub"
 
-    # Leave empty when bucket is private.
+    # Optional public/custom R2 URL.
+    #
+    # Leave EMPTY for private R2 buckets.
+    # When empty, BeatHub generates temporary presigned URLs.
+    #
     R2_PUBLIC_URL: str = ""
 
-    # Temporary URL for artwork/previews.
+    # Artwork URL lifetime.
     R2_PUBLIC_URL_EXPIRES: int = 3600
 
-    # Temporary URL for purchased downloads.
+    # Purchased audio download URL lifetime.
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
     MAX_UPLOAD_MB: int = 50
+
+    # --------------------------------------------------------------
+    # R2 HELPERS
+    # --------------------------------------------------------------
 
     @property
     def r2_enabled(self) -> bool:
@@ -115,9 +127,8 @@ class Settings(BaseSettings):
             return ""
 
         return (
-            f"https://"
-            f"{self.R2_ACCOUNT_ID}"
-            f".r2.cloudflarestorage.com"
+            f"https://{self.R2_ACCOUNT_ID}"
+            ".r2.cloudflarestorage.com"
         )
 
     # --------------------------------------------------------------
