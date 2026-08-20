@@ -1,7 +1,5 @@
 """
-FastAPI dependencies for authentication and role-based authorization.
-
-Session is carried via a secure HTTP-only cookie containing a JWT.
+FastAPI authentication and role-based authorization dependencies.
 """
 
 from typing import Optional
@@ -21,17 +19,17 @@ def get_optional_user(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    """
-    Return the currently authenticated user, if a valid session exists.
+    """Return the authenticated user or None."""
 
-    Invalid, expired, missing, or inactive sessions simply return None.
-    """
     token = request.cookies.get(SESSION_COOKIE_NAME)
 
     if not token:
         return None
 
-    payload = decode_access_token(token)
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        return None
 
     if not payload:
         return None
@@ -41,7 +39,10 @@ def get_optional_user(
     if not user_id:
         return None
 
-    user = db.get(User, user_id)
+    try:
+        user = db.get(User, str(user_id))
+    except Exception:
+        return None
 
     if not user or not user.is_active:
         return None
@@ -52,10 +53,9 @@ def get_optional_user(
 def require_user(
     user: Optional[User] = Depends(get_optional_user),
 ) -> User:
-    """
-    Require a valid authenticated user.
-    """
-    if not user:
+    """Require a valid authenticated user."""
+
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -64,15 +64,50 @@ def require_user(
     return user
 
 
+def get_role_value(user: User) -> str:
+    """
+    Normalize SQLAlchemy Enum/string roles.
+
+    This prevents routing problems when role is returned as
+    UserRole.BUYER versus 'buyer'.
+    """
+
+    role = getattr(user, "role", None)
+
+    if isinstance(role, UserRole):
+        return role.value.lower()
+
+    value = getattr(role, "value", role)
+
+    if value is None:
+        return ""
+
+    value = str(value).strip().lower()
+
+    if value.startswith("userrole."):
+        value = value.split(".", 1)[1]
+
+    return value
+
+
+def is_buyer(user: User) -> bool:
+    return get_role_value(user) == "buyer"
+
+
+def is_creator(user: User) -> bool:
+    return get_role_value(user) == "creator"
+
+
+def is_admin(user: User) -> bool:
+    return get_role_value(user) == "admin"
+
+
 def require_creator(
     user: User = Depends(require_user),
 ) -> User:
-    """
-    Allow creators and administrators to access creator functionality.
+    """Allow creators and administrators."""
 
-    Administrators retain creator-level access where appropriate.
-    """
-    if user.role not in (UserRole.CREATOR, UserRole.ADMIN):
+    if not (is_creator(user) or is_admin(user)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Creator account required",
@@ -84,10 +119,9 @@ def require_creator(
 def require_admin(
     user: User = Depends(require_user),
 ) -> User:
-    """
-    Require an authenticated administrator.
-    """
-    if user.role != UserRole.ADMIN:
+    """Require administrator access."""
+
+    if not is_admin(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrator access required",
