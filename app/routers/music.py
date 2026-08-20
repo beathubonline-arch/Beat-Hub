@@ -4,22 +4,37 @@ from typing import Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+)
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.engagement import (
+    EngagementEvent,
+    EngagementType,
+)
 from app.models.music import Track
-from app.models.order import Order, OrderStatus, License
+from app.models.order import (
+    License,
+    Order,
+    OrderStatus,
+)
 from app.models.user import User
 from app.utils.deps import get_optional_user
 
 
 router = APIRouter(tags=["music"])
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(
+    directory="app/templates"
+)
 
 
 # ============================================================
@@ -27,10 +42,14 @@ templates = Jinja2Templates(directory="app/templates")
 # ============================================================
 
 def get_r2_client():
+
     if not settings.r2_enabled:
+
         raise HTTPException(
             status_code=503,
-            detail="Cloud storage is not configured.",
+            detail=(
+                "Cloud storage is not configured."
+            ),
         )
 
     return boto3.client(
@@ -42,39 +61,61 @@ def get_r2_client():
     )
 
 
-def r2_key(path: Optional[str]) -> Optional[str]:
+def r2_key(
+    path: Optional[str],
+) -> Optional[str]:
+
     if not path:
         return None
 
     value = str(path).strip()
 
-    # Handle r2://bucket/key
     if value.startswith("r2://"):
+
         value = value[5:]
+
         parts = value.split("/", 1)
 
         if len(parts) == 2:
             value = parts[1]
 
-    # Handle full R2 URL accidentally stored in database.
     if "://" in value:
+
         try:
-            from urllib.parse import urlparse, unquote
+
+            from urllib.parse import (
+                urlparse,
+                unquote,
+            )
 
             parsed = urlparse(value)
-            value = unquote(parsed.path).lstrip("/")
 
-            # Remove bucket prefix if present.
-            bucket = getattr(settings, "R2_BUCKET_NAME", None)
-            if bucket and value.startswith(bucket + "/"):
-                value = value[len(bucket) + 1:]
+            value = unquote(
+                parsed.path
+            ).lstrip("/")
+
+            bucket = getattr(
+                settings,
+                "R2_BUCKET_NAME",
+                None,
+            )
+
+            if (
+                bucket
+                and value.startswith(
+                    bucket + "/"
+                )
+            ):
+
+                value = value[
+                    len(bucket) + 1:
+                ]
 
         except Exception:
             pass
 
     value = value.lstrip("/")
 
-    # Remove accidental "media/" prefix.
     if value.startswith("media/"):
         value = value[6:]
 
@@ -85,15 +126,20 @@ def r2_url(
     path: Optional[str],
     expires: int = 3600,
 ) -> Optional[str]:
+
     key = r2_key(path)
 
     if not key:
         return None
 
-    # Prefer configured public URL.
-    public_url = getattr(settings, "R2_PUBLIC_URL", None)
+    public_url = getattr(
+        settings,
+        "R2_PUBLIC_URL",
+        None,
+    )
 
     if public_url:
+
         return (
             public_url.rstrip("/")
             + "/"
@@ -116,6 +162,7 @@ def r2_download_url(
     path: Optional[str],
     filename: Optional[str] = None,
 ) -> Optional[str]:
+
     key = r2_key(path)
 
     if not key:
@@ -129,7 +176,10 @@ def r2_download_url(
     }
 
     if filename:
-        params["ResponseContentDisposition"] = (
+
+        params[
+            "ResponseContentDisposition"
+        ] = (
             f'attachment; filename="{filename}"'
         )
 
@@ -145,6 +195,46 @@ def r2_download_url(
 
 
 # ============================================================
+# ENGAGEMENT
+# ============================================================
+
+def record_engagement(
+    db: Session,
+    track: Track,
+    event_type: EngagementType,
+    user: Optional[User] = None,
+):
+    """
+    Records marketplace engagement.
+
+    Analytics must never prevent the music page or download
+    from functioning, so failures are rolled back locally.
+    """
+
+    try:
+
+        event = EngagementEvent(
+            track_id=track.id,
+            creator_profile_id=(
+                track.creator_profile_id
+            ),
+            user_id=(
+                user.id
+                if user
+                else None
+            ),
+            event_type=event_type,
+        )
+
+        db.add(event)
+        db.commit()
+
+    except Exception:
+
+        db.rollback()
+
+
+# ============================================================
 # TRACK DETAIL
 # ============================================================
 
@@ -153,8 +243,11 @@ def track_detail(
     request: Request,
     track_ref: str,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: Optional[User] = Depends(
+        get_optional_user
+    ),
 ):
+
     track = (
         db.query(Track)
         .filter(
@@ -165,9 +258,23 @@ def track_detail(
     )
 
     if not track:
+
         raise HTTPException(
             status_code=404,
             detail="Track not found.",
+        )
+
+    # --------------------------------------------------------
+    # TRACK VIEW
+    # --------------------------------------------------------
+
+    if track.is_published:
+
+        record_engagement(
+            db,
+            track,
+            EngagementType.VIEW,
+            user,
         )
 
     # --------------------------------------------------------
@@ -177,12 +284,16 @@ def track_detail(
     cover_art_url = None
 
     if track.cover_art_path:
+
         try:
+
             cover_art_url = r2_url(
                 track.cover_art_path,
                 expires=3600,
             )
+
         except Exception:
+
             cover_art_url = None
 
     # --------------------------------------------------------
@@ -192,44 +303,58 @@ def track_detail(
     purchased = False
 
     if user:
+
         order = (
             db.query(Order)
             .filter(
                 Order.track_id == track.id,
                 Order.buyer_id == user.id,
-                Order.status == OrderStatus.COMPLETED,
+                Order.status
+                == OrderStatus.COMPLETED,
             )
-            .order_by(Order.completed_at.desc())
+            .order_by(
+                Order.completed_at.desc()
+            )
             .first()
         )
 
         if order:
             purchased = True
 
-        # Compatibility with installations where an older
-        # Order model used user_id.
-        if not purchased and hasattr(Order, "user_id"):
+        if (
+            not purchased
+            and hasattr(Order, "user_id")
+        ):
+
             order = (
                 db.query(Order)
                 .filter(
-                    Order.track_id == track.id,
-                    Order.user_id == user.id,
-                    Order.status == OrderStatus.COMPLETED,
+                    Order.track_id
+                    == track.id,
+                    Order.user_id
+                    == user.id,
+                    Order.status
+                    == OrderStatus.COMPLETED,
                 )
-                .order_by(Order.completed_at.desc())
+                .order_by(
+                    Order.completed_at.desc()
+                )
                 .first()
             )
 
-            purchased = order is not None
+            purchased = (
+                order is not None
+            )
 
-        # License is the authoritative ownership record when
-        # available.
         if not purchased:
+
             license_record = (
                 db.query(License)
                 .filter(
-                    License.track_id == track.id,
-                    License.buyer_id == user.id,
+                    License.track_id
+                    == track.id,
+                    License.buyer_id
+                    == user.id,
                 )
                 .first()
             )
@@ -243,11 +368,84 @@ def track_detail(
         {
             "request": request,
             "current_user": user,
-            "current_year": datetime.utcnow().year,
+            "current_year": (
+                datetime.utcnow().year
+            ),
             "track": track,
             "purchased": purchased,
             "cover_art_url": cover_art_url,
         },
+    )
+
+
+# ============================================================
+# PREVIEW
+# ============================================================
+
+@router.get("/preview/track/{track_id}")
+def preview_track(
+    track_id: str,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+
+    track = (
+        db.query(Track)
+        .filter(
+            Track.id == track_id,
+            Track.is_published.is_(True),
+        )
+        .first()
+    )
+
+    if not track:
+
+        return RedirectResponse(
+            url="/",
+            status_code=303,
+        )
+
+    if not track.preview_file_path:
+
+        return RedirectResponse(
+            url="/track/" + track.slug,
+            status_code=303,
+        )
+
+    # --------------------------------------------------------
+    # PREVIEW PLAY
+    # --------------------------------------------------------
+
+    record_engagement(
+        db,
+        track,
+        EngagementType.PREVIEW_PLAY,
+        user,
+    )
+
+    try:
+
+        preview_url = r2_url(
+            track.preview_file_path,
+            expires=300,
+        )
+
+    except Exception:
+
+        preview_url = None
+
+    if not preview_url:
+
+        return RedirectResponse(
+            url="/track/" + track.slug,
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=preview_url,
+        status_code=307,
     )
 
 
@@ -259,12 +457,19 @@ def track_detail(
 def download_track(
     track_ref: str,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: Optional[User] = Depends(
+        get_optional_user
+    ),
 ):
+
     if not user:
+
         raise HTTPException(
             status_code=401,
-            detail="You must be logged in to download this track.",
+            detail=(
+                "You must be logged in "
+                "to download this track."
+            ),
         )
 
     # --------------------------------------------------------
@@ -281,6 +486,7 @@ def download_track(
     )
 
     if not track:
+
         raise HTTPException(
             status_code=404,
             detail="Track not found.",
@@ -295,27 +501,36 @@ def download_track(
         .filter(
             Order.track_id == track.id,
             Order.buyer_id == user.id,
-            Order.status == OrderStatus.COMPLETED,
+            Order.status
+            == OrderStatus.COMPLETED,
         )
-        .order_by(Order.completed_at.desc())
+        .order_by(
+            Order.completed_at.desc()
+        )
         .first()
     )
 
-    # Compatibility with older Order schema.
-    if not order and hasattr(Order, "user_id"):
+    if (
+        not order
+        and hasattr(Order, "user_id")
+    ):
+
         order = (
             db.query(Order)
             .filter(
                 Order.track_id == track.id,
                 Order.user_id == user.id,
-                Order.status == OrderStatus.COMPLETED,
+                Order.status
+                == OrderStatus.COMPLETED,
             )
-            .order_by(Order.completed_at.desc())
+            .order_by(
+                Order.completed_at.desc()
+            )
             .first()
         )
 
-    # License ownership is also accepted.
     if not order:
+
         license_record = (
             db.query(License)
             .filter(
@@ -326,9 +541,13 @@ def download_track(
         )
 
         if not license_record:
+
             raise HTTPException(
                 status_code=403,
-                detail="You have not purchased this track.",
+                detail=(
+                    "You have not purchased "
+                    "this track."
+                ),
             )
 
     # --------------------------------------------------------
@@ -336,34 +555,60 @@ def download_track(
     # --------------------------------------------------------
 
     if not track.audio_file_path:
+
         raise HTTPException(
             status_code=404,
-            detail="Audio file is not available.",
+            detail=(
+                "Audio file is not available."
+            ),
         )
 
     try:
+
         download_url = r2_download_url(
             track.audio_file_path,
             filename=f"{track.slug}.mp3",
         )
 
     except ClientError:
+
         raise HTTPException(
             status_code=503,
-            detail="Unable to access the purchased audio file.",
+            detail=(
+                "Unable to access the "
+                "purchased audio file."
+            ),
         )
 
     except Exception:
+
         raise HTTPException(
             status_code=503,
-            detail="Unable to access the purchased audio file.",
+            detail=(
+                "Unable to access the "
+                "purchased audio file."
+            ),
         )
 
     if not download_url:
+
         raise HTTPException(
             status_code=404,
-            detail="Audio file is not available.",
+            detail=(
+                "Audio file is not available."
+            ),
         )
+
+    # --------------------------------------------------------
+    # VERIFIED DOWNLOAD EVENT
+    # --------------------------------------------------------
+
+    record_engagement(
+        db,
+        track,
+        EngagementType.DOWNLOAD,
+        user,
+    )
 
     # --------------------------------------------------------
     # REDIRECT TO SIGNED R2 DOWNLOAD
