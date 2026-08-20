@@ -28,9 +28,7 @@ def ctx(
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
-
     context.update(extra)
-
     return context
 
 
