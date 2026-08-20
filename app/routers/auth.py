@@ -1,7 +1,3 @@
-"""
-BeatHub authentication routes.
-"""
-
 import re
 import secrets
 import uuid
@@ -18,7 +14,8 @@ from app.models.profile import Profile
 from app.models.user import User, UserRole
 from app.utils.deps import (
     SESSION_COOKIE_NAME,
-    get_optional_user,
+    is_admin,
+    is_creator,
 )
 from app.utils.security import (
     create_access_token,
@@ -34,6 +31,10 @@ templates = Jinja2Templates(directory="app/templates")
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 
+# ----------------------------------------------------------------------
+# HELPERS
+# ----------------------------------------------------------------------
+
 def slugify(value: str) -> str:
     value = re.sub(
         r"[^a-zA-Z0-9]+",
@@ -44,43 +45,21 @@ def slugify(value: str) -> str:
     return value or f"producer-{secrets.token_hex(4)}"
 
 
-def role_value(user: User) -> str:
-    role = getattr(user, "role", None)
-
-    if isinstance(role, UserRole):
-        return role.value.lower()
-
-    value = getattr(role, "value", role)
-
-    if value is None:
-        return ""
-
-    value = str(value).strip().lower()
-
-    if value.startswith("userrole."):
-        value = value.split(".", 1)[1]
-
-    return value
-
-
 def dashboard_url_for_user(user: User) -> str:
     """
-    One-way dashboard routing.
+    Central dashboard routing.
 
-    BUYER   -> /artist/dashboard
-    CREATOR -> /dashboard
-    ADMIN   -> /dashboard
+    Creator/admin -> /dashboard
+    Buyer/artist  -> /artist/dashboard
+
+    Creator detection is based on profile.is_producer so that
+    UserRole enum changes cannot create redirect loops.
     """
 
-    role = role_value(user)
-
-    if role == "buyer":
-        return "/artist/dashboard"
-
-    if role in {"creator", "admin"}:
+    if is_creator(user) or is_admin(user):
         return "/dashboard"
 
-    return "/account"
+    return "/artist/dashboard"
 
 
 def base_context(
@@ -99,51 +78,16 @@ def base_context(
     return context
 
 
-def set_session_cookie(
-    response: RedirectResponse,
-    token: str,
-) -> None:
-    """
-    Set the BeatHub session cookie consistently.
-
-    Render/production uses HTTPS, so Secure is enabled there.
-    """
-
-    # Clear any stale value first.
-    response.delete_cookie(
-        key=SESSION_COOKIE_NAME,
-        path="/",
-    )
-
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        max_age=COOKIE_MAX_AGE,
-        path="/",
-        samesite="lax",
-        secure=True,
-    )
-
-
-# ======================================================================
+# ----------------------------------------------------------------------
 # SIGNUP
-# ======================================================================
+# ----------------------------------------------------------------------
 
 @router.get("/signup")
-def signup_page(
-    request: Request,
-    current_user: User | None = Depends(get_optional_user),
-):
-    # Do NOT redirect authenticated users here.
-    # This avoids signup/login redirect loops.
+def signup_page(request: Request):
     return templates.TemplateResponse(
         request,
         "signup.html",
-        base_context(
-            request,
-            current_user,
-        ),
+        base_context(request),
     )
 
 
@@ -198,7 +142,6 @@ def signup_submit(
             "Passwords do not match."
         )
 
-    # Public signup can only create BUYER or CREATOR.
     if role not in {"buyer", "creator"}:
         role = "buyer"
 
@@ -232,8 +175,10 @@ def signup_submit(
 
     try:
         db.flush()
+
     except IntegrityError:
         db.rollback()
+
         return error(
             "An account with this email already exists."
         )
@@ -241,40 +186,38 @@ def signup_submit(
     base_slug = slugify(stage_name)
 
     slug = base_slug
-    suffix = 2
+    suffix = 1
 
     while (
         db.query(Profile)
         .filter(Profile.slug == slug)
         .first()
     ):
-        slug = f"{base_slug}-{suffix}"
         suffix += 1
+        slug = f"{base_slug}-{suffix}"
 
     profile = Profile(
         id=str(uuid.uuid4()),
         user_id=user.id,
         stage_name=stage_name,
         slug=slug,
-        is_producer=(user_role == UserRole.CREATOR),
+        is_producer=(role == "creator"),
     )
 
     db.add(profile)
 
     try:
         db.commit()
+
     except IntegrityError:
         db.rollback()
+
         return error(
             "Could not create account. Please try again."
         )
 
-    # --------------------------------------------------------------
-    # CREATE BRAND-NEW SESSION FOR THE NEW ACCOUNT
-    # --------------------------------------------------------------
-
     token = create_access_token(
-        subject=str(user.id)
+        subject=user.id
     )
 
     destination = dashboard_url_for_user(user)
@@ -287,22 +230,24 @@ def signup_submit(
         status_code=303,
     )
 
-    set_session_cookie(
-        response,
-        token,
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        samesite="lax",
+        secure=False,
     )
 
     return response
 
 
-# ======================================================================
+# ----------------------------------------------------------------------
 # LOGIN
-# ======================================================================
+# ----------------------------------------------------------------------
 
 @router.get("/login")
-def login_page(
-    request: Request,
-):
+def login_page(request: Request):
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -339,6 +284,7 @@ def login_submit(
     )
 
     if not user and identifier_norm:
+
         possible_slug = slugify(identifier_norm)
 
         profile = (
@@ -373,7 +319,7 @@ def login_submit(
         )
 
     token = create_access_token(
-        subject=str(user.id)
+        subject=user.id
     )
 
     destination = dashboard_url_for_user(user)
@@ -383,20 +329,23 @@ def login_submit(
         status_code=303,
     )
 
-    set_session_cookie(
-        response,
-        token,
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        samesite="lax",
+        secure=False,
     )
 
     return response
 
 
-# ======================================================================
+# ----------------------------------------------------------------------
 # LOGOUT
-# ======================================================================
+# ----------------------------------------------------------------------
 
-@router.post("/logout")
-def logout():
+def perform_logout() -> RedirectResponse:
     response = RedirectResponse(
         url="/?success=You have been logged out.",
         status_code=303,
@@ -404,35 +353,29 @@ def logout():
 
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
-        path="/",
+        httponly=True,
+        samesite="lax",
     )
 
     return response
+
+
+@router.post("/logout")
+def logout(request: Request):
+    return perform_logout()
 
 
 @router.get("/logout")
-def logout_get():
-    response = RedirectResponse(
-        url="/?success=You have been logged out.",
-        status_code=303,
-    )
-
-    response.delete_cookie(
-        key=SESSION_COOKIE_NAME,
-        path="/",
-    )
-
-    return response
+def logout_get(request: Request):
+    return perform_logout()
 
 
-# ======================================================================
+# ----------------------------------------------------------------------
 # FORGOT PASSWORD
-# ======================================================================
+# ----------------------------------------------------------------------
 
 @router.get("/forgot-password")
-def forgot_password_page(
-    request: Request,
-):
+def forgot_password_page(request: Request):
     return templates.TemplateResponse(
         request,
         "forgot_password.html",
@@ -457,9 +400,11 @@ def forgot_password_submit(
     )
 
     if user:
+
         token = secrets.token_urlsafe(32)
 
         user.reset_token = token
+
         user.reset_token_expires = (
             datetime.utcnow()
             + timedelta(hours=1)
@@ -482,16 +427,17 @@ def forgot_password_submit(
         base_context(
             request,
             success=(
-                "If an account exists for that email, "
-                "a reset link has been sent."
+                "If an account exists for "
+                "that email, a reset link "
+                "has been sent."
             ),
         ),
     )
 
 
-# ======================================================================
+# ----------------------------------------------------------------------
 # RESET PASSWORD
-# ======================================================================
+# ----------------------------------------------------------------------
 
 @router.get("/reset-password")
 def reset_password_page(
@@ -586,7 +532,8 @@ def reset_password_submit(
     return RedirectResponse(
         url=(
             "/login"
-            "?success=Password updated. Please log in."
+            "?success=Password updated. "
+            "Please log in."
         ),
         status_code=303,
     )
