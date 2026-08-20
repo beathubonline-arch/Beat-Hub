@@ -251,7 +251,7 @@ def public_profile(
 
     return templates.TemplateResponse(
         request,
-        "profile.html",
+        "profile_detail.html",
         ctx(
             request,
             current_user,
