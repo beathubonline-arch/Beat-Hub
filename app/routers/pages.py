@@ -17,18 +17,35 @@ def public_profile(
             detail="Creator profile not found.",
         )
 
-    tracks = list(profile.tracks or [])
-    albums = list(profile.albums or [])
+    # Safely load creator tracks and albums
+    tracks = list(getattr(profile, "tracks", None) or [])
+    albums = list(getattr(profile, "albums", None) or [])
 
-    # Only show published tracks.
-    # Exclusive tracks that have been sold are hidden.
-    public_tracks = [
-        track
-        for track in tracks
-        if getattr(track, "is_published", True)
-        and not getattr(track, "is_sold", False)
-    ]
+    # Public tracks:
+    # - must be published
+    # - exclusive tracks already sold are hidden
+    public_tracks = []
 
+    for track in tracks:
+        if not getattr(track, "is_published", True):
+            continue
+
+        if getattr(track, "sales_model", None):
+            sales_model = getattr(
+                getattr(track, "sales_model", None),
+                "value",
+                getattr(track, "sales_model", None),
+            )
+
+            if (
+                str(sales_model).lower() == "exclusive"
+                and getattr(track, "is_sold", False)
+            ):
+                continue
+
+        public_tracks.append(track)
+
+    # Only published albums are public
     public_albums = [
         album
         for album in albums
