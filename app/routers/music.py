@@ -55,8 +55,6 @@ def r2_object_key(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
 
-    # Database format:
-    # r2://bucket-name/path/to/object
     if value.startswith("r2://"):
         parts = value[5:].split("/", 1)
 
@@ -65,7 +63,6 @@ def r2_object_key(value: Optional[str]) -> Optional[str]:
 
         return None
 
-    # Already a normal R2 object key.
     return value.lstrip("/")
 
 
@@ -78,8 +75,6 @@ def r2_presigned_url(
     if not key:
         return None
 
-    # If a public R2/custom-domain URL is configured,
-    # use it directly.
     if settings.R2_PUBLIC_URL:
         return (
             settings.R2_PUBLIC_URL.rstrip("/")
@@ -122,29 +117,23 @@ def ctx(request: Request, current_user, **extra):
 def browse_beats(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     tracks = (
         db.query(Track)
-        .filter(
-            Track.is_published == True
-        )
-        .order_by(
-            Track.created_at.desc()
-        )
+        .filter(Track.is_published == True)
+        .order_by(Track.created_at.desc())
         .limit(60)
         .all()
     )
 
     for track in tracks:
+        track.cover_url = None
+
         if track.cover_art_path:
             try:
-                track.cover_art_path = (
-                    r2_presigned_url(
-                        track.cover_art_path
-                    )
+                track.cover_url = r2_presigned_url(
+                    track.cover_art_path
                 )
             except Exception:
                 pass
@@ -164,29 +153,23 @@ def browse_beats(
 def hot_picks(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     tracks = (
         db.query(Track)
-        .filter(
-            Track.is_published == True
-        )
-        .order_by(
-            Track.created_at.desc()
-        )
+        .filter(Track.is_published == True)
+        .order_by(Track.created_at.desc())
         .limit(12)
         .all()
     )
 
     for track in tracks:
+        track.cover_url = None
+
         if track.cover_art_path:
             try:
-                track.cover_art_path = (
-                    r2_presigned_url(
-                        track.cover_art_path
-                    )
+                track.cover_url = r2_presigned_url(
+                    track.cover_art_path
                 )
             except Exception:
                 pass
@@ -206,17 +189,12 @@ def hot_picks(
 @router.get("/sessions")
 def sessions_page(
     request: Request,
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     return templates.TemplateResponse(
         request,
         "sessions.html",
-        ctx(
-            request,
-            current_user,
-        ),
+        ctx(request, current_user),
     )
 
 
@@ -229,15 +207,11 @@ def track_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     track = (
         db.query(Track)
-        .filter(
-            Track.slug == slug
-        )
+        .filter(Track.slug == slug)
         .first()
     )
 
@@ -250,7 +224,6 @@ def track_detail(
     purchased = False
 
     if current_user:
-        # Primary ownership check through License.
         purchased = (
             db.query(License)
             .join(
@@ -258,29 +231,21 @@ def track_detail(
                 License.order_id == Order.id,
             )
             .filter(
-                License.buyer_id
-                == current_user.id,
-                License.track_id
-                == track.id,
-                Order.status
-                == OrderStatus.COMPLETED,
+                License.buyer_id == current_user.id,
+                License.track_id == track.id,
+                Order.status == OrderStatus.COMPLETED,
             )
             .first()
             is not None
         )
 
-        # Compatibility fallback:
-        # A completed order for the logged-in buyer is
-        # also proof of purchase.
         if not purchased:
             purchased = (
                 db.query(Order)
                 .filter(
                     Order.track_id == track.id,
-                    Order.buyer_id
-                    == current_user.id,
-                    Order.status
-                    == OrderStatus.COMPLETED,
+                    Order.buyer_id == current_user.id,
+                    Order.status == OrderStatus.COMPLETED,
                 )
                 .first()
                 is not None
@@ -294,7 +259,7 @@ def track_detail(
                 track.cover_art_path
             )
         except Exception:
-            cover_url = None
+            pass
 
     return templates.TemplateResponse(
         request,
@@ -318,15 +283,11 @@ def album_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     album = (
         db.query(Album)
-        .filter(
-            Album.slug == slug
-        )
+        .filter(Album.slug == slug)
         .first()
     )
 
@@ -344,7 +305,7 @@ def album_detail(
                 album.artwork_path
             )
         except Exception:
-            artwork_url = None
+            pass
 
     return templates.TemplateResponse(
         request,
@@ -367,15 +328,11 @@ def profile_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     profile = (
         db.query(Profile)
-        .filter(
-            Profile.slug == slug
-        )
+        .filter(Profile.slug == slug)
         .first()
     )
 
@@ -397,17 +354,13 @@ def profile_detail(
         if album.is_published
     ]
 
-    # Don't overwrite database fields with URLs.
-    # Attach temporary template-only values.
     for track in tracks:
         track.cover_url = None
 
         if track.cover_art_path:
             try:
-                track.cover_url = (
-                    r2_presigned_url(
-                        track.cover_art_path
-                    )
+                track.cover_url = r2_presigned_url(
+                    track.cover_art_path
                 )
             except Exception:
                 pass
@@ -417,10 +370,8 @@ def profile_detail(
 
         if album.artwork_path:
             try:
-                album.artwork_url = (
-                    r2_presigned_url(
-                        album.artwork_path
-                    )
+                album.artwork_url = r2_presigned_url(
+                    album.artwork_path
                 )
             except Exception:
                 pass
@@ -449,33 +400,13 @@ def download_track(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """
-    Secure purchased-track download.
-
-    Accepts either:
-        /download/track/<track UUID>
-        /download/<track UUID>
-        /download/track/<slug>
-        /download/<slug>
-
-    Authorization:
-        1. Logged-in user is required.
-        2. Completed License is accepted.
-        3. Completed Order belonging to the buyer is accepted
-           as a compatibility fallback.
-        4. Track must have an R2 audio object.
-        5. R2 object is checked before redirecting.
-    """
-
     # --------------------------------------------------------------
-    # FIND TRACK BY UUID / ID
+    # FIND TRACK BY ID
     # --------------------------------------------------------------
 
     track = (
         db.query(Track)
-        .filter(
-            Track.id == track_ref
-        )
+        .filter(Track.id == track_ref)
         .first()
     )
 
@@ -486,9 +417,7 @@ def download_track(
     if not track:
         track = (
             db.query(Track)
-            .filter(
-                Track.slug == track_ref
-            )
+            .filter(Track.slug == track_ref)
             .first()
         )
 
@@ -502,7 +431,6 @@ def download_track(
     # VERIFY PURCHASE
     # --------------------------------------------------------------
 
-    # First check the normal License relationship.
     license_record = (
         db.query(License)
         .join(
@@ -517,11 +445,6 @@ def download_track(
         .first()
     )
 
-    # If the License row is absent but the completed Order
-    # exists, allow the completed order to authorize download.
-    #
-    # This fixes compatibility with purchases completed before
-    # the License record was created correctly.
     completed_order = None
 
     if not license_record:
@@ -541,14 +464,11 @@ def download_track(
     if not license_record and not completed_order:
         raise HTTPException(
             status_code=403,
-            detail=(
-                "You do not own this track. "
-                "A completed purchase is required."
-            ),
+            detail="You do not own this track.",
         )
 
     # --------------------------------------------------------------
-    # R2 CONFIGURATION
+    # R2
     # --------------------------------------------------------------
 
     if not settings.r2_enabled:
@@ -557,10 +477,6 @@ def download_track(
             detail="Cloud storage is not configured.",
         )
 
-    # --------------------------------------------------------------
-    # GET R2 OBJECT KEY
-    # --------------------------------------------------------------
-
     key = r2_object_key(
         track.audio_file_path
     )
@@ -568,16 +484,13 @@ def download_track(
     if not key:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "This track does not have an audio "
-                "file configured."
-            ),
+            detail="Audio file is not available.",
         )
 
     client = get_r2_client()
 
     # --------------------------------------------------------------
-    # CONFIRM FILE EXISTS
+    # VERIFY ACTUAL R2 OBJECT
     # --------------------------------------------------------------
 
     try:
@@ -599,22 +512,16 @@ def download_track(
         }:
             raise HTTPException(
                 status_code=404,
-                detail=(
-                    "The purchased audio file "
-                    "is missing from Cloudflare R2."
-                ),
+                detail="Purchased audio file is missing from R2.",
             )
 
         raise HTTPException(
             status_code=502,
-            detail=(
-                "Cloudflare R2 could not verify "
-                "the purchased audio file."
-            ),
+            detail="Cloudflare R2 could not verify the audio file.",
         )
 
     # --------------------------------------------------------------
-    # GENERATE PRIVATE TEMPORARY DOWNLOAD URL
+    # TEMPORARY DOWNLOAD URL
     # --------------------------------------------------------------
 
     content_type = (
@@ -628,18 +535,17 @@ def download_track(
         or "beathub-track"
     )
 
-    extension = ""
+    object_filename = key.rsplit("/", 1)[-1]
 
-    if "." in key.rsplit("/", 1)[-1]:
-        extension = "." + key.rsplit(
-            ".",
-            1
-        )[-1]
+    if "." in object_filename:
+        file_ext = "." + object_filename.rsplit(".", 1)[-1]
+    else:
+        file_ext = ""
 
-    if not filename.lower().endswith(
-        extension.lower()
+    if file_ext and not filename.lower().endswith(
+        file_ext.lower()
     ):
-        filename += extension
+        filename += file_ext
 
     download_url = client.generate_presigned_url(
         "get_object",
@@ -653,10 +559,6 @@ def download_track(
         },
         ExpiresIn=settings.R2_DOWNLOAD_URL_EXPIRES,
     )
-
-    # --------------------------------------------------------------
-    # REDIRECT DIRECTLY TO R2
-    # --------------------------------------------------------------
 
     return RedirectResponse(
         url=download_url,
