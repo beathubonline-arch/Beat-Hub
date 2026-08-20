@@ -10,6 +10,7 @@
     Welcome back, {{ profile.stage_name }}
   </h1>
 
+
   <!-- PUBLIC STORE -->
 
   <div class="form-card" style="margin:20px 0 28px; padding:20px;">
@@ -63,6 +64,345 @@
     ></div>
 
   </div>
+
+
+  <!-- ==========================================================
+       BEATHUB PRODUCER SPOTLIGHT
+       ========================================================== -->
+
+  {% if top_producers %}
+
+  <div
+    class="form-card"
+    style="
+      margin:0 0 30px;
+      padding:24px;
+      overflow:hidden;
+    "
+  >
+
+    <div
+      style="
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:20px;
+        flex-wrap:wrap;
+        margin-bottom:22px;
+      "
+    >
+
+      <div>
+
+        <div
+          class="eyebrow"
+          style="letter-spacing:1.5px;"
+        >
+          BEATHUB PRODUCER SPOTLIGHT
+        </div>
+
+        <h2
+          style="
+            margin:5px 0 7px;
+            font-size:25px;
+          "
+        >
+          The producers making an impact
+        </h2>
+
+        <p
+          class="sub"
+          style="
+            margin:0;
+            max-width:620px;
+          "
+        >
+          Meet the five producers generating the most activity
+          on BeatHub over the last 30 days.
+        </p>
+
+      </div>
+
+      <div
+        class="badge"
+        style="
+          white-space:nowrap;
+          padding:8px 12px;
+        "
+      >
+        TOP 5 · 30 DAYS
+      </div>
+
+    </div>
+
+
+    <div
+      style="
+        display:grid;
+        grid-template-columns:
+          repeat(auto-fit, minmax(190px, 1fr));
+        gap:14px;
+      "
+    >
+
+      {% for producer in top_producers %}
+
+        <a
+          href="/profile/{{ producer.profile.slug }}"
+          style="
+            text-decoration:none;
+            color:inherit;
+          "
+        >
+
+          <div
+            class="form-card"
+            style="
+              position:relative;
+              height:100%;
+              padding:18px;
+              transition:transform .18s ease;
+            "
+          >
+
+            <!-- RANK -->
+
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                margin-bottom:14px;
+              "
+            >
+
+              <div
+                style="
+                  font-size:20px;
+                  font-weight:800;
+                "
+              >
+
+                {% if producer.rank == 1 %}
+                  🥇
+                {% elif producer.rank == 2 %}
+                  🥈
+                {% elif producer.rank == 3 %}
+                  🥉
+                {% else %}
+                  #{{ producer.rank }}
+                {% endif %}
+
+              </div>
+
+              {% if producer.rank == 1 %}
+
+                <span
+                  class="badge badge-exclusive"
+                >
+                  #1
+                </span>
+
+              {% endif %}
+
+            </div>
+
+
+            <!-- AVATAR -->
+
+            <div
+              style="
+                width:72px;
+                height:72px;
+                border-radius:50%;
+                overflow:hidden;
+                margin-bottom:14px;
+                background:#111;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                border:1px solid rgba(255,255,255,.08);
+              "
+            >
+
+              {% if producer.profile.avatar_path %}
+
+                <img
+                  src="{{ producer.profile.avatar_path }}"
+                  alt="{{ producer.profile.stage_name }}"
+                  loading="lazy"
+                  style="
+                    width:100%;
+                    height:100%;
+                    object-fit:cover;
+                    display:block;
+                  "
+                  onerror="
+                    this.style.display='none';
+                    this.nextElementSibling.style.display='flex';
+                  "
+                >
+
+                <span
+                  style="
+                    display:none;
+                    width:100%;
+                    height:100%;
+                    align-items:center;
+                    justify-content:center;
+                    font-size:26px;
+                    font-weight:800;
+                  "
+                >
+                  {{ producer.profile.stage_name[:1]|upper }}
+                </span>
+
+              {% else %}
+
+                <span
+                  style="
+                    font-size:26px;
+                    font-weight:800;
+                  "
+                >
+                  {{ producer.profile.stage_name[:1]|upper }}
+                </span>
+
+              {% endif %}
+
+            </div>
+
+
+            <!-- PRODUCER -->
+
+            <div
+              class="eyebrow"
+              style="margin-bottom:4px;"
+            >
+              PRODUCER
+            </div>
+
+            <h3
+              style="
+                font-size:18px;
+                margin:0 0 12px;
+                line-height:1.2;
+              "
+            >
+              {{ producer.profile.stage_name }}
+            </h3>
+
+
+            <!-- PERFORMANCE -->
+
+            <div
+              style="
+                display:grid;
+                grid-template-columns:1fr 1fr;
+                gap:8px;
+                margin-top:8px;
+              "
+            >
+
+              <div
+                style="
+                  padding:9px;
+                  border-radius:8px;
+                  background:rgba(255,255,255,.03);
+                "
+              >
+
+                <div
+                  class="sub"
+                  style="font-size:11px;"
+                >
+                  DOWNLOADS
+                </div>
+
+                <strong>
+                  {{ producer.downloads }}
+                </strong>
+
+              </div>
+
+
+              <div
+                style="
+                  padding:9px;
+                  border-radius:8px;
+                  background:rgba(255,255,255,.03);
+                "
+              >
+
+                <div
+                  class="sub"
+                  style="font-size:11px;"
+                >
+                  SALES
+                </div>
+
+                <strong>
+                  {{ producer.sales }}
+                </strong>
+
+              </div>
+
+            </div>
+
+
+            <div
+              style="
+                margin-top:13px;
+                font-size:12px;
+                font-weight:700;
+                opacity:.78;
+              "
+            >
+              {{ producer.impact_score }}
+              impact points
+            </div>
+
+          </div>
+
+        </a>
+
+      {% endfor %}
+
+    </div>
+
+
+    <div
+      style="
+        margin-top:20px;
+        padding-top:16px;
+        border-top:1px solid rgba(255,255,255,.07);
+        display:flex;
+        justify-content:space-between;
+        gap:15px;
+        flex-wrap:wrap;
+        align-items:center;
+      "
+    >
+
+      <span class="sub">
+        Rankings update automatically as BeatHub activity grows.
+      </span>
+
+      <span
+        style="
+          font-size:12px;
+          font-weight:700;
+          opacity:.65;
+        "
+      >
+        Engagement + verified marketplace activity
+      </span>
+
+    </div>
+
+  </div>
+
+  {% endif %}
 
 
   <!-- STATS -->
@@ -156,6 +496,7 @@
     </a>
 
     {% if discord_url %}
+
       <a
         href="{{ discord_url }}"
         target="_blank"
@@ -164,6 +505,7 @@
       >
         Join our Discord
       </a>
+
     {% endif %}
 
   </div>
@@ -256,8 +598,6 @@
             style="padding:18px;"
           >
 
-            <!-- COVER ART -->
-
             {% if track.cover_art_url %}
 
               <div
@@ -281,7 +621,9 @@
                     object-fit:cover;
                     display:block;
                   "
-                  onerror="this.parentElement.style.display='none';"
+                  onerror="
+                    this.parentElement.style.display='none';
+                  "
                 >
 
               </div>
