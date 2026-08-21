@@ -1,1017 +1,342 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - BeatHub{% endblock %}
+{% block title %}Withdraw Earnings — BeatHub{% endblock %}
 
 {% block content %}
-
-<section style="padding:30px 0;">
-
-  <h1 style="font-size:28px;">
-    Welcome back, {{ profile.stage_name }}
-  </h1>
-
-
-  <!-- PUBLIC STORE -->
-
-  <div class="form-card" style="margin:20px 0 28px; padding:20px;">
-
-    <div class="eyebrow">
-      YOUR PUBLIC STORE
+<div class="page-header">
+    <div>
+        <h1>Withdraw Earnings</h1>
+        <p>Request a payout from your available BeatHub earnings.</p>
     </div>
 
-    <h2 style="margin:5px 0 8px; font-size:22px;">
-      Share your BeatHub store
-    </h2>
+    <a href="/dashboard" class="btn btn-outline">
+        ← Back to Dashboard
+    </a>
+</div>
 
-    <p class="sub" style="margin-bottom:14px;">
-      Send this link to artists, buyers, fans or your social media
-      followers. They can browse your music and purchase available tracks.
-    </p>
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+{% if success %}
+<div class="alert alert-success">
+    {{ success }}
+</div>
+{% endif %}
 
-      <input
-        id="store-link"
-        type="text"
-        value="{{ store_url }}"
-        readonly
-        style="flex:1; min-width:260px;"
-      >
+<div class="dashboard-grid">
 
-      <button
-        type="button"
-        class="btn btn-primary"
-        onclick="copyStoreLink()"
-      >
-        Copy Store Link
-      </button>
+    <div class="card">
+        <h2>Available Balance</h2>
 
-      <a
-        href="/profile/{{ profile.slug }}"
-        target="_blank"
-        rel="noopener"
-        class="btn btn-outline"
-      >
-        View My Store
-      </a>
-
-    </div>
-
-    <div
-      id="copy-message"
-      class="sub"
-      style="margin-top:8px;"
-    ></div>
-
-  </div>
-
-
-  <!-- ==========================================================
-       BEATHUB PRODUCER SPOTLIGHT
-       ========================================================== -->
-
-  {% if top_producers %}
-
-  <div
-    class="form-card"
-    style="
-      margin:0 0 30px;
-      padding:24px;
-      overflow:hidden;
-    "
-  >
-
-    <div
-      style="
-        display:flex;
-        justify-content:space-between;
-        align-items:flex-start;
-        gap:20px;
-        flex-wrap:wrap;
-        margin-bottom:22px;
-      "
-    >
-
-      <div>
-
-        <div
-          class="eyebrow"
-          style="letter-spacing:1.5px;"
-        >
-          BEATHUB PRODUCER SPOTLIGHT
+        <div class="balance-amount">
+            KSh {{ "%.2f"|format(available_balance|float) }}
         </div>
 
-        <h2
-          style="
-            margin:5px 0 7px;
-            font-size:25px;
-          "
-        >
-          The producers making an impact
-        </h2>
-
-        <p
-          class="sub"
-          style="
-            margin:0;
-            max-width:620px;
-          "
-        >
-          Meet the five producers generating the most activity
-          on BeatHub over the last 30 days.
+        <p class="muted">
+            This is the amount currently available for withdrawal.
         </p>
-
-      </div>
-
-      <div
-        class="badge"
-        style="
-          white-space:nowrap;
-          padding:8px 12px;
-        "
-      >
-        TOP 5 · 30 DAYS
-      </div>
-
     </div>
 
+    <div class="card">
+        <h2>Request Withdrawal</h2>
 
-    <div
-      style="
-        display:grid;
-        grid-template-columns:
-          repeat(auto-fit, minmax(190px, 1fr));
-        gap:14px;
-      "
-    >
+        <form method="post" action="/dashboard/withdraw">
 
-      {% for producer in top_producers %}
+            <div class="form-group">
+                <label for="amount">
+                    Amount (KES)
+                </label>
 
-        <a
-          href="/profile/{{ producer.profile.slug }}"
-          style="
-            text-decoration:none;
-            color:inherit;
-          "
-        >
-
-          <div
-            class="form-card"
-            style="
-              position:relative;
-              height:100%;
-              padding:18px;
-              transition:transform .18s ease;
-            "
-          >
-
-            <!-- RANK -->
-
-            <div
-              style="
-                display:flex;
-                justify-content:space-between;
-                align-items:center;
-                margin-bottom:14px;
-              "
-            >
-
-              <div
-                style="
-                  font-size:20px;
-                  font-weight:800;
-                "
-              >
-
-                {% if producer.rank == 1 %}
-                  🥇
-                {% elif producer.rank == 2 %}
-                  🥈
-                {% elif producer.rank == 3 %}
-                  🥉
-                {% else %}
-                  #{{ producer.rank }}
-                {% endif %}
-
-              </div>
-
-              {% if producer.rank == 1 %}
-
-                <span
-                  class="badge badge-exclusive"
+                <input
+                    type="number"
+                    id="amount"
+                    name="amount"
+                    min="1"
+                    step="0.01"
+                    max="{{ available_balance }}"
+                    placeholder="Enter amount"
+                    required
                 >
-                  #1
-                </span>
-
-              {% endif %}
-
             </div>
 
+            <div class="form-group">
+                <label for="phone_number">
+                    M-Pesa Phone Number
+                </label>
 
-            <!-- AVATAR -->
-
-            <div
-              style="
-                width:72px;
-                height:72px;
-                border-radius:50%;
-                overflow:hidden;
-                margin-bottom:14px;
-                background:#111;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                border:1px solid rgba(255,255,255,.08);
-              "
-            >
-
-              {% if producer.profile.avatar_path %}
-
-                <img
-                  src="{{ producer.profile.avatar_path }}"
-                  alt="{{ producer.profile.stage_name }}"
-                  loading="lazy"
-                  style="
-                    width:100%;
-                    height:100%;
-                    object-fit:cover;
-                    display:block;
-                  "
-                  onerror="
-                    this.style.display='none';
-                    this.nextElementSibling.style.display='flex';
-                  "
+                <input
+                    type="text"
+                    id="phone_number"
+                    name="phone_number"
+                    placeholder="0712345678"
+                    autocomplete="tel"
+                    required
                 >
 
-                <span
-                  style="
-                    display:none;
-                    width:100%;
-                    height:100%;
-                    align-items:center;
-                    justify-content:center;
-                    font-size:26px;
-                    font-weight:800;
-                  "
-                >
-                  {{ producer.profile.stage_name[:1]|upper }}
-                </span>
-
-              {% else %}
-
-                <span
-                  style="
-                    font-size:26px;
-                    font-weight:800;
-                  "
-                >
-                  {{ producer.profile.stage_name[:1]|upper }}
-                </span>
-
-              {% endif %}
-
+                <small class="muted">
+                    Enter the M-Pesa number where you want to receive the payout.
+                </small>
             </div>
 
-
-            <!-- PRODUCER -->
-
-            <div
-              class="eyebrow"
-              style="margin-bottom:4px;"
+            <button
+                type="submit"
+                class="btn btn-primary"
+                style="width:100%;"
             >
-              PRODUCER
-            </div>
+                Request M-Pesa Withdrawal
+            </button>
 
-            <h3
-              style="
-                font-size:18px;
-                margin:0 0 12px;
-                line-height:1.2;
-              "
-            >
-              {{ producer.profile.stage_name }}
-            </h3>
-
-
-            <!-- PERFORMANCE -->
-
-            <div
-              style="
-                display:grid;
-                grid-template-columns:1fr 1fr;
-                gap:8px;
-                margin-top:8px;
-              "
-            >
-
-              <div
-                style="
-                  padding:9px;
-                  border-radius:8px;
-                  background:rgba(255,255,255,.03);
-                "
-              >
-
-                <div
-                  class="sub"
-                  style="font-size:11px;"
-                >
-                  DOWNLOADS
-                </div>
-
-                <strong>
-                  {{ producer.downloads }}
-                </strong>
-
-              </div>
-
-
-              <div
-                style="
-                  padding:9px;
-                  border-radius:8px;
-                  background:rgba(255,255,255,.03);
-                "
-              >
-
-                <div
-                  class="sub"
-                  style="font-size:11px;"
-                >
-                  SALES
-                </div>
-
-                <strong>
-                  {{ producer.sales }}
-                </strong>
-
-              </div>
-
-            </div>
-
-
-            <div
-              style="
-                margin-top:13px;
-                font-size:12px;
-                font-weight:700;
-                opacity:.78;
-              "
-            >
-              {{ producer.impact_score }}
-              impact points
-            </div>
-
-          </div>
-
-        </a>
-
-      {% endfor %}
-
+        </form>
     </div>
 
+</div>
 
-    <div
-      style="
-        margin-top:20px;
-        padding-top:16px;
-        border-top:1px solid rgba(255,255,255,.07);
-        display:flex;
-        justify-content:space-between;
-        gap:15px;
-        flex-wrap:wrap;
-        align-items:center;
-      "
-    >
-
-      <span class="sub">
-        Rankings update automatically as BeatHub activity grows.
-      </span>
-
-      <span
-        style="
-          font-size:12px;
-          font-weight:700;
-          opacity:.65;
-        "
-      >
-        Engagement + verified marketplace activity
-      </span>
-
-    </div>
-
-  </div>
-
-  {% endif %}
-
-
-  <!-- STATS -->
-
-  <div class="dashboard-grid">
-
-    <div class="stat-card">
-      <div class="label">Total Sales</div>
-      <div class="value">
-        {{ stats.total_sales }}
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="label">Net Earnings</div>
-      <div class="value teal">
-        KSh {{ '%.2f'|format(stats.net_earnings) }}
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="label">Available Balance</div>
-      <div class="value gold">
-        KSh {{ '%.2f'|format(stats.available_balance) }}
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="label">Pending Withdrawal</div>
-      <div class="value">
-        KSh {{ '%.2f'|format(stats.pending_withdrawal) }}
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="label">Tracks</div>
-      <div class="value">
-        {{ track_count }}
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="label">Albums</div>
-      <div class="value">
-        {{ album_count }}
-      </div>
-    </div>
-
-  </div>
-
-
-  <!-- ACTIONS -->
-
-  <div
-    style="
-      display:flex;
-      gap:14px;
-      margin:24px 0;
-      flex-wrap:wrap;
-    "
-  >
-
-    <a
-      href="/dashboard/upload"
-      class="btn btn-primary"
-    >
-      Upload Track(s)
-    </a>
+{% if withdrawal_requests %}
+<div class="card" style="margin-top:24px;">
 
-    <a
-      href="/dashboard/albums/new"
-      class="btn btn-outline"
-    >
-      Create Album
-    </a>
+    <h2>Withdrawal History</h2>
 
-  </div>
+    <div class="table-responsive">
 
+        <table class="table">
 
-  <!-- SOCIAL -->
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>M-Pesa Number</th>
+                    <th>Status</th>
+                    <th>Reference</th>
+                </tr>
+            </thead>
 
-  <div class="social-links">
+            <tbody>
 
-    <a
-      href="{{ youtube_url }}"
-      target="_blank"
-      rel="noopener"
-      class="social-pill youtube"
-    >
-      YouTube Channel
-    </a>
+            {% for withdrawal in withdrawal_requests %}
 
-    {% if discord_url %}
+                <tr>
 
-      <a
-        href="{{ discord_url }}"
-        target="_blank"
-        rel="noopener"
-        class="social-pill discord"
-      >
-        Join our Discord
-      </a>
+                    <td>
+                        {{ withdrawal.created_at.strftime("%d %b %Y %H:%M") if withdrawal.created_at else "-" }}
+                    </td>
 
-    {% endif %}
+                    <td>
+                        KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+                    </td>
 
-  </div>
+                    <td>
+                        {{ withdrawal.phone_number }}
+                    </td>
 
+                    <td>
 
-  <!-- TRACK LIBRARY -->
+                        {% if withdrawal.status|string|lower == "pending" %}
+                            <span class="badge badge-warning">
+                                Pending
+                            </span>
 
-  <div style="margin-top:45px;">
+                        {% elif withdrawal.status|string|lower == "approved" %}
+                            <span class="badge badge-info">
+                                Approved
+                            </span>
 
-    <div
-      style="
-        display:flex;
-        justify-content:space-between;
-        align-items:end;
-        gap:15px;
-        flex-wrap:wrap;
-        margin-bottom:18px;
-      "
-    >
-
-      <div>
-
-        <h2 style="font-size:22px; margin:0;">
-          My Tracks
-        </h2>
+                        {% elif withdrawal.status|string|lower == "processing" %}
+                            <span class="badge badge-info">
+                                Processing
+                            </span>
 
-        <p class="sub" style="margin:5px 0 0;">
+                        {% elif withdrawal.status|string|lower == "paid" %}
+                            <span class="badge badge-success">
+                                Paid
+                            </span>
 
-          {{ track_total }}
-          track{{ '' if track_total == 1 else 's' }}
+                        {% elif withdrawal.status|string|lower == "rejected" %}
+                            <span class="badge badge-error">
+                                Rejected
+                            </span>
 
-          {% if track_search %}
-            matching "{{ track_search }}"
-          {% endif %}
+                        {% else %}
+                            <span class="badge">
+                                {{ withdrawal.status }}
+                            </span>
+                        {% endif %}
 
-        </p>
+                    </td>
 
-      </div>
+                    <td>
+                        {{ withdrawal.payout_reference or "-" }}
+                    </td>
 
+                </tr>
 
-      <form
-        method="get"
-        action="/dashboard"
-        style="
-          display:flex;
-          gap:8px;
-          min-width:300px;
-        "
-      >
+                {% if withdrawal.admin_note %}
 
-        <input
-          type="search"
-          name="q"
-          value="{{ track_search }}"
-          placeholder="Search title, genre or tags..."
-          style="flex:1;"
-        >
-
-        <button
-          type="submit"
-          class="btn btn-outline"
-        >
-          Search
-        </button>
-
-        {% if track_search %}
-
-          <a
-            href="/dashboard"
-            class="btn btn-outline"
-          >
-            Clear
-          </a>
-
-        {% endif %}
-
-      </form>
-
-    </div>
-
-
-    {% if tracks %}
-
-      <div class="dashboard-grid">
-
-        {% for track in tracks %}
-
-          <div
-            class="form-card"
-            style="padding:18px;"
-          >
-
-            {% if track.cover_art_url %}
-
-              <div
-                style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  margin-bottom:14px;
-                  overflow:hidden;
-                  border-radius:10px;
-                  background:#111;
-                "
-              >
-
-                <img
-                  src="{{ track.cover_art_url }}"
-                  alt="{{ track.title }}"
-                  loading="lazy"
-                  style="
-                    width:100%;
-                    height:100%;
-                    object-fit:cover;
-                    display:block;
-                  "
-                  onerror="
-                    this.parentElement.style.display='none';
-                  "
-                >
-
-              </div>
-
-            {% endif %}
-
-
-            <div class="eyebrow">
-
-              {{ track.genre or 'BEAT' }}
-
-              {% if track.bpm %}
-                &middot; {{ track.bpm }} BPM
-              {% endif %}
-
-            </div>
-
-
-            <h3
-              style="
-                font-size:19px;
-                margin:5px 0 8px;
-              "
-            >
-              {{ track.title }}
-            </h3>
-
-
-            <div class="sub">
-              KSh {{ '%.2f'|format(track.price) }}
-            </div>
-
-
-            <div
-              style="
-                display:flex;
-                gap:7px;
-                flex-wrap:wrap;
-                margin-top:10px;
-              "
-            >
-
-              {% if track.sales_model.value == 'exclusive' %}
-
-                {% if track.is_sold %}
-
-                  <span class="badge badge-sold">
-                    SOLD
-                  </span>
-
-                {% else %}
-
-                  <span class="badge badge-exclusive">
-                    EXCLUSIVE
-                  </span>
+                <tr>
+                    <td colspan="5">
+                        <small class="muted">
+                            Admin note:
+                            {{ withdrawal.admin_note }}
+                        </small>
+                    </td>
+                </tr>
 
                 {% endif %}
 
-              {% else %}
+            {% else %}
 
-                <span class="badge badge-nonexclusive">
-                  NON-EXCLUSIVE
-                </span>
+                <tr>
+                    <td colspan="5">
+                        <div class="empty-state">
+                            No withdrawal requests yet.
+                        </div>
+                    </td>
+                </tr>
 
-              {% endif %}
+            {% endfor %}
 
+            </tbody>
 
-              {% if track.is_published %}
-
-                <span class="badge">
-                  PUBLISHED
-                </span>
-
-              {% else %}
-
-                <span class="badge badge-sold">
-                  UNPUBLISHED
-                </span>
-
-              {% endif %}
-
-            </div>
-
-
-            <div
-              style="
-                display:flex;
-                gap:8px;
-                margin-top:16px;
-                flex-wrap:wrap;
-              "
-            >
-
-              <a
-                href="/track/{{ track.slug }}"
-                target="_blank"
-                rel="noopener"
-                class="btn btn-outline"
-              >
-                View Store Page
-              </a>
-
-            </div>
-
-          </div>
-
-        {% endfor %}
-
-      </div>
-
-
-      <!-- PAGINATION -->
-
-      {% if track_total_pages > 1 %}
-
-        <div
-          style="
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            gap:8px;
-            flex-wrap:wrap;
-            margin-top:28px;
-          "
-        >
-
-          {% if track_page > 1 %}
-
-            <a
-              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page - 1 }}"
-              class="btn btn-outline"
-            >
-              Previous
-            </a>
-
-          {% endif %}
-
-
-          <span class="sub">
-            Page {{ track_page }}
-            of
-            {{ track_total_pages }}
-          </span>
-
-
-          {% if track_page < track_total_pages %}
-
-            <a
-              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page + 1 }}"
-              class="btn btn-outline"
-            >
-              Next
-            </a>
-
-          {% endif %}
-
-        </div>
-
-      {% endif %}
-
-
-    {% else %}
-
-      <div
-        class="form-card"
-        style="
-          padding:30px;
-          text-align:center;
-        "
-      >
-
-        {% if track_search %}
-
-          <h3>
-            No tracks found
-          </h3>
-
-          <p class="sub">
-            Try another search.
-          </p>
-
-          <a
-            href="/dashboard"
-            class="btn btn-outline"
-          >
-            Show All Tracks
-          </a>
-
-        {% else %}
-
-          <h3>
-            Your track library is empty
-          </h3>
-
-          <p class="sub">
-            Upload your first beat and it will appear here.
-          </p>
-
-          <a
-            href="/dashboard/upload"
-            class="btn btn-primary"
-          >
-            Upload Track
-          </a>
-
-        {% endif %}
-
-      </div>
-
-    {% endif %}
-
-  </div>
-
-
-  <!-- RECENT SALES -->
-
-  <h2
-    style="
-      font-size:20px;
-      margin-top:45px;
-    "
-  >
-    Recent Sales
-  </h2>
-
-
-  <table class="data-table">
-
-    <thead>
-
-      <tr>
-        <th>Order</th>
-        <th>Date</th>
-        <th>You Earned</th>
-      </tr>
-
-    </thead>
-
-
-    <tbody>
-
-      {% for o in stats.recent_orders %}
-
-        <tr>
-
-          <td>
-            {{ o.order_number }}
-          </td>
-
-          <td>
-
-            {{
-              o.completed_at.strftime('%d %b %Y')
-              if o.completed_at
-              else ''
-            }}
-
-          </td>
-
-          <td>
-            KSh {{ '%.2f'|format(o.net_amount) }}
-          </td>
-
-        </tr>
-
-      {% else %}
-
-        <tr>
-
-          <td
-            colspan="3"
-            class="sub"
-          >
-            No sales yet.
-          </td>
-
-        </tr>
-
-      {% endfor %}
-
-    </tbody>
-
-  </table>
-
-
-  <!-- WITHDRAWAL -->
-
-  <h2
-    style="
-      font-size:20px;
-      margin-top:45px;
-    "
-  >
-    Request Withdrawal
-  </h2>
-
-
-  <form
-    action="/dashboard/withdraw"
-    method="post"
-    style="max-width:420px;"
-  >
-
-    <div class="field">
-
-      <label>
-        Amount (KSh)
-      </label>
-
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        name="amount"
-        required
-      >
+        </table>
 
     </div>
 
+</div>
+{% endif %}
 
-    <div class="field">
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 28px;
+    }
 
-      <label>
-        M-Pesa Phone Number
-      </label>
+    .page-header h1 {
+        margin: 0 0 6px;
+    }
 
-      <input
-        type="tel"
-        name="phone_number"
-        placeholder="07XX XXX XXX"
-        required
-      >
+    .page-header p {
+        margin: 0;
+        color: #a1a1aa;
+    }
 
-    </div>
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.4fr;
+        gap: 24px;
+    }
 
+    .card {
+        background: #111113;
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        padding: 24px;
+    }
 
-    <button
-      type="submit"
-      class="btn btn-primary"
-    >
-      Request Withdrawal
-    </button>
+    .card h2 {
+        margin-top: 0;
+    }
 
-  </form>
+    .balance-amount {
+        font-size: 36px;
+        font-weight: 800;
+        margin: 20px 0 8px;
+    }
 
-</section>
+    .muted {
+        color: #a1a1aa;
+    }
 
+    .form-group {
+        margin-bottom: 20px;
+    }
 
-<script>
-function copyStoreLink() {
-  const input = document.getElementById("store-link");
-  const message = document.getElementById("copy-message");
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
 
-  if (!input) {
-    return;
-  }
+    .form-group input {
+        width: 100%;
+        padding: 13px 14px;
+        border-radius: 9px;
+        border: 1px solid #3f3f46;
+        background: #18181b;
+        color: white;
+        outline: none;
+    }
 
-  if (
-    navigator.clipboard &&
-    window.isSecureContext
-  ) {
-    navigator.clipboard.writeText(
-      input.value
-    ).then(function () {
-      message.textContent =
-        "Store link copied. Share it anywhere.";
-    }).catch(function () {
-      fallbackCopy(input, message);
-    });
-  } else {
-    fallbackCopy(input, message);
-  }
-}
+    .form-group input:focus {
+        border-color: #ffffff;
+    }
 
-function fallbackCopy(input, message) {
-  input.focus();
-  input.select();
+    .table-responsive {
+        overflow-x: auto;
+    }
 
-  try {
-    document.execCommand("copy");
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+    }
 
-    message.textContent =
-      "Store link copied. Share it anywhere.";
-  } catch (error) {
-    message.textContent =
-      "Copy failed. Please copy the link manually.";
-  }
-}
-</script>
+    .table th,
+    .table td {
+        padding: 14px 10px;
+        border-bottom: 1px solid #27272a;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: #27272a;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .badge-warning {
+        background: #713f12;
+        color: #fde68a;
+    }
+
+    .badge-info {
+        background: #1e3a5f;
+        color: #bfdbfe;
+    }
+
+    .badge-success {
+        background: #14532d;
+        color: #bbf7d0;
+    }
+
+    .badge-error {
+        background: #7f1d1d;
+        color: #fecaca;
+    }
+
+    .empty-state {
+        padding: 25px;
+        text-align: center;
+        color: #a1a1aa;
+    }
+
+    @media (max-width: 800px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+</style>
 
 {% endblock %}
