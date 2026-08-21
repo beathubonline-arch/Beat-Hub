@@ -1,7 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    HTTPException,
+    Request,
+)
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -16,7 +22,10 @@ from app.models.ledger import (
 )
 from app.models.music import Album, Track
 from app.models.order import Order, OrderStatus
-from app.models.payment import PaymentStatus, PaymentTransaction
+from app.models.payment import (
+    PaymentStatus,
+    PaymentTransaction,
+)
 from app.models.user import User
 from app.utils.deps import require_admin
 
@@ -31,31 +40,28 @@ templates = Jinja2Templates(
 )
 
 
-# ============================================================
-# CONTEXT
-# ============================================================
-
 def ctx(
     request: Request,
     current_user: User,
     **extra,
 ):
-    base = {
+    data = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
 
-    base.update(extra)
+    data.update(extra)
 
-    return base
+    return data
 
 
 # ============================================================
-# ADMIN DASHBOARD
+# ADMIN HOME
 # ============================================================
 
 @router.get("")
+@router.get("/")
 def admin_home(
     request: Request,
     db: Session = Depends(get_db),
@@ -69,7 +75,8 @@ def admin_home(
             )
         )
         .filter(
-            Order.status == OrderStatus.COMPLETED
+            Order.status
+            == OrderStatus.COMPLETED
         )
         .scalar()
     )
@@ -82,7 +89,8 @@ def admin_home(
             )
         )
         .filter(
-            Order.status == OrderStatus.COMPLETED
+            Order.status
+            == OrderStatus.COMPLETED
         )
         .scalar()
     )
@@ -95,7 +103,8 @@ def admin_home(
             )
         )
         .filter(
-            Order.status == OrderStatus.COMPLETED
+            Order.status
+            == OrderStatus.COMPLETED
         )
         .scalar()
     )
@@ -103,7 +112,8 @@ def admin_home(
     successful = (
         db.query(Order)
         .filter(
-            Order.status == OrderStatus.COMPLETED
+            Order.status
+            == OrderStatus.COMPLETED
         )
         .count()
     )
@@ -111,7 +121,8 @@ def admin_home(
     pending = (
         db.query(Order)
         .filter(
-            Order.status == OrderStatus.PENDING
+            Order.status
+            == OrderStatus.PENDING
         )
         .count()
     )
@@ -131,14 +142,18 @@ def admin_home(
 
     recent_orders = (
         db.query(Order)
-        .order_by(Order.created_at.desc())
+        .order_by(
+            Order.created_at.desc()
+        )
         .limit(10)
         .all()
     )
 
     recent_users = (
         db.query(User)
-        .order_by(User.created_at.desc())
+        .order_by(
+            User.created_at.desc()
+        )
         .limit(10)
         .all()
     )
@@ -160,7 +175,7 @@ def admin_home(
         .all()
     )
 
-    pending_withdrawals = (
+    pending_creator_withdrawals = (
         db.query(WithdrawalRequest)
         .filter(
             WithdrawalRequest.status
@@ -169,13 +184,7 @@ def admin_home(
         .count()
     )
 
-    # --------------------------------------------------------
-    # ADMIN / BEATHUB WITHDRAWALS
-    # IMPORTANT:
-    # Use AdminWithdrawalStatus here.
-    # --------------------------------------------------------
-
-    admin_withdrawals_pending = (
+    pending_admin_withdrawals = (
         db.query(AdminWithdrawal)
         .filter(
             AdminWithdrawal.status
@@ -184,30 +193,17 @@ def admin_home(
         .count()
     )
 
-    admin_withdrawals = (
-        db.query(AdminWithdrawal)
-        .order_by(
-            AdminWithdrawal.created_at.desc()
-        )
-        .limit(10)
-        .all()
-    )
-
-    # --------------------------------------------------------
-    # BeatHub platform earnings
-    #
-    # This is the commission earned by BeatHub.
-    # --------------------------------------------------------
-
+    # BeatHub commission.
     platform_earnings = Decimal(
         str(total_commission or 0)
     )
 
-    # Money already paid out from the platform account.
-    platform_paid = (
+    admin_paid = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -218,10 +214,12 @@ def admin_home(
         .scalar()
     )
 
-    platform_processing = (
+    admin_processing = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -232,10 +230,12 @@ def admin_home(
         .scalar()
     )
 
-    platform_pending = (
+    admin_pending = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -246,15 +246,15 @@ def admin_home(
         .scalar()
     )
 
-    platform_available_balance = (
+    platform_available = (
         platform_earnings
-        - Decimal(str(platform_paid or 0))
-        - Decimal(str(platform_processing or 0))
-        - Decimal(str(platform_pending or 0))
+        - Decimal(str(admin_paid or 0))
+        - Decimal(str(admin_processing or 0))
+        - Decimal(str(admin_pending or 0))
     )
 
-    if platform_available_balance < 0:
-        platform_available_balance = Decimal("0.00")
+    if platform_available < 0:
+        platform_available = Decimal("0.00")
 
     return templates.TemplateResponse(
         request,
@@ -275,27 +275,20 @@ def admin_home(
             recent_users=recent_users,
             failed_payments=failed_payments,
 
-            pending_withdrawals=pending_withdrawals,
-
-            admin_withdrawals_pending=(
-                admin_withdrawals_pending
+            pending_withdrawals=(
+                pending_creator_withdrawals
             ),
 
-            admin_withdrawals=admin_withdrawals,
+            pending_creator_withdrawals=(
+                pending_creator_withdrawals
+            ),
+
+            pending_admin_withdrawals=(
+                pending_admin_withdrawals
+            ),
 
             platform_earnings=platform_earnings,
-            platform_paid=Decimal(
-                str(platform_paid or 0)
-            ),
-            platform_processing=Decimal(
-                str(platform_processing or 0)
-            ),
-            platform_pending=Decimal(
-                str(platform_pending or 0)
-            ),
-            platform_available_balance=(
-                platform_available_balance
-            ),
+            platform_available=platform_available,
         ),
     )
 
@@ -322,7 +315,9 @@ def admin_users(
 
     users = (
         query
-        .order_by(User.created_at.desc())
+        .order_by(
+            User.created_at.desc()
+        )
         .limit(200)
         .all()
     )
@@ -358,8 +353,6 @@ def admin_toggle_user(
             detail="User not found",
         )
 
-    # Never allow an admin to deactivate
-    # their own account accidentally.
     if target.id == admin.id:
         raise HTTPException(
             status_code=400,
@@ -371,7 +364,10 @@ def admin_toggle_user(
     db.commit()
 
     return RedirectResponse(
-        url="/admin/users?success=User status updated.",
+        url=(
+            "/admin/users?"
+            "success=User status updated."
+        ),
         status_code=303,
     )
 
@@ -405,14 +401,18 @@ def admin_content(
 
     tracks = (
         tracks_query
-        .order_by(Track.created_at.desc())
+        .order_by(
+            Track.created_at.desc()
+        )
         .limit(200)
         .all()
     )
 
     albums = (
         albums_query
-        .order_by(Album.created_at.desc())
+        .order_by(
+            Album.created_at.desc()
+        )
         .limit(200)
         .all()
     )
@@ -449,12 +449,17 @@ def admin_toggle_track(
             detail="Track not found",
         )
 
-    track.is_published = not track.is_published
+    track.is_published = (
+        not track.is_published
+    )
 
     db.commit()
 
     return RedirectResponse(
-        url="/admin/content?success=Track updated.",
+        url=(
+            "/admin/content?"
+            "success=Track updated."
+        ),
         status_code=303,
     )
 
@@ -479,7 +484,9 @@ def admin_sales(
 
     orders = (
         query
-        .order_by(Order.created_at.desc())
+        .order_by(
+            Order.created_at.desc()
+        )
         .limit(300)
         .all()
     )
@@ -501,7 +508,7 @@ def admin_sales(
 # ============================================================
 
 @router.get("/withdrawals")
-def admin_withdrawals(
+def admin_creator_withdrawals(
     request: Request,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
@@ -529,7 +536,7 @@ def admin_withdrawals(
 @router.post(
     "/withdrawals/{withdrawal_id}/update"
 )
-def admin_update_withdrawal(
+def admin_update_creator_withdrawal(
     withdrawal_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
@@ -545,23 +552,23 @@ def admin_update_withdrawal(
     if not withdrawal:
         raise HTTPException(
             status_code=404,
-            detail="Withdrawal request not found",
+            detail="Creator withdrawal not found.",
         )
 
-    valid_transitions = {
+    transitions = {
         "approve": WithdrawalStatus.APPROVED,
         "process": WithdrawalStatus.PROCESSING,
         "mark_paid": WithdrawalStatus.PAID,
         "reject": WithdrawalStatus.REJECTED,
     }
 
-    if action not in valid_transitions:
+    if action not in transitions:
         raise HTTPException(
             status_code=400,
             detail="Invalid withdrawal action.",
         )
 
-    withdrawal.status = valid_transitions[
+    withdrawal.status = transitions[
         action
     ]
 
@@ -584,25 +591,28 @@ def admin_update_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url="/admin/withdrawals?success=Withdrawal updated.",
+        url=(
+            "/admin/withdrawals?"
+            "success=Creator withdrawal updated."
+        ),
         status_code=303,
     )
 
 
 # ============================================================
-# ADMIN / BEATHUB WITHDRAWAL PAGE
+# ADMIN PLATFORM WITHDRAWAL
 # ============================================================
 
-@router.get("/withdraw")
-def admin_withdraw_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    total_commission = (
+def _platform_available_balance(
+    db: Session,
+) -> Decimal:
+
+    commission = (
         db.query(
             func.coalesce(
-                func.sum(Order.commission_amount),
+                func.sum(
+                    Order.commission_amount
+                ),
                 0,
             )
         )
@@ -613,14 +623,12 @@ def admin_withdraw_page(
         .scalar()
     )
 
-    platform_earnings = Decimal(
-        str(total_commission or 0)
-    )
-
     paid = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -634,7 +642,9 @@ def admin_withdraw_page(
     processing = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -648,7 +658,9 @@ def admin_withdraw_page(
     pending = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -659,15 +671,28 @@ def admin_withdraw_page(
         .scalar()
     )
 
-    available_balance = (
-        platform_earnings
+    balance = (
+        Decimal(str(commission or 0))
         - Decimal(str(paid or 0))
         - Decimal(str(processing or 0))
         - Decimal(str(pending or 0))
     )
 
-    if available_balance < 0:
-        available_balance = Decimal("0.00")
+    return max(
+        balance,
+        Decimal("0.00"),
+    )
+
+
+@router.get("/withdraw")
+def admin_withdraw(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    available_balance = (
+        _platform_available_balance(db)
+    )
 
     withdrawals = (
         db.query(AdminWithdrawal)
@@ -684,31 +709,25 @@ def admin_withdraw_page(
         ctx(
             request,
             admin,
-
-            platform_earnings=platform_earnings,
-
-            paid=Decimal(
-                str(paid or 0)
-            ),
-
-            processing=Decimal(
-                str(processing or 0)
-            ),
-
-            pending=Decimal(
-                str(pending or 0)
-            ),
-
             available_balance=available_balance,
-
             withdrawals=withdrawals,
         ),
     )
 
 
-# ============================================================
-# CREATE ADMIN / BEATHUB WITHDRAWAL
-# ============================================================
+# Compatibility aliases.
+@router.get("/withdrawals/platform")
+def admin_platform_withdrawals(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    return admin_withdraw(
+        request=request,
+        db=db,
+        admin=admin,
+    )
+
 
 @router.post("/withdraw")
 def admin_create_withdrawal(
@@ -719,113 +738,40 @@ def admin_create_withdrawal(
     phone_number: str = Form(...),
     admin_note: str = Form(""),
 ):
-    # --------------------------------------------------------
-    # Calculate actual BeatHub commission earned.
-    # --------------------------------------------------------
-
-    total_commission = (
-        db.query(
-            func.coalesce(
-                func.sum(Order.commission_amount),
-                0,
-            )
-        )
-        .filter(
-            Order.status
-            == OrderStatus.COMPLETED
-        )
-        .scalar()
-    )
-
-    platform_earnings = Decimal(
-        str(total_commission or 0)
-    )
-
-    # --------------------------------------------------------
-    # Calculate money already committed/withdrawn.
-    # --------------------------------------------------------
-
-    paid = (
-        db.query(
-            func.coalesce(
-                func.sum(AdminWithdrawal.amount),
-                0,
-            )
-        )
-        .filter(
-            AdminWithdrawal.status
-            == AdminWithdrawalStatus.PAID
-        )
-        .scalar()
-    )
-
-    processing = (
-        db.query(
-            func.coalesce(
-                func.sum(AdminWithdrawal.amount),
-                0,
-            )
-        )
-        .filter(
-            AdminWithdrawal.status
-            == AdminWithdrawalStatus.PROCESSING
-        )
-        .scalar()
-    )
-
-    pending = (
-        db.query(
-            func.coalesce(
-                func.sum(AdminWithdrawal.amount),
-                0,
-            )
-        )
-        .filter(
-            AdminWithdrawal.status
-            == AdminWithdrawalStatus.PENDING
-        )
-        .scalar()
-    )
-
     available_balance = (
-        platform_earnings
-        - Decimal(str(paid or 0))
-        - Decimal(str(processing or 0))
-        - Decimal(str(pending or 0))
+        _platform_available_balance(db)
     )
-
-    if available_balance < 0:
-        available_balance = Decimal("0.00")
-
-    # --------------------------------------------------------
-    # Validate amount.
-    # --------------------------------------------------------
 
     try:
         amount_value = Decimal(
-            amount.strip()
+            (amount or "").strip()
         )
     except Exception:
         return RedirectResponse(
-            url="/admin/withdraw?error=Invalid withdrawal amount.",
+            url=(
+                "/admin/withdraw?"
+                "error=Invalid withdrawal amount."
+            ),
             status_code=303,
         )
 
     if amount_value <= 0:
         return RedirectResponse(
-            url="/admin/withdraw?error=Withdrawal amount must be greater than zero.",
+            url=(
+                "/admin/withdraw?"
+                "error=Withdrawal amount must be greater than zero."
+            ),
             status_code=303,
         )
 
     if amount_value > available_balance:
         return RedirectResponse(
-            url="/admin/withdraw?error=Withdrawal exceeds your available BeatHub balance.",
+            url=(
+                "/admin/withdraw?"
+                "error=Withdrawal exceeds your available BeatHub balance."
+            ),
             status_code=303,
         )
-
-    # --------------------------------------------------------
-    # Validate phone.
-    # --------------------------------------------------------
 
     phone = (
         phone_number or ""
@@ -833,17 +779,12 @@ def admin_create_withdrawal(
 
     if not phone:
         return RedirectResponse(
-            url="/admin/withdraw?error=M-Pesa phone number is required.",
+            url=(
+                "/admin/withdraw?"
+                "error=M-Pesa phone number is required."
+            ),
             status_code=303,
         )
-
-    # --------------------------------------------------------
-    # Create withdrawal.
-    #
-    # We create it as PENDING first.
-    # Actual M-Pesa payout should only happen through the
-    # configured payout process.
-    # --------------------------------------------------------
 
     withdrawal = AdminWithdrawal(
         amount=amount_value,
@@ -860,14 +801,13 @@ def admin_create_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url="/admin/withdraw?success=BeatHub withdrawal request created.",
+        url=(
+            "/admin/withdraw?"
+            "success=BeatHub withdrawal request created."
+        ),
         status_code=303,
     )
 
-
-# ============================================================
-# UPDATE ADMIN WITHDRAWAL
-# ============================================================
 
 @router.post(
     "/withdraw/{withdrawal_id}/update"
@@ -891,19 +831,19 @@ def admin_update_platform_withdrawal(
             detail="Admin withdrawal not found.",
         )
 
-    valid_actions = {
+    actions = {
         "process": AdminWithdrawalStatus.PROCESSING,
         "mark_paid": AdminWithdrawalStatus.PAID,
         "reject": AdminWithdrawalStatus.REJECTED,
     }
 
-    if action not in valid_actions:
+    if action not in actions:
         raise HTTPException(
             status_code=400,
             detail="Invalid admin withdrawal action.",
         )
 
-    withdrawal.status = valid_actions[
+    withdrawal.status = actions[
         action
     ]
 
@@ -926,6 +866,9 @@ def admin_update_platform_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url="/admin/withdraw?success=Admin withdrawal updated.",
+        url=(
+            "/admin/withdraw?"
+            "success=BeatHub withdrawal updated."
+        ),
         status_code=303,
     )
