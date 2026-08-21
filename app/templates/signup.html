@@ -8,10 +8,6 @@
 
   <div class="form-card">
 
-    <!-- ============================================================
-         BRAND
-    ============================================================ -->
-
     <div class="brand">
       BEAT<span class="hub">HUB</span>
     </div>
@@ -23,21 +19,18 @@
       selling beats and earning from your work.
     </p>
 
-
-    <!-- ============================================================
-         ERROR
-    ============================================================ -->
-
     {% if error %}
       <div class="alert alert-error">
         {{ error }}
       </div>
     {% endif %}
 
+    {% if success %}
+      <div class="alert alert-success">
+        {{ success }}
+      </div>
+    {% endif %}
 
-    <!-- ============================================================
-         SIGNUP FORM
-    ============================================================ -->
 
     <form
       action="/signup"
@@ -58,7 +51,8 @@
           type="text"
           name="stage_name"
           placeholder="e.g. Mr Mapema"
-          value="{{ request.form.get('stage_name', '') if request.form else '' }}"
+          value="{{ stage_name|default('') }}"
+          maxlength="100"
           required
           autofocus
           autocomplete="nickname"
@@ -80,7 +74,7 @@
           type="email"
           name="email"
           placeholder="you@example.com"
-          value="{{ request.form.get('email', '') if request.form else '' }}"
+          value="{{ email|default('') }}"
           required
           autocomplete="email"
         >
@@ -130,9 +124,7 @@
       </div>
 
 
-      <!-- ============================================================
-           ACCOUNT TYPE
-      ============================================================ -->
+      <!-- ACCOUNT TYPE -->
 
       <div class="field">
 
@@ -146,16 +138,21 @@
           required
         >
 
-          <!-- CREATOR IS THE DEFAULT -->
-
           <option
             value="creator"
-            selected
+            {% if role|default('creator') == 'creator' %}
+              selected
+            {% endif %}
           >
             Producer / Artist / DJ — I want to sell music
           </option>
 
-          <option value="buyer">
+          <option
+            value="buyer"
+            {% if role|default('creator') == 'buyer' %}
+              selected
+            {% endif %}
+          >
             Buyer / Artist — I want to purchase music
           </option>
 
@@ -164,7 +161,7 @@
       </div>
 
 
-      <!-- ACCOUNT TYPE EXPLANATION -->
+      <!-- CREATOR INFORMATION -->
 
       <div
         id="creator-info"
@@ -200,9 +197,43 @@
       </div>
 
 
-      <!-- ============================================================
-           TERMS
-      ============================================================ -->
+      <!-- BUYER INFORMATION -->
+
+      <div
+        id="buyer-info"
+        style="
+          display:none;
+          margin:-4px 0 18px;
+          padding:13px 15px;
+          border-radius:10px;
+          background:rgba(212,175,55,.07);
+          border:1px solid rgba(212,175,55,.20);
+        "
+      >
+
+        <div
+          class="eyebrow"
+          style="margin-bottom:5px;"
+        >
+          BUYER ACCOUNT
+        </div>
+
+        <p
+          class="sub"
+          style="
+            margin:0;
+            line-height:1.5;
+            font-size:13px;
+          "
+        >
+          You'll be able to discover beats and tracks, purchase music,
+          view your orders and securely download music you've purchased.
+        </p>
+
+      </div>
+
+
+      <!-- TERMS -->
 
       <div class="checkbox-row">
 
@@ -210,6 +241,10 @@
           type="checkbox"
           id="terms"
           name="agree_terms"
+          value="yes"
+          {% if agree_terms|default(false) %}
+            checked
+          {% endif %}
           required
         >
 
@@ -229,9 +264,7 @@
       </div>
 
 
-      <!-- ============================================================
-           SUBMIT
-      ============================================================ -->
+      <!-- SUBMIT -->
 
       <button
         type="submit"
@@ -243,9 +276,7 @@
     </form>
 
 
-    <!-- ============================================================
-         LOGIN
-    ============================================================ -->
+    <!-- LOGIN -->
 
     <p
       class="sub"
@@ -266,32 +297,30 @@
 </div>
 
 
-<!-- ================================================================
-     ACCOUNT TYPE UI
-================================================================ -->
-
 <script>
 (function () {
 
   const roleSelect = document.getElementById("role");
   const creatorInfo = document.getElementById("creator-info");
+  const buyerInfo = document.getElementById("buyer-info");
 
-  if (!roleSelect || !creatorInfo) {
+  if (!roleSelect) {
     return;
   }
 
   function updateAccountInfo() {
 
-    if (roleSelect.value === "creator") {
+    const isCreator = roleSelect.value === "creator";
 
-      creatorInfo.style.display = "block";
-
-    } else {
-
-      creatorInfo.style.display = "none";
-
+    if (creatorInfo) {
+      creatorInfo.style.display =
+        isCreator ? "block" : "none";
     }
 
+    if (buyerInfo) {
+      buyerInfo.style.display =
+        isCreator ? "none" : "block";
+    }
   }
 
   roleSelect.addEventListener(
