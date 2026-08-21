@@ -1,5 +1,13 @@
 """
 BeatHub authentication routes.
+
+One login is used by everyone:
+
+    Buyer / Artist  -> email
+    Creator         -> email
+    Admin           -> username or email
+
+The user's role determines the destination after login.
 """
 
 import re
@@ -27,9 +35,14 @@ from app.utils.security import (
 )
 
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(
+    tags=["auth"]
+)
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(
+    directory="app/templates"
+)
+
 
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -45,12 +58,16 @@ def slugify(value: str) -> str:
         (value or "").strip(),
     ).strip("-").lower()
 
-    return value or f"producer-{secrets.token_hex(4)}"
+    return value or (
+        f"producer-{secrets.token_hex(4)}"
+    )
 
 
-def dashboard_url_for_user(user: User) -> str:
+def dashboard_url_for_user(
+    user: User,
+) -> str:
     """
-    Determine where a user goes after authentication.
+    Single source of truth for post-login routing.
     """
 
     role = get_role_name(user)
@@ -117,9 +134,17 @@ def signup_submit(
             status_code=400,
         )
 
-    stage_name = (stage_name or "").strip()
-    email_norm = (email or "").strip().lower()
-    role = (role or "buyer").strip().lower()
+    stage_name = (
+        stage_name or ""
+    ).strip()
+
+    email_norm = (
+        email or ""
+    ).strip().lower()
+
+    role = (
+        role or "buyer"
+    ).strip().lower()
 
     if not stage_name:
         return error(
@@ -146,13 +171,6 @@ def signup_submit(
             "Passwords do not match."
         )
 
-    # --------------------------------------------------------------
-    # Public signup roles
-    #
-    # IMPORTANT:
-    # Admin accounts can NEVER be created through public signup.
-    # --------------------------------------------------------------
-
     if role in {
         "artist",
         "buyer",
@@ -172,7 +190,9 @@ def signup_submit(
 
     existing_user = (
         db.query(User)
-        .filter(User.email == email_norm)
+        .filter(
+            User.email == email_norm
+        )
         .first()
     )
 
@@ -184,6 +204,7 @@ def signup_submit(
     user = User(
         id=str(uuid.uuid4()),
         email=email_norm,
+        username=None,
         hashed_password=hash_password(password),
         role=user_role,
         is_active=True,
@@ -202,11 +223,9 @@ def signup_submit(
             "An account with this email already exists."
         )
 
-    # --------------------------------------------------------------
-    # Create profile
-    # --------------------------------------------------------------
-
-    base_slug = slugify(stage_name)
+    base_slug = slugify(
+        stage_name
+    )
 
     slug = base_slug
     suffix = 1
@@ -241,22 +260,21 @@ def signup_submit(
             "Could not create account. Please try again."
         )
 
-    # --------------------------------------------------------------
-    # Login immediately after successful signup
-    # --------------------------------------------------------------
-
     db.refresh(user)
 
     token = create_access_token(
         subject=user.id
     )
 
-    destination = dashboard_url_for_user(user)
+    destination = dashboard_url_for_user(
+        user
+    )
 
     response = RedirectResponse(
         url=(
             f"{destination}"
-            "?success=Account created. Welcome to BeatHub!"
+            "?success=Account created. "
+            "Welcome to BeatHub!"
         ),
         status_code=303,
     )
@@ -275,7 +293,7 @@ def signup_submit(
 
 
 # ----------------------------------------------------------------------
-# NORMAL LOGIN
+# LOGIN
 # ----------------------------------------------------------------------
 
 @router.get("/login")
@@ -303,6 +321,7 @@ def login_submit(
             base_context(
                 request,
                 error=message,
+                identifier=identifier,
             ),
             status_code=401,
         )
@@ -311,8 +330,18 @@ def login_submit(
         identifier or ""
     ).strip().lower()
 
+    if not identifier_norm:
+        return error(
+            "Please enter your email or username."
+        )
+
+    if not password:
+        return error(
+            "Please enter your password."
+        )
+
     # --------------------------------------------------------------
-    # Login using email
+    # FIRST: normal email lookup
     # --------------------------------------------------------------
 
     user = (
@@ -324,7 +353,25 @@ def login_submit(
     )
 
     # --------------------------------------------------------------
-    # Fallback: producer profile slug
+    # SECOND: username lookup
+    #
+    # This is primarily used by the administrator, but it also
+    # allows future accounts to use usernames.
+    # --------------------------------------------------------------
+
+    if not user:
+        user = (
+            db.query(User)
+            .filter(
+                User.username == identifier_norm
+            )
+            .first()
+        )
+
+    # --------------------------------------------------------------
+    # THIRD: existing producer profile slug compatibility
+    #
+    # Keeps your previous login behavior working.
     # --------------------------------------------------------------
 
     if not user and identifier_norm:
@@ -350,10 +397,6 @@ def login_submit(
                 .first()
             )
 
-    # --------------------------------------------------------------
-    # Validate credentials
-    # --------------------------------------------------------------
-
     if not user:
         return error(
             "Invalid credentials. Please try again."
@@ -369,20 +412,19 @@ def login_submit(
 
     if not user.is_active:
         return error(
-            "This account has been deactivated. Contact support."
+            "This account has been deactivated. "
+            "Contact support."
         )
 
     db.refresh(user)
-
-    # --------------------------------------------------------------
-    # Create authenticated session
-    # --------------------------------------------------------------
 
     token = create_access_token(
         subject=user.id
     )
 
-    destination = dashboard_url_for_user(user)
+    destination = dashboard_url_for_user(
+        user
+    )
 
     response = RedirectResponse(
         url=destination,
