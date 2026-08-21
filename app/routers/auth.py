@@ -81,10 +81,36 @@ def base_context(
     current_user=None,
     **extra,
 ):
+    """
+    Shared template context.
+
+    Important:
+    Never access request.form from Jinja templates.
+    Form values are explicitly supplied here.
+    """
+
     context = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
+
+        "error": None,
+        "success": None,
+
+        # Signup values
+        "stage_name": "",
+        "email": "",
+        "password": "",
+        "confirm_password": "",
+        "role": "creator",
+        "agree_terms": False,
+
+        # Login values
+        "identifier": "",
+
+        # Password reset
+        "token": "",
+        "valid": False,
     }
 
     context.update(extra)
@@ -169,10 +195,32 @@ def create_admin_session_token() -> str:
 def signup_page(
     request: Request,
 ):
+    """
+    Display signup page.
+
+    All form defaults are explicitly supplied to Jinja.
+    This prevents the common Starlette/Jinja error:
+
+        'method object' has no attribute 'get'
+    """
+
     return templates.TemplateResponse(
         request,
         "signup.html",
-        base_context(request),
+        base_context(
+            request,
+            current_user=None,
+
+            stage_name="",
+            email="",
+            password="",
+            confirm_password="",
+            role="creator",
+            agree_terms=False,
+
+            error=None,
+            success=None,
+        ),
     )
 
 
@@ -180,36 +228,95 @@ def signup_page(
 def signup_submit(
     request: Request,
     db: Session = Depends(get_db),
-    stage_name: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-    role: str = Form("buyer"),
+    stage_name: str = Form(""),
+    email: str = Form(""),
+    password: str = Form(""),
+    confirm_password: str = Form(""),
+    role: str = Form("creator"),
     agree_terms: str = Form(None),
 ):
+    """
+    Create a BeatHub buyer or creator account.
+
+    Public signup can NEVER create an admin account.
+    """
+
+    stage_name = (
+        stage_name or ""
+    ).strip()
+
+    email_norm = (
+        email or ""
+    ).strip().lower()
+
+    password = password or ""
+    confirm_password = confirm_password or ""
+
+    role = (
+        role or "creator"
+    ).strip().lower()
+
     def error(message: str):
+        """
+        Re-render the signup form while preserving safe
+        user-entered fields.
+
+        Password fields are intentionally cleared.
+        """
+
         return templates.TemplateResponse(
             request,
             "signup.html",
             base_context(
                 request,
+                current_user=None,
+
+                stage_name=stage_name,
+                email=email_norm,
+
+                password="",
+                confirm_password="",
+
+                role=(
+                    "creator"
+                    if role in {"creator", "producer"}
+                    else "buyer"
+                ),
+
+                agree_terms=bool(agree_terms),
+
                 error=message,
+                success=None,
             ),
             status_code=400,
         )
 
-    stage_name = (stage_name or "").strip()
-    email_norm = (email or "").strip().lower()
-    role = (role or "buyer").strip().lower()
+    # ------------------------------------------------------------------
+    # BASIC VALIDATION
+    # ------------------------------------------------------------------
 
     if not stage_name:
         return error(
             "Stage name / artist name is required."
         )
 
+    if len(stage_name) > 100:
+        return error(
+            "Stage name is too long."
+        )
+
     if not email_norm:
         return error(
             "Email address is required."
+        )
+
+    # Basic email validation.
+    if not re.fullmatch(
+        r"[^@\s]+@[^@\s]+\.[^@\s]+",
+        email_norm,
+    ):
+        return error(
+            "Please enter a valid email address."
         )
 
     if not agree_terms:
@@ -228,8 +335,9 @@ def signup_submit(
         )
 
     # ------------------------------------------------------------------
-    # IMPORTANT:
-    # Public signup can NEVER create an admin account.
+    # PUBLIC ROLE SELECTION
+    #
+    # Admin can NEVER be created through signup.
     # ------------------------------------------------------------------
 
     if role in {
@@ -237,13 +345,18 @@ def signup_submit(
         "producer",
     }:
         user_role = UserRole.CREATOR
-
     else:
         user_role = UserRole.BUYER
 
+    # ------------------------------------------------------------------
+    # EXISTING EMAIL
+    # ------------------------------------------------------------------
+
     existing_user = (
         db.query(User)
-        .filter(User.email == email_norm)
+        .filter(
+            User.email == email_norm
+        )
         .first()
     )
 
@@ -251,6 +364,10 @@ def signup_submit(
         return error(
             "An account with this email already exists."
         )
+
+    # ------------------------------------------------------------------
+    # CREATE USER
+    # ------------------------------------------------------------------
 
     user = User(
         id=str(uuid.uuid4()),
@@ -273,6 +390,10 @@ def signup_submit(
             "An account with this email already exists."
         )
 
+    # ------------------------------------------------------------------
+    # CREATE UNIQUE PUBLIC PROFILE SLUG
+    # ------------------------------------------------------------------
+
     base_slug = slugify(stage_name)
 
     slug = base_slug
@@ -280,11 +401,17 @@ def signup_submit(
 
     while (
         db.query(Profile)
-        .filter(Profile.slug == slug)
+        .filter(
+            Profile.slug == slug
+        )
         .first()
     ):
         suffix += 1
         slug = f"{base_slug}-{suffix}"
+
+    # ------------------------------------------------------------------
+    # CREATE PROFILE
+    # ------------------------------------------------------------------
 
     profile = Profile(
         id=str(uuid.uuid4()),
@@ -308,10 +435,21 @@ def signup_submit(
             "Could not create account. Please try again."
         )
 
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(user)
 
+    # ------------------------------------------------------------------
+    # AUTOMATIC LOGIN
+    # ------------------------------------------------------------------
+
     token = create_access_token(
-        subject=user.id
+        subject=user.id,
+        extra_claims={
+            "role": get_role_name(user),
+        },
     )
 
     destination = dashboard_url_for_user(user)
@@ -330,7 +468,7 @@ def signup_submit(
         httponly=True,
         max_age=COOKIE_MAX_AGE,
         samesite="lax",
-        secure=False,
+        secure=True,
         path="/",
     )
 
@@ -348,7 +486,13 @@ def login_page(
     return templates.TemplateResponse(
         request,
         "login.html",
-        base_context(request),
+        base_context(
+            request,
+            current_user=None,
+            identifier="",
+            error=None,
+            success=None,
+        ),
     )
 
 
@@ -356,8 +500,8 @@ def login_page(
 def login_submit(
     request: Request,
     db: Session = Depends(get_db),
-    identifier: str = Form(...),
-    password: str = Form(...),
+    identifier: str = Form(""),
+    password: str = Form(""),
 ):
     def error(message: str):
         return templates.TemplateResponse(
@@ -365,7 +509,10 @@ def login_submit(
             "login.html",
             base_context(
                 request,
+                current_user=None,
+                identifier=identifier_raw,
                 error=message,
+                success=None,
             ),
             status_code=401,
         )
@@ -389,9 +536,7 @@ def login_submit(
         )
 
     # ------------------------------------------------------------------
-    # 1. CHECK ADMIN FIRST
-    #
-    # Admin credentials live in Render and are NOT stored in users.
+    # ADMIN
     # ------------------------------------------------------------------
 
     if verify_admin_credentials(
@@ -411,14 +556,14 @@ def login_submit(
             httponly=True,
             max_age=COOKIE_MAX_AGE,
             samesite="lax",
-            secure=False,
+            secure=True,
             path="/",
         )
 
         return response
 
     # ------------------------------------------------------------------
-    # 2. NORMAL USER LOGIN BY EMAIL
+    # NORMAL USER BY EMAIL
     # ------------------------------------------------------------------
 
     user = (
@@ -430,9 +575,7 @@ def login_submit(
     )
 
     # ------------------------------------------------------------------
-    # 3. NORMAL USER LOGIN BY PUBLIC PROFILE SLUG
-    #
-    # This preserves the existing BeatHub behavior.
+    # NORMAL USER BY PROFILE SLUG
     # ------------------------------------------------------------------
 
     if not user and identifier_norm:
@@ -461,6 +604,11 @@ def login_submit(
     if not user:
         return error(
             "Invalid credentials. Please try again."
+        )
+
+    if not user.hashed_password:
+        return error(
+            "This account cannot be logged in with a password."
         )
 
     if not verify_password(
@@ -498,7 +646,7 @@ def login_submit(
         httponly=True,
         max_age=COOKIE_MAX_AGE,
         samesite="lax",
-        secure=False,
+        secure=True,
         path="/",
     )
 
@@ -544,7 +692,13 @@ def forgot_password_page(
     return templates.TemplateResponse(
         request,
         "forgot_password.html",
-        base_context(request),
+        base_context(
+            request,
+            current_user=None,
+            email="",
+            error=None,
+            success=None,
+        ),
     )
 
 
@@ -552,7 +706,7 @@ def forgot_password_page(
 def forgot_password_submit(
     request: Request,
     db: Session = Depends(get_db),
-    email: str = Form(...),
+    email: str = Form(""),
 ):
     email_norm = (
         email or ""
@@ -593,6 +747,8 @@ def forgot_password_submit(
         "forgot_password.html",
         base_context(
             request,
+            current_user=None,
+            email=email_norm,
             success=(
                 "If an account exists for "
                 "that email, a reset link "
@@ -632,8 +788,11 @@ def reset_password_page(
         "reset_password.html",
         base_context(
             request,
+            current_user=None,
             token=token,
             valid=valid,
+            error=None,
+            success=None,
         ),
     )
 
@@ -642,9 +801,9 @@ def reset_password_page(
 def reset_password_submit(
     request: Request,
     db: Session = Depends(get_db),
-    token: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
+    token: str = Form(""),
+    password: str = Form(""),
+    confirm_password: str = Form(""),
 ):
     user = (
         db.query(User)
@@ -667,6 +826,7 @@ def reset_password_submit(
             "reset_password.html",
             base_context(
                 request,
+                current_user=None,
                 token=token,
                 valid=False,
                 error=(
@@ -686,6 +846,7 @@ def reset_password_submit(
             "reset_password.html",
             base_context(
                 request,
+                current_user=None,
                 token=token,
                 valid=True,
                 error=(
