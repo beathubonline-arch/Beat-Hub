@@ -38,7 +38,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 # =========================================================
-# COMMON TEMPLATE CONTEXT
+# TEMPLATE CONTEXT
 # =========================================================
 
 def ctx(request: Request, current_user, **extra):
@@ -54,23 +54,13 @@ def ctx(request: Request, current_user, **extra):
 
 
 # =========================================================
-# CREATOR STATISTICS
+# CREATOR STATS
 # =========================================================
 
 def _creator_stats(db: Session, profile_id: str) -> dict:
-    """
-    Calculate creator financial statistics from completed orders.
-
-    IMPORTANT:
-    All values are returned as Decimal where appropriate.
-    """
-
     orders = (
         db.query(Order)
-        .join(
-            Track,
-            Order.track_id == Track.id,
-        )
+        .join(Track, Order.track_id == Track.id)
         .filter(
             Track.creator_profile_id == profile_id,
             Order.status == OrderStatus.COMPLETED,
@@ -80,24 +70,24 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
 
     gross = sum(
         (
-            Decimal(str(order.gross_amount or 0))
-            for order in orders
+            Decimal(str(o.gross_amount or 0))
+            for o in orders
         ),
         Decimal("0"),
     )
 
     commission = sum(
         (
-            Decimal(str(order.commission_amount or 0))
-            for order in orders
+            Decimal(str(o.commission_amount or 0))
+            for o in orders
         ),
         Decimal("0"),
     )
 
     net = sum(
         (
-            Decimal(str(order.net_amount or 0))
-            for order in orders
+            Decimal(str(o.net_amount or 0))
+            for o in orders
         ),
         Decimal("0"),
     )
@@ -150,15 +140,14 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
         - pending_decimal
     )
 
-    # Never expose a negative available balance.
-    if available_balance < Decimal("0"):
+    if available_balance < 0:
         available_balance = Decimal("0")
 
     recent_orders = sorted(
         orders,
-        key=lambda order: (
-            order.completed_at
-            or order.created_at
+        key=lambda o: (
+            o.completed_at
+            or o.created_at
             or datetime.min
         ),
         reverse=True,
@@ -171,16 +160,17 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
         "net_earnings": net,
         "available_balance": available_balance,
         "pending_withdrawal": pending_decimal,
-        "withdrawn_amount": withdrawn_decimal,
+        "withdrawn": withdrawn_decimal,
         "recent_orders": recent_orders,
     }
 
 
 # =========================================================
-# DASHBOARD HOME
+# DASHBOARD
 # =========================================================
 
 @router.get("/dashboard")
+@router.get("/dashboard/")
 def dashboard_home(
     request: Request,
     db: Session = Depends(get_db),
@@ -199,6 +189,10 @@ def dashboard_home(
         profile.id,
     )
 
+    # -----------------------------------------------------
+    # TRACK COUNTS
+    # -----------------------------------------------------
+
     track_count = (
         db.query(Track)
         .filter(
@@ -216,7 +210,7 @@ def dashboard_home(
     )
 
     # -----------------------------------------------------
-    # Creator tracks
+    # RECENT TRACKS
     # -----------------------------------------------------
 
     tracks = (
@@ -227,34 +221,45 @@ def dashboard_home(
         .order_by(
             Track.created_at.desc()
         )
+        .limit(12)
         .all()
     )
 
     # -----------------------------------------------------
-    # Public store URL
+    # STORE URL
     # -----------------------------------------------------
 
     store_url = None
 
-    # Your profile/store implementation may expose slug.
-    # Keep this safe so dashboard never crashes if a profile
-    # does not yet have a slug.
-    profile_slug = getattr(profile, "slug", None)
-
-    if profile_slug:
-        store_url = f"/store/{profile_slug}"
+    try:
+        if getattr(profile, "slug", None):
+            store_url = (
+                f"/producer/{profile.slug}"
+            )
+        elif getattr(profile, "username", None):
+            store_url = (
+                f"/producer/{profile.username}"
+            )
+    except Exception:
+        store_url = None
 
     # -----------------------------------------------------
-    # YouTube / Discord
+    # SOCIAL LINKS
     # -----------------------------------------------------
-
-    youtube_url = None
 
     youtube_channel_id = getattr(
         settings,
         "YOUTUBE_CHANNEL_ID",
-        None,
+        "",
     )
+
+    discord_invite_url = getattr(
+        settings,
+        "DISCORD_INVITE_URL",
+        "",
+    )
+
+    youtube_url = None
 
     if youtube_channel_id:
         youtube_url = (
@@ -262,24 +267,45 @@ def dashboard_home(
             f"{youtube_channel_id}"
         )
 
-    discord_url = getattr(
-        settings,
-        "DISCORD_INVITE_URL",
-        None,
-    )
+    # -----------------------------------------------------
+    # DIRECT TEMPLATE VARIABLES
+    #
+    # IMPORTANT:
+    # dashboard.html expects these variables directly,
+    # not only inside stats.
+    # -----------------------------------------------------
 
-    # -----------------------------------------------------
-    # Expose stats BOTH as `stats[...]` and direct variables.
-    #
-    # This is important because dashboard.html currently
-    # uses variables such as:
-    #
-    # available_balance
-    # gross_revenue
-    # platform_commission
-    # net_earnings
-    # pending_withdrawal
-    # -----------------------------------------------------
+    available_balance = stats[
+        "available_balance"
+    ]
+
+    total_sales = stats[
+        "total_sales"
+    ]
+
+    gross_revenue = stats[
+        "gross_revenue"
+    ]
+
+    platform_commission = stats[
+        "platform_commission"
+    ]
+
+    net_earnings = stats[
+        "net_earnings"
+    ]
+
+    pending_withdrawal = stats[
+        "pending_withdrawal"
+    ]
+
+    withdrawn = stats[
+        "withdrawn"
+    ]
+
+    recent_orders = stats[
+        "recent_orders"
+    ]
 
     return templates.TemplateResponse(
         request,
@@ -288,31 +314,45 @@ def dashboard_home(
             request,
             user,
 
+            # Main objects
             profile=profile,
             stats=stats,
 
+            # Counts
             track_count=track_count,
             album_count=album_count,
+
+            # Tracks
             tracks=tracks,
 
-            total_sales=stats["total_sales"],
-            gross_revenue=stats["gross_revenue"],
-            platform_commission=stats["platform_commission"],
-            net_earnings=stats["net_earnings"],
-            available_balance=stats["available_balance"],
-            pending_withdrawal=stats["pending_withdrawal"],
-            withdrawn_amount=stats["withdrawn_amount"],
-            recent_orders=stats["recent_orders"],
+            # Financial values
+            available_balance=available_balance,
+            total_sales=total_sales,
+            gross_revenue=gross_revenue,
+            platform_commission=platform_commission,
+            net_earnings=net_earnings,
+            pending_withdrawal=pending_withdrawal,
+            withdrawn=withdrawn,
 
+            # Orders
+            recent_orders=recent_orders,
+
+            # Socials
             youtube_url=youtube_url,
-            discord_url=discord_url,
+            discord_url=discord_invite_url,
+
+            # Public store
             store_url=store_url,
+
+            # Compatibility aliases
+            earnings=net_earnings,
+            balance=available_balance,
         ),
     )
 
 
 # =========================================================
-# UPLOAD TRACK PAGE
+# UPLOAD PAGE
 # =========================================================
 
 @router.get("/dashboard/upload")
@@ -429,10 +469,7 @@ async def upload_submit(
                 if price_val < 0:
                     raise ValueError
 
-            except (
-                InvalidOperation,
-                ValueError,
-            ):
+            except (InvalidOperation, ValueError):
                 return error(
                     f"Price for '{title}' is invalid."
                 )
@@ -447,11 +484,10 @@ async def upload_submit(
                 else "non_exclusive"
             )
 
-            sales_model = (
-                SalesModel.EXCLUSIVE
-                if model_raw == "exclusive"
-                else SalesModel.NON_EXCLUSIVE
-            )
+            if model_raw == "exclusive":
+                sales_model = SalesModel.EXCLUSIVE
+            else:
+                sales_model = SalesModel.NON_EXCLUSIVE
 
             # -------------------------------------------------
             # AUDIO
@@ -500,30 +536,24 @@ async def upload_submit(
                 creator_profile_id=profile.id,
                 title=title,
                 slug=slug,
-
                 description=(
                     descriptions[i].strip()
                     if i < len(descriptions)
                     else None
                 ) or None,
-
                 genre=(
                     genres[i].strip()
                     if i < len(genres)
                     else None
                 ) or None,
-
                 bpm=bpm_val,
-
                 tags=(
                     tags_list[i].strip()
                     if i < len(tags_list)
                     else None
                 ) or None,
-
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
-
                 price=price_val,
                 sales_model=sales_model,
             )
@@ -693,9 +723,8 @@ async def new_album_submit(
 
     if not valid_tracks:
         db.rollback()
-
         return error(
-            "None of the selected tracks belong to your account."
+            "The selected tracks could not be found."
         )
 
     for position, track in enumerate(valid_tracks):
@@ -748,10 +777,7 @@ def request_withdrawal(
         amount_val = Decimal(
             amount.strip()
         )
-    except (
-        InvalidOperation,
-        ValueError,
-    ):
+    except (InvalidOperation, ValueError):
         return RedirectResponse(
             url=(
                 "/dashboard?"
