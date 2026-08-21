@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.ledger import (
     AdminWithdrawal,
-    CreatorLedgerEntry,
     WithdrawalRequest,
 )
 from app.models.order import Order, OrderStatus
@@ -29,6 +28,10 @@ templates = Jinja2Templates(
 )
 
 
+# =========================================================
+# COMMON TEMPLATE CONTEXT
+# =========================================================
+
 def admin_ctx(
     request: Request,
     current_user,
@@ -39,16 +42,20 @@ def admin_ctx(
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
 
-        # Safe defaults for templates
+        # Safe defaults so templates don't crash when a
+        # particular page doesn't use every variable.
         "users_count": 0,
         "tracks_count": 0,
         "completed_sales": 0,
         "pending_creator_withdrawals": 0,
+
         "total_sales_volume": Decimal("0"),
         "platform_revenue": Decimal("0"),
+
         "already_withdrawn": Decimal("0"),
         "pending_admin": Decimal("0"),
         "available_balance": Decimal("0"),
+
         "withdrawals": [],
         "admin_withdrawals": [],
     }
@@ -58,9 +65,9 @@ def admin_ctx(
     return data
 
 
-# ---------------------------------------------------------
+# =========================================================
 # ADMIN HOME
-# ---------------------------------------------------------
+# =========================================================
 
 @router.get("")
 @router.get("/")
@@ -83,11 +90,15 @@ def admin_home(
 
     # -----------------------------------------------------
     # TOTAL SALES VOLUME
+    #
+    # IMPORTANT:
+    # Order has gross_amount, NOT total_amount.
     # -----------------------------------------------------
+
     total_sales_volume_raw = (
         db.query(
             func.coalesce(
-                func.sum(Order.total_amount),
+                func.sum(Order.gross_amount),
                 0,
             )
         )
@@ -102,8 +113,11 @@ def admin_home(
     )
 
     # -----------------------------------------------------
-    # PLATFORM REVENUE / COMMISSION
+    # BEATHUB PLATFORM REVENUE
+    #
+    # This is the commission retained by BeatHub.
     # -----------------------------------------------------
+
     platform_revenue_raw = (
         db.query(
             func.coalesce(
@@ -124,6 +138,7 @@ def admin_home(
     # -----------------------------------------------------
     # PENDING CREATOR WITHDRAWALS
     # -----------------------------------------------------
+
     pending_creator_withdrawals = (
         db.query(WithdrawalRequest)
         .filter(
@@ -135,6 +150,7 @@ def admin_home(
     # -----------------------------------------------------
     # RECENT ADMIN WITHDRAWALS
     # -----------------------------------------------------
+
     admin_withdrawals = (
         db.query(AdminWithdrawal)
         .order_by(
@@ -159,8 +175,6 @@ def admin_home(
                 pending_creator_withdrawals
             ),
 
-            # IMPORTANT:
-            # dashboard.html requires this
             total_sales_volume=total_sales_volume,
 
             platform_revenue=platform_revenue,
@@ -170,9 +184,9 @@ def admin_home(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # CREATOR WITHDRAWALS
-# ---------------------------------------------------------
+# =========================================================
 
 @router.get("/withdrawals")
 def creator_withdrawals(
@@ -199,7 +213,13 @@ def creator_withdrawals(
     )
 
 
-@router.post("/withdrawals/{withdrawal_id}/approve")
+# ---------------------------------------------------------
+# APPROVE CREATOR WITHDRAWAL
+# ---------------------------------------------------------
+
+@router.post(
+    "/withdrawals/{withdrawal_id}/approve"
+)
 def approve_creator_withdrawal(
     withdrawal_id: str,
     db: Session = Depends(get_db),
@@ -229,7 +249,9 @@ def approve_creator_withdrawal(
         )
 
     withdrawal.status = "approved"
+
     withdrawal.updated_at = datetime.utcnow()
+
     withdrawal.admin_note = (
         "Withdrawal approved by administrator."
     )
@@ -245,7 +267,13 @@ def approve_creator_withdrawal(
     )
 
 
-@router.post("/withdrawals/{withdrawal_id}/reject")
+# ---------------------------------------------------------
+# REJECT CREATOR WITHDRAWAL
+# ---------------------------------------------------------
+
+@router.post(
+    "/withdrawals/{withdrawal_id}/reject"
+)
 def reject_creator_withdrawal(
     withdrawal_id: str,
     note: str = Form(""),
@@ -267,11 +295,14 @@ def reject_creator_withdrawal(
         )
 
     withdrawal.status = "rejected"
+
     withdrawal.admin_note = (
         note.strip()
         or "Withdrawal rejected by administrator."
     )
+
     withdrawal.updated_at = datetime.utcnow()
+
     withdrawal.resolved_at = datetime.utcnow()
 
     db.commit()
@@ -285,9 +316,9 @@ def reject_creator_withdrawal(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # ADMIN / BEATHUB OWN WITHDRAWAL
-# ---------------------------------------------------------
+# =========================================================
 
 @router.get("/withdraw")
 def admin_withdraw_page(
@@ -295,6 +326,10 @@ def admin_withdraw_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
+    # -----------------------------------------------------
+    # COMPLETED ORDERS
+    # -----------------------------------------------------
+
     completed_orders = (
         db.query(Order)
         .filter(
@@ -303,18 +338,33 @@ def admin_withdraw_page(
         .all()
     )
 
+    # -----------------------------------------------------
+    # PLATFORM REVENUE
+    # -----------------------------------------------------
+
     platform_revenue = sum(
         (
-            Decimal(str(o.commission_amount or 0))
-            for o in completed_orders
+            Decimal(
+                str(
+                    order.commission_amount
+                    or 0
+                )
+            )
+            for order in completed_orders
         ),
         Decimal("0"),
     )
 
-    already_withdrawn = (
+    # -----------------------------------------------------
+    # ALREADY WITHDRAWN
+    # -----------------------------------------------------
+
+    already_withdrawn_raw = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -330,10 +380,20 @@ def admin_withdraw_page(
         .scalar()
     )
 
-    pending_admin = (
+    already_withdrawn = Decimal(
+        str(already_withdrawn_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # PENDING ADMIN WITHDRAWALS
+    # -----------------------------------------------------
+
+    pending_admin_raw = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -343,19 +403,26 @@ def admin_withdraw_page(
         .scalar()
     )
 
-    already_withdrawn = Decimal(
-        str(already_withdrawn or 0)
+    pending_admin = Decimal(
+        str(pending_admin_raw or 0)
     )
 
-    pending_admin = Decimal(
-        str(pending_admin or 0)
-    )
+    # -----------------------------------------------------
+    # AVAILABLE BALANCE
+    # -----------------------------------------------------
 
     available = (
         platform_revenue
         - already_withdrawn
         - pending_admin
     )
+
+    if available < 0:
+        available = Decimal("0")
+
+    # -----------------------------------------------------
+    # WITHDRAWAL HISTORY
+    # -----------------------------------------------------
 
     withdrawals = (
         db.query(AdminWithdrawal)
@@ -371,18 +438,25 @@ def admin_withdraw_page(
         admin_ctx(
             request,
             user,
+
             platform_revenue=platform_revenue,
-            already_withdrawn=already_withdrawn,
+
+            already_withdrawn=(
+                already_withdrawn
+            ),
+
             pending_admin=pending_admin,
+
             available_balance=available,
+
             withdrawals=withdrawals,
         ),
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # CREATE ADMIN WITHDRAWAL
-# ---------------------------------------------------------
+# =========================================================
 
 @router.post("/withdraw")
 def create_admin_withdrawal(
@@ -392,11 +466,19 @@ def create_admin_withdrawal(
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
+    # -----------------------------------------------------
+    # VALIDATE AMOUNT
+    # -----------------------------------------------------
+
     try:
         amount_val = Decimal(
             amount.strip()
         )
-    except (InvalidOperation, ValueError):
+    except (
+        InvalidOperation,
+        ValueError,
+        AttributeError,
+    ):
         return RedirectResponse(
             url=(
                 "/admin/withdraw?"
@@ -414,6 +496,10 @@ def create_admin_withdrawal(
             status_code=303,
         )
 
+    # -----------------------------------------------------
+    # VALIDATE PHONE
+    # -----------------------------------------------------
+
     phone_number = phone_number.strip()
 
     if not phone_number:
@@ -425,6 +511,10 @@ def create_admin_withdrawal(
             status_code=303,
         )
 
+    # -----------------------------------------------------
+    # COMPLETED ORDERS
+    # -----------------------------------------------------
+
     completed_orders = (
         db.query(Order)
         .filter(
@@ -433,18 +523,33 @@ def create_admin_withdrawal(
         .all()
     )
 
+    # -----------------------------------------------------
+    # PLATFORM REVENUE
+    # -----------------------------------------------------
+
     platform_revenue = sum(
         (
-            Decimal(str(o.commission_amount or 0))
-            for o in completed_orders
+            Decimal(
+                str(
+                    order.commission_amount
+                    or 0
+                )
+            )
+            for order in completed_orders
         ),
         Decimal("0"),
     )
 
-    already_withdrawn = (
+    # -----------------------------------------------------
+    # ALREADY WITHDRAWN
+    # -----------------------------------------------------
+
+    already_withdrawn_raw = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -460,10 +565,20 @@ def create_admin_withdrawal(
         .scalar()
     )
 
-    pending_admin = (
+    already_withdrawn = Decimal(
+        str(already_withdrawn_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # PENDING WITHDRAWALS
+    # -----------------------------------------------------
+
+    pending_admin_raw = (
         db.query(
             func.coalesce(
-                func.sum(AdminWithdrawal.amount),
+                func.sum(
+                    AdminWithdrawal.amount
+                ),
                 0,
             )
         )
@@ -473,11 +588,26 @@ def create_admin_withdrawal(
         .scalar()
     )
 
+    pending_admin = Decimal(
+        str(pending_admin_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # AVAILABLE BALANCE
+    # -----------------------------------------------------
+
     available = (
         platform_revenue
-        - Decimal(str(already_withdrawn or 0))
-        - Decimal(str(pending_admin or 0))
+        - already_withdrawn
+        - pending_admin
     )
+
+    if available < 0:
+        available = Decimal("0")
+
+    # -----------------------------------------------------
+    # CHECK REQUESTED AMOUNT
+    # -----------------------------------------------------
 
     if amount_val > available:
         return RedirectResponse(
@@ -488,14 +618,22 @@ def create_admin_withdrawal(
             status_code=303,
         )
 
+    # -----------------------------------------------------
+    # CREATE WITHDRAWAL
+    # -----------------------------------------------------
+
     withdrawal = AdminWithdrawal(
         amount=amount_val,
         phone_number=phone_number,
         status="pending",
-        admin_note=note.strip() or None,
+        admin_note=(
+            note.strip()
+            or None
+        ),
     )
 
     db.add(withdrawal)
+
     db.commit()
 
     return RedirectResponse(
@@ -507,9 +645,9 @@ def create_admin_withdrawal(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # APPROVE ADMIN WITHDRAWAL
-# ---------------------------------------------------------
+# =========================================================
 
 @router.post(
     "/withdraw/{withdrawal_id}/approve"
@@ -543,6 +681,7 @@ def approve_admin_withdrawal(
         )
 
     withdrawal.status = "approved"
+
     withdrawal.updated_at = datetime.utcnow()
 
     db.commit()
@@ -556,9 +695,9 @@ def approve_admin_withdrawal(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # REJECT ADMIN WITHDRAWAL
-# ---------------------------------------------------------
+# =========================================================
 
 @router.post(
     "/withdraw/{withdrawal_id}/reject"
@@ -591,6 +730,7 @@ def reject_admin_withdrawal(
     )
 
     withdrawal.updated_at = datetime.utcnow()
+
     withdrawal.resolved_at = datetime.utcnow()
 
     db.commit()
@@ -604,9 +744,9 @@ def reject_admin_withdrawal(
     )
 
 
-# ---------------------------------------------------------
-# MARK ADMIN WITHDRAWAL PAID
-# ---------------------------------------------------------
+# =========================================================
+# MARK ADMIN WITHDRAWAL AS PAID
+# =========================================================
 
 @router.post(
     "/withdraw/{withdrawal_id}/paid"
@@ -639,6 +779,7 @@ def mark_admin_withdrawal_paid(
     )
 
     withdrawal.updated_at = datetime.utcnow()
+
     withdrawal.resolved_at = datetime.utcnow()
 
     db.commit()
