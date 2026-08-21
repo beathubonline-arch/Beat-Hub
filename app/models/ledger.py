@@ -1,39 +1,40 @@
-import enum
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
-from sqlalchemy import (
-    DateTime,
-    Enum,
-    ForeignKey,
-    Numeric,
-    String,
-    Text,
-)
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
-# ============================================================
-# CREATOR WITHDRAWALS
-# ============================================================
+class WithdrawalStatus:
+    """
+    String constants instead of a SQLAlchemy/PostgreSQL Enum.
 
-class WithdrawalStatus(str, enum.Enum):
+    This intentionally avoids PostgreSQL enum-name/value mismatches.
+    """
+
     PENDING = "pending"
     APPROVED = "approved"
     PROCESSING = "processing"
     PAID = "paid"
     REJECTED = "rejected"
 
+    ALL = (
+        PENDING,
+        APPROVED,
+        PROCESSING,
+        PAID,
+        REJECTED,
+    )
+
 
 class CreatorLedgerEntry(Base):
     """
-    Append-only financial ledger for creators.
+    Append-only creator financial ledger.
 
     Positive amount = creator credit.
-    Negative amount = creator debit/withdrawal.
+    Negative amount = creator debit.
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -65,7 +66,7 @@ class CreatorLedgerEntry(Base):
         index=True,
     )
 
-    amount: Mapped[Decimal] = mapped_column(
+    amount: Mapped[Numeric] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
@@ -81,20 +82,12 @@ class CreatorLedgerEntry(Base):
         nullable=False,
     )
 
-    creator_profile = relationship(
-        "Profile",
-        foreign_keys=[creator_profile_id],
-    )
-
-    withdrawal_request = relationship(
-        "WithdrawalRequest",
-        foreign_keys=[withdrawal_request_id],
-    )
-
 
 class WithdrawalRequest(Base):
     """
-    Withdrawal requested by a creator/producer.
+    Creator withdrawal request.
+
+    Status is deliberately stored as VARCHAR rather than PostgreSQL ENUM.
     """
 
     __tablename__ = "withdrawal_requests"
@@ -112,7 +105,7 @@ class WithdrawalRequest(Base):
         index=True,
     )
 
-    amount: Mapped[Decimal] = mapped_column(
+    amount: Mapped[Numeric] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
@@ -122,10 +115,10 @@ class WithdrawalRequest(Base):
         nullable=False,
     )
 
-    status: Mapped[WithdrawalStatus] = mapped_column(
-        Enum(WithdrawalStatus),
-        default=WithdrawalStatus.PENDING,
+    status: Mapped[str] = mapped_column(
+        String(30),
         nullable=False,
+        default=WithdrawalStatus.PENDING,
         index=True,
     )
 
@@ -159,36 +152,21 @@ class WithdrawalRequest(Base):
 
     creator_profile = relationship(
         "Profile",
-        foreign_keys=[creator_profile_id],
+        lazy="joined",
     )
-
-
-# ============================================================
-# ADMIN / BEATHUB PLATFORM WITHDRAWALS
-# ============================================================
-
-class AdminWithdrawalStatus(str, enum.Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    PAID = "paid"
-    REJECTED = "rejected"
 
 
 class AdminWithdrawal(Base):
     """
-    Money withdrawn by BeatHub itself.
+    Platform/admin withdrawal.
 
-    This is completely separate from creator withdrawals.
+    This is separate from creator withdrawals.
 
-    Example:
+    Creator money:
+        WithdrawalRequest
 
-        BeatHub has KES 50,000 in platform earnings.
-
-        Admin requests:
-            KES 10,000
-            to 0712345678
-
-        This record tracks that platform withdrawal.
+    BeatHub/platform money:
+        AdminWithdrawal
     """
 
     __tablename__ = "admin_withdrawals"
@@ -199,7 +177,7 @@ class AdminWithdrawal(Base):
         default=lambda: str(uuid.uuid4()),
     )
 
-    amount: Mapped[Decimal] = mapped_column(
+    amount: Mapped[Numeric] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
@@ -209,10 +187,10 @@ class AdminWithdrawal(Base):
         nullable=False,
     )
 
-    status: Mapped[AdminWithdrawalStatus] = mapped_column(
-        Enum(AdminWithdrawalStatus),
-        default=AdminWithdrawalStatus.PENDING,
+    status: Mapped[str] = mapped_column(
+        String(30),
         nullable=False,
+        default=WithdrawalStatus.PENDING,
         index=True,
     )
 
@@ -243,23 +221,3 @@ class AdminWithdrawal(Base):
         DateTime,
         nullable=True,
     )
-
-    def __repr__(self) -> str:
-        return (
-            f"<AdminWithdrawal "
-            f"{self.amount} -> {self.phone_number} "
-            f"({self.status})>"
-        )
-
-
-# ============================================================
-# BACKWARD COMPATIBILITY
-# ============================================================
-#
-# Some earlier admin code used PlatformWithdrawal.
-# Keep this alias so that code importing PlatformWithdrawal
-# will continue to work without another model/table.
-#
-
-PlatformWithdrawal = AdminWithdrawal
-PlatformWithdrawalStatus = AdminWithdrawalStatus
