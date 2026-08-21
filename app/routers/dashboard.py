@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, UploadFile, File
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -34,7 +34,14 @@ templates = Jinja2Templates(directory="app/templates")
 # COMMON TEMPLATE CONTEXT
 # ============================================================
 
-def ctx(request: Request, current_user, **extra):
+def ctx(request: Request, current_user: User, **extra):
+    """
+    Common template context.
+
+    Provides both the newer dashboard variables and compatibility
+    variables used by older BeatHub templates.
+    """
+
     base = {
         "request": request,
         "current_user": current_user,
@@ -42,32 +49,24 @@ def ctx(request: Request, current_user, **extra):
 
         "available_balance": Decimal("0"),
         "pending_withdrawal": Decimal("0"),
+
         "total_sales": 0,
         "gross_revenue": Decimal("0"),
         "platform_commission": Decimal("0"),
         "net_earnings": Decimal("0"),
 
-        "withdrawal_requests": [],
         "recent_orders": [],
+        "withdrawal_requests": [],
 
         "track_count": 0,
         "album_count": 0,
+
         "tracks": [],
         "albums": [],
 
         "store_url": None,
         "youtube_url": None,
         "discord_url": None,
-
-        "track_page": 1,
-        "track_total_pages": 1,
-        "track_total": 0,
-        "track_total_count": 0,
-        "track_per_page": 12,
-        "track_search": "",
-        "track_start": 0,
-        "track_end": 0,
-        "q": "",
     }
 
     base.update(extra)
@@ -80,6 +79,10 @@ def ctx(request: Request, current_user, **extra):
 # ============================================================
 
 def _decimal(value) -> Decimal:
+    """
+    Safely convert database numeric values to Decimal.
+    """
+
     if value is None:
         return Decimal("0")
 
@@ -88,7 +91,7 @@ def _decimal(value) -> Decimal:
 
     try:
         return Decimal(str(value))
-    except (InvalidOperation, ValueError, TypeError):
+    except Exception:
         return Decimal("0")
 
 
@@ -97,6 +100,18 @@ def _decimal(value) -> Decimal:
 # ============================================================
 
 def _creator_stats(db: Session, profile_id: str) -> dict:
+    """
+    Calculate creator earnings from completed orders.
+
+    Uses the current Order fields:
+
+        gross_amount
+        commission_amount
+        net_amount
+
+    Never uses Order.total_amount.
+    """
+
     orders = (
         db.query(Order)
         .join(
@@ -111,17 +126,26 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
     )
 
     gross = sum(
-        (_decimal(order.gross_amount) for order in orders),
+        (
+            _decimal(order.gross_amount)
+            for order in orders
+        ),
         Decimal("0"),
     )
 
     commission = sum(
-        (_decimal(order.commission_amount) for order in orders),
+        (
+            _decimal(order.commission_amount)
+            for order in orders
+        ),
         Decimal("0"),
     )
 
     net = sum(
-        (_decimal(order.net_amount) for order in orders),
+        (
+            _decimal(order.net_amount)
+            for order in orders
+        ),
         Decimal("0"),
     )
 
@@ -221,9 +245,15 @@ def _dashboard_context(
     db: Session,
     user: User,
 ):
-    profile = user.profile
+    """
+    Build one consistent context for dashboard.html.
+    """
+
+    profile = getattr(user, "profile", None)
 
     if not profile:
+        from fastapi import HTTPException
+
         raise HTTPException(
             status_code=400,
             detail="Creator profile missing.",
@@ -255,23 +285,32 @@ def _dashboard_context(
         profile.id,
     )
 
-    # --------------------------------------------------------
-    # PUBLIC STORE
+    # ========================================================
+    # PUBLIC CREATOR STORE
     #
-    # Your live logs showed:
-    # GET /creator/mr-mapema
+    # IMPORTANT:
+    # BeatHub public creator stores now use:
     #
-    # Therefore the dashboard uses the creator URL.
-    # --------------------------------------------------------
+    #     /creator/{slug}
+    #
+    # This matches the URL being requested by the dashboard
+    # and prevents the previous /store/{slug} mismatch.
+    # ========================================================
 
     store_url = None
 
-    if getattr(profile, "slug", None):
-        store_url = f"/creator/{profile.slug}"
+    profile_slug = getattr(
+        profile,
+        "slug",
+        None,
+    )
 
-    # --------------------------------------------------------
-    # YOUTUBE
-    # --------------------------------------------------------
+    if profile_slug:
+        store_url = f"/creator/{profile_slug}"
+
+    # ========================================================
+    # SOCIAL LINKS
+    # ========================================================
 
     youtube_url = None
 
@@ -286,10 +325,6 @@ def _dashboard_context(
             "https://www.youtube.com/channel/"
             f"{youtube_channel_id}"
         )
-
-    # --------------------------------------------------------
-    # DISCORD
-    # --------------------------------------------------------
 
     discord_url = getattr(
         settings,
@@ -320,20 +355,13 @@ def _dashboard_context(
 
         youtube_url=youtube_url,
         discord_url=discord_url,
+
+        # IMPORTANT:
+        # Dashboard now generates /creator/{slug}
         store_url=store_url,
 
         tracks=[],
         albums=[],
-
-        track_page=1,
-        track_total_pages=1,
-        track_total=track_count,
-        track_total_count=track_count,
-        track_per_page=12,
-        track_search="",
-        track_start=1 if track_count else 0,
-        track_end=track_count,
-        q="",
     )
 
 
@@ -378,7 +406,7 @@ def upload_page(
 
 
 # ============================================================
-# UPLOAD TRACKS
+# UPLOAD TRACK
 # ============================================================
 
 @router.post("/dashboard/upload")
@@ -396,24 +424,34 @@ async def upload_submit(
     sales_models: List[str] = Form(...),
 
     audio_files: List[UploadFile] = File(...),
-    cover_files: List[Optional[UploadFile]] = File(None),
+    cover_files: Optional[List[UploadFile]] = File(None),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
-        raise HTTPException(
-            status_code=400,
-            detail="Creator profile missing.",
-        )
-
-    def error(msg: str):
         return templates.TemplateResponse(
             request,
             "upload_track.html",
             ctx(
                 request,
                 user,
-                error=msg,
+                error="Creator profile missing.",
+            ),
+            status_code=400,
+        )
+
+    def error(message: str):
+        return templates.TemplateResponse(
+            request,
+            "upload_track.html",
+            ctx(
+                request,
+                user,
+                error=message,
             ),
             status_code=400,
         )
@@ -431,7 +469,9 @@ async def upload_submit(
     created = []
 
     try:
+
         for i, title in enumerate(titles):
+
             title = (title or "").strip()
 
             if not title:
@@ -439,7 +479,10 @@ async def upload_submit(
                     "Every track needs a title."
                 )
 
+            # ------------------------------------------------
             # BPM
+            # ------------------------------------------------
+
             bpm_raw = (
                 bpms[i].strip()
                 if i < len(bpms)
@@ -449,6 +492,7 @@ async def upload_submit(
             bpm_val = None
 
             if bpm_raw:
+
                 if not bpm_raw.isdigit():
                     return error(
                         f"BPM for '{title}' must be a whole number."
@@ -461,7 +505,10 @@ async def upload_submit(
                         f"BPM for '{title}' must be between 1 and 999."
                     )
 
-            # Price
+            # ------------------------------------------------
+            # PRICE
+            # ------------------------------------------------
+
             price_raw = (
                 prices[i].strip()
                 if i < len(prices)
@@ -479,7 +526,10 @@ async def upload_submit(
                     f"Price for '{title}' is invalid."
                 )
 
-            # Sales model
+            # ------------------------------------------------
+            # SALES MODEL
+            # ------------------------------------------------
+
             model_raw = (
                 sales_models[i]
                 if i < len(sales_models)
@@ -491,14 +541,20 @@ async def upload_submit(
             else:
                 sales_model = SalesModel.NON_EXCLUSIVE
 
-            # Audio
+            # ------------------------------------------------
+            # AUDIO
+            # ------------------------------------------------
+
             audio_path = await save_upload(
                 audio_files[i],
                 "audio",
                 ALLOWED_AUDIO_EXT,
             )
 
-            # Cover
+            # ------------------------------------------------
+            # COVER
+            # ------------------------------------------------
+
             cover_path = None
 
             if (
@@ -513,7 +569,10 @@ async def upload_submit(
                     ALLOWED_IMAGE_EXT,
                 )
 
-            # Slug
+            # ------------------------------------------------
+            # SLUG
+            # ------------------------------------------------
+
             slug = unique_slug(
                 db,
                 Track,
@@ -525,24 +584,30 @@ async def upload_submit(
                 creator_profile_id=profile.id,
                 title=title,
                 slug=slug,
+
                 description=(
                     descriptions[i].strip()
                     if i < len(descriptions)
                     else None
                 ) or None,
+
                 genre=(
                     genres[i].strip()
                     if i < len(genres)
                     else None
                 ) or None,
+
                 bpm=bpm_val,
+
                 tags=(
                     tags_list[i].strip()
                     if i < len(tags_list)
                     else None
                 ) or None,
+
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
+
                 price=price_val,
                 sales_model=sales_model,
             )
@@ -553,10 +618,15 @@ async def upload_submit(
         db.commit()
 
     except UploadValidationError as exc:
+
         db.rollback()
-        return error(str(exc))
+
+        return error(
+            str(exc)
+        )
 
     except Exception:
+
         db.rollback()
         raise
 
@@ -581,9 +651,15 @@ def new_album_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
+        from fastapi import HTTPException
+
         raise HTTPException(
             status_code=400,
             detail="Creator profile missing.",
@@ -624,19 +700,25 @@ async def new_album_submit(
     title: str = Form(...),
     description: str = Form(""),
     genre: str = Form(""),
-    artwork: UploadFile = File(None),
+    artwork: Optional[UploadFile] = File(None),
     track_ids: List[str] = Form([]),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
+        from fastapi import HTTPException
+
         raise HTTPException(
             status_code=400,
             detail="Creator profile missing.",
         )
 
-    def error(msg: str):
-        tracks = (
+    def get_tracks():
+        return (
             db.query(Track)
             .filter(
                 Track.creator_profile_id == profile.id
@@ -647,14 +729,16 @@ async def new_album_submit(
             .all()
         )
 
+    def error(message: str):
+
         return templates.TemplateResponse(
             request,
             "upload_album.html",
             ctx(
                 request,
                 user,
-                tracks=tracks,
-                error=msg,
+                tracks=get_tracks(),
+                error=message,
             ),
             status_code=400,
         )
@@ -674,14 +758,20 @@ async def new_album_submit(
     artwork_path = None
 
     if artwork and artwork.filename:
+
         try:
+
             artwork_path = await save_upload(
                 artwork,
                 "artwork",
                 ALLOWED_IMAGE_EXT,
             )
+
         except UploadValidationError as exc:
-            return error(str(exc))
+
+            return error(
+                str(exc)
+            )
 
     slug = unique_slug(
         db,
@@ -700,6 +790,7 @@ async def new_album_submit(
     )
 
     db.add(album)
+
     db.flush()
 
     valid_tracks = (
@@ -712,6 +803,7 @@ async def new_album_submit(
     )
 
     if not valid_tracks:
+
         db.rollback()
 
         return error(
@@ -726,6 +818,7 @@ async def new_album_submit(
     position = 0
 
     for track_id in track_ids:
+
         track = track_map.get(
             str(track_id)
         )
@@ -764,9 +857,15 @@ def withdrawal_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
+        from fastapi import HTTPException
+
         raise HTTPException(
             status_code=400,
             detail="Creator profile missing.",
@@ -790,6 +889,7 @@ def withdrawal_page(
             user,
 
             profile=profile,
+
             stats=stats,
 
             available_balance=stats[
@@ -801,22 +901,6 @@ def withdrawal_page(
             ],
 
             withdrawal_requests=withdrawal_requests,
-
-            total_sales=stats[
-                "total_sales"
-            ],
-
-            gross_revenue=stats[
-                "gross_revenue"
-            ],
-
-            platform_commission=stats[
-                "platform_commission"
-            ],
-
-            net_earnings=stats[
-                "net_earnings"
-            ],
         ),
     )
 
@@ -834,12 +918,16 @@ def request_withdrawal(
     amount: str = Form(...),
     phone_number: str = Form(...),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
-        raise HTTPException(
-            status_code=400,
-            detail="Creator profile missing.",
+        return RedirectResponse(
+            url="/dashboard?error=Creator%20profile%20missing.",
+            status_code=303,
         )
 
     stats = _creator_stats(
@@ -847,92 +935,72 @@ def request_withdrawal(
         profile.id,
     )
 
-    # Validate amount
+    # --------------------------------------------------------
+    # AMOUNT
+    # --------------------------------------------------------
+
     try:
+
         amount_val = Decimal(
             str(amount).strip()
         )
-    except Exception:
+
+    except (
+        InvalidOperation,
+        ValueError,
+        TypeError,
+    ):
+
         return RedirectResponse(
             url=(
-                "/dashboard/withdraw?"
-                "error=Invalid%20withdrawal%20amount."
+                "/dashboard/withdraw"
+                "?error=Invalid%20withdrawal%20amount."
             ),
             status_code=303,
         )
 
     if amount_val <= 0:
+
         return RedirectResponse(
             url=(
-                "/dashboard/withdraw?"
-                "error=Withdrawal%20amount%20must%20be%20positive."
+                "/dashboard/withdraw"
+                "?error=Withdrawal%20amount%20must%20be%20positive."
             ),
             status_code=303,
         )
 
     if amount_val > stats["available_balance"]:
+
         return RedirectResponse(
             url=(
-                "/dashboard/withdraw?"
-                "error=Withdrawal%20exceeds%20your%20available%20balance."
+                "/dashboard/withdraw"
+                "?error=Withdrawal%20exceeds%20your%20available%20balance."
             ),
             status_code=303,
         )
 
-    # Normalize phone
+    # --------------------------------------------------------
+    # PHONE
+    # --------------------------------------------------------
+
     phone_number = (
         phone_number or ""
     ).strip()
 
     if not phone_number:
+
         return RedirectResponse(
             url=(
-                "/dashboard/withdraw?"
-                "error=M-Pesa%20phone%20number%20is%20required."
+                "/dashboard/withdraw"
+                "?error=M-Pesa%20phone%20number%20is%20required."
             ),
             status_code=303,
         )
 
-    cleaned_phone = (
-        phone_number
-        .replace(" ", "")
-        .replace("-", "")
-    )
+    # --------------------------------------------------------
+    # CREATE REQUEST
+    # --------------------------------------------------------
 
-    if cleaned_phone.startswith("+254"):
-        cleaned_phone = (
-            "254"
-            + cleaned_phone[4:]
-        )
-
-    elif cleaned_phone.startswith("07"):
-        cleaned_phone = (
-            "254"
-            + cleaned_phone[1:]
-        )
-
-    elif cleaned_phone.startswith("01"):
-        cleaned_phone = (
-            "254"
-            + cleaned_phone[1:]
-        )
-
-    if (
-        not cleaned_phone.isdigit()
-        or len(cleaned_phone) != 12
-        or not cleaned_phone.startswith("254")
-    ):
-        return RedirectResponse(
-            url=(
-                "/dashboard/withdraw?"
-                "error=Enter%20a%20valid%20Kenyan%20M-Pesa%20number."
-            ),
-            status_code=303,
-        )
-
-    phone_number = cleaned_phone
-
-    # Create withdrawal request
     withdrawal = WithdrawalRequest(
         creator_profile_id=profile.id,
         amount=amount_val,
@@ -941,12 +1009,13 @@ def request_withdrawal(
     )
 
     db.add(withdrawal)
+
     db.commit()
 
     return RedirectResponse(
         url=(
-            "/dashboard/withdraw?"
-            "success=Withdrawal%20request%20submitted."
+            "/dashboard/withdraw"
+            "?success=Withdrawal%20request%20submitted."
         ),
         status_code=303,
     )
