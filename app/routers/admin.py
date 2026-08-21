@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.ledger import (
     AdminWithdrawal,
+    CreatorLedgerEntry,
     WithdrawalRequest,
 )
 from app.models.order import Order, OrderStatus
@@ -37,27 +38,52 @@ def admin_ctx(
     current_user,
     **extra,
 ):
+    """
+    Centralized admin template context.
+
+    Important:
+    The admin dashboard template expects many variables.
+    We provide safe defaults here so a missing database result
+    can never cause a Jinja UndefinedError.
+    """
+
     data = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
 
-        # Safe defaults so templates don't crash when a
-        # particular page doesn't use every variable.
+        # Basic counts
         "users_count": 0,
         "tracks_count": 0,
         "completed_sales": 0,
-        "pending_creator_withdrawals": 0,
 
+        # Financial dashboard
         "total_sales_volume": Decimal("0"),
+        "total_commission": Decimal("0"),
+        "total_creator_earnings": Decimal("0"),
         "platform_revenue": Decimal("0"),
 
+        # Withdrawals
+        "pending_withdrawals": 0,
+        "pending_creator_withdrawals": 0,
         "already_withdrawn": Decimal("0"),
         "pending_admin": Decimal("0"),
         "available_balance": Decimal("0"),
 
+        # Orders
+        "successful": 0,
+        "pending": 0,
+        "failed": 0,
+        "recent_orders": [],
+        "recent_users": [],
+        "failed_payments": [],
+
+        # Lists
         "withdrawals": [],
         "admin_withdrawals": [],
+
+        # Optional values used by some templates
+        "recent_activity": [],
     }
 
     data.update(extra)
@@ -76,6 +102,10 @@ def admin_home(
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
+    # -----------------------------------------------------
+    # BASIC COUNTS
+    # -----------------------------------------------------
+
     users_count = db.query(User).count()
 
     tracks_count = db.query(Track).count()
@@ -89,10 +119,44 @@ def admin_home(
     )
 
     # -----------------------------------------------------
+    # ORDER STATUS COUNTS
+    # -----------------------------------------------------
+
+    successful = (
+        db.query(Order)
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .count()
+    )
+
+    pending = (
+        db.query(Order)
+        .filter(
+            Order.status == OrderStatus.PENDING
+        )
+        .count()
+    )
+
+    failed = (
+        db.query(Order)
+        .filter(
+            Order.status.in_(
+                [
+                    OrderStatus.FAILED,
+                    OrderStatus.REJECTED,
+                ]
+            )
+        )
+        .count()
+    )
+
+    # -----------------------------------------------------
     # TOTAL SALES VOLUME
     #
     # IMPORTANT:
-    # Order has gross_amount, NOT total_amount.
+    # Order has gross_amount.
+    # It does NOT have total_amount.
     # -----------------------------------------------------
 
     total_sales_volume_raw = (
@@ -113,12 +177,10 @@ def admin_home(
     )
 
     # -----------------------------------------------------
-    # BEATHUB PLATFORM REVENUE
-    #
-    # This is the commission retained by BeatHub.
+    # TOTAL PLATFORM COMMISSION
     # -----------------------------------------------------
 
-    platform_revenue_raw = (
+    total_commission_raw = (
         db.query(
             func.coalesce(
                 func.sum(Order.commission_amount),
@@ -131,8 +193,34 @@ def admin_home(
         .scalar()
     )
 
-    platform_revenue = Decimal(
-        str(platform_revenue_raw or 0)
+    total_commission = Decimal(
+        str(total_commission_raw or 0)
+    )
+
+    # Platform revenue is the same commission amount.
+    platform_revenue = total_commission
+
+    # -----------------------------------------------------
+    # TOTAL CREATOR EARNINGS
+    #
+    # Order.net_amount is the creator's net amount.
+    # -----------------------------------------------------
+
+    total_creator_earnings_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.net_amount),
+                0,
+            )
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    total_creator_earnings = Decimal(
+        str(total_creator_earnings_raw or 0)
     )
 
     # -----------------------------------------------------
@@ -147,6 +235,44 @@ def admin_home(
         .count()
     )
 
+    # Template uses both names in different sections.
+    pending_withdrawals = pending_creator_withdrawals
+
+    # -----------------------------------------------------
+    # RECENT ORDERS
+    # -----------------------------------------------------
+
+    recent_orders = (
+        db.query(Order)
+        .order_by(
+            Order.created_at.desc()
+        )
+        .limit(10)
+        .all()
+    )
+
+    # -----------------------------------------------------
+    # RECENT USERS
+    # -----------------------------------------------------
+
+    recent_users = (
+        db.query(User)
+        .order_by(
+            User.created_at.desc()
+        )
+        .limit(10)
+        .all()
+    )
+
+    # -----------------------------------------------------
+    # FAILED PAYMENTS
+    #
+    # Do not assume a payment model exists here.
+    # The dashboard can safely receive an empty list.
+    # -----------------------------------------------------
+
+    failed_payments = []
+
     # -----------------------------------------------------
     # RECENT ADMIN WITHDRAWALS
     # -----------------------------------------------------
@@ -160,6 +286,10 @@ def admin_home(
         .all()
     )
 
+    # -----------------------------------------------------
+    # RENDER DASHBOARD
+    # -----------------------------------------------------
+
     return templates.TemplateResponse(
         request,
         "admin/dashboard.html",
@@ -171,13 +301,25 @@ def admin_home(
             tracks_count=tracks_count,
             completed_sales=completed_sales,
 
+            total_sales_volume=total_sales_volume,
+            total_commission=total_commission,
+            total_creator_earnings=total_creator_earnings,
+            platform_revenue=platform_revenue,
+
             pending_creator_withdrawals=(
                 pending_creator_withdrawals
             ),
+            pending_withdrawals=(
+                pending_withdrawals
+            ),
 
-            total_sales_volume=total_sales_volume,
+            successful=successful,
+            pending=pending,
+            failed=failed,
 
-            platform_revenue=platform_revenue,
+            recent_orders=recent_orders,
+            recent_users=recent_users,
+            failed_payments=failed_payments,
 
             admin_withdrawals=admin_withdrawals,
         ),
@@ -213,9 +355,9 @@ def creator_withdrawals(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # APPROVE CREATOR WITHDRAWAL
-# ---------------------------------------------------------
+# =========================================================
 
 @router.post(
     "/withdrawals/{withdrawal_id}/approve"
@@ -249,9 +391,7 @@ def approve_creator_withdrawal(
         )
 
     withdrawal.status = "approved"
-
     withdrawal.updated_at = datetime.utcnow()
-
     withdrawal.admin_note = (
         "Withdrawal approved by administrator."
     )
@@ -267,9 +407,9 @@ def approve_creator_withdrawal(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # REJECT CREATOR WITHDRAWAL
-# ---------------------------------------------------------
+# =========================================================
 
 @router.post(
     "/withdrawals/{withdrawal_id}/reject"
@@ -302,7 +442,6 @@ def reject_creator_withdrawal(
     )
 
     withdrawal.updated_at = datetime.utcnow()
-
     withdrawal.resolved_at = datetime.utcnow()
 
     db.commit()
@@ -317,7 +456,7 @@ def reject_creator_withdrawal(
 
 
 # =========================================================
-# ADMIN / BEATHUB OWN WITHDRAWAL
+# ADMIN / BEATHUB OWN WITHDRAWAL PAGE
 # =========================================================
 
 @router.get("/withdraw")
@@ -327,32 +466,24 @@ def admin_withdraw_page(
     user: User = Depends(require_admin),
 ):
     # -----------------------------------------------------
-    # COMPLETED ORDERS
-    # -----------------------------------------------------
-
-    completed_orders = (
-        db.query(Order)
-        .filter(
-            Order.status == OrderStatus.COMPLETED
-        )
-        .all()
-    )
-
-    # -----------------------------------------------------
     # PLATFORM REVENUE
     # -----------------------------------------------------
 
-    platform_revenue = sum(
-        (
-            Decimal(
-                str(
-                    order.commission_amount
-                    or 0
-                )
+    platform_revenue_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.commission_amount),
+                0,
             )
-            for order in completed_orders
-        ),
-        Decimal("0"),
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    platform_revenue = Decimal(
+        str(platform_revenue_raw or 0)
     )
 
     # -----------------------------------------------------
@@ -362,9 +493,7 @@ def admin_withdraw_page(
     already_withdrawn_raw = (
         db.query(
             func.coalesce(
-                func.sum(
-                    AdminWithdrawal.amount
-                ),
+                func.sum(AdminWithdrawal.amount),
                 0,
             )
         )
@@ -391,9 +520,7 @@ def admin_withdraw_page(
     pending_admin_raw = (
         db.query(
             func.coalesce(
-                func.sum(
-                    AdminWithdrawal.amount
-                ),
+                func.sum(AdminWithdrawal.amount),
                 0,
             )
         )
@@ -440,16 +567,12 @@ def admin_withdraw_page(
             user,
 
             platform_revenue=platform_revenue,
-
-            already_withdrawn=(
-                already_withdrawn
-            ),
-
+            already_withdrawn=already_withdrawn,
             pending_admin=pending_admin,
-
             available_balance=available,
 
             withdrawals=withdrawals,
+            admin_withdrawals=withdrawals,
         ),
     )
 
@@ -474,11 +597,7 @@ def create_admin_withdrawal(
         amount_val = Decimal(
             amount.strip()
         )
-    except (
-        InvalidOperation,
-        ValueError,
-        AttributeError,
-    ):
+    except (InvalidOperation, ValueError):
         return RedirectResponse(
             url=(
                 "/admin/withdraw?"
@@ -512,32 +631,24 @@ def create_admin_withdrawal(
         )
 
     # -----------------------------------------------------
-    # COMPLETED ORDERS
+    # CALCULATE PLATFORM REVENUE
     # -----------------------------------------------------
 
-    completed_orders = (
-        db.query(Order)
+    platform_revenue_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.commission_amount),
+                0,
+            )
+        )
         .filter(
             Order.status == OrderStatus.COMPLETED
         )
-        .all()
+        .scalar()
     )
 
-    # -----------------------------------------------------
-    # PLATFORM REVENUE
-    # -----------------------------------------------------
-
-    platform_revenue = sum(
-        (
-            Decimal(
-                str(
-                    order.commission_amount
-                    or 0
-                )
-            )
-            for order in completed_orders
-        ),
-        Decimal("0"),
+    platform_revenue = Decimal(
+        str(platform_revenue_raw or 0)
     )
 
     # -----------------------------------------------------
@@ -547,9 +658,7 @@ def create_admin_withdrawal(
     already_withdrawn_raw = (
         db.query(
             func.coalesce(
-                func.sum(
-                    AdminWithdrawal.amount
-                ),
+                func.sum(AdminWithdrawal.amount),
                 0,
             )
         )
@@ -570,15 +679,13 @@ def create_admin_withdrawal(
     )
 
     # -----------------------------------------------------
-    # PENDING WITHDRAWALS
+    # PENDING ADMIN WITHDRAWALS
     # -----------------------------------------------------
 
     pending_admin_raw = (
         db.query(
             func.coalesce(
-                func.sum(
-                    AdminWithdrawal.amount
-                ),
+                func.sum(AdminWithdrawal.amount),
                 0,
             )
         )
@@ -605,10 +712,6 @@ def create_admin_withdrawal(
     if available < 0:
         available = Decimal("0")
 
-    # -----------------------------------------------------
-    # CHECK REQUESTED AMOUNT
-    # -----------------------------------------------------
-
     if amount_val > available:
         return RedirectResponse(
             url=(
@@ -626,14 +729,10 @@ def create_admin_withdrawal(
         amount=amount_val,
         phone_number=phone_number,
         status="pending",
-        admin_note=(
-            note.strip()
-            or None
-        ),
+        admin_note=note.strip() or None,
     )
 
     db.add(withdrawal)
-
     db.commit()
 
     return RedirectResponse(
@@ -681,7 +780,6 @@ def approve_admin_withdrawal(
         )
 
     withdrawal.status = "approved"
-
     withdrawal.updated_at = datetime.utcnow()
 
     db.commit()
@@ -730,7 +828,6 @@ def reject_admin_withdrawal(
     )
 
     withdrawal.updated_at = datetime.utcnow()
-
     withdrawal.resolved_at = datetime.utcnow()
 
     db.commit()
@@ -779,7 +876,6 @@ def mark_admin_withdrawal_paid(
     )
 
     withdrawal.updated_at = datetime.utcnow()
-
     withdrawal.resolved_at = datetime.utcnow()
 
     db.commit()
