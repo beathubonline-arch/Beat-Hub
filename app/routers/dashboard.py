@@ -1,4 +1,3 @@
-```python
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional
@@ -1191,4 +1190,3 @@ def request_withdrawal(
         ),
         status_code=303,
     )
-```
