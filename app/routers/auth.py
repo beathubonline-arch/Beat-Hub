@@ -50,12 +50,15 @@ def slugify(value: str) -> str:
 
 def dashboard_url_for_user(user: User) -> str:
     """
-    One single source of truth for post-login routing.
+    Determine where a user goes after authentication.
     """
 
     role = get_role_name(user)
 
-    if role in {"creator", "admin"}:
+    if role == "admin":
+        return "/admin"
+
+    if role == "creator":
         return "/dashboard"
 
     return "/artist/dashboard"
@@ -143,7 +146,13 @@ def signup_submit(
             "Passwords do not match."
         )
 
-    # Buyer aliases are all treated as buyer.
+    # --------------------------------------------------------------
+    # Public signup roles
+    #
+    # IMPORTANT:
+    # Admin accounts can NEVER be created through public signup.
+    # --------------------------------------------------------------
+
     if role in {
         "artist",
         "buyer",
@@ -193,6 +202,10 @@ def signup_submit(
             "An account with this email already exists."
         )
 
+    # --------------------------------------------------------------
+    # Create profile
+    # --------------------------------------------------------------
+
     base_slug = slugify(stage_name)
 
     slug = base_slug
@@ -228,7 +241,10 @@ def signup_submit(
             "Could not create account. Please try again."
         )
 
-    # Reload the user after commit so role is definitive.
+    # --------------------------------------------------------------
+    # Login immediately after successful signup
+    # --------------------------------------------------------------
+
     db.refresh(user)
 
     token = create_access_token(
@@ -259,7 +275,7 @@ def signup_submit(
 
 
 # ----------------------------------------------------------------------
-# LOGIN
+# NORMAL LOGIN
 # ----------------------------------------------------------------------
 
 @router.get("/login")
@@ -295,6 +311,10 @@ def login_submit(
         identifier or ""
     ).strip().lower()
 
+    # --------------------------------------------------------------
+    # Login using email
+    # --------------------------------------------------------------
+
     user = (
         db.query(User)
         .filter(
@@ -302,6 +322,10 @@ def login_submit(
         )
         .first()
     )
+
+    # --------------------------------------------------------------
+    # Fallback: producer profile slug
+    # --------------------------------------------------------------
 
     if not user and identifier_norm:
 
@@ -326,6 +350,10 @@ def login_submit(
                 .first()
             )
 
+    # --------------------------------------------------------------
+    # Validate credentials
+    # --------------------------------------------------------------
+
     if not user:
         return error(
             "Invalid credentials. Please try again."
@@ -345,6 +373,10 @@ def login_submit(
         )
 
     db.refresh(user)
+
+    # --------------------------------------------------------------
+    # Create authenticated session
+    # --------------------------------------------------------------
 
     token = create_access_token(
         subject=user.id
