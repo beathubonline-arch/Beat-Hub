@@ -1,8 +1,16 @@
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Form, Request, UploadFile, File
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -29,22 +37,40 @@ router = APIRouter(tags=["dashboard"])
 templates = Jinja2Templates(directory="app/templates")
 
 
+# =========================================================
+# COMMON TEMPLATE CONTEXT
+# =========================================================
+
 def ctx(request: Request, current_user, **extra):
-    base = {
+    data = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
 
-    base.update(extra)
+    data.update(extra)
 
-    return base
+    return data
 
+
+# =========================================================
+# CREATOR STATISTICS
+# =========================================================
 
 def _creator_stats(db: Session, profile_id: str) -> dict:
+    """
+    Calculate creator financial statistics from completed orders.
+
+    IMPORTANT:
+    All values are returned as Decimal where appropriate.
+    """
+
     orders = (
         db.query(Order)
-        .join(Track, Order.track_id == Track.id)
+        .join(
+            Track,
+            Order.track_id == Track.id,
+        )
         .filter(
             Track.creator_profile_id == profile_id,
             Order.status == OrderStatus.COMPLETED,
@@ -53,17 +79,26 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
     )
 
     gross = sum(
-        (o.gross_amount for o in orders),
+        (
+            Decimal(str(order.gross_amount or 0))
+            for order in orders
+        ),
         Decimal("0"),
     )
 
     commission = sum(
-        (o.commission_amount for o in orders),
+        (
+            Decimal(str(order.commission_amount or 0))
+            for order in orders
+        ),
         Decimal("0"),
     )
 
     net = sum(
-        (o.net_amount for o in orders),
+        (
+            Decimal(str(order.net_amount or 0))
+            for order in orders
+        ),
         Decimal("0"),
     )
 
@@ -115,6 +150,20 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
         - pending_decimal
     )
 
+    # Never expose a negative available balance.
+    if available_balance < Decimal("0"):
+        available_balance = Decimal("0")
+
+    recent_orders = sorted(
+        orders,
+        key=lambda order: (
+            order.completed_at
+            or order.created_at
+            or datetime.min
+        ),
+        reverse=True,
+    )[:8]
+
     return {
         "total_sales": len(orders),
         "gross_revenue": gross,
@@ -122,13 +171,14 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
         "net_earnings": net,
         "available_balance": available_balance,
         "pending_withdrawal": pending_decimal,
-        "recent_orders": sorted(
-            orders,
-            key=lambda o: o.completed_at or o.created_at,
-            reverse=True,
-        )[:8],
+        "withdrawn_amount": withdrawn_decimal,
+        "recent_orders": recent_orders,
     }
 
+
+# =========================================================
+# DASHBOARD HOME
+# =========================================================
 
 @router.get("/dashboard")
 def dashboard_home(
@@ -139,8 +189,6 @@ def dashboard_home(
     profile = user.profile
 
     if not profile:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=400,
             detail="Creator profile missing.",
@@ -167,10 +215,71 @@ def dashboard_home(
         .count()
     )
 
-    youtube_url = (
-        f"https://www.youtube.com/channel/"
-        f"{settings.YOUTUBE_CHANNEL_ID}"
+    # -----------------------------------------------------
+    # Creator tracks
+    # -----------------------------------------------------
+
+    tracks = (
+        db.query(Track)
+        .filter(
+            Track.creator_profile_id == profile.id
+        )
+        .order_by(
+            Track.created_at.desc()
+        )
+        .all()
     )
+
+    # -----------------------------------------------------
+    # Public store URL
+    # -----------------------------------------------------
+
+    store_url = None
+
+    # Your profile/store implementation may expose slug.
+    # Keep this safe so dashboard never crashes if a profile
+    # does not yet have a slug.
+    profile_slug = getattr(profile, "slug", None)
+
+    if profile_slug:
+        store_url = f"/store/{profile_slug}"
+
+    # -----------------------------------------------------
+    # YouTube / Discord
+    # -----------------------------------------------------
+
+    youtube_url = None
+
+    youtube_channel_id = getattr(
+        settings,
+        "YOUTUBE_CHANNEL_ID",
+        None,
+    )
+
+    if youtube_channel_id:
+        youtube_url = (
+            "https://www.youtube.com/channel/"
+            f"{youtube_channel_id}"
+        )
+
+    discord_url = getattr(
+        settings,
+        "DISCORD_INVITE_URL",
+        None,
+    )
+
+    # -----------------------------------------------------
+    # Expose stats BOTH as `stats[...]` and direct variables.
+    #
+    # This is important because dashboard.html currently
+    # uses variables such as:
+    #
+    # available_balance
+    # gross_revenue
+    # platform_commission
+    # net_earnings
+    # pending_withdrawal
+    # -----------------------------------------------------
 
     return templates.TemplateResponse(
         request,
@@ -178,15 +287,33 @@ def dashboard_home(
         ctx(
             request,
             user,
+
             profile=profile,
             stats=stats,
+
             track_count=track_count,
             album_count=album_count,
+            tracks=tracks,
+
+            total_sales=stats["total_sales"],
+            gross_revenue=stats["gross_revenue"],
+            platform_commission=stats["platform_commission"],
+            net_earnings=stats["net_earnings"],
+            available_balance=stats["available_balance"],
+            pending_withdrawal=stats["pending_withdrawal"],
+            withdrawn_amount=stats["withdrawn_amount"],
+            recent_orders=stats["recent_orders"],
+
             youtube_url=youtube_url,
-            discord_url=settings.DISCORD_INVITE_URL,
+            discord_url=discord_url,
+            store_url=store_url,
         ),
     )
 
+
+# =========================================================
+# UPLOAD TRACK PAGE
+# =========================================================
 
 @router.get("/dashboard/upload")
 def upload_page(
@@ -203,11 +330,16 @@ def upload_page(
     )
 
 
+# =========================================================
+# UPLOAD TRACKS
+# =========================================================
+
 @router.post("/dashboard/upload")
 async def upload_submit(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
+
     titles: List[str] = Form(...),
     descriptions: List[str] = Form(...),
     genres: List[str] = Form(...),
@@ -215,10 +347,17 @@ async def upload_submit(
     tags_list: List[str] = Form(...),
     prices: List[str] = Form(...),
     sales_models: List[str] = Form(...),
+
     audio_files: List[UploadFile] = File(...),
     cover_files: List[Optional[UploadFile]] = File(None),
 ):
     profile = user.profile
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
 
     def error(msg: str):
         return templates.TemplateResponse(
@@ -254,6 +393,10 @@ async def upload_submit(
                     "Every track needs a title."
                 )
 
+            # -------------------------------------------------
+            # BPM
+            # -------------------------------------------------
+
             bpm_raw = (
                 bpms[i].strip()
                 if i < len(bpms)
@@ -270,6 +413,10 @@ async def upload_submit(
 
                 bpm_val = int(bpm_raw)
 
+            # -------------------------------------------------
+            # PRICE
+            # -------------------------------------------------
+
             price_raw = (
                 prices[i].strip()
                 if i < len(prices)
@@ -282,10 +429,17 @@ async def upload_submit(
                 if price_val < 0:
                     raise ValueError
 
-            except Exception:
+            except (
+                InvalidOperation,
+                ValueError,
+            ):
                 return error(
                     f"Price for '{title}' is invalid."
                 )
+
+            # -------------------------------------------------
+            # SALES MODEL
+            # -------------------------------------------------
 
             model_raw = (
                 sales_models[i]
@@ -299,11 +453,19 @@ async def upload_submit(
                 else SalesModel.NON_EXCLUSIVE
             )
 
+            # -------------------------------------------------
+            # AUDIO
+            # -------------------------------------------------
+
             audio_path = await save_upload(
                 audio_files[i],
                 "audio",
                 ALLOWED_AUDIO_EXT,
             )
+
+            # -------------------------------------------------
+            # COVER
+            # -------------------------------------------------
 
             cover_path = None
 
@@ -319,6 +481,10 @@ async def upload_submit(
                     ALLOWED_IMAGE_EXT,
                 )
 
+            # -------------------------------------------------
+            # SLUG
+            # -------------------------------------------------
+
             slug = unique_slug(
                 db,
                 Track,
@@ -326,31 +492,38 @@ async def upload_submit(
                 "track",
             )
 
+            # -------------------------------------------------
+            # TRACK
+            # -------------------------------------------------
+
             track = Track(
                 creator_profile_id=profile.id,
                 title=title,
                 slug=slug,
+
                 description=(
                     descriptions[i].strip()
                     if i < len(descriptions)
                     else None
-                )
-                or None,
+                ) or None,
+
                 genre=(
                     genres[i].strip()
                     if i < len(genres)
                     else None
-                )
-                or None,
+                ) or None,
+
                 bpm=bpm_val,
+
                 tags=(
                     tags_list[i].strip()
                     if i < len(tags_list)
                     else None
-                )
-                or None,
+                ) or None,
+
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
+
                 price=price_val,
                 sales_model=sales_model,
             )
@@ -377,18 +550,32 @@ async def upload_submit(
     )
 
 
+# =========================================================
+# NEW ALBUM PAGE
+# =========================================================
+
 @router.get("/dashboard/albums/new")
 def new_album_page(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
+    profile = user.profile
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
+
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id == user.profile.id
+            Track.creator_profile_id == profile.id
         )
-        .order_by(Track.created_at.desc())
+        .order_by(
+            Track.created_at.desc()
+        )
         .all()
     )
 
@@ -403,24 +590,38 @@ def new_album_page(
     )
 
 
+# =========================================================
+# CREATE ALBUM
+# =========================================================
+
 @router.post("/dashboard/albums/new")
 async def new_album_submit(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
+
     title: str = Form(...),
     description: str = Form(""),
     genre: str = Form(""),
-    artwork: UploadFile = File(None),
+    artwork: Optional[UploadFile] = File(None),
     track_ids: List[str] = Form([]),
 ):
     profile = user.profile
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
 
     def error(msg: str):
         tracks = (
             db.query(Track)
             .filter(
                 Track.creator_profile_id == profile.id
+            )
+            .order_by(
+                Track.created_at.desc()
             )
             .all()
         )
@@ -484,8 +685,18 @@ async def new_album_submit(
             Track.id.in_(track_ids),
             Track.creator_profile_id == profile.id,
         )
+        .order_by(
+            Track.created_at.asc()
+        )
         .all()
     )
+
+    if not valid_tracks:
+        db.rollback()
+
+        return error(
+            "None of the selected tracks belong to your account."
+        )
 
     for position, track in enumerate(valid_tracks):
         db.add(
@@ -507,15 +718,26 @@ async def new_album_submit(
     )
 
 
+# =========================================================
+# CREATOR WITHDRAWAL
+# =========================================================
+
 @router.post("/dashboard/withdraw")
 def request_withdrawal(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
+
     amount: str = Form(...),
     phone_number: str = Form(...),
 ):
     profile = user.profile
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
 
     stats = _creator_stats(
         db,
@@ -523,10 +745,18 @@ def request_withdrawal(
     )
 
     try:
-        amount_val = Decimal(amount)
-    except Exception:
+        amount_val = Decimal(
+            amount.strip()
+        )
+    except (
+        InvalidOperation,
+        ValueError,
+    ):
         return RedirectResponse(
-            url="/dashboard?error=Invalid%20withdrawal%20amount.",
+            url=(
+                "/dashboard?"
+                "error=Invalid%20withdrawal%20amount."
+            ),
             status_code=303,
         )
 
@@ -552,7 +782,10 @@ def request_withdrawal(
 
     if not phone_number:
         return RedirectResponse(
-            url="/dashboard?error=M-Pesa%20phone%20number%20is%20required.",
+            url=(
+                "/dashboard?"
+                "error=M-Pesa%20phone%20number%20is%20required."
+            ),
             status_code=303,
         )
 
