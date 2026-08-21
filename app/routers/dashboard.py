@@ -3,15 +3,7 @@ from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -44,7 +36,10 @@ templates = Jinja2Templates(directory="app/templates")
 
 def ctx(request: Request, current_user, **extra):
     """
-    Common template context used by dashboard-related pages.
+    Common template context.
+
+    Provides safe defaults so older and newer dashboard
+    templates can use the same context without crashing.
     """
 
     base = {
@@ -69,9 +64,21 @@ def ctx(request: Request, current_user, **extra):
 
         "recent_orders": [],
 
-        "store_url": None,
+        # Dashboard pagination defaults.
+        "track_page": 1,
+        "track_total_pages": 1,
+        "track_total": 0,
+        "track_total_count": 0,
+        "track_per_page": 12,
+        "track_search": "",
+        "track_start": 0,
+        "track_end": 0,
+        "q": "",
+
+        # Social/store defaults.
         "youtube_url": None,
         "discord_url": None,
+        "store_url": None,
     }
 
     base.update(extra)
@@ -107,6 +114,13 @@ def _decimal(value) -> Decimal:
 def _creator_stats(db: Session, profile_id: str) -> dict:
     """
     Calculate creator earnings from completed orders.
+
+    Uses:
+        gross_amount
+        commission_amount
+        net_amount
+
+    These are the authoritative Order fields used by BeatHub.
     """
 
     orders = (
@@ -124,7 +138,7 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
 
     gross = sum(
         (
-            _decimal(getattr(order, "gross_amount", 0))
+            _decimal(order.gross_amount)
             for order in orders
         ),
         Decimal("0"),
@@ -132,7 +146,7 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
 
     commission = sum(
         (
-            _decimal(getattr(order, "commission_amount", 0))
+            _decimal(order.commission_amount)
             for order in orders
         ),
         Decimal("0"),
@@ -140,14 +154,14 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
 
     net = sum(
         (
-            _decimal(getattr(order, "net_amount", 0))
+            _decimal(order.net_amount)
             for order in orders
         ),
         Decimal("0"),
     )
 
     # --------------------------------------------------------
-    # Completed/approved/processing/paid withdrawals
+    # Withdrawals already approved / processing / paid
     # --------------------------------------------------------
 
     withdrawn = (
@@ -211,8 +225,8 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
     recent_orders = sorted(
         orders,
         key=lambda order: (
-            getattr(order, "completed_at", None)
-            or getattr(order, "created_at", None)
+            order.completed_at
+            or order.created_at
             or datetime.min
         ),
         reverse=True,
@@ -263,7 +277,7 @@ def _dashboard_context(
     user: User,
 ):
     """
-    Build the complete dashboard template context.
+    Build the complete dashboard context.
     """
 
     profile = user.profile
@@ -304,36 +318,6 @@ def _dashboard_context(
     )
 
     # --------------------------------------------------------
-    # Creator tracks
-    # --------------------------------------------------------
-
-    tracks = (
-        db.query(Track)
-        .filter(
-            Track.creator_profile_id == profile.id
-        )
-        .order_by(
-            Track.created_at.desc()
-        )
-        .all()
-    )
-
-    # --------------------------------------------------------
-    # Creator albums
-    # --------------------------------------------------------
-
-    albums = (
-        db.query(Album)
-        .filter(
-            Album.creator_profile_id == profile.id
-        )
-        .order_by(
-            Album.created_at.desc()
-        )
-        .all()
-    )
-
-    # --------------------------------------------------------
     # Withdrawal history
     # --------------------------------------------------------
 
@@ -346,13 +330,13 @@ def _dashboard_context(
     # Public creator store
     # --------------------------------------------------------
 
+    store_url = None
+
     profile_slug = getattr(
         profile,
         "slug",
         None,
     )
-
-    store_url = None
 
     if profile_slug:
         store_url = f"/store/{profile_slug}"
@@ -385,6 +369,12 @@ def _dashboard_context(
         None,
     )
 
+    # --------------------------------------------------------
+    # Default dashboard tracks
+    #
+    # Pagination is handled by dashboard_home().
+    # --------------------------------------------------------
+
     return ctx(
         request,
         user,
@@ -404,9 +394,6 @@ def _dashboard_context(
         track_count=track_count,
         album_count=album_count,
 
-        tracks=tracks,
-        albums=albums,
-
         withdrawal_requests=withdrawal_requests,
 
         youtube_url=youtube_url,
@@ -424,11 +411,106 @@ def dashboard_home(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
+    page: int = 1,
+    q: str = "",
 ):
+    """
+    Creator dashboard.
+
+    Includes stable pagination variables so dashboard.html
+    never receives an undefined track_total_pages variable.
+    """
+
+    if page < 1:
+        page = 1
+
     context = _dashboard_context(
         request,
         db,
         user,
+    )
+
+    profile = user.profile
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
+
+    # --------------------------------------------------------
+    # Track pagination
+    # --------------------------------------------------------
+
+    track_per_page = 12
+
+    search = (q or "").strip()
+
+    tracks_query = (
+        db.query(Track)
+        .filter(
+            Track.creator_profile_id == profile.id
+        )
+    )
+
+    if search:
+        search_term = f"%{search}%"
+
+        tracks_query = tracks_query.filter(
+            Track.title.ilike(search_term)
+        )
+
+    track_total = tracks_query.count()
+
+    track_total_pages = max(
+        1,
+        (track_total + track_per_page - 1)
+        // track_per_page,
+    )
+
+    if page > track_total_pages:
+        page = track_total_pages
+
+    track_start = (
+        (page - 1)
+        * track_per_page
+    )
+
+    tracks = (
+        tracks_query
+        .order_by(
+            Track.created_at.desc()
+        )
+        .offset(track_start)
+        .limit(track_per_page)
+        .all()
+    )
+
+    track_end = (
+        track_start + len(tracks)
+    )
+
+    # --------------------------------------------------------
+    # Add pagination context
+    # --------------------------------------------------------
+
+    context.update(
+        {
+            "tracks": tracks,
+
+            "track_page": page,
+            "track_total_pages": track_total_pages,
+            "track_total": track_total,
+            "track_total_count": track_total,
+
+            "track_per_page": track_per_page,
+
+            "track_search": search,
+            "q": search,
+
+            "track_start": track_start,
+            "track_end": track_end,
+        }
     )
 
     return templates.TemplateResponse(
@@ -448,6 +530,10 @@ def withdrawal_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
+    """
+    Display the creator withdrawal page.
+    """
+
     context = _dashboard_context(
         request,
         db,
@@ -499,7 +585,7 @@ async def upload_submit(
     sales_models: List[str] = Form(...),
 
     audio_files: List[UploadFile] = File(...),
-    cover_files: List[Optional[UploadFile]] = File(None),
+    cover_files: Optional[List[UploadFile]] = File(None),
 ):
     profile = user.profile
 
@@ -509,14 +595,14 @@ async def upload_submit(
             detail="Creator profile missing.",
         )
 
-    def error(message: str):
+    def error(msg: str):
         return templates.TemplateResponse(
             request,
             "upload_track.html",
             ctx(
                 request,
                 user,
-                error=message,
+                error=msg,
             ),
             status_code=400,
         )
@@ -557,7 +643,7 @@ async def upload_submit(
                 else ""
             )
 
-            bpm_value = None
+            bpm_val = None
 
             if bpm_raw:
                 if not bpm_raw.isdigit():
@@ -565,9 +651,9 @@ async def upload_submit(
                         f"BPM for '{title}' must be a whole number."
                     )
 
-                bpm_value = int(bpm_raw)
+                bpm_val = int(bpm_raw)
 
-                if bpm_value < 1 or bpm_value > 999:
+                if bpm_val < 1 or bpm_val > 999:
                     return error(
                         f"BPM for '{title}' must be between 1 and 999."
                     )
@@ -583,10 +669,7 @@ async def upload_submit(
             )
 
             try:
-                price_value = Decimal(price_raw)
-
-                if price_value < 0:
-                    raise ValueError
+                price_val = Decimal(price_raw)
 
             except (
                 InvalidOperation,
@@ -596,6 +679,16 @@ async def upload_submit(
                 return error(
                     f"Price for '{title}' is invalid."
                 )
+
+            if price_val < 0:
+                return error(
+                    f"Price for '{title}' cannot be negative."
+                )
+
+            # Keep money to two decimal places.
+            price_val = price_val.quantize(
+                Decimal("0.01")
+            )
 
             # ------------------------------------------------
             # Sales model
@@ -657,6 +750,7 @@ async def upload_submit(
 
             track = Track(
                 creator_profile_id=profile.id,
+
                 title=title,
                 slug=slug,
 
@@ -672,7 +766,7 @@ async def upload_submit(
                     else None
                 ) or None,
 
-                bpm=bpm_value,
+                bpm=bpm_val,
 
                 tags=(
                     tags_list[i].strip()
@@ -683,8 +777,12 @@ async def upload_submit(
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
 
-                price=price_value,
+                price=price_val,
+
                 sales_model=sales_model,
+
+                is_sold=False,
+                is_published=True,
             )
 
             db.add(track)
@@ -694,18 +792,21 @@ async def upload_submit(
 
     except UploadValidationError as exc:
         db.rollback()
+
         return error(str(exc))
 
     except Exception:
         db.rollback()
         raise
 
-    success_message = (
-        f"{len(created)} track(s) uploaded successfully."
-    )
-
     return RedirectResponse(
-        url="/dashboard?success=" + quote(success_message),
+        url=(
+            "/dashboard?success="
+            + quote(
+                str(len(created))
+                + " track(s) uploaded successfully."
+            )
+        ),
         status_code=303,
     )
 
@@ -763,9 +864,7 @@ async def new_album_submit(
     title: str = Form(...),
     description: str = Form(""),
     genre: str = Form(""),
-
     artwork: Optional[UploadFile] = File(None),
-
     track_ids: List[str] = Form([]),
 ):
     profile = user.profile
@@ -776,7 +875,7 @@ async def new_album_submit(
             detail="Creator profile missing.",
         )
 
-    def error(message: str):
+    def error(msg: str):
         tracks = (
             db.query(Track)
             .filter(
@@ -795,7 +894,7 @@ async def new_album_submit(
                 request,
                 user,
                 tracks=tracks,
-                error=message,
+                error=msg,
             ),
             status_code=400,
         )
@@ -852,9 +951,16 @@ async def new_album_submit(
         creator_profile_id=profile.id,
         title=title,
         slug=slug,
-        description=description.strip() or None,
-        genre=genre.strip() or None,
+        description=(
+            description.strip()
+            or None
+        ),
+        genre=(
+            genre.strip()
+            or None
+        ),
         artwork_path=artwork_path,
+        is_published=True,
     )
 
     db.add(album)
@@ -910,6 +1016,13 @@ async def new_album_submit(
 
         position += 1
 
+    if position == 0:
+        db.rollback()
+
+        return error(
+            "None of the selected tracks could be added to the album."
+        )
+
     db.commit()
 
     return RedirectResponse(
@@ -937,8 +1050,11 @@ def request_withdrawal(
     """
     Submit a creator withdrawal request.
 
-    This creates a pending withdrawal request.
-    It does not automatically send B2C money.
+    This creates a PENDING withdrawal.
+
+    It does NOT automatically send B2C money.
+    Admin/payment processing can approve/process
+    the request.
     """
 
     profile = user.profile
@@ -950,7 +1066,7 @@ def request_withdrawal(
         )
 
     # --------------------------------------------------------
-    # Recalculate balance
+    # Recalculate balance at request time
     # --------------------------------------------------------
 
     stats = _creator_stats(
@@ -963,7 +1079,7 @@ def request_withdrawal(
     # --------------------------------------------------------
 
     try:
-        amount_value = Decimal(
+        amount_val = Decimal(
             str(amount).strip()
         )
 
@@ -984,7 +1100,7 @@ def request_withdrawal(
     # Positive amount
     # --------------------------------------------------------
 
-    if amount_value <= 0:
+    if amount_val <= 0:
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw?"
@@ -993,11 +1109,15 @@ def request_withdrawal(
             status_code=303,
         )
 
+    amount_val = amount_val.quantize(
+        Decimal("0.01")
+    )
+
     # --------------------------------------------------------
     # Available balance
     # --------------------------------------------------------
 
-    if amount_value > stats["available_balance"]:
+    if amount_val > stats["available_balance"]:
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw?"
@@ -1024,7 +1144,10 @@ def request_withdrawal(
         )
 
     # --------------------------------------------------------
-    # Kenyan M-Pesa phone validation
+    # Normalize only for validation.
+    #
+    # The original entered value is retained in the database
+    # for compatibility with existing admin/payment logic.
     # --------------------------------------------------------
 
     normalized_phone = (
@@ -1076,7 +1199,7 @@ def request_withdrawal(
         .filter(
             WithdrawalRequest.creator_profile_id == profile.id,
             WithdrawalRequest.status == "pending",
-            WithdrawalRequest.amount == amount_value,
+            WithdrawalRequest.amount == amount_val,
             WithdrawalRequest.phone_number == phone_number,
         )
         .first()
@@ -1097,7 +1220,7 @@ def request_withdrawal(
 
     withdrawal = WithdrawalRequest(
         creator_profile_id=profile.id,
-        amount=amount_value,
+        amount=amount_val,
         phone_number=phone_number,
         status="pending",
     )
