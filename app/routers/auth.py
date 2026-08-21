@@ -1,15 +1,18 @@
 """
 BeatHub authentication routes.
 
-One login is used by everyone:
+One shared login is used for:
+    - Buyers / artists
+    - Creators / producers
+    - Administrator
 
-    Buyer / Artist  -> email
-    Creator         -> email
-    Admin           -> username or email
-
-The user's role determines the destination after login.
+Administrator credentials are stored in Render environment variables:
+    ADMIN_USERNAME
+    ADMIN_PASSWORD
 """
 
+import hmac
+import os
 import re
 import secrets
 import uuid
@@ -25,6 +28,7 @@ from app.database import get_db
 from app.models.profile import Profile
 from app.models.user import User, UserRole
 from app.utils.deps import (
+    ADMIN_SESSION_SUBJECT,
     SESSION_COOKIE_NAME,
     get_role_name,
 )
@@ -35,14 +39,9 @@ from app.utils.security import (
 )
 
 
-router = APIRouter(
-    tags=["auth"]
-)
+router = APIRouter(tags=["auth"])
 
-templates = Jinja2Templates(
-    directory="app/templates"
-)
-
+templates = Jinja2Templates(directory="app/templates")
 
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -58,16 +57,12 @@ def slugify(value: str) -> str:
         (value or "").strip(),
     ).strip("-").lower()
 
-    return value or (
-        f"producer-{secrets.token_hex(4)}"
-    )
+    return value or f"producer-{secrets.token_hex(4)}"
 
 
-def dashboard_url_for_user(
-    user: User,
-) -> str:
+def dashboard_url_for_user(user: User) -> str:
     """
-    Single source of truth for post-login routing.
+    Single source of truth for normal user post-login routing.
     """
 
     role = get_role_name(user)
@@ -95,6 +90,75 @@ def base_context(
     context.update(extra)
 
     return context
+
+
+def get_admin_credentials():
+    """
+    Read administrator credentials from environment variables.
+
+    Render:
+        ADMIN_USERNAME
+        ADMIN_PASSWORD
+    """
+
+    username = (
+        os.getenv("ADMIN_USERNAME")
+        or ""
+    ).strip()
+
+    password = os.getenv("ADMIN_PASSWORD") or ""
+
+    return username, password
+
+
+def verify_admin_credentials(
+    identifier: str,
+    password: str,
+) -> bool:
+    """
+    Securely compare the submitted admin credentials
+    with the credentials stored in Render.
+    """
+
+    configured_username, configured_password = (
+        get_admin_credentials()
+    )
+
+    if not configured_username or not configured_password:
+        return False
+
+    submitted_username = (
+        identifier or ""
+    ).strip()
+
+    submitted_password = password or ""
+
+    username_match = hmac.compare_digest(
+        submitted_username,
+        configured_username,
+    )
+
+    password_match = hmac.compare_digest(
+        submitted_password,
+        configured_password,
+    )
+
+    return username_match and password_match
+
+
+def create_admin_session_token() -> str:
+    """
+    Creates a session token specifically for the
+    Render-configured administrator.
+    """
+
+    return create_access_token(
+        subject=ADMIN_SESSION_SUBJECT,
+        extra_claims={
+            "role": "admin",
+            "admin": True,
+        },
+    )
 
 
 # ----------------------------------------------------------------------
@@ -134,17 +198,9 @@ def signup_submit(
             status_code=400,
         )
 
-    stage_name = (
-        stage_name or ""
-    ).strip()
-
-    email_norm = (
-        email or ""
-    ).strip().lower()
-
-    role = (
-        role or "buyer"
-    ).strip().lower()
+    stage_name = (stage_name or "").strip()
+    email_norm = (email or "").strip().lower()
+    role = (role or "buyer").strip().lower()
 
     if not stage_name:
         return error(
@@ -171,15 +227,12 @@ def signup_submit(
             "Passwords do not match."
         )
 
-    if role in {
-        "artist",
-        "buyer",
-        "customer",
-        "user",
-    }:
-        user_role = UserRole.BUYER
+    # ------------------------------------------------------------------
+    # IMPORTANT:
+    # Public signup can NEVER create an admin account.
+    # ------------------------------------------------------------------
 
-    elif role in {
+    if role in {
         "creator",
         "producer",
     }:
@@ -190,9 +243,7 @@ def signup_submit(
 
     existing_user = (
         db.query(User)
-        .filter(
-            User.email == email_norm
-        )
+        .filter(User.email == email_norm)
         .first()
     )
 
@@ -204,7 +255,6 @@ def signup_submit(
     user = User(
         id=str(uuid.uuid4()),
         email=email_norm,
-        username=None,
         hashed_password=hash_password(password),
         role=user_role,
         is_active=True,
@@ -223,9 +273,7 @@ def signup_submit(
             "An account with this email already exists."
         )
 
-    base_slug = slugify(
-        stage_name
-    )
+    base_slug = slugify(stage_name)
 
     slug = base_slug
     suffix = 1
@@ -266,15 +314,12 @@ def signup_submit(
         subject=user.id
     )
 
-    destination = dashboard_url_for_user(
-        user
-    )
+    destination = dashboard_url_for_user(user)
 
     response = RedirectResponse(
         url=(
             f"{destination}"
-            "?success=Account created. "
-            "Welcome to BeatHub!"
+            "?success=Account created. Welcome to BeatHub!"
         ),
         status_code=303,
     )
@@ -293,7 +338,7 @@ def signup_submit(
 
 
 # ----------------------------------------------------------------------
-# LOGIN
+# SHARED LOGIN
 # ----------------------------------------------------------------------
 
 @router.get("/login")
@@ -321,28 +366,60 @@ def login_submit(
             base_context(
                 request,
                 error=message,
-                identifier=identifier,
             ),
             status_code=401,
         )
 
-    identifier_norm = (
+    identifier_raw = (
         identifier or ""
-    ).strip().lower()
+    ).strip()
 
-    if not identifier_norm:
+    identifier_norm = identifier_raw.lower()
+
+    password = password or ""
+
+    if not identifier_raw:
         return error(
-            "Please enter your email or username."
+            "Email or username is required."
         )
 
     if not password:
         return error(
-            "Please enter your password."
+            "Password is required."
         )
 
-    # --------------------------------------------------------------
-    # FIRST: normal email lookup
-    # --------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 1. CHECK ADMIN FIRST
+    #
+    # Admin credentials live in Render and are NOT stored in users.
+    # ------------------------------------------------------------------
+
+    if verify_admin_credentials(
+        identifier_raw,
+        password,
+    ):
+        token = create_admin_session_token()
+
+        response = RedirectResponse(
+            url="/admin",
+            status_code=303,
+        )
+
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            max_age=COOKIE_MAX_AGE,
+            samesite="lax",
+            secure=False,
+            path="/",
+        )
+
+        return response
+
+    # ------------------------------------------------------------------
+    # 2. NORMAL USER LOGIN BY EMAIL
+    # ------------------------------------------------------------------
 
     user = (
         db.query(User)
@@ -352,27 +429,11 @@ def login_submit(
         .first()
     )
 
-    # --------------------------------------------------------------
-    # SECOND: username lookup
+    # ------------------------------------------------------------------
+    # 3. NORMAL USER LOGIN BY PUBLIC PROFILE SLUG
     #
-    # This is primarily used by the administrator, but it also
-    # allows future accounts to use usernames.
-    # --------------------------------------------------------------
-
-    if not user:
-        user = (
-            db.query(User)
-            .filter(
-                User.username == identifier_norm
-            )
-            .first()
-        )
-
-    # --------------------------------------------------------------
-    # THIRD: existing producer profile slug compatibility
-    #
-    # Keeps your previous login behavior working.
-    # --------------------------------------------------------------
+    # This preserves the existing BeatHub behavior.
+    # ------------------------------------------------------------------
 
     if not user and identifier_norm:
 
@@ -412,19 +473,19 @@ def login_submit(
 
     if not user.is_active:
         return error(
-            "This account has been deactivated. "
-            "Contact support."
+            "This account has been deactivated. Contact support."
         )
 
     db.refresh(user)
 
     token = create_access_token(
-        subject=user.id
+        subject=user.id,
+        extra_claims={
+            "role": get_role_name(user),
+        },
     )
 
-    destination = dashboard_url_for_user(
-        user
-    )
+    destination = dashboard_url_for_user(user)
 
     response = RedirectResponse(
         url=destination,
