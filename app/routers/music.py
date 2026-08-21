@@ -1,62 +1,49 @@
 """
-BeatHub music routes.
+BeatHub music and marketplace routes.
 
-Supports:
-- Public beat browsing
-- Hot picks
-- Sessions
-- Track details
-- Album details
-- Creator profiles
-- Secure purchased-track downloads
-- Cloudflare R2 private-object downloads
-- Local filesystem compatibility for older tracks
+Public:
+    /beats
+    /hot-picks
+    /sessions
+    /track/{slug}
+    /album/{slug}
+    /profile/{slug}
 
-R2 audio paths are expected in formats such as:
-
-    r2://beathub-r2/audio/file.mp3
-
-or:
-
-    r2://beathub-r2/tracks/file.mp3
+Protected:
+    /download/{track_ref}
+    /download/track/{track_ref}
 """
 
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
-
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.models.music import Album, Track
 from app.models.order import License, Order, OrderStatus
-from app.models.profile import Profile
 from app.models.user import User
 from app.utils.deps import get_optional_user, require_user
 
 
 router = APIRouter(tags=["music"])
 
-templates = Jinja2Templates(
-    directory="app/templates"
-)
+templates = Jinja2Templates(directory="app/templates")
 
 
 # ======================================================================
-# CONTEXT
+# SHARED TEMPLATE CONTEXT
 # ======================================================================
 
 def ctx(
     request: Request,
-    current_user=None,
+    current_user,
     **extra,
 ):
     data = {
@@ -71,388 +58,183 @@ def ctx(
 
 
 # ======================================================================
-# R2 CLIENT
+# HELPERS
 # ======================================================================
 
-def get_r2_client():
-    """
-    Create a Cloudflare R2 S3-compatible client.
+def clean_search(value: Optional[str]) -> str:
+    return (value or "").strip()
 
-    R2 credentials are loaded from app.config.settings.
-    """
 
-    if not settings.r2_enabled:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Cloudflare R2 storage is not configured. "
-                "Please check the R2 environment variables."
-            ),
-        )
-
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.r2_endpoint_url,
-        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-        region_name="auto",
+def track_is_visible(track: Track) -> bool:
+    return bool(
+        track
+        and track.is_published
     )
 
 
 # ======================================================================
-# R2 PATH PARSER
-# ======================================================================
-
-def parse_r2_path(
-    stored_path: str,
-):
-    """
-    Convert:
-
-        r2://bucket/key/file.mp3
-
-    into:
-
-        bucket
-        key
-
-    Only the configured BeatHub R2 bucket is allowed.
-    """
-
-    value = (
-        str(stored_path or "")
-        .strip()
-    )
-
-    if not value.lower().startswith(
-        "r2://"
-    ):
-        return None, None
-
-    remainder = value[5:]
-
-    if "/" not in remainder:
-        return None, None
-
-    bucket, key = remainder.split(
-        "/",
-        1,
-    )
-
-    bucket = bucket.strip()
-    key = key.strip().lstrip("/")
-
-    if not bucket or not key:
-        return None, None
-
-    configured_bucket = (
-        str(settings.R2_BUCKET_NAME or "")
-        .strip()
-    )
-
-    if not configured_bucket:
-        return None, None
-
-    # Security:
-    # Never allow a database value to make us access
-    # an arbitrary R2 bucket.
-    if bucket != configured_bucket:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid R2 storage bucket.",
-        )
-
-    return bucket, key
-
-
-# ======================================================================
-# R2 DOWNLOAD
-# ======================================================================
-
-def create_r2_download_url(
-    stored_path: str,
-    download_name: str,
-):
-    """
-    Generate a temporary signed URL for a private R2 object.
-    """
-
-    bucket, key = parse_r2_path(
-        stored_path
-    )
-
-    if not bucket or not key:
-        raise HTTPException(
-            status_code=404,
-            detail="Invalid R2 audio path.",
-        )
-
-    client = get_r2_client()
-
-    extension = (
-        Path(key)
-        .suffix
-        .lower()
-    )
-
-    media_type = {
-        ".mp3": "audio/mpeg",
-        ".wav": "audio/wav",
-        ".m4a": "audio/mp4",
-        ".aac": "audio/aac",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-    }.get(
-        extension,
-        "application/octet-stream",
-    )
-
-    # Quote filename safely for Content-Disposition.
-    safe_filename = (
-        download_name
-        .replace(
-            "\\",
-            "_",
-        )
-        .replace(
-            '"',
-            "_",
-        )
-        .replace(
-            "\r",
-            "_",
-        )
-        .replace(
-            "\n",
-            "_",
-        )
-    )
-
-    try:
-        # --------------------------------------------------------------
-        # Confirm object exists before giving buyer a URL.
-        # --------------------------------------------------------------
-
-        client.head_object(
-            Bucket=bucket,
-            Key=key,
-        )
-
-        # --------------------------------------------------------------
-        # Generate short-lived private download URL.
-        # --------------------------------------------------------------
-
-        signed_url = client.generate_presigned_url(
-            ClientMethod="get_object",
-            Params={
-                "Bucket": bucket,
-                "Key": key,
-                "ResponseContentDisposition": (
-                    f'attachment; filename="{safe_filename}"'
-                ),
-                "ResponseContentType": media_type,
-            },
-            ExpiresIn=int(
-                settings.R2_DOWNLOAD_URL_EXPIRES
-            ),
-        )
-
-        return signed_url
-
-    except ClientError as exc:
-        error_code = (
-            exc.response
-            .get("Error", {})
-            .get("Code", "")
-        )
-
-        if error_code in {
-            "404",
-            "NoSuchKey",
-            "NotFound",
-        }:
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    "The purchased audio file "
-                    "could not be found in R2."
-                ),
-            )
-
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "BeatHub could not access "
-                "the R2 audio file."
-            ),
-        )
-
-    except BotoCoreError:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "BeatHub could not connect "
-                "to Cloudflare R2."
-            ),
-        )
-
-
-# ======================================================================
-# LOCAL FILE DOWNLOAD
-# ======================================================================
-
-def find_local_audio_file(
-    stored_path: str,
-):
-    """
-    Compatibility fallback for older tracks that were stored
-    on the local filesystem instead of R2.
-
-    This intentionally does not use settings.MEDIA_ROOT because
-    MEDIA_ROOT is not part of the current BeatHub configuration.
-    """
-
-    value = (
-        str(stored_path or "")
-        .strip()
-    )
-
-    if not value:
-        return None
-
-    stored = Path(value)
-
-    # --------------------------------------------------------------
-    # Absolute local path.
-    # --------------------------------------------------------------
-
-    if stored.is_absolute():
-        candidate = stored.resolve()
-
-        if (
-            candidate.exists()
-            and candidate.is_file()
-        ):
-            return candidate
-
-        return None
-
-    project_root = Path.cwd().resolve()
-
-    candidates = [
-        project_root / stored,
-        project_root / "media" / stored,
-        project_root / "media" / "audio" / stored.name,
-        project_root / "uploads" / stored,
-        project_root / "uploads" / "audio" / stored.name,
-    ]
-
-    for candidate in candidates:
-
-        try:
-            resolved = candidate.resolve()
-        except Exception:
-            continue
-
-        # Never allow ../ traversal outside project root.
-        try:
-            resolved.relative_to(
-                project_root
-            )
-        except ValueError:
-            continue
-
-        if (
-            resolved.exists()
-            and resolved.is_file()
-        ):
-            return resolved
-
-    return None
-
-
-# ======================================================================
-# DOWNLOAD FILENAME
-# ======================================================================
-
-def build_download_filename(
-    track: Track,
-    stored_path: str,
-):
-    """
-    Build a safe filename while preserving the original
-    audio extension where possible.
-    """
-
-    title = str(
-        getattr(
-            track,
-            "title",
-            "",
-        )
-        or ""
-    )
-
-    safe_title = "".join(
-        character
-        for character in title
-        if character.isalnum()
-        or character in (
-            " ",
-            "-",
-            "_",
-        )
-    ).strip()
-
-    if not safe_title:
-        safe_title = "BeatHub-Track"
-
-    extension = (
-        Path(
-            str(stored_path or "")
-        )
-        .suffix
-        .lower()
-    )
-
-    if extension not in {
-        ".mp3",
-        ".wav",
-        ".m4a",
-        ".aac",
-        ".ogg",
-        ".flac",
-    }:
-        extension = ".mp3"
-
-    return (
-        f"{safe_title}{extension}"
-    )
-
-
-# ======================================================================
-# PUBLIC MUSIC
+# BEAT MARKETPLACE
 # ======================================================================
 
 @router.get("/beats")
 def browse_beats(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
+    current_user: Optional[User] = Depends(get_optional_user),
+    q: Optional[str] = Query(
+        default=None,
+        max_length=100,
+    ),
+    genre: Optional[str] = Query(
+        default=None,
+        max_length=100,
+    ),
+    sort: str = Query(
+        default="newest",
+        max_length=30,
     ),
 ):
-    tracks = (
+    """
+    Main BeatHub discovery page.
+
+    This is now the default landing page for buyer/artist accounts.
+
+    Search:
+        /beats?q=afro
+
+    Genre:
+        /beats?genre=Afrobeats
+
+    Sorting:
+        /beats?sort=newest
+        /beats?sort=oldest
+        /beats?sort=price_low
+        /beats?sort=price_high
+    """
+
+    search = clean_search(q)
+    selected_genre = clean_search(genre)
+
+    query = (
         db.query(Track)
         .filter(
             Track.is_published == True  # noqa: E712
         )
-        .order_by(
+    )
+
+    # --------------------------------------------------------------
+    # SEARCH
+    # --------------------------------------------------------------
+
+    if search:
+        search_pattern = f"%{search}%"
+
+        query = query.filter(
+            or_(
+                Track.title.ilike(search_pattern),
+                Track.genre.ilike(search_pattern),
+                Track.tags.ilike(search_pattern),
+                Track.description.ilike(search_pattern),
+            )
+        )
+
+    # --------------------------------------------------------------
+    # GENRE
+    # --------------------------------------------------------------
+
+    if selected_genre:
+        query = query.filter(
+            Track.genre.ilike(
+                selected_genre
+            )
+        )
+
+    # --------------------------------------------------------------
+    # SORT
+    # --------------------------------------------------------------
+
+    if sort == "oldest":
+
+        query = query.order_by(
+            Track.created_at.asc()
+        )
+
+    elif sort == "price_low":
+
+        query = query.order_by(
+            Track.price.asc(),
+            Track.created_at.desc(),
+        )
+
+    elif sort == "price_high":
+
+        query = query.order_by(
+            Track.price.desc(),
+            Track.created_at.desc(),
+        )
+
+    else:
+
+        sort = "newest"
+
+        query = query.order_by(
             Track.created_at.desc()
         )
-        .limit(60)
+
+    tracks = query.limit(100).all()
+
+    # --------------------------------------------------------------
+    # FEATURED / NEWEST
+    #
+    # Only show these sections when the user isn't actively searching.
+    # --------------------------------------------------------------
+
+    featured_tracks = []
+
+    if not search and not selected_genre:
+
+        featured_tracks = (
+            db.query(Track)
+            .filter(
+                Track.is_published == True  # noqa: E712
+            )
+            .order_by(
+                Track.created_at.desc()
+            )
+            .limit(6)
+            .all()
+        )
+
+    # --------------------------------------------------------------
+    # AVAILABLE GENRES
+    # --------------------------------------------------------------
+
+    genre_rows = (
+        db.query(Track.genre)
+        .filter(
+            Track.is_published == True,  # noqa: E712
+            Track.genre.isnot(None),
+            Track.genre != "",
+        )
+        .distinct()
+        .order_by(
+            Track.genre.asc()
+        )
+        .limit(30)
         .all()
     )
+
+    genres = [
+        row[0]
+        for row in genre_rows
+        if row[0]
+    ]
+
+    # --------------------------------------------------------------
+    # EMPTY STATE
+    # --------------------------------------------------------------
+
+    has_results = bool(tracks)
 
     return templates.TemplateResponse(
         request,
@@ -461,6 +243,13 @@ def browse_beats(
             request,
             current_user,
             tracks=tracks,
+            featured_tracks=featured_tracks,
+            genres=genres,
+            search=search,
+            selected_genre=selected_genre,
+            sort=sort,
+            has_results=has_results,
+            title="Find Your Sound",
         ),
     )
 
@@ -473,9 +262,7 @@ def browse_beats(
 def hot_picks(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     tracks = (
         db.query(Track)
@@ -485,7 +272,7 @@ def hot_picks(
         .order_by(
             Track.created_at.desc()
         )
-        .limit(12)
+        .limit(24)
         .all()
     )
 
@@ -496,6 +283,12 @@ def hot_picks(
             request,
             current_user,
             tracks=tracks,
+            featured_tracks=[],
+            genres=[],
+            search="",
+            selected_genre="",
+            sort="newest",
+            has_results=bool(tracks),
             title="Hot Picks",
         ),
     )
@@ -508,9 +301,7 @@ def hot_picks(
 @router.get("/sessions")
 def sessions_page(
     request: Request,
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     return templates.TemplateResponse(
         request,
@@ -531,9 +322,7 @@ def track_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     track = (
         db.query(Track)
@@ -546,7 +335,7 @@ def track_detail(
     if not track:
         raise HTTPException(
             status_code=404,
-            detail="Track not found.",
+            detail="Track not found",
         )
 
     purchased = False
@@ -560,12 +349,9 @@ def track_detail(
                 License.order_id == Order.id,
             )
             .filter(
-                License.buyer_id
-                == current_user.id,
-                License.track_id
-                == track.id,
-                Order.status
-                == OrderStatus.COMPLETED,
+                License.buyer_id == current_user.id,
+                License.track_id == track.id,
+                Order.status == OrderStatus.COMPLETED,
             )
             .first()
             is not None
@@ -592,9 +378,7 @@ def album_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     album = (
         db.query(Album)
@@ -607,7 +391,7 @@ def album_detail(
     if not album:
         raise HTTPException(
             status_code=404,
-            detail="Album not found.",
+            detail="Album not found",
         )
 
     return templates.TemplateResponse(
@@ -630,9 +414,7 @@ def profile_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(
-        get_optional_user
-    ),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     profile = (
         db.query(Profile)
@@ -645,41 +427,19 @@ def profile_detail(
     if not profile:
         raise HTTPException(
             status_code=404,
-            detail="Profile not found.",
+            detail="Profile not found",
         )
 
     tracks = [
         track
-        for track in (
-            getattr(
-                profile,
-                "tracks",
-                None,
-            )
-            or []
-        )
-        if getattr(
-            track,
-            "is_published",
-            False,
-        )
+        for track in profile.tracks
+        if track.is_published
     ]
 
     albums = [
         album
-        for album in (
-            getattr(
-                profile,
-                "albums",
-                None,
-            )
-            or []
-        )
-        if getattr(
-            album,
-            "is_published",
-            False,
-        )
+        for album in profile.albums
+        if album.is_published
     ]
 
     return templates.TemplateResponse(
@@ -696,33 +456,7 @@ def profile_detail(
 
 
 # ======================================================================
-# SECURE PURCHASE DOWNLOAD
-# ======================================================================
-#
-# Supports:
-#
-#   /download/track/{track_id}
-#   /download/{track_id}
-#   /download/track/{track_slug}
-#   /download/{track_slug}
-#
-# Buyer must have:
-#
-#   License
-#       ↓
-#   correct buyer
-#       ↓
-#   correct track
-#       ↓
-#   completed order
-#
-# R2 files:
-#
-#   r2://bucket/key.mp3
-#
-# are returned through a temporary signed URL.
-#
-# Local legacy files are still supported.
+# PURCHASE DOWNLOAD
 # ======================================================================
 
 @router.get("/download/track/{track_ref}")
@@ -732,6 +466,25 @@ def download_track(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """
+    Secure purchased-track download.
+
+    Supports:
+        /download/track/{track_id}
+        /download/{track_id}
+        /download/track/{slug}
+        /download/{slug}
+
+    IMPORTANT:
+    This route only serves locally stored files.
+
+    If the database contains an R2 URL such as:
+        r2://bucket/audio/file.mp3
+
+    this route deliberately does not pretend that it is a local file.
+    R2-specific serving should be handled by the R2 storage layer.
+    """
+
     # --------------------------------------------------------------
     # FIND TRACK BY ID
     # --------------------------------------------------------------
@@ -749,6 +502,7 @@ def download_track(
     # --------------------------------------------------------------
 
     if not track:
+
         track = (
             db.query(Track)
             .filter(
@@ -791,120 +545,184 @@ def download_track(
     # AUDIO PATH
     # --------------------------------------------------------------
 
-    stored_path = (
-        str(
-            getattr(
-                track,
-                "audio_file_path",
-                "",
-            )
-            or ""
-        )
-        .strip()
-    )
-
-    if not stored_path:
+    if not track.audio_file_path:
         raise HTTPException(
             status_code=404,
-            detail="This track has no audio file.",
+            detail="Audio file is not available.",
         )
 
-    # --------------------------------------------------------------
-    # DOWNLOAD NAME
-    # --------------------------------------------------------------
-
-    download_name = (
-        build_download_filename(
-            track,
-            stored_path,
-        )
+    stored_path = Path(
+        track.audio_file_path
     )
 
     # --------------------------------------------------------------
-    # R2 DOWNLOAD
+    # R2 REFERENCES ARE NOT LOCAL FILES
     # --------------------------------------------------------------
 
-    if stored_path.lower().startswith(
-        "r2://"
+    stored_text = str(
+        track.audio_file_path
+    ).strip()
+
+    if (
+        stored_text.startswith("r2://")
+        or stored_text.startswith("s3://")
     ):
-
-        signed_url = (
-            create_r2_download_url(
-                stored_path,
-                download_name,
-            )
-        )
-
-        return RedirectResponse(
-            url=signed_url,
-            status_code=307,
-        )
-
-    # --------------------------------------------------------------
-    # HTTPS STORAGE URL
-    #
-    # Supports an existing public/custom-domain
-    # storage URL if one was stored.
-    # --------------------------------------------------------------
-
-    if stored_path.startswith(
-        "https://"
-    ) or stored_path.startswith(
-        "http://"
-    ):
-
-        return RedirectResponse(
-            url=stored_path,
-            status_code=307,
-        )
-
-    # --------------------------------------------------------------
-    # LOCAL FILE COMPATIBILITY
-    # --------------------------------------------------------------
-
-    audio_path = (
-        find_local_audio_file(
-            stored_path
-        )
-    )
-
-    if audio_path is None:
         raise HTTPException(
             status_code=404,
             detail=(
-                "The purchased audio file "
-                "is unavailable."
+                "This track is stored in cloud storage. "
+                "The R2 download endpoint must be used."
             ),
         )
 
     # --------------------------------------------------------------
-    # MIME TYPE
+    # MEDIA ROOT
     # --------------------------------------------------------------
+
+    media_root_value = getattr(
+        settings,
+        "MEDIA_ROOT",
+        "media",
+    )
+
+    media_root = Path(
+        media_root_value
+    )
+
+    if not media_root.is_absolute():
+        media_root = (
+            Path.cwd() / media_root
+        )
+
+    media_root = media_root.resolve()
+
+    # --------------------------------------------------------------
+    # EXACT STORED PATH
+    # --------------------------------------------------------------
+
+    if stored_path.is_absolute():
+
+        audio_path = stored_path
+
+    else:
+
+        audio_path = (
+            Path.cwd()
+            / stored_path
+        )
+
+    audio_path = audio_path.resolve()
+
+    # --------------------------------------------------------------
+    # COMPATIBILITY PATHS
+    # --------------------------------------------------------------
+
+    if (
+        not audio_path.exists()
+        or not audio_path.is_file()
+    ):
+
+        filename = stored_path.name
+
+        candidates = [
+            media_root / stored_path,
+            media_root / "audio" / filename,
+            Path.cwd() / "media" / "audio" / filename,
+        ]
+
+        found = None
+
+        for candidate in candidates:
+
+            candidate = candidate.resolve()
+
+            try:
+                candidate.relative_to(
+                    media_root
+                )
+
+            except ValueError:
+                continue
+
+            if (
+                candidate.exists()
+                and candidate.is_file()
+            ):
+                found = candidate
+                break
+
+        if found is None:
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "The purchased audio file "
+                    "is missing from storage."
+                ),
+            )
+
+        audio_path = found
+
+    # --------------------------------------------------------------
+    # SECURITY
+    # --------------------------------------------------------------
+
+    try:
+
+        audio_path.relative_to(
+            media_root
+        )
+
+    except ValueError:
+
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid audio file location.",
+        )
+
+    if not audio_path.is_file():
+
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file is unavailable.",
+        )
+
+    # --------------------------------------------------------------
+    # SAFE DOWNLOAD NAME
+    # --------------------------------------------------------------
+
+    safe_title = "".join(
+        character
+        for character in track.title
+        if character.isalnum()
+        or character in (
+            " ",
+            "-",
+            "_",
+        )
+    ).strip()
+
+    if not safe_title:
+        safe_title = "BeatHub-Track"
 
     extension = (
         audio_path.suffix.lower()
     )
 
-    media_type = {
-        ".mp3": "audio/mpeg",
-        ".wav": "audio/wav",
-        ".m4a": "audio/mp4",
-        ".aac": "audio/aac",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-    }.get(
-        extension,
-        "application/octet-stream",
+    download_name = (
+        f"{safe_title}{extension}"
+        if extension
+        else safe_title
     )
 
     # --------------------------------------------------------------
-    # LOCAL DOWNLOAD
+    # DOWNLOAD
     # --------------------------------------------------------------
 
     return FileResponse(
         path=str(audio_path),
-        media_type=media_type,
         filename=download_name,
+        media_type="application/octet-stream",
         headers={
             "Content-Disposition": (
                 f'attachment; filename="{download_name}"'
