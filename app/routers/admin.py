@@ -1,5 +1,5 @@
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -8,140 +8,133 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.ledger import WithdrawalRequest, WithdrawalStatus
+from app.models.ledger import (
+    PlatformWithdrawal,
+    WithdrawalRequest,
+    WithdrawalStatus,
+)
 from app.models.music import Album, Track
 from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
-from app.models.profile import Profile
-from app.models.user import User, UserRole
-from app.utils.deps import (
-    SESSION_COOKIE_NAME,
-    require_admin,
-)
-from app.utils.security import (
-    create_access_token,
-    verify_password,
+from app.models.user import User
+from app.utils.deps import require_admin
+
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
 )
 
-router = APIRouter(prefix="/admin", tags=["admin"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(
+    directory="app/templates"
+)
 
-COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
-
-def ctx(request: Request, current_user=None, **extra):
+def ctx(
+    request: Request,
+    current_user,
+    **extra,
+):
     base = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
     }
+
     base.update(extra)
+
     return base
 
 
 # ----------------------------------------------------------------------
-# ADMIN LOGIN
+# PLATFORM WALLET
 # ----------------------------------------------------------------------
 
-@router.get("/login")
-def admin_login_page(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "admin/login.html",
-        ctx(request),
-    )
+def platform_financials(db: Session) -> dict:
+    """
+    Calculate BeatHub's platform money.
 
+    Platform commission comes from completed orders.
 
-@router.post("/login")
-def admin_login_submit(
-    request: Request,
-    db: Session = Depends(get_db),
-    identifier: str = Form(...),
-    password: str = Form(...),
-):
-    identifier = (identifier or "").strip().lower()
+    Creator net earnings are NOT included.
+    """
 
-    admin = (
-        db.query(User)
-        .filter(User.email == identifier)
-        .first()
-    )
-
-    # Never reveal whether the email exists.
-    if not admin:
-        return templates.TemplateResponse(
-            request,
-            "admin/login.html",
-            ctx(
-                request,
-                error="Invalid administrator credentials.",
-            ),
-            status_code=401,
+    total_commission = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.commission_amount),
+                0,
+            )
         )
-
-    if not admin.is_active:
-        return templates.TemplateResponse(
-            request,
-            "admin/login.html",
-            ctx(
-                request,
-                error="This administrator account is inactive.",
-            ),
-            status_code=403,
+        .filter(
+            Order.status == OrderStatus.COMPLETED
         )
-
-    if not verify_password(
-        password,
-        admin.hashed_password,
-    ):
-        return templates.TemplateResponse(
-            request,
-            "admin/login.html",
-            ctx(
-                request,
-                error="Invalid administrator credentials.",
-            ),
-            status_code=401,
-        )
-
-    role = getattr(admin.role, "value", admin.role)
-
-    if str(role).strip().lower() != "admin":
-        return templates.TemplateResponse(
-            request,
-            "admin/login.html",
-            ctx(
-                request,
-                error="Administrator access denied.",
-            ),
-            status_code=403,
-        )
-
-    token = create_access_token(
-        subject=admin.id,
-        extra_claims={"role": "admin"},
+        .scalar()
     )
 
-    response = RedirectResponse(
-        url="/admin",
-        status_code=303,
+    total_commission = Decimal(
+        str(total_commission or 0)
     )
 
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        max_age=COOKIE_MAX_AGE,
-        samesite="lax",
-        secure=False,
-        path="/",
+    paid_withdrawals = (
+        db.query(
+            func.coalesce(
+                func.sum(PlatformWithdrawal.amount),
+                0,
+            )
+        )
+        .filter(
+            PlatformWithdrawal.status
+            == WithdrawalStatus.PAID
+        )
+        .scalar()
     )
 
-    return response
+    processing_withdrawals = (
+        db.query(
+            func.coalesce(
+                func.sum(PlatformWithdrawal.amount),
+                0,
+            )
+        )
+        .filter(
+            PlatformWithdrawal.status.in_(
+                [
+                    WithdrawalStatus.PENDING,
+                    WithdrawalStatus.APPROVED,
+                    WithdrawalStatus.PROCESSING,
+                ]
+            )
+        )
+        .scalar()
+    )
+
+    paid_withdrawals = Decimal(
+        str(paid_withdrawals or 0)
+    )
+
+    processing_withdrawals = Decimal(
+        str(processing_withdrawals or 0)
+    )
+
+    available = (
+        total_commission
+        - paid_withdrawals
+        - processing_withdrawals
+    )
+
+    if available < 0:
+        available = Decimal("0")
+
+    return {
+        "total_commission": total_commission,
+        "withdrawn": paid_withdrawals,
+        "reserved": processing_withdrawals,
+        "available": available,
+    }
 
 
 # ----------------------------------------------------------------------
-# ADMIN DASHBOARD
+# ADMIN HOME
 # ----------------------------------------------------------------------
 
 @router.get("")
@@ -157,7 +150,10 @@ def admin_home(
                 0,
             )
         )
-        .filter(Order.status == OrderStatus.COMPLETED)
+        .filter(
+            Order.status
+            == OrderStatus.COMPLETED
+        )
         .scalar()
     )
 
@@ -168,7 +164,10 @@ def admin_home(
                 0,
             )
         )
-        .filter(Order.status == OrderStatus.COMPLETED)
+        .filter(
+            Order.status
+            == OrderStatus.COMPLETED
+        )
         .scalar()
     )
 
@@ -179,19 +178,28 @@ def admin_home(
                 0,
             )
         )
-        .filter(Order.status == OrderStatus.COMPLETED)
+        .filter(
+            Order.status
+            == OrderStatus.COMPLETED
+        )
         .scalar()
     )
 
     successful = (
         db.query(Order)
-        .filter(Order.status == OrderStatus.COMPLETED)
+        .filter(
+            Order.status
+            == OrderStatus.COMPLETED
+        )
         .count()
     )
 
     pending = (
         db.query(Order)
-        .filter(Order.status == OrderStatus.PENDING)
+        .filter(
+            Order.status
+            == OrderStatus.PENDING
+        )
         .count()
     )
 
@@ -210,14 +218,18 @@ def admin_home(
 
     recent_orders = (
         db.query(Order)
-        .order_by(Order.created_at.desc())
+        .order_by(
+            Order.created_at.desc()
+        )
         .limit(10)
         .all()
     )
 
     recent_users = (
         db.query(User)
-        .order_by(User.created_at.desc())
+        .order_by(
+            User.created_at.desc()
+        )
         .limit(10)
         .all()
     )
@@ -232,7 +244,9 @@ def admin_home(
                 ]
             )
         )
-        .order_by(PaymentTransaction.updated_at.desc())
+        .order_by(
+            PaymentTransaction.updated_at.desc()
+        )
         .limit(10)
         .all()
     )
@@ -245,6 +259,8 @@ def admin_home(
         )
         .count()
     )
+
+    platform = platform_financials(db)
 
     return templates.TemplateResponse(
         request,
@@ -262,7 +278,266 @@ def admin_home(
             recent_users=recent_users,
             failed_payments=failed_payments,
             pending_withdrawals=pending_withdrawals,
+            platform=platform,
         ),
+    )
+
+
+# ----------------------------------------------------------------------
+# PLATFORM EARNINGS
+# ----------------------------------------------------------------------
+
+@router.get("/earnings")
+def admin_earnings(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    platform = platform_financials(db)
+
+    withdrawals = (
+        db.query(PlatformWithdrawal)
+        .order_by(
+            PlatformWithdrawal.created_at.desc()
+        )
+        .limit(100)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "admin/earnings.html",
+        ctx(
+            request,
+            admin,
+            platform=platform,
+            withdrawals=withdrawals,
+        ),
+    )
+
+
+# ----------------------------------------------------------------------
+# ADMIN PLATFORM WITHDRAWAL
+# ----------------------------------------------------------------------
+
+@router.post("/earnings/withdraw")
+async def admin_platform_withdraw(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+    amount: str = Form(...),
+    phone_number: str = Form(...),
+):
+    """
+    Withdraw BeatHub's platform commission to M-Pesa.
+
+    This is NOT a creator withdrawal.
+    """
+
+    try:
+        amount_value = Decimal(
+            amount.strip()
+        ).quantize(Decimal("0.01"))
+
+    except (InvalidOperation, ValueError):
+        return RedirectResponse(
+            url=(
+                "/admin/earnings"
+                "?error=Invalid withdrawal amount."
+            ),
+            status_code=303,
+        )
+
+    if amount_value <= 0:
+        return RedirectResponse(
+            url=(
+                "/admin/earnings"
+                "?error=Withdrawal amount must be greater than zero."
+            ),
+            status_code=303,
+        )
+
+    platform = platform_financials(db)
+
+    if amount_value > platform["available"]:
+        return RedirectResponse(
+            url=(
+                "/admin/earnings"
+                "?error=Withdrawal exceeds your available BeatHub balance."
+            ),
+            status_code=303,
+        )
+
+    # Validate phone before creating a request.
+    from app.mpesa import normalize_phone
+
+    try:
+        normalized_phone = normalize_phone(
+            phone_number
+        )
+    except ValueError:
+        return RedirectResponse(
+            url=(
+                "/admin/earnings"
+                "?error=Invalid M-Pesa phone number."
+            ),
+            status_code=303,
+        )
+
+    withdrawal = PlatformWithdrawal(
+        amount=amount_value,
+        phone_number=normalized_phone,
+        status=WithdrawalStatus.PROCESSING,
+        admin_note="BeatHub platform commission withdrawal.",
+    )
+
+    db.add(withdrawal)
+
+    try:
+        db.flush()
+
+        from app.mpesa import b2c_payment
+
+        result = await b2c_payment(
+            phone_number=normalized_phone,
+            amount=float(amount_value),
+            remarks="BeatHub platform commission",
+            occasion="BeatHub",
+            command_id="BusinessPayment",
+        )
+
+        withdrawal.conversation_id = (
+            result.get("ConversationID")
+        )
+
+        withdrawal.originator_conversation_id = (
+            result.get(
+                "OriginatorConversationID"
+            )
+        )
+
+        # Safaricom accepting the request does NOT necessarily
+        # mean the recipient has received the money yet.
+        withdrawal.status = (
+            WithdrawalStatus.PROCESSING
+        )
+
+        db.commit()
+
+    except Exception as exc:
+        db.rollback()
+
+        return RedirectResponse(
+            url=(
+                "/admin/earnings"
+                "?error="
+                "M-Pesa payout could not be initiated."
+            ),
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=(
+            "/admin/earnings"
+            "?success="
+            "M-Pesa payout request submitted successfully."
+        ),
+        status_code=303,
+    )
+
+
+# ----------------------------------------------------------------------
+# MARK PLATFORM WITHDRAWAL PAID
+# ----------------------------------------------------------------------
+
+@router.post(
+    "/earnings/{withdrawal_id}/mark-paid"
+)
+def admin_mark_platform_paid(
+    withdrawal_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    withdrawal = db.get(
+        PlatformWithdrawal,
+        withdrawal_id,
+    )
+
+    if not withdrawal:
+        raise HTTPException(
+            status_code=404,
+            detail="Platform withdrawal not found.",
+        )
+
+    if withdrawal.status not in {
+        WithdrawalStatus.PROCESSING,
+        WithdrawalStatus.APPROVED,
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="This withdrawal cannot be marked as paid.",
+        )
+
+    withdrawal.status = (
+        WithdrawalStatus.PAID
+    )
+
+    withdrawal.resolved_at = datetime.utcnow()
+
+    db.commit()
+
+    return RedirectResponse(
+        url=(
+            "/admin/earnings"
+            "?success=Platform withdrawal marked as paid."
+        ),
+        status_code=303,
+    )
+
+
+# ----------------------------------------------------------------------
+# MARK PLATFORM WITHDRAWAL REJECTED
+# ----------------------------------------------------------------------
+
+@router.post(
+    "/earnings/{withdrawal_id}/reject"
+)
+def admin_reject_platform_withdrawal(
+    withdrawal_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    withdrawal = db.get(
+        PlatformWithdrawal,
+        withdrawal_id,
+    )
+
+    if not withdrawal:
+        raise HTTPException(
+            status_code=404,
+            detail="Platform withdrawal not found.",
+        )
+
+    if withdrawal.status == WithdrawalStatus.PAID:
+        raise HTTPException(
+            status_code=400,
+            detail="A paid withdrawal cannot be rejected.",
+        )
+
+    withdrawal.status = (
+        WithdrawalStatus.REJECTED
+    )
+
+    withdrawal.resolved_at = datetime.utcnow()
+
+    db.commit()
+
+    return RedirectResponse(
+        url=(
+            "/admin/earnings"
+            "?success=Platform withdrawal rejected."
+        ),
+        status_code=303,
     )
 
 
@@ -281,12 +556,16 @@ def admin_users(
 
     if q:
         query = query.filter(
-            User.email.ilike(f"%{q}%")
+            User.email.ilike(
+                f"%{q}%"
+            )
         )
 
     users = (
         query
-        .order_by(User.created_at.desc())
+        .order_by(
+            User.created_at.desc()
+        )
         .limit(200)
         .all()
     )
@@ -303,13 +582,18 @@ def admin_users(
     )
 
 
-@router.post("/users/{user_id}/toggle-active")
+@router.post(
+    "/users/{user_id}/toggle-active"
+)
 def admin_toggle_user(
     user_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    target = db.get(User, user_id)
+    target = db.get(
+        User,
+        user_id,
+    )
 
     if not target:
         raise HTTPException(
@@ -317,12 +601,22 @@ def admin_toggle_user(
             detail="User not found",
         )
 
+    # Never allow an admin to deactivate themselves.
+    if target.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot deactivate your own admin account.",
+        )
+
     target.is_active = not target.is_active
 
     db.commit()
 
     return RedirectResponse(
-        url="/admin/users?success=User status updated.",
+        url=(
+            "/admin/users"
+            "?success=User status updated."
+        ),
         status_code=303,
     )
 
@@ -343,22 +637,31 @@ def admin_content(
 
     if q:
         tracks_query = tracks_query.filter(
-            Track.title.ilike(f"%{q}%")
+            Track.title.ilike(
+                f"%{q}%"
+            )
         )
+
         albums_query = albums_query.filter(
-            Album.title.ilike(f"%{q}%")
+            Album.title.ilike(
+                f"%{q}%"
+            )
         )
 
     tracks = (
         tracks_query
-        .order_by(Track.created_at.desc())
+        .order_by(
+            Track.created_at.desc()
+        )
         .limit(200)
         .all()
     )
 
     albums = (
         albums_query
-        .order_by(Album.created_at.desc())
+        .order_by(
+            Album.created_at.desc()
+        )
         .limit(200)
         .all()
     )
@@ -376,13 +679,18 @@ def admin_content(
     )
 
 
-@router.post("/content/track/{track_id}/toggle-published")
+@router.post(
+    "/content/track/{track_id}/toggle-published"
+)
 def admin_toggle_track(
     track_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    track = db.get(Track, track_id)
+    track = db.get(
+        Track,
+        track_id,
+    )
 
     if not track:
         raise HTTPException(
@@ -390,12 +698,17 @@ def admin_toggle_track(
             detail="Track not found",
         )
 
-    track.is_published = not track.is_published
+    track.is_published = (
+        not track.is_published
+    )
 
     db.commit()
 
     return RedirectResponse(
-        url="/admin/content?success=Track updated.",
+        url=(
+            "/admin/content"
+            "?success=Track updated."
+        ),
         status_code=303,
     )
 
@@ -420,7 +733,9 @@ def admin_sales(
 
     orders = (
         query
-        .order_by(Order.created_at.desc())
+        .order_by(
+            Order.created_at.desc()
+        )
         .limit(300)
         .all()
     )
@@ -438,7 +753,7 @@ def admin_sales(
 
 
 # ----------------------------------------------------------------------
-# WITHDRAWALS
+# CREATOR WITHDRAWALS
 # ----------------------------------------------------------------------
 
 @router.get("/withdrawals")
@@ -467,7 +782,9 @@ def admin_withdrawals(
     )
 
 
-@router.post("/withdrawals/{withdrawal_id}/update")
+@router.post(
+    "/withdrawals/{withdrawal_id}/update"
+)
 def admin_update_withdrawal(
     withdrawal_id: str,
     db: Session = Depends(get_db),
@@ -487,10 +804,17 @@ def admin_update_withdrawal(
         )
 
     valid_transitions = {
-        "approve": WithdrawalStatus.APPROVED,
-        "process": WithdrawalStatus.PROCESSING,
-        "mark_paid": WithdrawalStatus.PAID,
-        "reject": WithdrawalStatus.REJECTED,
+        "approve":
+            WithdrawalStatus.APPROVED,
+
+        "process":
+            WithdrawalStatus.PROCESSING,
+
+        "mark_paid":
+            WithdrawalStatus.PAID,
+
+        "reject":
+            WithdrawalStatus.REJECTED,
     }
 
     if action not in valid_transitions:
@@ -499,10 +823,14 @@ def admin_update_withdrawal(
             detail="Invalid action",
         )
 
-    wr.status = valid_transitions[action]
+    wr.status = valid_transitions[
+        action
+    ]
 
     if payout_reference:
-        wr.payout_reference = payout_reference
+        wr.payout_reference = (
+            payout_reference.strip()
+        )
 
     if wr.status in (
         WithdrawalStatus.PAID,
@@ -513,6 +841,9 @@ def admin_update_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url="/admin/withdrawals?success=Withdrawal updated.",
+        url=(
+            "/admin/withdrawals"
+            "?success=Withdrawal updated."
+        ),
         status_code=303,
     )
