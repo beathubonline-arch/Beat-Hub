@@ -18,41 +18,193 @@ class WithdrawalStatus(str, enum.Enum):
 
 class CreatorLedgerEntry(Base):
     """
-    Append-only ledger of every credit/debit affecting a creator's balance.
-    Balance is always DERIVED by summing entries — never stored/mutated directly —
-    so it can never drift out of sync with actual transactions.
+    Append-only ledger of creator credits and debits.
+
+    Positive amount:
+        creator earns money
+
+    Negative amount:
+        creator withdraws money
     """
 
     __tablename__ = "creator_ledger_entries"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    creator_profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("profiles.id"), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
 
-    order_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("orders.id"), nullable=True)
-    withdrawal_request_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("withdrawal_requests.id"), nullable=True)
+    creator_profile_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("profiles.id"),
+        nullable=False,
+        index=True,
+    )
 
-    # positive = credit (a sale), negative = debit (a withdrawal)
-    amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
-    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    order_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("orders.id"),
+        nullable=True,
+    )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    withdrawal_request_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("withdrawal_requests.id"),
+        nullable=True,
+    )
+
+    amount: Mapped[Numeric] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+
+    description: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
 
 
 class WithdrawalRequest(Base):
+    """
+    Creator withdrawal request.
+
+    This table is ONLY for creator withdrawals.
+    """
+
     __tablename__ = "withdrawal_requests"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    creator_profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("profiles.id"), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
 
-    amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
-    phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
-    status: Mapped[WithdrawalStatus] = mapped_column(Enum(WithdrawalStatus), default=WithdrawalStatus.PENDING, index=True)
+    creator_profile_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("profiles.id"),
+        nullable=False,
+        index=True,
+    )
 
-    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    payout_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    amount: Mapped[Numeric] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    phone_number: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    status: Mapped[WithdrawalStatus] = mapped_column(
+        Enum(WithdrawalStatus),
+        default=WithdrawalStatus.PENDING,
+        index=True,
+    )
+
+    admin_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    payout_reference: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
 
     creator_profile = relationship("Profile")
+
+
+class PlatformWithdrawal(Base):
+    """
+    BeatHub platform-money withdrawal.
+
+    This is completely separate from creator withdrawals.
+
+    The available platform balance is calculated from completed
+    order commissions minus platform withdrawals that have already
+    been paid or are currently being processed.
+    """
+
+    __tablename__ = "platform_withdrawals"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+
+    amount: Mapped[Numeric] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+
+    phone_number: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    status: Mapped[WithdrawalStatus] = mapped_column(
+        Enum(WithdrawalStatus),
+        default=WithdrawalStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+
+    payout_reference: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
+    originator_conversation_id: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
+    admin_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
