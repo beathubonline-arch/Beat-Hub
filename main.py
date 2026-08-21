@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -7,12 +6,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import inspect, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.database import Base, SessionLocal, engine
-from app.models.user import User, UserRole
+from app.database import Base, engine, get_db
 from app.routers import (
     admin,
     auth,
@@ -23,17 +20,25 @@ from app.routers import (
     pages,
 )
 from app.services.search import run_search
-from app.utils.deps import get_optional_user, require_creator
-from app.utils.security import hash_password
+from app.utils.deps import (
+    get_optional_user,
+    require_creator,
+)
 
 
-logger = logging.getLogger("beathub")
+logger = logging.getLogger(
+    "beathub"
+)
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(
+    __file__
+).resolve().parent
+
 APP_DIR = BASE_DIR / "app"
 
 TEMPLATES_DIR = APP_DIR / "templates"
+
 STATIC_DIR = APP_DIR / "static"
 
 
@@ -41,8 +46,11 @@ app = FastAPI(
     title=settings.APP_NAME
 )
 
+
 templates = Jinja2Templates(
-    directory=str(TEMPLATES_DIR)
+    directory=str(
+        TEMPLATES_DIR
+    )
 )
 
 
@@ -53,7 +61,11 @@ templates = Jinja2Templates(
 if STATIC_DIR.exists():
     app.mount(
         "/static",
-        StaticFiles(directory=str(STATIC_DIR)),
+        StaticFiles(
+            directory=str(
+                STATIC_DIR
+            )
+        ),
         name="static",
     )
 
@@ -68,276 +80,36 @@ Base.metadata.create_all(
 
 
 # ----------------------------------------------------------------------
-# DATABASE COMPATIBILITY
-# ----------------------------------------------------------------------
-
-def ensure_username_column():
-    """
-    Add the username column to existing BeatHub databases.
-
-    create_all() does not modify existing tables, so this check is
-    required when upgrading an existing installation.
-    """
-
-    try:
-        inspector = inspect(engine)
-
-        columns = {
-            column["name"]
-            for column in inspector.get_columns("users")
-        }
-
-        if "username" in columns:
-            return
-
-        logger.info(
-            "Adding username column to users table."
-        )
-
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "ALTER TABLE users "
-                    "ADD COLUMN username VARCHAR(100)"
-                )
-            )
-
-        logger.info(
-            "Username column added successfully."
-        )
-
-    except Exception:
-        logger.exception(
-            "Failed to add username column."
-        )
-        raise
-
-
-ensure_username_column()
-
-
-# ----------------------------------------------------------------------
-# ADMIN ACCOUNT INITIALIZATION
-# ----------------------------------------------------------------------
-
-def initialize_admin_account():
-    """
-    Creates the BeatHub administrator from Render environment variables.
-
-    Required:
-
-        ADMIN_USERNAME
-        ADMIN_PASSWORD
-
-    Optional:
-
-        ADMIN_EMAIL
-
-    ADMIN_USERNAME is the login identity for the administrator.
-
-    ADMIN_EMAIL is stored as the admin's email address if supplied.
-
-    If ADMIN_EMAIL is not supplied, a private internal placeholder
-    address is generated from the username because the existing User
-    model requires email to be non-null.
-
-    Existing users are never automatically promoted to admin.
-    """
-
-    admin_username = (
-        os.getenv("ADMIN_USERNAME")
-        or ""
-    ).strip().lower()
-
-    admin_password = (
-        os.getenv("ADMIN_PASSWORD")
-        or ""
-    )
-
-    admin_email = (
-        os.getenv("ADMIN_EMAIL")
-        or ""
-    ).strip().lower()
-
-    if not admin_username or not admin_password:
-        logger.info(
-            "Admin initialization skipped: "
-            "ADMIN_USERNAME and ADMIN_PASSWORD are not both set."
-        )
-        return
-
-    if len(admin_password) < 8:
-        logger.error(
-            "ADMIN_PASSWORD must contain at least 8 characters. "
-            "Admin initialization skipped."
-        )
-        return
-
-    db = SessionLocal()
-
-    try:
-        # ----------------------------------------------------------
-        # Look for admin by username.
-        # ----------------------------------------------------------
-
-        existing_admin = (
-            db.query(User)
-            .filter(
-                User.username == admin_username
-            )
-            .first()
-        )
-
-        if existing_admin:
-
-            role = getattr(
-                existing_admin.role,
-                "value",
-                existing_admin.role,
-            )
-
-            role = str(
-                role
-            ).strip().lower()
-
-            if role == "admin":
-                logger.info(
-                    "BeatHub admin already exists: %s",
-                    admin_username,
-                )
-                return
-
-            logger.warning(
-                "Username %s belongs to a non-admin account. "
-                "No automatic promotion performed.",
-                admin_username,
-            )
-            return
-
-        # ----------------------------------------------------------
-        # Check whether ADMIN_EMAIL already belongs to an account.
-        # ----------------------------------------------------------
-
-        if admin_email:
-            email_owner = (
-                db.query(User)
-                .filter(
-                    User.email == admin_email
-                )
-                .first()
-            )
-
-            if email_owner:
-                role = getattr(
-                    email_owner.role,
-                    "value",
-                    email_owner.role,
-                )
-
-                role = str(
-                    role
-                ).strip().lower()
-
-                if role == "admin":
-                    # Give an existing admin the configured username
-                    # if it doesn't conflict.
-                    if not email_owner.username:
-                        email_owner.username = admin_username
-                        db.commit()
-
-                    logger.info(
-                        "Existing admin linked to username: %s",
-                        admin_username,
-                    )
-                    return
-
-                logger.warning(
-                    "ADMIN_EMAIL %s already belongs to a "
-                    "non-admin account. Admin was not created.",
-                    admin_email,
-                )
-                return
-
-        # ----------------------------------------------------------
-        # If no real admin email was supplied, use an internal
-        # placeholder because User.email is currently required.
-        # ----------------------------------------------------------
-
-        if not admin_email:
-            admin_email = (
-                f"{admin_username}@admin.beathub.local"
-            )
-
-        # ----------------------------------------------------------
-        # Final email uniqueness check.
-        # ----------------------------------------------------------
-
-        email_owner = (
-            db.query(User)
-            .filter(
-                User.email == admin_email
-            )
-            .first()
-        )
-
-        if email_owner:
-            logger.warning(
-                "Cannot create admin because email %s "
-                "already belongs to another account.",
-                admin_email,
-            )
-            return
-
-        # ----------------------------------------------------------
-        # Create administrator.
-        # ----------------------------------------------------------
-
-        admin_user = User(
-            id=None,
-            email=admin_email,
-            username=admin_username,
-            hashed_password=hash_password(
-                admin_password
-            ),
-            role=UserRole.ADMIN,
-            is_active=True,
-            is_verified=True,
-        )
-
-        db.add(admin_user)
-        db.commit()
-        db.refresh(admin_user)
-
-        logger.info(
-            "BeatHub administrator created successfully: %s",
-            admin_username,
-        )
-
-    except Exception:
-        db.rollback()
-
-        logger.exception(
-            "Failed to initialize BeatHub administrator."
-        )
-
-    finally:
-        db.close()
-
-
-initialize_admin_account()
-
-
-# ----------------------------------------------------------------------
 # ROUTERS
 # ----------------------------------------------------------------------
 
-app.include_router(auth.router)
-app.include_router(pages.router)
-app.include_router(music.router)
-app.include_router(checkout.router)
-app.include_router(mpesa_callback.router)
-app.include_router(dashboard.router)
-app.include_router(admin.router)
+app.include_router(
+    auth.router
+)
+
+app.include_router(
+    pages.router
+)
+
+app.include_router(
+    music.router
+)
+
+app.include_router(
+    checkout.router
+)
+
+app.include_router(
+    mpesa_callback.router
+)
+
+app.include_router(
+    dashboard.router
+)
+
+app.include_router(
+    admin.router
+)
 
 
 # ----------------------------------------------------------------------
@@ -350,13 +122,10 @@ app.include_router(admin.router)
 )
 def beats_compat(
     request: Request,
-    db=Depends(
-        __import__(
-            "app.database",
-            fromlist=["get_db"],
-        ).get_db
+    db=Depends(get_db),
+    current_user=Depends(
+        get_optional_user
     ),
-    current_user=Depends(get_optional_user),
 ):
     found = run_search(
         db,
@@ -383,13 +152,10 @@ def beats_compat(
 )
 def sessions_compat(
     request: Request,
-    db=Depends(
-        __import__(
-            "app.database",
-            fromlist=["get_db"],
-        ).get_db
+    db=Depends(get_db),
+    current_user=Depends(
+        get_optional_user
     ),
-    current_user=Depends(get_optional_user),
 ):
     found = run_search(
         db,
@@ -416,13 +182,10 @@ def sessions_compat(
 )
 def hot_picks_compat(
     request: Request,
-    db=Depends(
-        __import__(
-            "app.database",
-            fromlist=["get_db"],
-        ).get_db
+    db=Depends(get_db),
+    current_user=Depends(
+        get_optional_user
     ),
-    current_user=Depends(get_optional_user),
 ):
     found = run_search(
         db,
@@ -468,7 +231,9 @@ def hot_picks_compat(
     include_in_schema=False,
 )
 def dashboard_alias(
-    user=Depends(require_creator),
+    user=Depends(
+        require_creator
+    ),
 ):
     return RedirectResponse(
         url="/dashboard",
@@ -477,12 +242,15 @@ def dashboard_alias(
 
 
 # ----------------------------------------------------------------------
-# HEALTH
+# HEALTH CHECK
 # ----------------------------------------------------------------------
 
 @app.api_route(
     "/healthz",
-    methods=["GET", "HEAD"],
+    methods=[
+        "GET",
+        "HEAD",
+    ],
 )
 def healthz():
     return {
@@ -501,7 +269,7 @@ def healthz():
 
 
 # ----------------------------------------------------------------------
-# ERRORS
+# ERROR HANDLERS
 # ----------------------------------------------------------------------
 
 @app.exception_handler(
