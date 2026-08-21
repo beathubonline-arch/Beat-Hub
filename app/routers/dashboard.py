@@ -1,3 +1,16 @@
+from datetime import datetime
+from decimal import Decimal
+from typing import List, Optional
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -26,7 +39,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 # ============================================================
-# COMMON CONTEXT
+# COMMON TEMPLATE CONTEXT
 # ============================================================
 
 def ctx(request: Request, current_user, **extra):
@@ -36,6 +49,7 @@ def ctx(request: Request, current_user, **extra):
         "current_year": datetime.utcnow().year,
 
         "profile": None,
+        "creator": None,
         "stats": {},
 
         "available_balance": Decimal("0"),
@@ -73,7 +87,7 @@ def ctx(request: Request, current_user, **extra):
 
 
 # ============================================================
-# HELPERS
+# DECIMAL HELPER
 # ============================================================
 
 def _decimal(value) -> Decimal:
@@ -89,10 +103,11 @@ def _decimal(value) -> Decimal:
         return Decimal("0")
 
 
+# ============================================================
+# PUBLIC CREATOR STORE URL
+# ============================================================
+
 def _absolute_store_url(request: Request, slug: str) -> str:
-    # Render terminates TLS before forwarding the request.
-    # Prefer forwarded protocol so the dashboard always exposes
-    # the real public HTTPS URL instead of localhost/http.
     forwarded_proto = request.headers.get("x-forwarded-proto")
     forwarded_host = request.headers.get("x-forwarded-host")
 
@@ -110,13 +125,16 @@ def _absolute_store_url(request: Request, slug: str) -> str:
 
 
 # ============================================================
-# CREATOR EARNINGS
+# CREATOR STATISTICS
 # ============================================================
 
 def _creator_stats(db: Session, profile_id) -> dict:
     orders = (
         db.query(Order)
-        .join(Track, Order.track_id == Track.id)
+        .join(
+            Track,
+            Order.track_id == Track.id,
+        )
         .filter(
             Track.creator_profile_id == profile_id,
             Order.status == OrderStatus.COMPLETED,
@@ -125,17 +143,26 @@ def _creator_stats(db: Session, profile_id) -> dict:
     )
 
     gross = sum(
-        (_decimal(order.gross_amount) for order in orders),
+        (
+            _decimal(order.gross_amount)
+            for order in orders
+        ),
         Decimal("0"),
     )
 
     commission = sum(
-        (_decimal(order.commission_amount) for order in orders),
+        (
+            _decimal(order.commission_amount)
+            for order in orders
+        ),
         Decimal("0"),
     )
 
     net = sum(
-        (_decimal(order.net_amount) for order in orders),
+        (
+            _decimal(order.net_amount)
+            for order in orders
+        ),
         Decimal("0"),
     )
 
@@ -202,7 +229,14 @@ def _creator_stats(db: Session, profile_id) -> dict:
     }
 
 
-def _withdrawal_history(db: Session, profile_id):
+# ============================================================
+# WITHDRAWAL HISTORY
+# ============================================================
+
+def _withdrawal_history(
+    db: Session,
+    profile_id,
+):
     return (
         db.query(WithdrawalRequest)
         .filter(
@@ -273,8 +307,6 @@ def _track_page(
         .all()
     )
 
-    # Keep the database's original R2 path untouched.
-    # Templates can use cover_art_url when available.
     for track in tracks:
         try:
             from app.services.storage import r2_presigned_url
@@ -403,6 +435,7 @@ def _dashboard_context(
         user,
 
         profile=profile,
+        creator=profile,
         stats=stats,
 
         available_balance=stats["available_balance"],
@@ -450,13 +483,13 @@ def dashboard_home(
     )
 
     success = request.query_params.get("success")
-    error = request.query_params.get("error")
+    error_message = request.query_params.get("error")
 
     if success:
         context["success"] = success
 
-    if error:
-        context["error"] = error
+    if error_message:
+        context["error"] = error_message
 
     return templates.TemplateResponse(
         request,
@@ -671,10 +704,8 @@ async def upload_submit(
     )
 
     return RedirectResponse(
-        url="/dashboard?success=" + message.replace(
-            " ",
-            "%20",
-        ),
+        url="/dashboard?success="
+        + quote(message),
         status_code=303,
     )
 
@@ -967,6 +998,63 @@ def request_withdrawal(
             status_code=303,
         )
 
+    normalized_phone = (
+        phone_number
+        .replace(" ", "")
+        .replace("-", "")
+    )
+
+    if normalized_phone.startswith("+"):
+        normalized_phone = normalized_phone[1:]
+
+    valid_phone = False
+
+    if (
+        len(normalized_phone) == 10
+        and normalized_phone.isdigit()
+        and normalized_phone.startswith(
+            ("07", "01")
+        )
+    ):
+        valid_phone = True
+
+    elif (
+        len(normalized_phone) == 12
+        and normalized_phone.isdigit()
+        and normalized_phone.startswith("254")
+        and normalized_phone[3:5] in ("07", "01")
+    ):
+        valid_phone = True
+
+    if not valid_phone:
+        return RedirectResponse(
+            url=(
+                "/dashboard/withdraw?"
+                "error=Enter%20a%20valid%20Kenyan%20M-Pesa%20phone%20number."
+            ),
+            status_code=303,
+        )
+
+    existing_pending = (
+        db.query(WithdrawalRequest)
+        .filter(
+            WithdrawalRequest.creator_profile_id == profile.id,
+            WithdrawalRequest.status == "pending",
+            WithdrawalRequest.amount == amount_value,
+            WithdrawalRequest.phone_number == phone_number,
+        )
+        .first()
+    )
+
+    if existing_pending:
+        return RedirectResponse(
+            url=(
+                "/dashboard/withdraw?"
+                "success=Your%20withdrawal%20request%20is%20already%20pending."
+            ),
+            status_code=303,
+        )
+
     withdrawal = WithdrawalRequest(
         creator_profile_id=profile.id,
         amount=amount_value,
@@ -978,7 +1066,10 @@ def request_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url="/dashboard?success=Withdrawal%20request%20submitted.",
+        url=(
+            "/dashboard/withdraw?"
+            "success=Withdrawal%20request%20submitted."
+        ),
         status_code=303,
     )
 
@@ -986,17 +1077,11 @@ def request_withdrawal(
 # ============================================================
 # PUBLIC CREATOR STORE
 #
-# Primary public URL:
+# PRIMARY:
+# /creator/{slug}
 #
-#     /creator/{slug}
-#
-# Example:
-#
-#     /creator/mr-mapema
-#
-# Legacy URL remains supported:
-#
-#     /profile/{slug}
+# LEGACY:
+# /profile/{slug}
 # ============================================================
 
 def _public_creator_store(
@@ -1021,22 +1106,31 @@ def _public_creator_store(
     tracks = [
         track
         for track in profile.tracks
-        if getattr(track, "is_published", True)
+        if getattr(
+            track,
+            "is_published",
+            True,
+        )
     ]
 
     albums = [
         album
         for album in profile.albums
-        if getattr(album, "is_published", True)
+        if getattr(
+            album,
+            "is_published",
+            True,
+        )
     ]
 
-    # Do not overwrite database paths.
     for track in tracks:
         try:
             from app.services.storage import r2_presigned_url
 
             track.cover_art_url = (
-                r2_presigned_url(track.cover_art_path)
+                r2_presigned_url(
+                    track.cover_art_path
+                )
                 if track.cover_art_path
                 else None
             )
@@ -1048,7 +1142,9 @@ def _public_creator_store(
             from app.services.storage import r2_presigned_url
 
             album.artwork_url = (
-                r2_presigned_url(album.artwork_path)
+                r2_presigned_url(
+                    album.artwork_path
+                )
                 if album.artwork_path
                 else None
             )
@@ -1075,6 +1171,10 @@ def _public_creator_store(
     )
 
 
+# ============================================================
+# PUBLIC PRODUCER STORE
+# ============================================================
+
 @router.get("/creator/{slug}")
 def creator_store(
     slug: str,
@@ -1087,6 +1187,10 @@ def creator_store(
         db,
     )
 
+
+# ============================================================
+# LEGACY PRODUCER STORE URL
+# ============================================================
 
 @router.get("/profile/{slug}")
 def profile_detail_legacy(
