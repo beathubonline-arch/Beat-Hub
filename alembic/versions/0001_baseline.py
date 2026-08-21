@@ -1,4 +1,4 @@
-"""BeatHub migration baseline.
+"""BeatHub baseline migration.
 
 Revision ID: beathub_baseline_001
 Revises:
@@ -6,6 +6,7 @@ Create Date: 2026-08-21
 """
 
 from alembic import op
+import sqlalchemy as sa
 
 
 revision = "beathub_baseline_001"
