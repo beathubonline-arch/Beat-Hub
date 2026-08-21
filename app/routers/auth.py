@@ -2,9 +2,11 @@
 BeatHub authentication routes.
 
 Shared authentication for:
-- Buyers / artists
-- Creators / producers
-- Administrator
+    - Buyers / artists
+    - Creators / producers
+    - Administrator
+
+Public signup can NEVER create an administrator account.
 
 Admin credentials:
     ADMIN_USERNAME
@@ -46,9 +48,9 @@ templates = Jinja2Templates(directory="app/templates")
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # HELPERS
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def slugify(value: str) -> str:
     value = re.sub(
@@ -61,6 +63,16 @@ def slugify(value: str) -> str:
 
 
 def dashboard_url_for_user(user: User) -> str:
+    """
+    Decide where a user lands after signup/login.
+
+    Admin      -> /admin
+    Creator    -> /dashboard
+    Buyer      -> /beats
+
+    Buyers/artists should immediately see the marketplace.
+    """
+
     role = get_role_name(user)
 
     if role == "admin":
@@ -69,7 +81,7 @@ def dashboard_url_for_user(user: User) -> str:
     if role == "creator":
         return "/dashboard"
 
-    return "/account"
+    return "/beats"
 
 
 def base_context(
@@ -77,6 +89,16 @@ def base_context(
     current_user=None,
     **extra,
 ):
+    """
+    Shared template context.
+
+    IMPORTANT:
+    Do not use request.form inside Jinja templates.
+
+    Starlette's request.form is a method. Values that need to
+    survive a failed form submission are explicitly passed here.
+    """
+
     context = {
         "request": request,
         "current_user": current_user,
@@ -102,7 +124,6 @@ def verify_admin_credentials(
     identifier: str,
     password: str,
 ) -> bool:
-
     configured_username, configured_password = (
         get_admin_credentials()
     )
@@ -116,17 +137,17 @@ def verify_admin_credentials(
 
     submitted_password = password or ""
 
-    return (
-        hmac.compare_digest(
-            submitted_username,
-            configured_username,
-        )
-        and
-        hmac.compare_digest(
-            submitted_password,
-            configured_password,
-        )
+    username_match = hmac.compare_digest(
+        submitted_username,
+        configured_username,
     )
+
+    password_match = hmac.compare_digest(
+        submitted_password,
+        configured_password,
+    )
+
+    return username_match and password_match
 
 
 def create_admin_session_token() -> str:
@@ -139,26 +160,9 @@ def create_admin_session_token() -> str:
     )
 
 
-def signup_context(
-    request: Request,
-    *,
-    stage_name: str = "",
-    email: str = "",
-    role: str = "creator",
-    error: str = "",
-):
-    return base_context(
-        request,
-        stage_name=stage_name,
-        email=email,
-        role=role,
-        error=error,
-    )
-
-
-# ----------------------------------------------------------------------
+# ======================================================================
 # SIGNUP PAGE
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/signup")
 def signup_page(
@@ -167,47 +171,78 @@ def signup_page(
     return templates.TemplateResponse(
         request,
         "signup.html",
-        signup_context(request),
+        base_context(
+            request,
+            stage_name="",
+            email="",
+            role="creator",
+        ),
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # SIGNUP SUBMIT
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.post("/signup")
 def signup_submit(
     request: Request,
     db: Session = Depends(get_db),
-    stage_name: str = Form(""),
-    email: str = Form(""),
-    password: str = Form(""),
-    confirm_password: str = Form(""),
-    role: str = Form("creator"),
-    agree_terms: str = Form(""),
+    stage_name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    role: str = Form("buyer"),
+    agree_terms: str = Form(None),
 ):
+    """
+    Create a normal BeatHub user.
+
+    Creator:
+        /dashboard
+
+    Buyer / artist:
+        /beats
+    """
+
+    # --------------------------------------------------------------
+    # Preserve entered form values when validation fails.
+    # --------------------------------------------------------------
 
     stage_name = (stage_name or "").strip()
     email_norm = (email or "").strip().lower()
-    role = (role or "creator").strip().lower()
+    role = (role or "buyer").strip().lower()
 
     def error(message: str):
         return templates.TemplateResponse(
             request,
             "signup.html",
-            signup_context(
+            base_context(
                 request,
+                error=message,
                 stage_name=stage_name,
                 email=email_norm,
-                role=role,
-                error=message,
+                role=(
+                    "creator"
+                    if role in {"creator", "producer"}
+                    else "buyer"
+                ),
             ),
             status_code=400,
         )
 
+    # --------------------------------------------------------------
+    # VALIDATION
+    # --------------------------------------------------------------
+
     if not stage_name:
         return error(
             "Stage name / artist name is required."
+        )
+
+    if len(stage_name) > 255:
+        return error(
+            "Stage name is too long."
         )
 
     if not email_norm:
@@ -215,12 +250,9 @@ def signup_submit(
             "Email address is required."
         )
 
-    if not re.match(
-        r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
-        email_norm,
-    ):
+    if len(email_norm) > 255:
         return error(
-            "Please enter a valid email address."
+            "Email address is too long."
         )
 
     if not agree_terms:
@@ -238,15 +270,21 @@ def signup_submit(
             "Passwords do not match."
         )
 
+    # --------------------------------------------------------------
+    # PUBLIC SIGNUP CAN NEVER CREATE ADMIN
+    # --------------------------------------------------------------
+
     if role in {
         "creator",
         "producer",
-        "artist",
-        "dj",
     }:
         user_role = UserRole.CREATOR
     else:
         user_role = UserRole.BUYER
+
+    # --------------------------------------------------------------
+    # CHECK EXISTING EMAIL
+    # --------------------------------------------------------------
 
     existing_user = (
         db.query(User)
@@ -260,6 +298,10 @@ def signup_submit(
         return error(
             "An account with this email already exists."
         )
+
+    # --------------------------------------------------------------
+    # CREATE USER
+    # --------------------------------------------------------------
 
     user = User(
         id=str(uuid.uuid4()),
@@ -275,50 +317,57 @@ def signup_submit(
     try:
         db.flush()
 
-        base_slug = slugify(stage_name)
+    except IntegrityError:
+        db.rollback()
 
-        slug = base_slug
-        suffix = 1
-
-        while (
-            db.query(Profile)
-            .filter(Profile.slug == slug)
-            .first()
-        ):
-            suffix += 1
-            slug = f"{base_slug}-{suffix}"
-
-        profile = Profile(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            stage_name=stage_name,
-            slug=slug,
-            is_producer=(
-                user_role == UserRole.CREATOR
-            ),
+        return error(
+            "An account with this email already exists."
         )
 
-        db.add(profile)
+    # --------------------------------------------------------------
+    # CREATE PUBLIC PROFILE
+    # --------------------------------------------------------------
 
+    base_slug = slugify(stage_name)
+
+    slug = base_slug
+    suffix = 1
+
+    while (
+        db.query(Profile)
+        .filter(Profile.slug == slug)
+        .first()
+    ):
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+
+    profile = Profile(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        stage_name=stage_name,
+        slug=slug,
+        is_producer=(
+            user_role == UserRole.CREATOR
+        ),
+    )
+
+    db.add(profile)
+
+    try:
         db.commit()
 
     except IntegrityError:
         db.rollback()
 
         return error(
-            "Could not create the account because "
-            "the email or profile name is already in use."
-        )
-
-    except Exception:
-        db.rollback()
-
-        return error(
-            "Could not create your account right now. "
-            "Please try again."
+            "Could not create account. Please try again."
         )
 
     db.refresh(user)
+
+    # --------------------------------------------------------------
+    # LOGIN IMMEDIATELY
+    # --------------------------------------------------------------
 
     token = create_access_token(
         subject=user.id,
@@ -332,8 +381,7 @@ def signup_submit(
     response = RedirectResponse(
         url=(
             f"{destination}"
-            "?success=Account created. "
-            "Welcome to BeatHub!"
+            "?success=Account created. Welcome to BeatHub!"
         ),
         status_code=303,
     )
@@ -344,16 +392,16 @@ def signup_submit(
         httponly=True,
         max_age=COOKIE_MAX_AGE,
         samesite="lax",
-        secure=True,
+        secure=False,
         path="/",
     )
 
     return response
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # LOGIN PAGE
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/login")
 def login_page(
@@ -366,17 +414,27 @@ def login_page(
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # LOGIN SUBMIT
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.post("/login")
 def login_submit(
     request: Request,
     db: Session = Depends(get_db),
-    identifier: str = Form(""),
-    password: str = Form(""),
+    identifier: str = Form(...),
+    password: str = Form(...),
 ):
+    def error(message: str):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            base_context(
+                request,
+                error=message,
+            ),
+            status_code=401,
+        )
 
     identifier_raw = (
         identifier or ""
@@ -385,18 +443,6 @@ def login_submit(
     identifier_norm = identifier_raw.lower()
 
     password = password or ""
-
-    def error(message: str):
-        return templates.TemplateResponse(
-            request,
-            "login.html",
-            base_context(
-                request,
-                error=message,
-                identifier=identifier_raw,
-            ),
-            status_code=401,
-        )
 
     if not identifier_raw:
         return error(
@@ -408,7 +454,10 @@ def login_submit(
             "Password is required."
         )
 
-    # ADMIN
+    # --------------------------------------------------------------
+    # ADMIN FIRST
+    # --------------------------------------------------------------
+
     if verify_admin_credentials(
         identifier_raw,
         password,
@@ -426,13 +475,16 @@ def login_submit(
             httponly=True,
             max_age=COOKIE_MAX_AGE,
             samesite="lax",
-            secure=True,
+            secure=False,
             path="/",
         )
 
         return response
 
-    # NORMAL USER
+    # --------------------------------------------------------------
+    # NORMAL USER BY EMAIL
+    # --------------------------------------------------------------
+
     user = (
         db.query(User)
         .filter(
@@ -441,7 +493,10 @@ def login_submit(
         .first()
     )
 
-    # PROFILE SLUG LOGIN
+    # --------------------------------------------------------------
+    # NORMAL USER BY PROFILE SLUG
+    # --------------------------------------------------------------
+
     if not user and identifier_norm:
 
         possible_slug = slugify(
@@ -480,9 +535,14 @@ def login_submit(
 
     if not user.is_active:
         return error(
-            "This account has been deactivated. "
-            "Contact support."
+            "This account has been deactivated. Contact support."
         )
+
+    db.refresh(user)
+
+    # --------------------------------------------------------------
+    # CREATE SESSION
+    # --------------------------------------------------------------
 
     token = create_access_token(
         subject=user.id,
@@ -504,19 +564,18 @@ def login_submit(
         httponly=True,
         max_age=COOKIE_MAX_AGE,
         samesite="lax",
-        secure=True,
+        secure=False,
         path="/",
     )
 
     return response
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # LOGOUT
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def perform_logout() -> RedirectResponse:
-
     response = RedirectResponse(
         url="/?success=You have been logged out.",
         status_code=303,
@@ -540,9 +599,9 @@ def logout_get():
     return perform_logout()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # FORGOT PASSWORD
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/forgot-password")
 def forgot_password_page(
@@ -559,9 +618,8 @@ def forgot_password_page(
 def forgot_password_submit(
     request: Request,
     db: Session = Depends(get_db),
-    email: str = Form(""),
+    email: str = Form(...),
 ):
-
     email_norm = (
         email or ""
     ).strip().lower()
@@ -610,9 +668,9 @@ def forgot_password_submit(
     )
 
 
-# ----------------------------------------------------------------------
-# RESET PASSWORD
-# ----------------------------------------------------------------------
+# ======================================================================
+# RESET PASSWORD PAGE
+# ======================================================================
 
 @router.get("/reset-password")
 def reset_password_page(
@@ -620,7 +678,6 @@ def reset_password_page(
     token: str,
     db: Session = Depends(get_db),
 ):
-
     user = (
         db.query(User)
         .filter(
@@ -647,15 +704,18 @@ def reset_password_page(
     )
 
 
+# ======================================================================
+# RESET PASSWORD SUBMIT
+# ======================================================================
+
 @router.post("/reset-password")
 def reset_password_submit(
     request: Request,
     db: Session = Depends(get_db),
-    token: str = Form(""),
-    password: str = Form(""),
-    confirm_password: str = Form(""),
+    token: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
 ):
-
     user = (
         db.query(User)
         .filter(
@@ -706,7 +766,9 @@ def reset_password_submit(
             status_code=400,
         )
 
-    user.hashed_password = hash_password(password)
+    user.hashed_password = hash_password(
+        password
+    )
 
     user.reset_token = None
     user.reset_token_expires = None
