@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>BeatHub — Login</title>
+
+    <link rel="stylesheet" href="/static/css/style.css">
 
     <style>
         * {
@@ -23,16 +22,19 @@
             background: #09090b;
             color: #ffffff;
             font-family: Arial, sans-serif;
+        }
+
+        .login-wrapper {
+            width: 100%;
+            max-width: 440px;
             padding: 20px;
         }
 
         .login-box {
-            width: 100%;
-            max-width: 420px;
-            padding: 36px;
             background: #111113;
             border: 1px solid #27272a;
-            border-radius: 16px;
+            border-radius: 18px;
+            padding: 38px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
         }
 
@@ -41,9 +43,11 @@
             margin-bottom: 30px;
         }
 
-        .brand h1 {
-            margin: 0;
-            font-size: 32px;
+        .brand a {
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 30px;
+            font-weight: 800;
             letter-spacing: -1px;
         }
 
@@ -51,213 +55,259 @@
             color: #a1a1aa;
         }
 
+        .brand h2 {
+            margin: 18px 0 8px;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
         .brand p {
-            margin-top: 9px;
+            margin: 0;
             color: #a1a1aa;
             font-size: 14px;
         }
 
-        .error {
-            margin-bottom: 20px;
+        .alert {
             padding: 12px 14px;
-            border-radius: 8px;
+            border-radius: 9px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-error {
             background: #3f1515;
+            border: 1px solid #7f1d1d;
             color: #fca5a5;
-            font-size: 14px;
-            line-height: 1.4;
         }
 
-        .success {
-            margin-bottom: 20px;
-            padding: 12px 14px;
-            border-radius: 8px;
-            background: #12351f;
+        .alert-success {
+            background: #14251a;
+            border: 1px solid #166534;
             color: #86efac;
-            font-size: 14px;
-            line-height: 1.4;
         }
 
-        label {
+        .field {
+            margin-bottom: 20px;
+        }
+
+        .field label {
             display: block;
             margin-bottom: 8px;
-            font-size: 14px;
             color: #d4d4d8;
+            font-size: 14px;
+            font-weight: 600;
         }
 
-        input {
+        .field input {
             width: 100%;
             padding: 13px 14px;
-            margin-bottom: 20px;
-            border-radius: 9px;
             border: 1px solid #3f3f46;
+            border-radius: 9px;
             background: #18181b;
             color: #ffffff;
-            outline: none;
             font-size: 15px;
+            outline: none;
         }
 
-        input:focus {
-            border-color: #ffffff;
-        }
-
-        input::placeholder {
+        .field input::placeholder {
             color: #71717a;
         }
 
-        button {
+        .field input:focus {
+            border-color: #ffffff;
+        }
+
+        .login-button {
             width: 100%;
             padding: 14px;
             border: 0;
             border-radius: 9px;
             background: #ffffff;
             color: #09090b;
-            font-weight: 700;
             font-size: 15px;
+            font-weight: 700;
             cursor: pointer;
         }
 
-        button:hover {
+        .login-button:hover {
             opacity: .9;
         }
 
-        .links {
-            margin-top: 22px;
-            text-align: center;
+        .forgot {
+            text-align: right;
+            margin-top: -8px;
+            margin-bottom: 22px;
         }
 
-        .links a {
-            color: #a1a1aa;
+        .forgot a,
+        .bottom-links a {
+            color: #d4d4d8;
             text-decoration: none;
             font-size: 14px;
         }
 
-        .links a:hover {
+        .forgot a:hover,
+        .bottom-links a:hover {
             color: #ffffff;
+            text-decoration: underline;
         }
 
         .divider {
-            height: 1px;
-            background: #27272a;
-            margin: 22px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 26px 0;
+            color: #71717a;
+            font-size: 12px;
         }
 
-        .signup {
+        .divider::before,
+        .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #27272a;
+        }
+
+        .bottom-links {
             text-align: center;
             color: #a1a1aa;
             font-size: 14px;
+            line-height: 1.8;
         }
 
-        .signup a {
-            color: #ffffff;
-            text-decoration: none;
-            font-weight: 700;
-        }
-
-        .back {
+        .back-home {
             text-align: center;
-            margin-top: 18px;
+            margin-top: 22px;
         }
 
-        .back a {
+        .back-home a {
             color: #71717a;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 14px;
         }
 
-        .back a:hover {
+        .back-home a:hover {
             color: #ffffff;
+        }
+
+        @media (max-width: 480px) {
+            .login-wrapper {
+                padding: 14px;
+            }
+
+            .login-box {
+                padding: 28px 22px;
+            }
         }
     </style>
 </head>
 
 <body>
 
-<div class="login-box">
+<div class="login-wrapper">
 
-    <div class="brand">
-        <h1>BEAT<span class="hub">HUB</span></h1>
-        <p>Log in to your BeatHub account</p>
-    </div>
+    <div class="login-box">
 
-    {% if error %}
-        <div class="error">
-            {{ error }}
+        <div class="brand">
+            <a href="/">
+                BEAT<span class="hub">HUB</span>
+            </a>
+
+            <h2>Welcome back</h2>
+
+            <p>
+                Sign in to your BeatHub account.
+            </p>
         </div>
-    {% endif %}
 
-    {% if success %}
-        <div class="success">
-            {{ success }}
+        {% if error %}
+            <div class="alert alert-error">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        {% if success %}
+            <div class="alert alert-success">
+                {{ success }}
+            </div>
+        {% endif %}
+
+        {% if request.query_params.get('error') %}
+            <div class="alert alert-error">
+                {{ request.query_params.get('error') }}
+            </div>
+        {% endif %}
+
+        {% if request.query_params.get('success') %}
+            <div class="alert alert-success">
+                {{ request.query_params.get('success') }}
+            </div>
+        {% endif %}
+
+        <form method="post" action="/login">
+
+            <div class="field">
+                <label for="identifier">
+                    Email or Username
+                </label>
+
+                <input
+                    type="text"
+                    id="identifier"
+                    name="identifier"
+                    placeholder="Enter your email or username"
+                    autocomplete="username"
+                    required
+                    autofocus
+                >
+            </div>
+
+            <div class="field">
+                <label for="password">
+                    Password
+                </label>
+
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
+                    required
+                >
+            </div>
+
+            <div class="forgot">
+                <a href="/forgot-password">
+                    Forgot your password?
+                </a>
+            </div>
+
+            <button
+                type="submit"
+                class="login-button"
+            >
+                Sign In
+            </button>
+
+        </form>
+
+        <div class="divider">
+            OR
         </div>
-    {% endif %}
 
-    {% if request.query_params.get("error") %}
-        <div class="error">
-            {{ request.query_params.get("error") }}
+        <div class="bottom-links">
+            Don't have a BeatHub account?
+            <a href="/signup">Join BeatHub</a>
         </div>
-    {% endif %}
 
-    {% if request.query_params.get("success") %}
-        <div class="success">
-            {{ request.query_params.get("success") }}
+        <div class="back-home">
+            <a href="/">
+                ← Back to BeatHub
+            </a>
         </div>
-    {% endif %}
 
-    <form
-        method="post"
-        action="/login"
-    >
-
-        <label for="identifier">
-            Email or Username
-        </label>
-
-        <input
-            type="text"
-            id="identifier"
-            name="identifier"
-            placeholder="Email or username"
-            required
-            autocomplete="username"
-            autofocus
-        >
-
-        <label for="password">
-            Password
-        </label>
-
-        <input
-            type="password"
-            id="password"
-            name="password"
-            placeholder="Enter your password"
-            required
-            autocomplete="current-password"
-        >
-
-        <button type="submit">
-            Log In
-        </button>
-
-    </form>
-
-    <div class="links">
-        <a href="/forgot-password">
-            Forgot your password?
-        </a>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="signup">
-        Don't have a BeatHub account?
-        <a href="/signup">Create Account</a>
-    </div>
-
-    <div class="back">
-        <a href="/">
-            ← Back to BeatHub
-        </a>
     </div>
 
 </div>
