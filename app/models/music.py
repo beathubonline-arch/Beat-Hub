@@ -103,10 +103,6 @@ class Album(Base):
         onupdate=datetime.utcnow,
     )
 
-    # ------------------------------------------------------------------
-    # RELATIONSHIPS
-    # ------------------------------------------------------------------
-
     creator_profile = relationship(
         "Profile",
         foreign_keys=[creator_profile_id],
@@ -119,19 +115,22 @@ class Album(Base):
         order_by="AlbumTrack.position",
     )
 
-    # ------------------------------------------------------------------
-    # TEMPLATE COMPATIBILITY
-    # ------------------------------------------------------------------
-
     @property
     def artwork_url(self):
-        """
-        Compatibility property used by public album/store templates.
+        value = getattr(
+            self,
+            "_artwork_url",
+            None,
+        )
 
-        If artwork_path already contains a public URL, return it directly.
-        Otherwise return the stored path.
-        """
+        if value:
+            return value
+
         return self.artwork_path
+
+    @artwork_url.setter
+    def artwork_url(self, value):
+        self._artwork_url = value
 
 
 # ======================================================================
@@ -247,10 +246,6 @@ class Track(Base):
         onupdate=datetime.utcnow,
     )
 
-    # ------------------------------------------------------------------
-    # RELATIONSHIPS
-    # ------------------------------------------------------------------
-
     creator_profile = relationship(
         "Profile",
         foreign_keys=[creator_profile_id],
@@ -262,19 +257,22 @@ class Track(Base):
         cascade="all, delete-orphan",
     )
 
-    # ------------------------------------------------------------------
-    # TEMPLATE COMPATIBILITY
-    # ------------------------------------------------------------------
-
     @property
     def cover_art_url(self):
-        """
-        Public template compatibility.
+        value = getattr(
+            self,
+            "_cover_art_url",
+            None,
+        )
 
-        The templates use track.cover_art_url while the database stores
-        cover_art_path.
-        """
+        if value:
+            return value
+
         return self.cover_art_path
+
+    @cover_art_url.setter
+    def cover_art_url(self, value):
+        self._cover_art_url = value
 
 
 # ======================================================================
@@ -315,10 +313,6 @@ class AlbumTrack(Base):
         nullable=False,
         default=0,
     )
-
-    # ------------------------------------------------------------------
-    # RELATIONSHIPS
-    # ------------------------------------------------------------------
 
     album = relationship(
         "Album",
