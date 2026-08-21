@@ -7,13 +7,27 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+# ============================================================
+# WITHDRAWAL STATUS
+# ============================================================
+#
+# IMPORTANT:
+# These are plain strings.
+#
+# DO NOT change this back to sqlalchemy.Enum.
+#
+# Database values are always:
+#
+#   pending
+#   approved
+#   processing
+#   paid
+#   rejected
+#
+# This prevents PostgreSQL enum-name/value mismatches.
+# ============================================================
+
 class WithdrawalStatus:
-    """
-    String constants instead of a SQLAlchemy/PostgreSQL Enum.
-
-    This intentionally avoids PostgreSQL enum-name/value mismatches.
-    """
-
     PENDING = "pending"
     APPROVED = "approved"
     PROCESSING = "processing"
@@ -29,12 +43,36 @@ class WithdrawalStatus:
     )
 
 
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+#
+# Some versions of admin.py may still import:
+#
+#   AdminWithdrawalStatus
+#
+# Keep this alias so the application cannot crash simply because
+# an older router still uses that name.
+#
+# Both names point to exactly the same status values.
+# ============================================================
+
+AdminWithdrawalStatus = WithdrawalStatus
+
+
+# ============================================================
+# CREATOR LEDGER
+# ============================================================
+
 class CreatorLedgerEntry(Base):
     """
-    Append-only creator financial ledger.
+    Append-only financial ledger for creator earnings.
 
-    Positive amount = creator credit.
-    Negative amount = creator debit.
+    Positive amount:
+        Creator receives money.
+
+    Negative amount:
+        Creator money is deducted, e.g. withdrawal.
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -83,11 +121,15 @@ class CreatorLedgerEntry(Base):
     )
 
 
+# ============================================================
+# CREATOR WITHDRAWAL
+# ============================================================
+
 class WithdrawalRequest(Base):
     """
-    Creator withdrawal request.
+    Withdrawal requested by a BeatHub creator.
 
-    Status is deliberately stored as VARCHAR rather than PostgreSQL ENUM.
+    This is separate from BeatHub/admin withdrawals.
     """
 
     __tablename__ = "withdrawal_requests"
@@ -115,6 +157,9 @@ class WithdrawalRequest(Base):
         nullable=False,
     )
 
+    # Plain VARCHAR.
+    #
+    # This is intentional.
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
@@ -156,16 +201,20 @@ class WithdrawalRequest(Base):
     )
 
 
+# ============================================================
+# ADMIN / PLATFORM WITHDRAWAL
+# ============================================================
+
 class AdminWithdrawal(Base):
     """
-    Platform/admin withdrawal.
+    Withdrawal of BeatHub's own platform money.
 
-    This is separate from creator withdrawals.
+    This is NOT a creator withdrawal.
 
-    Creator money:
+    Creator:
         WithdrawalRequest
 
-    BeatHub/platform money:
+    BeatHub platform/admin:
         AdminWithdrawal
     """
 
@@ -187,6 +236,7 @@ class AdminWithdrawal(Base):
         nullable=False,
     )
 
+    # Plain VARCHAR.
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
