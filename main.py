@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -9,7 +10,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
+from app.models.user import User, UserRole
 from app.routers import (
     admin,
     auth,
@@ -21,6 +23,8 @@ from app.routers import (
 )
 from app.services.search import run_search
 from app.utils.deps import get_optional_user, require_creator
+from app.utils.security import hash_password
+
 
 logger = logging.getLogger("beathub")
 
@@ -36,10 +40,15 @@ app = FastAPI(
     title=settings.APP_NAME
 )
 
+
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
 
+
+# ----------------------------------------------------------------------
+# STATIC FILES
+# ----------------------------------------------------------------------
 
 if STATIC_DIR.exists():
     app.mount(
@@ -49,10 +58,167 @@ if STATIC_DIR.exists():
     )
 
 
+# ----------------------------------------------------------------------
+# DATABASE
+# ----------------------------------------------------------------------
+
 Base.metadata.create_all(
     bind=engine
 )
 
+
+# ----------------------------------------------------------------------
+# ADMIN ACCOUNT INITIALIZATION
+# ----------------------------------------------------------------------
+
+def initialize_admin_account():
+    """
+    Create the BeatHub administrator from Render environment variables.
+
+    Supported environment variables:
+
+        ADMIN_EMAIL
+        ADMIN_USERNAME
+        ADMIN_PASSWORD
+
+    ADMIN_EMAIL is preferred.
+
+    ADMIN_USERNAME is supported as a fallback so an existing Render
+    variable named ADMIN_USERNAME can also be used.
+
+    The admin is created only when an account with that email does
+    not already exist.
+
+    Existing users are never overwritten automatically.
+    """
+
+    admin_email = (
+        os.getenv("ADMIN_EMAIL")
+        or os.getenv("ADMIN_USERNAME")
+        or ""
+    ).strip().lower()
+
+    admin_password = (
+        os.getenv("ADMIN_PASSWORD")
+        or ""
+    )
+
+    # --------------------------------------------------------------
+    # Nothing to do if admin credentials are not configured.
+    # --------------------------------------------------------------
+
+    if not admin_email or not admin_password:
+        logger.info(
+            "Admin initialization skipped: "
+            "ADMIN_EMAIL/ADMIN_USERNAME and ADMIN_PASSWORD "
+            "are not both configured."
+        )
+        return
+
+    # --------------------------------------------------------------
+    # Basic validation.
+    # --------------------------------------------------------------
+
+    if len(admin_password) < 8:
+        logger.error(
+            "ADMIN_PASSWORD must contain at least 8 characters. "
+            "Admin initialization was skipped."
+        )
+        return
+
+    db = SessionLocal()
+
+    try:
+        # ----------------------------------------------------------
+        # Look for an existing account.
+        # ----------------------------------------------------------
+
+        existing_user = (
+            db.query(User)
+            .filter(User.email == admin_email)
+            .first()
+        )
+
+        if existing_user:
+
+            existing_role = getattr(
+                existing_user.role,
+                "value",
+                existing_user.role,
+            )
+
+            existing_role = str(
+                existing_role
+            ).strip().lower()
+
+            # ------------------------------------------------------
+            # Already an admin.
+            # ------------------------------------------------------
+
+            if existing_role == "admin":
+                logger.info(
+                    "BeatHub admin account already exists: %s",
+                    admin_email,
+                )
+                return
+
+            # ------------------------------------------------------
+            # An ordinary account already owns this email.
+            #
+            # We deliberately DO NOT promote it automatically.
+            # ------------------------------------------------------
+
+            logger.warning(
+                "ADMIN_EMAIL %s already belongs to a non-admin "
+                "account. Admin was NOT created or promoted.",
+                admin_email,
+            )
+            return
+
+        # ----------------------------------------------------------
+        # Create administrator.
+        # ----------------------------------------------------------
+
+        admin_user = User(
+            email=admin_email,
+            hashed_password=hash_password(
+                admin_password
+            ),
+            role=UserRole.ADMIN,
+            is_active=True,
+            is_verified=True,
+        )
+
+        db.add(admin_user)
+        db.commit()
+        db.refresh(admin_user)
+
+        logger.info(
+            "BeatHub administrator created successfully: %s",
+            admin_email,
+        )
+
+    except Exception:
+        db.rollback()
+
+        logger.exception(
+            "Failed to initialize BeatHub administrator."
+        )
+
+    finally:
+        db.close()
+
+
+# ----------------------------------------------------------------------
+# INITIALIZE ADMIN
+# ----------------------------------------------------------------------
+
+initialize_admin_account()
+
+
+# ----------------------------------------------------------------------
+# ROUTERS
+# ----------------------------------------------------------------------
 
 app.include_router(auth.router)
 app.include_router(pages.router)
@@ -65,6 +231,7 @@ app.include_router(admin.router)
 
 # ----------------------------------------------------------------------
 # HOMEPAGE COMPATIBILITY ROUTES
+# ----------------------------------------------------------------------
 # These are intentionally defined here so the public homepage links
 # always exist even if an older pages.py is deployed.
 # ----------------------------------------------------------------------
@@ -75,10 +242,18 @@ app.include_router(admin.router)
 )
 def beats_compat(
     request: Request,
-    db=Depends(__import__("app.database", fromlist=["get_db"]).get_db),
+    db=Depends(
+        __import__(
+            "app.database",
+            fromlist=["get_db"],
+        ).get_db
+    ),
     current_user=Depends(get_optional_user),
 ):
-    found = run_search(db, "beats")
+    found = run_search(
+        db,
+        "beats",
+    )
 
     return templates.TemplateResponse(
         request,
@@ -100,10 +275,18 @@ def beats_compat(
 )
 def sessions_compat(
     request: Request,
-    db=Depends(__import__("app.database", fromlist=["get_db"]).get_db),
+    db=Depends(
+        __import__(
+            "app.database",
+            fromlist=["get_db"],
+        ).get_db
+    ),
     current_user=Depends(get_optional_user),
 ):
-    found = run_search(db, "sessions")
+    found = run_search(
+        db,
+        "sessions",
+    )
 
     return templates.TemplateResponse(
         request,
@@ -125,10 +308,18 @@ def sessions_compat(
 )
 def hot_picks_compat(
     request: Request,
-    db=Depends(__import__("app.database", fromlist=["get_db"]).get_db),
+    db=Depends(
+        __import__(
+            "app.database",
+            fromlist=["get_db"],
+        ).get_db
+    ),
     current_user=Depends(get_optional_user),
 ):
-    found = run_search(db, "hot")
+    found = run_search(
+        db,
+        "hot",
+    )
 
     return templates.TemplateResponse(
         request,
