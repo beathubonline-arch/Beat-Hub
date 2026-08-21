@@ -1,16 +1,10 @@
+```python
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import List, Optional
+from urllib.parse import quote
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -21,7 +15,6 @@ from app.database import get_db
 from app.models.ledger import WithdrawalRequest
 from app.models.music import Album, AlbumTrack, SalesModel, Track
 from app.models.order import Order, OrderStatus
-from app.models.profile import Profile
 from app.models.user import User
 from app.services.storage import (
     ALLOWED_AUDIO_EXT,
@@ -39,25 +32,23 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 # ============================================================
-# COMMON CONTEXT
+# COMMON TEMPLATE CONTEXT
 # ============================================================
 
 def ctx(request: Request, current_user, **extra):
     """
     Common dashboard/template context.
 
-    Provides all variables expected by the current and
-    previous dashboard templates.
+    Provides safe defaults for older and newer templates so that
+    missing optional variables do not break dashboard rendering.
     """
 
-    data = {
+    base = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
 
-        "profile": None,
-        "stats": {},
-
+        # Earnings
         "available_balance": Decimal("0"),
         "pending_withdrawal": Decimal("0"),
         "total_sales": 0,
@@ -65,15 +56,24 @@ def ctx(request: Request, current_user, **extra):
         "platform_commission": Decimal("0"),
         "net_earnings": Decimal("0"),
 
-        "recent_orders": [],
+        # Withdrawals
         "withdrawal_requests": [],
 
+        # Catalog
         "track_count": 0,
         "album_count": 0,
         "tracks": [],
         "albums": [],
 
-        # Dashboard pagination compatibility
+        # Orders
+        "recent_orders": [],
+
+        # Social/store
+        "store_url": None,
+        "youtube_url": None,
+        "discord_url": None,
+
+        # Pagination compatibility
         "track_page": 1,
         "track_total_pages": 1,
         "track_total": 0,
@@ -84,19 +84,14 @@ def ctx(request: Request, current_user, **extra):
         "track_end": 0,
         "q": "",
 
-        # Social/store
-        "youtube_url": None,
-        "discord_url": None,
-        "store_url": None,
-
         # Messages
         "success": None,
         "error": None,
     }
 
-    data.update(extra)
+    base.update(extra)
 
-    return data
+    return base
 
 
 # ============================================================
@@ -104,6 +99,10 @@ def ctx(request: Request, current_user, **extra):
 # ============================================================
 
 def _decimal(value) -> Decimal:
+    """
+    Safely convert database numeric values to Decimal.
+    """
+
     if value is None:
         return Decimal("0")
 
@@ -112,50 +111,20 @@ def _decimal(value) -> Decimal:
 
     try:
         return Decimal(str(value))
-    except Exception:
+    except (InvalidOperation, ValueError, TypeError):
         return Decimal("0")
 
 
 # ============================================================
-# ABSOLUTE PUBLIC STORE URL
+# CREATOR STATISTICS
 # ============================================================
 
-def _absolute_store_url(request: Request, slug: str) -> str:
-    """
-    Build the public producer store URL.
-
-    Primary route:
-        /creator/{slug}
-
-    Render sits behind a proxy, therefore forwarded headers
-    are preferred so the dashboard generates HTTPS links.
-    """
-
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    forwarded_host = request.headers.get("x-forwarded-host")
-
-    if forwarded_proto:
-        scheme = forwarded_proto.split(",")[0].strip()
-    else:
-        scheme = request.url.scheme
-
-    if forwarded_host:
-        host = forwarded_host.split(",")[0].strip()
-    else:
-        host = request.headers.get("host") or request.url.netloc
-
-    return f"{scheme}://{host}/creator/{slug}"
-
-
-# ============================================================
-# CREATOR EARNINGS
-# ============================================================
-
-def _creator_stats(db: Session, profile_id) -> dict:
+def _creator_stats(db: Session, profile_id: str) -> dict:
     """
     Calculate creator earnings from completed orders.
 
-    Uses the actual Order fields:
+    Uses the actual Order fields used by BeatHub:
+
         gross_amount
         commission_amount
         net_amount
@@ -199,7 +168,7 @@ def _creator_stats(db: Session, profile_id) -> dict:
     )
 
     # --------------------------------------------------------
-    # Approved / processing / paid withdrawals
+    # Already withdrawn
     # --------------------------------------------------------
 
     withdrawn = (
@@ -226,7 +195,7 @@ def _creator_stats(db: Session, profile_id) -> dict:
     # Pending withdrawals
     # --------------------------------------------------------
 
-    pending = (
+    pending_withdrawal = (
         db.query(
             func.coalesce(
                 func.sum(WithdrawalRequest.amount),
@@ -240,17 +209,21 @@ def _creator_stats(db: Session, profile_id) -> dict:
         .scalar()
     )
 
-    withdrawn = _decimal(withdrawn)
-    pending = _decimal(pending)
+    withdrawn_decimal = _decimal(withdrawn)
+    pending_decimal = _decimal(pending_withdrawal)
 
     # --------------------------------------------------------
     # Available balance
     # --------------------------------------------------------
 
-    available = net - withdrawn - pending
+    available_balance = (
+        net
+        - withdrawn_decimal
+        - pending_decimal
+    )
 
-    if available < Decimal("0"):
-        available = Decimal("0")
+    if available_balance < Decimal("0"):
+        available_balance = Decimal("0")
 
     # --------------------------------------------------------
     # Recent completed orders
@@ -259,8 +232,8 @@ def _creator_stats(db: Session, profile_id) -> dict:
     recent_orders = sorted(
         orders,
         key=lambda order: (
-            order.completed_at
-            or order.created_at
+            getattr(order, "completed_at", None)
+            or getattr(order, "created_at", None)
             or datetime.min
         ),
         reverse=True,
@@ -271,8 +244,8 @@ def _creator_stats(db: Session, profile_id) -> dict:
         "gross_revenue": gross,
         "platform_commission": commission,
         "net_earnings": net,
-        "available_balance": available,
-        "pending_withdrawal": pending,
+        "available_balance": available_balance,
+        "pending_withdrawal": pending_decimal,
         "recent_orders": recent_orders,
     }
 
@@ -283,7 +256,7 @@ def _creator_stats(db: Session, profile_id) -> dict:
 
 def _withdrawal_history(
     db: Session,
-    profile_id,
+    profile_id: str,
 ):
     return (
         db.query(WithdrawalRequest)
@@ -298,107 +271,6 @@ def _withdrawal_history(
 
 
 # ============================================================
-# TRACK PAGINATION
-# ============================================================
-
-def _track_page(
-    db: Session,
-    profile_id,
-    page: int,
-    search: str,
-):
-    """
-    Load creator tracks with search and pagination.
-    """
-
-    per_page = 12
-
-    try:
-        page = int(page)
-    except (TypeError, ValueError):
-        page = 1
-
-    if page < 1:
-        page = 1
-
-    search = (search or "").strip()
-
-    query = (
-        db.query(Track)
-        .filter(
-            Track.creator_profile_id == profile_id
-        )
-    )
-
-    if search:
-        term = f"%{search}%"
-
-        query = query.filter(
-            Track.title.ilike(term)
-            | Track.genre.ilike(term)
-            | Track.tags.ilike(term)
-        )
-
-    total = query.count()
-
-    total_pages = max(
-        1,
-        (total + per_page - 1) // per_page,
-    )
-
-    if page > total_pages:
-        page = total_pages
-
-    offset = (page - 1) * per_page
-
-    tracks = (
-        query
-        .order_by(Track.created_at.desc())
-        .offset(offset)
-        .limit(per_page)
-        .all()
-    )
-
-    # --------------------------------------------------------
-    # Generate temporary cover URLs.
-    # Never overwrite the database path.
-    # --------------------------------------------------------
-
-    for track in tracks:
-        try:
-            from app.services.storage import r2_presigned_url
-
-            track.cover_art_url = (
-                r2_presigned_url(track.cover_art_path)
-                if track.cover_art_path
-                else None
-            )
-
-        except Exception:
-            track.cover_art_url = None
-
-    return {
-        "tracks": tracks,
-        "track_page": page,
-        "track_total_pages": total_pages,
-        "track_total": total,
-        "track_total_count": total,
-        "track_per_page": per_page,
-        "track_search": search,
-        "track_start": (
-            offset + 1
-            if total
-            else 0
-        ),
-        "track_end": min(
-            offset + len(tracks),
-            total,
-        ),
-        "q": search,
-    }
-
-
-# ============================================================
 # DASHBOARD CONTEXT
 # ============================================================
 
@@ -406,10 +278,17 @@ def _dashboard_context(
     request: Request,
     db: Session,
     user: User,
-    page: int = 1,
-    search: str = "",
 ):
-    profile = user.profile
+    """
+    Build the complete creator dashboard context.
+
+    Important:
+    The dashboard previously depended on pagination variables and
+    actual track/album collections. Those are supplied here rather
+    than sending empty compatibility lists.
+    """
+
+    profile = getattr(user, "profile", None)
 
     if not profile:
         raise HTTPException(
@@ -417,62 +296,99 @@ def _dashboard_context(
             detail="Creator profile missing.",
         )
 
-    # --------------------------------------------------------
-    # Earnings
-    # --------------------------------------------------------
+    # ========================================================
+    # STATS
+    # ========================================================
 
     stats = _creator_stats(
         db,
         profile.id,
     )
 
-    # --------------------------------------------------------
-    # Track count
-    # --------------------------------------------------------
+    # ========================================================
+    # TRACK PAGINATION
+    # ========================================================
 
-    track_count = (
+    track_per_page = 12
+
+    try:
+        raw_page = request.query_params.get(
+            "track_page",
+            request.query_params.get("page", "1"),
+        )
+
+        track_page = int(raw_page)
+
+    except (ValueError, TypeError):
+        track_page = 1
+
+    if track_page < 1:
+        track_page = 1
+
+    track_search = (
+        request.query_params.get(
+            "track_search",
+            request.query_params.get("q", ""),
+        )
+        or ""
+    ).strip()
+
+    track_query = (
         db.query(Track)
         .filter(
             Track.creator_profile_id == profile.id
         )
-        .count()
     )
 
-    # --------------------------------------------------------
-    # Album count
-    # --------------------------------------------------------
+    if track_search:
+        search_pattern = f"%{track_search}%"
 
-    album_count = (
-        db.query(Album)
-        .filter(
-            Album.creator_profile_id == profile.id
+        track_query = track_query.filter(
+            Track.title.ilike(search_pattern)
         )
-        .count()
+
+    track_total_count = track_query.count()
+
+    track_total_pages = max(
+        1,
+        (
+            track_total_count
+            + track_per_page
+            - 1
+        )
+        // track_per_page,
     )
 
-    # --------------------------------------------------------
-    # Withdrawal history
-    # --------------------------------------------------------
+    if track_page > track_total_pages:
+        track_page = track_total_pages
 
-    withdrawal_requests = _withdrawal_history(
-        db,
-        profile.id,
+    track_start_index = (
+        track_page - 1
+    ) * track_per_page
+
+    tracks = (
+        track_query
+        .order_by(
+            Track.created_at.desc()
+        )
+        .offset(track_start_index)
+        .limit(track_per_page)
+        .all()
     )
 
-    # --------------------------------------------------------
-    # Track pagination
-    # --------------------------------------------------------
+    if track_total_count:
+        track_start = track_start_index + 1
+        track_end = min(
+            track_start_index + len(tracks),
+            track_total_count,
+        )
+    else:
+        track_start = 0
+        track_end = 0
 
-    track_data = _track_page(
-        db,
-        profile.id,
-        page,
-        search,
-    )
-
-    # --------------------------------------------------------
-    # Albums
-    # --------------------------------------------------------
+    # ========================================================
+    # ALBUMS
+    # ========================================================
 
     albums = (
         db.query(Album)
@@ -485,32 +401,67 @@ def _dashboard_context(
         .all()
     )
 
-    # --------------------------------------------------------
-    # YouTube
-    # --------------------------------------------------------
+    track_count = (
+        db.query(Track)
+        .filter(
+            Track.creator_profile_id == profile.id
+        )
+        .count()
+    )
 
-    youtube_id = getattr(
+    album_count = (
+        db.query(Album)
+        .filter(
+            Album.creator_profile_id == profile.id
+        )
+        .count()
+    )
+
+    # ========================================================
+    # WITHDRAWALS
+    # ========================================================
+
+    withdrawal_requests = _withdrawal_history(
+        db,
+        profile.id,
+    )
+
+    # ========================================================
+    # PUBLIC CREATOR STORE
+    # ========================================================
+
+    profile_slug = getattr(
+        profile,
+        "slug",
+        None,
+    )
+
+    store_url = None
+
+    if profile_slug:
+        store_url = f"/store/{profile_slug}"
+
+    # ========================================================
+    # YOUTUBE
+    # ========================================================
+
+    youtube_url = None
+
+    youtube_channel_id = getattr(
         settings,
         "YOUTUBE_CHANNEL_ID",
         None,
     )
 
-    youtube_url = None
+    if youtube_channel_id:
+        youtube_url = (
+            "https://www.youtube.com/channel/"
+            f"{youtube_channel_id}"
+        )
 
-    if youtube_id:
-        youtube_id = str(youtube_id)
-
-        if youtube_id.startswith("http"):
-            youtube_url = youtube_id
-        else:
-            youtube_url = (
-                "https://www.youtube.com/channel/"
-                + youtube_id
-            )
-
-    # --------------------------------------------------------
-    # Discord
-    # --------------------------------------------------------
+    # ========================================================
+    # DISCORD
+    # ========================================================
 
     discord_url = getattr(
         settings,
@@ -518,70 +469,69 @@ def _dashboard_context(
         None,
     )
 
-    # --------------------------------------------------------
-    # PUBLIC PRODUCER STORE
-    # --------------------------------------------------------
+    # ========================================================
+    # QUERY MESSAGES
+    # ========================================================
 
-    store_url = None
+    success = request.query_params.get(
+        "success"
+    )
 
-    if getattr(profile, "slug", None):
-        store_url = _absolute_store_url(
-            request,
-            str(profile.slug),
-        )
+    error = request.query_params.get(
+        "error"
+    )
 
-    # --------------------------------------------------------
-    # Final context
-    # --------------------------------------------------------
+    # ========================================================
+    # RETURN EVERYTHING
+    # ========================================================
 
     return ctx(
         request,
         user,
 
+        # User/profile
         profile=profile,
 
+        # Stats object
         stats=stats,
 
-        available_balance=stats[
-            "available_balance"
-        ],
+        # Top-level earnings compatibility
+        total_sales=stats["total_sales"],
+        gross_revenue=stats["gross_revenue"],
+        platform_commission=stats["platform_commission"],
+        net_earnings=stats["net_earnings"],
+        available_balance=stats["available_balance"],
+        pending_withdrawal=stats["pending_withdrawal"],
+        recent_orders=stats["recent_orders"],
 
-        pending_withdrawal=stats[
-            "pending_withdrawal"
-        ],
-
-        total_sales=stats[
-            "total_sales"
-        ],
-
-        gross_revenue=stats[
-            "gross_revenue"
-        ],
-
-        platform_commission=stats[
-            "platform_commission"
-        ],
-
-        net_earnings=stats[
-            "net_earnings"
-        ],
-
-        recent_orders=stats[
-            "recent_orders"
-        ],
-
-        withdrawal_requests=withdrawal_requests,
-
+        # Catalog
         track_count=track_count,
         album_count=album_count,
-
+        tracks=tracks,
         albums=albums,
 
+        # Pagination
+        track_page=track_page,
+        track_total_pages=track_total_pages,
+        track_total=track_total_count,
+        track_total_count=track_total_count,
+        track_per_page=track_per_page,
+        track_search=track_search,
+        track_start=track_start,
+        track_end=track_end,
+        q=track_search,
+
+        # Withdrawals
+        withdrawal_requests=withdrawal_requests,
+
+        # Public store/social
+        store_url=store_url,
         youtube_url=youtube_url,
         discord_url=discord_url,
-        store_url=store_url,
 
-        **track_data,
+        # Messages
+        success=success,
+        error=error,
     )
 
 
@@ -590,34 +540,43 @@ def _dashboard_context(
 # ============================================================
 
 @router.get("/dashboard")
-@router.get("/dashboard/")
 def dashboard_home(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
-    page: int = 1,
-    q: str = "",
 ):
     context = _dashboard_context(
         request,
         db,
         user,
-        page=page,
-        search=q,
     )
-
-    success = request.query_params.get("success")
-    error = request.query_params.get("error")
-
-    if success:
-        context["success"] = success
-
-    if error:
-        context["error"] = error
 
     return templates.TemplateResponse(
         request,
         "dashboard.html",
+        context,
+    )
+
+
+# ============================================================
+# WITHDRAWAL PAGE
+# ============================================================
+
+@router.get("/dashboard/withdraw")
+def withdrawal_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+):
+    context = _dashboard_context(
+        request,
+        db,
+        user,
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "withdraw.html",
         context,
     )
 
@@ -642,7 +601,7 @@ def upload_page(
 
 
 # ============================================================
-# UPLOAD TRACKS
+# UPLOAD TRACK
 # ============================================================
 
 @router.post("/dashboard/upload")
@@ -660,9 +619,14 @@ async def upload_submit(
     sales_models: List[str] = Form(...),
 
     audio_files: List[UploadFile] = File(...),
+
     cover_files: List[Optional[UploadFile]] = File(None),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
         raise HTTPException(
@@ -699,13 +663,7 @@ async def upload_submit(
     created = []
 
     try:
-        for i, audio_file in enumerate(audio_files):
-
-            title = (
-                titles[i]
-                if i < len(titles)
-                else ""
-            )
+        for i, title in enumerate(titles):
 
             title = (title or "").strip()
 
@@ -724,7 +682,7 @@ async def upload_submit(
                 else ""
             )
 
-            bpm_value = None
+            bpm_val = None
 
             if bpm_raw:
 
@@ -733,15 +691,15 @@ async def upload_submit(
                         f"BPM for '{title}' must be a whole number."
                     )
 
-                bpm_value = int(bpm_raw)
+                bpm_val = int(bpm_raw)
 
-                if bpm_value < 1 or bpm_value > 999:
+                if bpm_val < 1 or bpm_val > 999:
                     return error(
                         f"BPM for '{title}' must be between 1 and 999."
                     )
 
             # ------------------------------------------------
-            # PRICE
+            # Price
             # ------------------------------------------------
 
             price_raw = (
@@ -751,9 +709,9 @@ async def upload_submit(
             )
 
             try:
-                price_value = Decimal(price_raw)
+                price_val = Decimal(price_raw)
 
-                if price_value < 0:
+                if price_val < 0:
                     raise ValueError
 
             except Exception:
@@ -762,7 +720,7 @@ async def upload_submit(
                 )
 
             # ------------------------------------------------
-            # SALES MODEL
+            # Sales model
             # ------------------------------------------------
 
             model_raw = (
@@ -771,23 +729,24 @@ async def upload_submit(
                 else "non_exclusive"
             )
 
-            if model_raw == "exclusive":
-                sales_model = SalesModel.EXCLUSIVE
-            else:
-                sales_model = SalesModel.NON_EXCLUSIVE
+            sales_model = (
+                SalesModel.EXCLUSIVE
+                if model_raw == "exclusive"
+                else SalesModel.NON_EXCLUSIVE
+            )
 
             # ------------------------------------------------
-            # AUDIO
+            # Audio
             # ------------------------------------------------
 
             audio_path = await save_upload(
-                audio_file,
+                audio_files[i],
                 "audio",
                 ALLOWED_AUDIO_EXT,
             )
 
             # ------------------------------------------------
-            # COVER
+            # Cover
             # ------------------------------------------------
 
             cover_path = None
@@ -805,7 +764,7 @@ async def upload_submit(
                 )
 
             # ------------------------------------------------
-            # SLUG
+            # Slug
             # ------------------------------------------------
 
             slug = unique_slug(
@@ -816,7 +775,7 @@ async def upload_submit(
             )
 
             # ------------------------------------------------
-            # TRACK
+            # Track
             # ------------------------------------------------
 
             track = Track(
@@ -836,7 +795,7 @@ async def upload_submit(
                     else None
                 ) or None,
 
-                bpm=bpm_value,
+                bpm=bpm_val,
 
                 tags=(
                     tags_list[i].strip()
@@ -847,7 +806,7 @@ async def upload_submit(
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
 
-                price=price_value,
+                price=price_val,
                 sales_model=sales_model,
             )
 
@@ -868,14 +827,10 @@ async def upload_submit(
 
         raise
 
-    message = (
-        f"{len(created)} track(s) uploaded successfully."
-    )
-
     return RedirectResponse(
-        url="/dashboard?success=" + message.replace(
-            " ",
-            "%20",
+        url=(
+            "/dashboard?success="
+            f"{quote(str(len(created)) + ' track(s) uploaded successfully.')}"
         ),
         status_code=303,
     )
@@ -891,7 +846,11 @@ def new_album_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
         raise HTTPException(
@@ -935,11 +894,15 @@ async def new_album_submit(
     description: str = Form(""),
     genre: str = Form(""),
 
-    artwork: Optional[UploadFile] = File(None),
+    artwork: UploadFile = File(None),
 
-    track_ids: List[str] = Form(default=[]),
+    track_ids: List[str] = Form([]),
 ):
-    profile = user.profile
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
         raise HTTPException(
@@ -947,25 +910,26 @@ async def new_album_submit(
             detail="Creator profile missing.",
         )
 
-    existing_tracks = (
-        db.query(Track)
-        .filter(
-            Track.creator_profile_id == profile.id
-        )
-        .order_by(
-            Track.created_at.desc()
-        )
-        .all()
-    )
-
     def error(message: str):
+
+        tracks = (
+            db.query(Track)
+            .filter(
+                Track.creator_profile_id == profile.id
+            )
+            .order_by(
+                Track.created_at.desc()
+            )
+            .all()
+        )
+
         return templates.TemplateResponse(
             request,
             "upload_album.html",
             ctx(
                 request,
                 user,
-                tracks=existing_tracks,
+                tracks=tracks,
                 error=message,
             ),
             status_code=400,
@@ -980,167 +944,109 @@ async def new_album_submit(
 
     if not track_ids:
         return error(
-            "Select at least one track for the album."
+            "Select at least one track for this album."
         )
 
     # --------------------------------------------------------
-    # Validate tracks
+    # Artwork
     # --------------------------------------------------------
-
-    valid_tracks = (
-        db.query(Track)
-        .filter(
-            Track.creator_profile_id == profile.id,
-            Track.id.in_(track_ids),
-        )
-        .all()
-    )
-
-    if len(valid_tracks) != len(set(track_ids)):
-        return error(
-            "One or more selected tracks are invalid."
-        )
 
     artwork_path = None
 
-    try:
+    if artwork and artwork.filename:
 
-        # ----------------------------------------------------
-        # Artwork
-        # ----------------------------------------------------
-
-        if artwork and artwork.filename:
-
+        try:
             artwork_path = await save_upload(
                 artwork,
                 "artwork",
                 ALLOWED_IMAGE_EXT,
             )
 
-        # ----------------------------------------------------
-        # Album
-        # ----------------------------------------------------
+        except UploadValidationError as exc:
+            return error(str(exc))
 
-        slug = unique_slug(
-            db,
-            Album,
-            title,
-            "album",
+    # --------------------------------------------------------
+    # Album
+    # --------------------------------------------------------
+
+    slug = unique_slug(
+        db,
+        Album,
+        title,
+        "album",
+    )
+
+    album = Album(
+        creator_profile_id=profile.id,
+        title=title,
+        slug=slug,
+        description=description.strip() or None,
+        genre=genre.strip() or None,
+        artwork_path=artwork_path,
+    )
+
+    db.add(album)
+    db.flush()
+
+    # --------------------------------------------------------
+    # Validate tracks belong to creator
+    # --------------------------------------------------------
+
+    valid_tracks = (
+        db.query(Track)
+        .filter(
+            Track.id.in_(track_ids),
+            Track.creator_profile_id == profile.id,
         )
+        .all()
+    )
 
-        album = Album(
-            creator_profile_id=profile.id,
-            title=title,
-            slug=slug,
-            description=(
-                description.strip()
-                or None
-            ),
-            genre=(
-                genre.strip()
-                or None
-            ),
-            artwork_path=artwork_path,
-            is_published=True,
-        )
-
-        db.add(album)
-        db.flush()
-
-        # ----------------------------------------------------
-        # Preserve selected track order
-        # ----------------------------------------------------
-
-        track_map = {
-            str(track.id): track
-            for track in valid_tracks
-        }
-
-        for position, track_id in enumerate(track_ids):
-
-            track = track_map.get(
-                str(track_id)
-            )
-
-            if track:
-
-                db.add(
-                    AlbumTrack(
-                        album_id=album.id,
-                        track_id=track.id,
-                        position=position,
-                    )
-                )
-
-        db.commit()
-
-    except UploadValidationError as exc:
-
-        db.rollback()
-
-        return error(str(exc))
-
-    except Exception as exc:
+    if not valid_tracks:
 
         db.rollback()
 
         return error(
-            f"Album creation failed: {str(exc)}"
+            "None of the selected tracks belong to your account."
         )
+
+    # --------------------------------------------------------
+    # Preserve selected order
+    # --------------------------------------------------------
+
+    track_map = {
+        str(track.id): track
+        for track in valid_tracks
+    }
+
+    position = 0
+
+    for track_id in track_ids:
+
+        track = track_map.get(
+            str(track_id)
+        )
+
+        if not track:
+            continue
+
+        db.add(
+            AlbumTrack(
+                album_id=album.id,
+                track_id=track.id,
+                position=position,
+            )
+        )
+
+        position += 1
+
+    db.commit()
 
     return RedirectResponse(
-        url=f"/album/{album.slug}",
-        status_code=303,
-    )
-
-
-# ============================================================
-# WITHDRAWAL PAGE
-# ============================================================
-
-@router.get("/dashboard/withdraw")
-def withdrawal_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_creator),
-):
-    profile = user.profile
-
-    if not profile:
-        raise HTTPException(
-            status_code=400,
-            detail="Creator profile missing.",
-        )
-
-    stats = _creator_stats(
-        db,
-        profile.id,
-    )
-
-    withdrawal_requests = _withdrawal_history(
-        db,
-        profile.id,
-    )
-
-    return templates.TemplateResponse(
-        request,
-        "withdraw.html",
-        ctx(
-            request,
-            user,
-            profile=profile,
-            stats=stats,
-
-            available_balance=stats[
-                "available_balance"
-            ],
-
-            pending_withdrawal=stats[
-                "pending_withdrawal"
-            ],
-
-            withdrawal_requests=withdrawal_requests,
+        url=(
+            f"/album/{album.slug}"
+            "?success=Album%20created."
         ),
+        status_code=303,
     )
 
 
@@ -1157,39 +1063,26 @@ def request_withdrawal(
     amount: str = Form(...),
     phone_number: str = Form(...),
 ):
-    profile = user.profile
+    """
+    Create a pending creator withdrawal request.
+
+    This route does not automatically send B2C money.
+    """
+
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
 
     if not profile:
-        return RedirectResponse(
-            url="/dashboard?error=Creator%20profile%20not%20found.",
-            status_code=303,
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
         )
 
     # --------------------------------------------------------
-    # Amount
-    # --------------------------------------------------------
-
-    try:
-        amount_value = Decimal(
-            str(amount).strip()
-        )
-
-    except Exception:
-
-        return RedirectResponse(
-            url="/dashboard?error=Invalid%20withdrawal%20amount.",
-            status_code=303,
-        )
-
-    if amount_value <= 0:
-
-        return RedirectResponse(
-            url="/dashboard?error=Amount%20must%20be%20greater%20than%20zero.",
-            status_code=303,
-        )
-
-    # --------------------------------------------------------
-    # Balance
+    # Recalculate balance at request time
     # --------------------------------------------------------
 
     stats = _creator_stats(
@@ -1197,10 +1090,50 @@ def request_withdrawal(
         profile.id,
     )
 
-    if amount_value > stats["available_balance"]:
+    # --------------------------------------------------------
+    # Amount
+    # --------------------------------------------------------
+
+    try:
+        amount_val = Decimal(
+            str(amount).strip()
+        )
+
+    except (InvalidOperation, ValueError, TypeError):
 
         return RedirectResponse(
-            url="/dashboard?error=Insufficient%20available%20balance.",
+            url=(
+                "/dashboard/withdraw?"
+                "error=Invalid%20withdrawal%20amount."
+            ),
+            status_code=303,
+        )
+
+    # --------------------------------------------------------
+    # Positive amount
+    # --------------------------------------------------------
+
+    if amount_val <= 0:
+
+        return RedirectResponse(
+            url=(
+                "/dashboard/withdraw?"
+                "error=Withdrawal%20amount%20must%20be%20positive."
+            ),
+            status_code=303,
+        )
+
+    # --------------------------------------------------------
+    # Available balance
+    # --------------------------------------------------------
+
+    if amount_val > stats["available_balance"]:
+
+        return RedirectResponse(
+            url=(
+                "/dashboard/withdraw?"
+                "error=Withdrawal%20exceeds%20your%20available%20balance."
+            ),
             status_code=303,
         )
 
@@ -1215,7 +1148,10 @@ def request_withdrawal(
     if not phone_number:
 
         return RedirectResponse(
-            url="/dashboard?error=M-Pesa%20phone%20number%20is%20required.",
+            url=(
+                "/dashboard/withdraw?"
+                "error=M-Pesa%20phone%20number%20is%20required."
+            ),
             status_code=303,
         )
 
@@ -1258,8 +1194,8 @@ def request_withdrawal(
 
         return RedirectResponse(
             url=(
-                "/dashboard?error="
-                "Enter%20a%20valid%20Kenyan%20M-Pesa%20phone%20number."
+                "/dashboard/withdraw?"
+                "error=Enter%20a%20valid%20Kenyan%20M-Pesa%20phone%20number."
             ),
             status_code=303,
         )
@@ -1273,7 +1209,7 @@ def request_withdrawal(
         .filter(
             WithdrawalRequest.creator_profile_id == profile.id,
             WithdrawalRequest.status == "pending",
-            WithdrawalRequest.amount == amount_value,
+            WithdrawalRequest.amount == amount_val,
             WithdrawalRequest.phone_number == phone_number,
         )
         .first()
@@ -1283,8 +1219,8 @@ def request_withdrawal(
 
         return RedirectResponse(
             url=(
-                "/dashboard?success="
-                "Your%20withdrawal%20request%20is%20already%20pending."
+                "/dashboard/withdraw?"
+                "success=Your%20withdrawal%20request%20is%20already%20pending."
             ),
             status_code=303,
         )
@@ -1295,7 +1231,7 @@ def request_withdrawal(
 
     withdrawal = WithdrawalRequest(
         creator_profile_id=profile.id,
-        amount=amount_value,
+        amount=amount_val,
         phone_number=phone_number,
         status="pending",
     )
@@ -1304,165 +1240,10 @@ def request_withdrawal(
     db.commit()
 
     return RedirectResponse(
-        url="/dashboard?success=Withdrawal%20request%20submitted.",
+        url=(
+            "/dashboard/withdraw?"
+            "success=Withdrawal%20request%20submitted."
+        ),
         status_code=303,
     )
-
-
-# ============================================================
-# PUBLIC CREATOR STORE
-#
-# Primary:
-#     /creator/{slug}
-#
-# Legacy:
-#     /profile/{slug}
-# ============================================================
-
-def _public_creator_store(
-    request: Request,
-    slug: str,
-    db: Session,
-):
-    profile = (
-        db.query(Profile)
-        .filter(
-            Profile.slug == slug
-        )
-        .first()
-    )
-
-    if not profile:
-        raise HTTPException(
-            status_code=404,
-            detail="Creator store not found.",
-        )
-
-    # --------------------------------------------------------
-    # Published tracks
-    # --------------------------------------------------------
-
-    tracks = [
-        track
-        for track in profile.tracks
-        if getattr(
-            track,
-            "is_published",
-            True,
-        )
-    ]
-
-    # --------------------------------------------------------
-    # Published albums
-    # --------------------------------------------------------
-
-    albums = [
-        album
-        for album in profile.albums
-        if getattr(
-            album,
-            "is_published",
-            True,
-        )
-    ]
-
-    # --------------------------------------------------------
-    # Temporary R2 cover URLs
-    # --------------------------------------------------------
-
-    for track in tracks:
-
-        try:
-
-            from app.services.storage import r2_presigned_url
-
-            track.cover_art_url = (
-                r2_presigned_url(
-                    track.cover_art_path
-                )
-                if track.cover_art_path
-                else None
-            )
-
-        except Exception:
-
-            track.cover_art_url = None
-
-    for album in albums:
-
-        try:
-
-            from app.services.storage import r2_presigned_url
-
-            album.artwork_url = (
-                r2_presigned_url(
-                    album.artwork_path
-                )
-                if album.artwork_path
-                else None
-            )
-
-        except Exception:
-
-            album.artwork_url = None
-
-    # --------------------------------------------------------
-    # Public store URL
-    # --------------------------------------------------------
-
-    store_url = _absolute_store_url(
-        request,
-        str(profile.slug),
-    )
-
-    # --------------------------------------------------------
-    # Render store
-    # --------------------------------------------------------
-
-    return templates.TemplateResponse(
-        request,
-        "profile_detail.html",
-        ctx(
-            request,
-            None,
-            profile=profile,
-            creator=profile,
-            tracks=tracks,
-            albums=albums,
-            store_url=store_url,
-        ),
-    )
-
-
-# ============================================================
-# PRIMARY CREATOR STORE ROUTE
-# ============================================================
-
-@router.get("/creator/{slug}")
-def creator_store(
-    slug: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    return _public_creator_store(
-        request,
-        slug,
-        db,
-    )
-
-
-# ============================================================
-# LEGACY PROFILE ROUTE
-# ============================================================
-
-@router.get("/profile/{slug}")
-def profile_detail_legacy(
-    slug: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    return _public_creator_store(
-        request,
-        slug,
-        db,
-    )
+```
