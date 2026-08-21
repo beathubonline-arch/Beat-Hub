@@ -1,4 +1,3 @@
-```python
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional
@@ -36,19 +35,11 @@ templates = Jinja2Templates(directory="app/templates")
 # ============================================================
 
 def ctx(request: Request, current_user, **extra):
-    """
-    Common template context.
-
-    Provides both the newer dashboard variables and compatibility
-    variables used by older/newer BeatHub templates.
-    """
-
     base = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
 
-        # Safe financial defaults
         "available_balance": Decimal("0"),
         "pending_withdrawal": Decimal("0"),
         "total_sales": 0,
@@ -56,20 +47,18 @@ def ctx(request: Request, current_user, **extra):
         "platform_commission": Decimal("0"),
         "net_earnings": Decimal("0"),
 
-        # Collections
         "withdrawal_requests": [],
         "recent_orders": [],
+
         "track_count": 0,
         "album_count": 0,
         "tracks": [],
         "albums": [],
 
-        # Store/social defaults
         "store_url": None,
         "youtube_url": None,
         "discord_url": None,
 
-        # Compatibility/pagination defaults
         "track_page": 1,
         "track_total_pages": 1,
         "track_total": 0,
@@ -91,10 +80,6 @@ def ctx(request: Request, current_user, **extra):
 # ============================================================
 
 def _decimal(value) -> Decimal:
-    """
-    Safely convert database numeric values to Decimal.
-    """
-
     if value is None:
         return Decimal("0")
 
@@ -112,18 +97,6 @@ def _decimal(value) -> Decimal:
 # ============================================================
 
 def _creator_stats(db: Session, profile_id: str) -> dict:
-    """
-    Calculate creator earnings from completed orders.
-
-    Uses the actual Order fields used by the current application:
-
-        gross_amount
-        commission_amount
-        net_amount
-
-    Do NOT replace these with total_amount.
-    """
-
     orders = (
         db.query(Order)
         .join(
@@ -152,7 +125,6 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
         Decimal("0"),
     )
 
-    # Already approved/processing/paid withdrawals
     withdrawn = (
         db.query(
             func.coalesce(
@@ -173,7 +145,6 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
         .scalar()
     )
 
-    # Pending withdrawals must also reduce available balance.
     pending_withdrawal = (
         db.query(
             func.coalesce(
@@ -229,10 +200,6 @@ def _withdrawal_history(
     db: Session,
     profile_id: str,
 ):
-    """
-    Return creator withdrawal history.
-    """
-
     return (
         db.query(WithdrawalRequest)
         .filter(
@@ -254,14 +221,6 @@ def _dashboard_context(
     db: Session,
     user: User,
 ):
-    """
-    Build the complete dashboard context.
-
-    Important:
-    Dashboard templates expect financial values at the TOP LEVEL,
-    not only inside stats.
-    """
-
     profile = user.profile
 
     if not profile:
@@ -275,10 +234,6 @@ def _dashboard_context(
         profile.id,
     )
 
-    # --------------------------------------------------------
-    # Track count
-    # --------------------------------------------------------
-
     track_count = (
         db.query(Track)
         .filter(
@@ -286,10 +241,6 @@ def _dashboard_context(
         )
         .count()
     )
-
-    # --------------------------------------------------------
-    # Album count
-    # --------------------------------------------------------
 
     album_count = (
         db.query(Album)
@@ -299,34 +250,27 @@ def _dashboard_context(
         .count()
     )
 
-    # --------------------------------------------------------
-    # Withdrawal history
-    # --------------------------------------------------------
-
     withdrawal_requests = _withdrawal_history(
         db,
         profile.id,
     )
 
     # --------------------------------------------------------
-    # PUBLIC CREATOR STORE
+    # PUBLIC STORE
     #
-    # IMPORTANT:
-    # Current live application is requesting:
+    # Your live logs showed:
+    # GET /creator/mr-mapema
     #
-    # /creator/mr-mapema
-    #
-    # Therefore dashboard uses /creator/{slug}.
+    # Therefore the dashboard uses the creator URL.
     # --------------------------------------------------------
 
-    store_url = (
-        f"/creator/{profile.slug}"
-        if getattr(profile, "slug", None)
-        else None
-    )
+    store_url = None
+
+    if getattr(profile, "slug", None):
+        store_url = f"/creator/{profile.slug}"
 
     # --------------------------------------------------------
-    # YouTube
+    # YOUTUBE
     # --------------------------------------------------------
 
     youtube_url = None
@@ -344,7 +288,7 @@ def _dashboard_context(
         )
 
     # --------------------------------------------------------
-    # Discord
+    # DISCORD
     # --------------------------------------------------------
 
     discord_url = getattr(
@@ -353,22 +297,13 @@ def _dashboard_context(
         None,
     )
 
-    # --------------------------------------------------------
-    # Return complete context
-    # --------------------------------------------------------
-
     return ctx(
         request,
         user,
 
         profile=profile,
 
-        # Original stats object
         stats=stats,
-
-        # ----------------------------------------------------
-        # Financial values required directly by dashboard.html
-        # ----------------------------------------------------
 
         total_sales=stats["total_sales"],
         gross_revenue=stats["gross_revenue"],
@@ -378,30 +313,14 @@ def _dashboard_context(
         pending_withdrawal=stats["pending_withdrawal"],
         recent_orders=stats["recent_orders"],
 
-        # ----------------------------------------------------
-        # Content
-        # ----------------------------------------------------
-
         track_count=track_count,
         album_count=album_count,
 
-        # ----------------------------------------------------
-        # Withdrawals
-        # ----------------------------------------------------
-
         withdrawal_requests=withdrawal_requests,
-
-        # ----------------------------------------------------
-        # Social/store
-        # ----------------------------------------------------
 
         youtube_url=youtube_url,
         discord_url=discord_url,
         store_url=store_url,
-
-        # ----------------------------------------------------
-        # Compatibility
-        # ----------------------------------------------------
 
         tracks=[],
         albums=[],
@@ -513,7 +432,6 @@ async def upload_submit(
 
     try:
         for i, title in enumerate(titles):
-
             title = (title or "").strip()
 
             if not title:
@@ -521,10 +439,7 @@ async def upload_submit(
                     "Every track needs a title."
                 )
 
-            # ------------------------------------------------
             # BPM
-            # ------------------------------------------------
-
             bpm_raw = (
                 bpms[i].strip()
                 if i < len(bpms)
@@ -534,7 +449,6 @@ async def upload_submit(
             bpm_val = None
 
             if bpm_raw:
-
                 if not bpm_raw.isdigit():
                     return error(
                         f"BPM for '{title}' must be a whole number."
@@ -547,10 +461,7 @@ async def upload_submit(
                         f"BPM for '{title}' must be between 1 and 999."
                     )
 
-            # ------------------------------------------------
-            # PRICE
-            # ------------------------------------------------
-
+            # Price
             price_raw = (
                 prices[i].strip()
                 if i < len(prices)
@@ -568,10 +479,7 @@ async def upload_submit(
                     f"Price for '{title}' is invalid."
                 )
 
-            # ------------------------------------------------
-            # SALES MODEL
-            # ------------------------------------------------
-
+            # Sales model
             model_raw = (
                 sales_models[i]
                 if i < len(sales_models)
@@ -583,20 +491,14 @@ async def upload_submit(
             else:
                 sales_model = SalesModel.NON_EXCLUSIVE
 
-            # ------------------------------------------------
-            # AUDIO
-            # ------------------------------------------------
-
+            # Audio
             audio_path = await save_upload(
                 audio_files[i],
                 "audio",
                 ALLOWED_AUDIO_EXT,
             )
 
-            # ------------------------------------------------
-            # COVER
-            # ------------------------------------------------
-
+            # Cover
             cover_path = None
 
             if (
@@ -611,20 +513,13 @@ async def upload_submit(
                     ALLOWED_IMAGE_EXT,
                 )
 
-            # ------------------------------------------------
-            # SLUG
-            # ------------------------------------------------
-
+            # Slug
             slug = unique_slug(
                 db,
                 Track,
                 title,
                 "track",
             )
-
-            # ------------------------------------------------
-            # CREATE TRACK
-            # ------------------------------------------------
 
             track = Track(
                 creator_profile_id=profile.id,
@@ -659,7 +554,6 @@ async def upload_submit(
 
     except UploadValidationError as exc:
         db.rollback()
-
         return error(str(exc))
 
     except Exception:
@@ -742,7 +636,6 @@ async def new_album_submit(
         )
 
     def error(msg: str):
-
         tracks = (
             db.query(Track)
             .filter(
@@ -778,27 +671,17 @@ async def new_album_submit(
             "Select at least one track for this album."
         )
 
-    # --------------------------------------------------------
-    # ARTWORK
-    # --------------------------------------------------------
-
     artwork_path = None
 
     if artwork and artwork.filename:
-
         try:
             artwork_path = await save_upload(
                 artwork,
                 "artwork",
                 ALLOWED_IMAGE_EXT,
             )
-
         except UploadValidationError as exc:
             return error(str(exc))
-
-    # --------------------------------------------------------
-    # ALBUM SLUG
-    # --------------------------------------------------------
 
     slug = unique_slug(
         db,
@@ -806,10 +689,6 @@ async def new_album_submit(
         title,
         "album",
     )
-
-    # --------------------------------------------------------
-    # CREATE ALBUM
-    # --------------------------------------------------------
 
     album = Album(
         creator_profile_id=profile.id,
@@ -821,12 +700,7 @@ async def new_album_submit(
     )
 
     db.add(album)
-
     db.flush()
-
-    # --------------------------------------------------------
-    # ONLY ALLOW CREATOR'S OWN TRACKS
-    # --------------------------------------------------------
 
     valid_tracks = (
         db.query(Track)
@@ -844,7 +718,6 @@ async def new_album_submit(
             "None of the selected tracks belong to your account."
         )
 
-    # Preserve form selection order
     track_map = {
         str(track.id): track
         for track in valid_tracks
@@ -853,7 +726,6 @@ async def new_album_submit(
     position = 0
 
     for track_id in track_ids:
-
         track = track_map.get(
             str(track_id)
         )
@@ -918,7 +790,6 @@ def withdrawal_page(
             user,
 
             profile=profile,
-
             stats=stats,
 
             available_balance=stats[
@@ -976,15 +847,11 @@ def request_withdrawal(
         profile.id,
     )
 
-    # --------------------------------------------------------
-    # AMOUNT
-    # --------------------------------------------------------
-
+    # Validate amount
     try:
         amount_val = Decimal(
             str(amount).strip()
         )
-
     except Exception:
         return RedirectResponse(
             url=(
@@ -1003,10 +870,6 @@ def request_withdrawal(
             status_code=303,
         )
 
-    # --------------------------------------------------------
-    # AVAILABLE BALANCE
-    # --------------------------------------------------------
-
     if amount_val > stats["available_balance"]:
         return RedirectResponse(
             url=(
@@ -1016,10 +879,7 @@ def request_withdrawal(
             status_code=303,
         )
 
-    # --------------------------------------------------------
-    # PHONE
-    # --------------------------------------------------------
-
+    # Normalize phone
     phone_number = (
         phone_number or ""
     ).strip()
@@ -1033,10 +893,6 @@ def request_withdrawal(
             status_code=303,
         )
 
-    # --------------------------------------------------------
-    # BASIC KENYAN M-PESA NORMALIZATION
-    # --------------------------------------------------------
-
     cleaned_phone = (
         phone_number
         .replace(" ", "")
@@ -1048,9 +904,6 @@ def request_withdrawal(
             "254"
             + cleaned_phone[4:]
         )
-
-    elif cleaned_phone.startswith("254"):
-        pass
 
     elif cleaned_phone.startswith("07"):
         cleaned_phone = (
@@ -1064,8 +917,6 @@ def request_withdrawal(
             + cleaned_phone[1:]
         )
 
-    # Keep validation reasonably strict without breaking
-    # existing supported Kenyan numbers.
     if (
         not cleaned_phone.isdigit()
         or len(cleaned_phone) != 12
@@ -1079,13 +930,9 @@ def request_withdrawal(
             status_code=303,
         )
 
-    # Store normalized number.
     phone_number = cleaned_phone
 
-    # --------------------------------------------------------
-    # CREATE WITHDRAWAL
-    # --------------------------------------------------------
-
+    # Create withdrawal request
     withdrawal = WithdrawalRequest(
         creator_profile_id=profile.id,
         amount=amount_val,
@@ -1094,7 +941,6 @@ def request_withdrawal(
     )
 
     db.add(withdrawal)
-
     db.commit()
 
     return RedirectResponse(
@@ -1104,4 +950,3 @@ def request_withdrawal(
         ),
         status_code=303,
     )
-```
