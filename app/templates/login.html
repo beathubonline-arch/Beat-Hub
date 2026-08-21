@@ -1,34 +1,165 @@
-{% extends "base.html" %}
-{% block title %}Login — BeatHub{% endblock %}
-{% block content %}
-<div class="form-page">
-  <div class="form-card">
-    <div class="brand">BEAT<span class="hub">HUB</span></div>
-    <h2>The Home of Cool Beats &amp; Dope Tracks</h2>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <title>BeatHub Admin Login</title>
 
-    <form action="/login" method="post">
-      <div class="field">
-        <label>Email or Producer Name</label>
-        <input type="text" name="identifier" required autofocus>
-      </div>
-      <div class="field">
-        <label>Password</label>
-        <input type="password" name="password" required>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="remember" name="remember">
-        <label for="remember" style="margin:0;text-transform:none;">Remember me</label>
-      </div>
-      <button type="submit" class="btn btn-primary btn-block">Login</button>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #09090b;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 420px;
+            padding: 36px;
+            background: #111113;
+            border: 1px solid #27272a;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.45);
+        }
+
+        .brand {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .brand p {
+            margin-top: 8px;
+            color: #a1a1aa;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #d4d4d8;
+        }
+
+        input {
+            width: 100%;
+            padding: 13px 14px;
+            margin-bottom: 20px;
+            border-radius: 9px;
+            border: 1px solid #3f3f46;
+            background: #18181b;
+            color: white;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #ffffff;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: 0;
+            border-radius: 9px;
+            background: white;
+            color: #09090b;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: .9;
+        }
+
+        .error {
+            margin-bottom: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #3f1515;
+            color: #fca5a5;
+            font-size: 14px;
+        }
+
+        .back {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back a {
+            color: #a1a1aa;
+            text-decoration: none;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="login-box">
+
+    <div class="brand">
+        <h1>BeatHub</h1>
+        <p>Administrator Portal</p>
+    </div>
+
+    {% if error %}
+        <div class="error">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <form method="post" action="/admin/login">
+
+        <label for="identifier">
+            Administrator Email
+        </label>
+
+        <input
+            type="email"
+            id="identifier"
+            name="identifier"
+            placeholder="admin@beathub.com"
+            required
+            autocomplete="username"
+        >
+
+        <label for="password">
+            Password
+        </label>
+
+        <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Enter your password"
+            required
+            autocomplete="current-password"
+        >
+
+        <button type="submit">
+            Sign In to Admin
+        </button>
+
     </form>
-    <p class="sub" style="margin-top:18px;">
-      <a href="/forgot-password" style="color:var(--teal);">Forgot your password?</a>
-    </p>
-    <p class="sub">
-      New to BeatHub? <a href="/signup" style="color:var(--gold);">Create an account</a>
-    </p>
-  </div>
+
+    <div class="back">
+        <a href="/login">← Back to BeatHub Login</a>
+    </div>
+
 </div>
-{% endblock %}
+
+</body>
+</html>
