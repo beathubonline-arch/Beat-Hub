@@ -1,267 +1,616 @@
-from datetime import datetime
-from decimal import Decimal
-from typing import List, Optional
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeatHub — Admin Dashboard</title>
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, File
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+    <link rel="stylesheet" href="/static/css/style.css">
 
-from app.config import settings
-from app.database import get_db
-from app.models.ledger import CreatorLedgerEntry, WithdrawalRequest, WithdrawalStatus
-from app.models.music import Album, AlbumTrack, SalesModel, Track
-from app.models.order import Order, OrderStatus
-from app.models.user import User
-from app.services.storage import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, UploadValidationError, save_upload
-from app.utils.deps import require_creator
-from app.utils.text import unique_slug
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-router = APIRouter(tags=["dashboard"])
-templates = Jinja2Templates(directory="app/templates")
+        body {
+            margin: 0;
+            background: #09090b;
+            color: #f4f4f5;
+            font-family: Arial, sans-serif;
+        }
+
+        .admin-shell {
+            min-height: 100vh;
+        }
+
+        .admin-topbar {
+            min-height: 72px;
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #27272a;
+            background: #111113;
+        }
+
+        .admin-brand {
+            color: #fff;
+            text-decoration: none;
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .admin-brand span {
+            color: #a1a1aa;
+        }
+
+        .admin-user {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: #a1a1aa;
+            font-size: 14px;
+        }
+
+        .admin-user strong {
+            color: #fff;
+        }
+
+        .admin-logout {
+            border: 1px solid #3f3f46;
+            background: transparent;
+            color: #fff;
+            padding: 9px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .admin-layout {
+            display: flex;
+            min-height: calc(100vh - 72px);
+        }
+
+        .admin-sidebar {
+            width: 230px;
+            flex-shrink: 0;
+            padding: 24px 16px;
+            border-right: 1px solid #27272a;
+            background: #111113;
+        }
+
+        .sidebar-label {
+            margin: 0 12px 12px;
+            color: #71717a;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .admin-sidebar a {
+            display: block;
+            padding: 11px 12px;
+            margin-bottom: 4px;
+            border-radius: 8px;
+            color: #a1a1aa;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .admin-sidebar a:hover,
+        .admin-sidebar a.active {
+            background: #27272a;
+            color: #fff;
+        }
+
+        .admin-main {
+            flex: 1;
+            padding: 32px;
+            min-width: 0;
+        }
+
+        .page-heading {
+            margin-bottom: 28px;
+        }
+
+        .page-heading h1 {
+            margin: 0 0 7px;
+            font-size: 30px;
+        }
+
+        .page-heading p {
+            margin: 0;
+            color: #a1a1aa;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            padding: 22px;
+            border: 1px solid #27272a;
+            border-radius: 14px;
+            background: #111113;
+        }
+
+        .stat-label {
+            color: #a1a1aa;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 25px;
+            font-weight: 800;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            border: 1px solid #27272a;
+            border-radius: 14px;
+            background: #111113;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 18px 20px;
+            border-bottom: 1px solid #27272a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h2 {
+            margin: 0;
+            font-size: 17px;
+        }
+
+        .panel-header a {
+            color: #a1a1aa;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 13px 16px;
+            border-bottom: 1px solid #27272a;
+            text-align: left;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
+        th {
+            color: #71717a;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        td {
+            color: #d4d4d8;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: #27272a;
+            color: #d4d4d8;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .attention {
+            display: grid;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .attention-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px;
+            border: 1px solid #27272a;
+            border-radius: 10px;
+        }
+
+        .attention-item span {
+            color: #a1a1aa;
+            font-size: 13px;
+        }
+
+        .attention-item strong {
+            font-size: 18px;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .quick-link {
+            padding: 18px;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            background: #111113;
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .quick-link:hover {
+            border-color: #52525b;
+        }
+
+        .quick-link strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .quick-link span {
+            color: #71717a;
+            font-size: 12px;
+        }
+
+        @media (max-width: 1000px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .admin-topbar {
+                padding: 0 16px;
+            }
+
+            .admin-layout {
+                display: block;
+            }
+
+            .admin-sidebar {
+                width: 100%;
+                border-right: 0;
+                border-bottom: 1px solid #27272a;
+                display: flex;
+                gap: 5px;
+                overflow-x: auto;
+            }
+
+            .sidebar-label {
+                display: none;
+            }
+
+            .admin-sidebar a {
+                white-space: nowrap;
+            }
+
+            .admin-main {
+                padding: 20px 16px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-links {
+                grid-template-columns: 1fr;
+            }
+
+            .admin-user span {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="admin-shell">
+
+    <header class="admin-topbar">
+
+        <a href="/admin" class="admin-brand">
+            BEAT<span>HUB</span> ADMIN
+        </a>
+
+        <div class="admin-user">
+            <span>
+                Signed in as
+                <strong>{{ current_user.email }}</strong>
+            </span>
+
+            <form action="/logout" method="post">
+                <button class="admin-logout" type="submit">
+                    Logout
+                </button>
+            </form>
+        </div>
+
+    </header>
+
+    <div class="admin-layout">
+
+        <aside class="admin-sidebar">
+
+            <div class="sidebar-label">Management</div>
+
+            <a href="/admin" class="active">
+                Overview
+            </a>
+
+            <a href="/admin/users">
+                Users
+            </a>
+
+            <a href="/admin/content">
+                Content
+            </a>
+
+            <a href="/admin/sales">
+                Sales
+            </a>
+
+            <a href="/admin/withdrawals">
+                Withdrawals
+            </a>
+
+        </aside>
+
+        <main class="admin-main">
+
+            <div class="page-heading">
+                <h1>Overview</h1>
+                <p>Monitor BeatHub activity, revenue and platform operations.</p>
+            </div>
+
+            <section class="stats-grid">
+
+                <div class="stat-card">
+                    <div class="stat-label">Total Sales Volume</div>
+                    <div class="stat-value">
+                        KES {{ "{:,.2f}".format(total_sales_volume or 0) }}
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">BeatHub Commission</div>
+                    <div class="stat-value">
+                        KES {{ "{:,.2f}".format(total_commission or 0) }}
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">Creator Earnings</div>
+                    <div class="stat-value">
+                        KES {{ "{:,.2f}".format(total_creator_earnings or 0) }}
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">Pending Withdrawals</div>
+                    <div class="stat-value">
+                        {{ pending_withdrawals or 0 }}
+                    </div>
+                </div>
+
+            </section>
+
+            <div class="dashboard-grid">
+
+                <section class="panel">
+
+                    <div class="panel-header">
+                        <h2>Recent Orders</h2>
+                        <a href="/admin/sales">View all</a>
+                    </div>
+
+                    <div class="table-wrap">
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>Order</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                            {% for order in recent_orders %}
+
+                                <tr>
+                                    <td>
+                                        {{ order.id }}
+                                    </td>
+
+                                    <td>
+                                        KES {{ "{:,.2f}".format(order.gross_amount or 0) }}
+                                    </td>
+
+                                    <td>
+                                        <span class="status">
+                                            {{ order.status.value if order.status.value else order.status }}
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        {{ order.created_at.strftime('%d %b %Y') if order.created_at else '—' }}
+                                    </td>
+                                </tr>
+
+                            {% else %}
+
+                                <tr>
+                                    <td colspan="4">
+                                        No orders yet.
+                                    </td>
+                                </tr>
+
+                            {% endfor %}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </section>
 
 
-def ctx(request: Request, current_user, **extra):
-    base = {"request": request, "current_user": current_user, "current_year": datetime.utcnow().year}
-    base.update(extra)
-    return base
+                <section class="panel">
+
+                    <div class="panel-header">
+                        <h2>Attention Required</h2>
+                    </div>
+
+                    <div class="attention">
+
+                        <div class="attention-item">
+                            <span>Pending withdrawals</span>
+                            <strong>{{ pending_withdrawals or 0 }}</strong>
+                        </div>
+
+                        <div class="attention-item">
+                            <span>Pending orders</span>
+                            <strong>{{ pending or 0 }}</strong>
+                        </div>
+
+                        <div class="attention-item">
+                            <span>Failed orders</span>
+                            <strong>{{ failed or 0 }}</strong>
+                        </div>
+
+                    </div>
+
+                </section>
+
+            </div>
 
 
-def _creator_stats(db: Session, profile_id: str) -> dict:
-    orders = (
-        db.query(Order)
-        .join(Track, Order.track_id == Track.id)
-        .filter(Track.creator_profile_id == profile_id, Order.status == OrderStatus.COMPLETED)
-        .all()
-    )
-    gross = sum((o.gross_amount for o in orders), Decimal("0"))
-    commission = sum((o.commission_amount for o in orders), Decimal("0"))
-    net = sum((o.net_amount for o in orders), Decimal("0"))
+            <section class="panel" style="margin-top:20px;">
 
-    withdrawn = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
-        .filter(
-            WithdrawalRequest.creator_profile_id == profile_id,
-            WithdrawalRequest.status.in_([WithdrawalStatus.APPROVED, WithdrawalStatus.PROCESSING, WithdrawalStatus.PAID]),
-        )
-        .scalar()
-    )
-    pending_withdrawal = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
-        .filter(WithdrawalRequest.creator_profile_id == profile_id, WithdrawalRequest.status == WithdrawalStatus.PENDING)
-        .scalar()
-    )
+                <div class="panel-header">
+                    <h2>Recent Users</h2>
+                    <a href="/admin/users">Manage users</a>
+                </div>
 
-    available_balance = net - Decimal(str(withdrawn or 0)) - Decimal(str(pending_withdrawal or 0))
+                <div class="table-wrap">
 
-    return {
-        "total_sales": len(orders),
-        "gross_revenue": gross,
-        "platform_commission": commission,
-        "net_earnings": net,
-        "available_balance": available_balance,
-        "pending_withdrawal": Decimal(str(pending_withdrawal or 0)),
-        "recent_orders": sorted(orders, key=lambda o: o.completed_at or o.created_at, reverse=True)[:8],
-    }
+                    <table>
 
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                            </tr>
+                        </thead>
 
-@router.get("/dashboard")
-def dashboard_home(request: Request, db: Session = Depends(get_db), user: User = Depends(require_creator)):
-    profile = user.profile
-    if not profile:
-        raise HTTPException(status_code=400, detail="Creator profile missing.")
+                        <tbody>
 
-    stats = _creator_stats(db, profile.id)
-    track_count = db.query(Track).filter(Track.creator_profile_id == profile.id).count()
-    album_count = db.query(Album).filter(Album.creator_profile_id == profile.id).count()
+                        {% for user in recent_users %}
 
-    youtube_url = f"https://www.youtube.com/channel/{settings.YOUTUBE_CHANNEL_ID}"
+                            <tr>
 
-    # NOTE: platform commission figures are intentionally NOT passed to this
-    # template. Commission/BeatHub-cut visibility is admin-only — creators
-    # should only ever see their own net earnings and available balance.
-    return templates.TemplateResponse(request, 
-        "dashboard.html",
-        ctx(
-            request, user,
-            profile=profile, stats=stats, track_count=track_count, album_count=album_count,
-            youtube_url=youtube_url, discord_url=settings.DISCORD_INVITE_URL,
-        ),
-    )
+                                <td>
+                                    {{ user.email }}
+                                </td>
 
+                                <td>
+                                    {{ user.role.value if user.role.value else user.role }}
+                                </td>
 
-@router.get("/dashboard/upload")
-def upload_page(request: Request, user: User = Depends(require_creator)):
-    return templates.TemplateResponse(request, "upload_track.html", ctx(request, user))
+                                <td>
 
+                                    {% if user.is_active %}
+                                        <span class="status">Active</span>
+                                    {% else %}
+                                        <span class="status">Inactive</span>
+                                    {% endif %}
 
-@router.post("/dashboard/upload")
-async def upload_submit(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_creator),
-    titles: List[str] = Form(...),
-    descriptions: List[str] = Form(...),
-    genres: List[str] = Form(...),
-    bpms: List[str] = Form(...),
-    tags_list: List[str] = Form(...),
-    prices: List[str] = Form(...),
-    sales_models: List[str] = Form(...),
-    audio_files: List[UploadFile] = File(...),
-    cover_files: List[Optional[UploadFile]] = File(None),
-):
-    """
-    Handles both single-track and multi-track uploads via the same endpoint —
-    the form always submits arrays, even for a single track.
-    """
-    profile = user.profile
+                                </td>
 
-    def error(msg: str):
-        return templates.TemplateResponse(request, "upload_track.html", ctx(request, user, error=msg), status_code=400)
+                                <td>
+                                    {{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}
+                                </td>
 
-    if not titles or not audio_files:
-        return error("At least one track with an audio file is required.")
-    if len(titles) != len(audio_files):
-        return error("Track details and audio files don't match up. Please try again.")
+                            </tr>
 
-    created = []
-    try:
-        for i, title in enumerate(titles):
-            if not title.strip():
-                return error("Every track needs a title.")
+                        {% else %}
 
-            bpm_raw = bpms[i].strip() if i < len(bpms) else ""
-            bpm_val = None
-            if bpm_raw:
-                if not bpm_raw.isdigit():
-                    return error(f"BPM for '{title}' must be a whole number.")
-                bpm_val = int(bpm_raw)
+                            <tr>
+                                <td colspan="4">
+                                    No users yet.
+                                </td>
+                            </tr>
 
-            price_raw = prices[i].strip() if i < len(prices) else "0"
-            try:
-                price_val = Decimal(price_raw)
-                if price_val < 0:
-                    raise ValueError
-            except Exception:
-                return error(f"Price for '{title}' is invalid.")
+                        {% endfor %}
 
-            model_raw = sales_models[i] if i < len(sales_models) else "non_exclusive"
-            sales_model = SalesModel.EXCLUSIVE if model_raw == "exclusive" else SalesModel.NON_EXCLUSIVE
+                        </tbody>
 
-            audio_path = await save_upload(audio_files[i], "audio", ALLOWED_AUDIO_EXT)
-            cover_path = None
-            if cover_files and i < len(cover_files) and cover_files[i] is not None and cover_files[i].filename:
-                cover_path = await save_upload(cover_files[i], "covers", ALLOWED_IMAGE_EXT)
+                    </table>
 
-            slug = unique_slug(db, Track, title, "track")
-            track = Track(
-                creator_profile_id=profile.id,
-                title=title.strip(),
-                slug=slug,
-                description=(descriptions[i].strip() if i < len(descriptions) else None) or None,
-                genre=(genres[i].strip() if i < len(genres) else None) or None,
-                bpm=bpm_val,
-                tags=(tags_list[i].strip() if i < len(tags_list) else None) or None,
-                audio_file_path=audio_path,
-                cover_art_path=cover_path,
-                price=price_val,
-                sales_model=sales_model,
-            )
-            db.add(track)
-            created.append(track)
+                </div>
 
-        db.commit()
-    except UploadValidationError as exc:
-        db.rollback()
-        return error(str(exc))
-
-    return RedirectResponse(url="/dashboard?success=" + f"{len(created)} track(s) uploaded successfully.", status_code=303)
+            </section>
 
 
-@router.get("/dashboard/albums/new")
-def new_album_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_creator)):
-    tracks = db.query(Track).filter(Track.creator_profile_id == user.profile.id).order_by(Track.created_at.desc()).all()
-    return templates.TemplateResponse(request, "upload_album.html", ctx(request, user, tracks=tracks))
+            <div class="quick-links">
 
+                <a href="/admin/users" class="quick-link">
+                    <strong>Manage Users</strong>
+                    <span>Accounts, roles and access</span>
+                </a>
 
-@router.post("/dashboard/albums/new")
-async def new_album_submit(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_creator),
-    title: str = Form(...),
-    description: str = Form(""),
-    genre: str = Form(""),
-    artwork: UploadFile = File(None),
-    track_ids: List[str] = Form([]),
-):
-    profile = user.profile
+                <a href="/admin/content" class="quick-link">
+                    <strong>Manage Content</strong>
+                    <span>Tracks, albums and publishing</span>
+                </a>
 
-    def error(msg: str):
-        tracks = db.query(Track).filter(Track.creator_profile_id == profile.id).all()
-        return templates.TemplateResponse(request, "upload_album.html", ctx(request, user, tracks=tracks, error=msg), status_code=400)
+                <a href="/admin/withdrawals" class="quick-link">
+                    <strong>Withdrawals</strong>
+                    <span>Review creator payouts</span>
+                </a>
 
-    if not title.strip():
-        return error("Album title is required.")
-    if not track_ids:
-        return error("Select at least one track for this album.")
+            </div>
 
-    artwork_path = None
-    if artwork and artwork.filename:
-        try:
-            artwork_path = await save_upload(artwork, "artwork", ALLOWED_IMAGE_EXT)
-        except UploadValidationError as exc:
-            return error(str(exc))
+        </main>
 
-    slug = unique_slug(db, Album, title, "album")
-    album = Album(
-        creator_profile_id=profile.id,
-        title=title.strip(),
-        slug=slug,
-        description=description.strip() or None,
-        genre=genre.strip() or None,
-        artwork_path=artwork_path,
-    )
-    db.add(album)
-    db.flush()
+    </div>
 
-    valid_tracks = db.query(Track).filter(Track.id.in_(track_ids), Track.creator_profile_id == profile.id).all()
-    for position, track in enumerate(valid_tracks):
-        db.add(AlbumTrack(album_id=album.id, track_id=track.id, position=position))
+</div>
 
-    db.commit()
-    return RedirectResponse(url=f"/album/{album.slug}?success=Album created.", status_code=303)
-
-
-@router.post("/dashboard/withdraw")
-def request_withdrawal(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_creator),
-    amount: str = Form(...),
-    phone_number: str = Form(...),
-):
-    profile = user.profile
-    stats = _creator_stats(db, profile.id)
-
-    try:
-        amount_val = Decimal(amount)
-    except Exception:
-        return RedirectResponse(url="/dashboard?error=Invalid withdrawal amount.", status_code=303)
-
-    if amount_val <= 0:
-        return RedirectResponse(url="/dashboard?error=Withdrawal amount must be positive.", status_code=303)
-    if amount_val > stats["available_balance"]:
-        return RedirectResponse(url="/dashboard?error=Withdrawal exceeds your available balance.", status_code=303)
-
-    wr = WithdrawalRequest(
-        creator_profile_id=profile.id,
-        amount=amount_val,
-        phone_number=phone_number,
-        status=WithdrawalStatus.PENDING,
-    )
-    db.add(wr)
-    db.commit()
-
-    return RedirectResponse(url="/dashboard?success=Withdrawal request submitted.", status_code=303)
+</body>
+</html>
