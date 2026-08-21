@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.ledger import (
     AdminWithdrawal,
-    CreatorLedgerEntry,
     WithdrawalRequest,
 )
 from app.models.order import Order, OrderStatus
@@ -30,7 +29,7 @@ templates = Jinja2Templates(
 
 
 # =========================================================
-# COMMON TEMPLATE CONTEXT
+# COMMON ADMIN TEMPLATE CONTEXT
 # =========================================================
 
 def admin_ctx(
@@ -38,52 +37,42 @@ def admin_ctx(
     current_user,
     **extra,
 ):
-    """
-    Centralized admin template context.
-
-    Important:
-    The admin dashboard template expects many variables.
-    We provide safe defaults here so a missing database result
-    can never cause a Jinja UndefinedError.
-    """
-
     data = {
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
 
-        # Basic counts
+        # Basic statistics
         "users_count": 0,
         "tracks_count": 0,
         "completed_sales": 0,
 
-        # Financial dashboard
+        # Financial statistics
         "total_sales_volume": Decimal("0"),
         "total_commission": Decimal("0"),
         "total_creator_earnings": Decimal("0"),
         "platform_revenue": Decimal("0"),
 
-        # Withdrawals
-        "pending_withdrawals": 0,
+        # Withdrawal statistics
         "pending_creator_withdrawals": 0,
+        "pending_withdrawals": 0,
         "already_withdrawn": Decimal("0"),
         "pending_admin": Decimal("0"),
         "available_balance": Decimal("0"),
 
-        # Orders
+        # Order statistics
         "successful": 0,
         "pending": 0,
         "failed": 0,
+
+        # Lists
         "recent_orders": [],
         "recent_users": [],
         "failed_payments": [],
-
-        # Lists
-        "withdrawals": [],
         "admin_withdrawals": [],
-
-        # Optional values used by some templates
-        "recent_activity": [],
+        "withdrawals": [],
+        "sales": [],
+        "orders": [],
     }
 
     data.update(extra)
@@ -92,7 +81,7 @@ def admin_ctx(
 
 
 # =========================================================
-# ADMIN HOME
+# ADMIN DASHBOARD
 # =========================================================
 
 @router.get("")
@@ -138,25 +127,31 @@ def admin_home(
         .count()
     )
 
-    failed = (
-        db.query(Order)
-        .filter(
-            Order.status.in_(
-                [
-                    OrderStatus.FAILED,
-                    OrderStatus.REJECTED,
-                ]
+    failed_statuses = []
+
+    if hasattr(OrderStatus, "FAILED"):
+        failed_statuses.append(OrderStatus.FAILED)
+
+    if hasattr(OrderStatus, "REJECTED"):
+        failed_statuses.append(OrderStatus.REJECTED)
+
+    if failed_statuses:
+        failed = (
+            db.query(Order)
+            .filter(
+                Order.status.in_(failed_statuses)
             )
+            .count()
         )
-        .count()
-    )
+    else:
+        failed = 0
 
     # -----------------------------------------------------
     # TOTAL SALES VOLUME
     #
     # IMPORTANT:
-    # Order has gross_amount.
-    # It does NOT have total_amount.
+    # Order.total_amount DOES NOT EXIST.
+    # The current Order model uses gross_amount.
     # -----------------------------------------------------
 
     total_sales_volume_raw = (
@@ -177,7 +172,7 @@ def admin_home(
     )
 
     # -----------------------------------------------------
-    # TOTAL PLATFORM COMMISSION
+    # TOTAL COMMISSION
     # -----------------------------------------------------
 
     total_commission_raw = (
@@ -197,13 +192,8 @@ def admin_home(
         str(total_commission_raw or 0)
     )
 
-    # Platform revenue is the same commission amount.
-    platform_revenue = total_commission
-
     # -----------------------------------------------------
     # TOTAL CREATOR EARNINGS
-    #
-    # Order.net_amount is the creator's net amount.
     # -----------------------------------------------------
 
     total_creator_earnings_raw = (
@@ -223,8 +213,11 @@ def admin_home(
         str(total_creator_earnings_raw or 0)
     )
 
+    # Platform revenue = BeatHub commission
+    platform_revenue = total_commission
+
     # -----------------------------------------------------
-    # PENDING CREATOR WITHDRAWALS
+    # CREATOR WITHDRAWALS
     # -----------------------------------------------------
 
     pending_creator_withdrawals = (
@@ -235,7 +228,6 @@ def admin_home(
         .count()
     )
 
-    # Template uses both names in different sections.
     pending_withdrawals = pending_creator_withdrawals
 
     # -----------------------------------------------------
@@ -266,12 +258,22 @@ def admin_home(
 
     # -----------------------------------------------------
     # FAILED PAYMENTS
-    #
-    # Do not assume a payment model exists here.
-    # The dashboard can safely receive an empty list.
     # -----------------------------------------------------
 
     failed_payments = []
+
+    if failed_statuses:
+        failed_payments = (
+            db.query(Order)
+            .filter(
+                Order.status.in_(failed_statuses)
+            )
+            .order_by(
+                Order.created_at.desc()
+            )
+            .limit(10)
+            .all()
+        )
 
     # -----------------------------------------------------
     # RECENT ADMIN WITHDRAWALS
@@ -287,7 +289,7 @@ def admin_home(
     )
 
     # -----------------------------------------------------
-    # RENDER DASHBOARD
+    # RENDER
     # -----------------------------------------------------
 
     return templates.TemplateResponse(
@@ -322,6 +324,125 @@ def admin_home(
             failed_payments=failed_payments,
 
             admin_withdrawals=admin_withdrawals,
+        ),
+    )
+
+
+# =========================================================
+# ADMIN SALES
+# =========================================================
+
+@router.get("/sales")
+def admin_sales(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    # -----------------------------------------------------
+    # COMPLETED SALES
+    # -----------------------------------------------------
+
+    sales = (
+        db.query(Order)
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .order_by(
+            Order.created_at.desc()
+        )
+        .all()
+    )
+
+    # -----------------------------------------------------
+    # TOTAL SALES
+    # -----------------------------------------------------
+
+    total_sales_volume_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.gross_amount),
+                0,
+            )
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    total_sales_volume = Decimal(
+        str(total_sales_volume_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # TOTAL COMMISSION
+    # -----------------------------------------------------
+
+    total_commission_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.commission_amount),
+                0,
+            )
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    total_commission = Decimal(
+        str(total_commission_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # TOTAL CREATOR EARNINGS
+    # -----------------------------------------------------
+
+    total_creator_earnings_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.net_amount),
+                0,
+            )
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    total_creator_earnings = Decimal(
+        str(total_creator_earnings_raw or 0)
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "admin/sales.html",
+        admin_ctx(
+            request,
+            user,
+
+            sales=sales,
+            orders=sales,
+
+            sales_count=len(sales),
+
+            total_sales_volume=(
+                total_sales_volume
+            ),
+
+            total_commission=(
+                total_commission
+            ),
+
+            total_creator_earnings=(
+                total_creator_earnings
+            ),
+
+            platform_revenue=(
+                total_commission
+            ),
         ),
     )
 
@@ -391,7 +512,9 @@ def approve_creator_withdrawal(
         )
 
     withdrawal.status = "approved"
+
     withdrawal.updated_at = datetime.utcnow()
+
     withdrawal.admin_note = (
         "Withdrawal approved by administrator."
     )
@@ -456,7 +579,7 @@ def reject_creator_withdrawal(
 
 
 # =========================================================
-# ADMIN / BEATHUB OWN WITHDRAWAL PAGE
+# ADMIN / BEATHUB WITHDRAWAL PAGE
 # =========================================================
 
 @router.get("/withdraw")
@@ -548,7 +671,7 @@ def admin_withdraw_page(
         available = Decimal("0")
 
     # -----------------------------------------------------
-    # WITHDRAWAL HISTORY
+    # HISTORY
     # -----------------------------------------------------
 
     withdrawals = (
@@ -566,10 +689,21 @@ def admin_withdraw_page(
             request,
             user,
 
-            platform_revenue=platform_revenue,
-            already_withdrawn=already_withdrawn,
-            pending_admin=pending_admin,
-            available_balance=available,
+            platform_revenue=(
+                platform_revenue
+            ),
+
+            already_withdrawn=(
+                already_withdrawn
+            ),
+
+            pending_admin=(
+                pending_admin
+            ),
+
+            available_balance=(
+                available
+            ),
 
             withdrawals=withdrawals,
             admin_withdrawals=withdrawals,
@@ -590,7 +724,7 @@ def create_admin_withdrawal(
     user: User = Depends(require_admin),
 ):
     # -----------------------------------------------------
-    # VALIDATE AMOUNT
+    # AMOUNT
     # -----------------------------------------------------
 
     try:
@@ -616,7 +750,7 @@ def create_admin_withdrawal(
         )
 
     # -----------------------------------------------------
-    # VALIDATE PHONE
+    # PHONE
     # -----------------------------------------------------
 
     phone_number = phone_number.strip()
@@ -631,7 +765,7 @@ def create_admin_withdrawal(
         )
 
     # -----------------------------------------------------
-    # CALCULATE PLATFORM REVENUE
+    # PLATFORM REVENUE
     # -----------------------------------------------------
 
     platform_revenue_raw = (
@@ -679,7 +813,7 @@ def create_admin_withdrawal(
     )
 
     # -----------------------------------------------------
-    # PENDING ADMIN WITHDRAWALS
+    # PENDING
     # -----------------------------------------------------
 
     pending_admin_raw = (
@@ -700,7 +834,7 @@ def create_admin_withdrawal(
     )
 
     # -----------------------------------------------------
-    # AVAILABLE BALANCE
+    # AVAILABLE
     # -----------------------------------------------------
 
     available = (
@@ -722,7 +856,7 @@ def create_admin_withdrawal(
         )
 
     # -----------------------------------------------------
-    # CREATE WITHDRAWAL
+    # CREATE
     # -----------------------------------------------------
 
     withdrawal = AdminWithdrawal(
@@ -842,7 +976,7 @@ def reject_admin_withdrawal(
 
 
 # =========================================================
-# MARK ADMIN WITHDRAWAL AS PAID
+# MARK ADMIN WITHDRAWAL PAID
 # =========================================================
 
 @router.post(
