@@ -16,9 +16,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # CREATOR WITHDRAWALS
-# ----------------------------------------------------------------------
+# ============================================================
 
 class WithdrawalStatus(str, enum.Enum):
     PENDING = "pending"
@@ -30,16 +30,10 @@ class WithdrawalStatus(str, enum.Enum):
 
 class CreatorLedgerEntry(Base):
     """
-    Append-only ledger for creator balances.
+    Append-only financial ledger for creators.
 
-    Positive amount:
-        Creator receives money from a completed sale.
-
-    Negative amount:
-        Creator withdraws money.
-
-    Creator balance is calculated from ledger entries rather than
-    storing a mutable balance field.
+    Positive amount = creator credit.
+    Negative amount = creator debit/withdrawal.
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -98,11 +92,11 @@ class CreatorLedgerEntry(Base):
     )
 
 
-# ----------------------------------------------------------------------
-# CREATOR WITHDRAWAL REQUEST
-# ----------------------------------------------------------------------
-
 class WithdrawalRequest(Base):
+    """
+    Withdrawal requested by a creator/producer.
+    """
+
     __tablename__ = "withdrawal_requests"
 
     id: Mapped[str] = mapped_column(
@@ -169,31 +163,35 @@ class WithdrawalRequest(Base):
     )
 
 
-# ----------------------------------------------------------------------
-# PLATFORM / ADMIN WITHDRAWALS
-# ----------------------------------------------------------------------
+# ============================================================
+# ADMIN / BEATHUB PLATFORM WITHDRAWALS
+# ============================================================
 
-class PlatformWithdrawalStatus(str, enum.Enum):
+class AdminWithdrawalStatus(str, enum.Enum):
     PENDING = "pending"
     PROCESSING = "processing"
     PAID = "paid"
     REJECTED = "rejected"
 
 
-class PlatformWithdrawal(Base):
+class AdminWithdrawal(Base):
     """
-    Withdrawal made by the BeatHub platform/admin.
+    Money withdrawn by BeatHub itself.
 
-    This is separate from CreatorLedgerEntry and WithdrawalRequest.
+    This is completely separate from creator withdrawals.
 
-    Creator withdrawals:
-        Creator -> BeatHub
+    Example:
 
-    Platform withdrawals:
-        BeatHub -> Admin/platform M-Pesa number
+        BeatHub has KES 50,000 in platform earnings.
+
+        Admin requests:
+            KES 10,000
+            to 0712345678
+
+        This record tracks that platform withdrawal.
     """
 
-    __tablename__ = "platform_withdrawals"
+    __tablename__ = "admin_withdrawals"
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -211,9 +209,9 @@ class PlatformWithdrawal(Base):
         nullable=False,
     )
 
-    status: Mapped[PlatformWithdrawalStatus] = mapped_column(
-        Enum(PlatformWithdrawalStatus),
-        default=PlatformWithdrawalStatus.PENDING,
+    status: Mapped[AdminWithdrawalStatus] = mapped_column(
+        Enum(AdminWithdrawalStatus),
+        default=AdminWithdrawalStatus.PENDING,
         nullable=False,
         index=True,
     )
@@ -248,7 +246,20 @@ class PlatformWithdrawal(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<PlatformWithdrawal "
+            f"<AdminWithdrawal "
             f"{self.amount} -> {self.phone_number} "
             f"({self.status})>"
         )
+
+
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+#
+# Some earlier admin code used PlatformWithdrawal.
+# Keep this alias so that code importing PlatformWithdrawal
+# will continue to work without another model/table.
+#
+
+PlatformWithdrawal = AdminWithdrawal
+PlatformWithdrawalStatus = AdminWithdrawalStatus
