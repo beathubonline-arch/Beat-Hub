@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+
+{% block title %}BeatHub Earnings — Admin{% endblock %}
+
+{% block content %}
+
+<style>
+    .earnings-page {
+        padding: 32px 0 60px;
+    }
+
+    .earnings-header {
+        margin-bottom: 25px;
+    }
+
+    .earnings-header h1 {
+        margin: 0;
+        font-size: 30px;
+    }
+
+    .earnings-header p {
+        color: #71717a;
+        margin-top: 8px;
+    }
+
+    .wallet {
+        background: #18181b;
+        color: white;
+        border-radius: 18px;
+        padding: 28px;
+        margin-bottom: 24px;
+    }
+
+    .wallet-label {
+        color: #a1a1aa;
+        font-size: 13px;
+    }
+
+    .wallet-amount {
+        font-size: 40px;
+        font-weight: 800;
+        margin: 8px 0 22px;
+    }
+
+    .wallet-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+    }
+
+    .wallet-stat {
+        background: #27272a;
+        border-radius: 10px;
+        padding: 14px;
+    }
+
+    .wallet-stat span {
+        display: block;
+        color: #a1a1aa;
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .wallet-stat strong {
+        font-size: 17px;
+    }
+
+    .panel {
+        background: white;
+        border: 1px solid #e4e4e7;
+        border-radius: 14px;
+        overflow: hidden;
+        margin-bottom: 22px;
+    }
+
+    .panel-header {
+        padding: 18px 20px;
+        border-bottom: 1px solid #e4e4e7;
+    }
+
+    .panel-header h2 {
+        margin: 0;
+        font-size: 18px;
+    }
+
+    .withdraw-form {
+        padding: 20px;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 15px;
+        align-items: end;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 7px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #d4d4d8;
+        border-radius: 8px;
+        box-sizing: border-box;
+    }
+
+    button {
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 18px;
+        background: #18181b;
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    button:hover {
+        opacity: .9;
+    }
+
+    .alert {
+        margin-bottom: 20px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f4f4f5;
+        text-align: left;
+        font-size: 13px;
+    }
+
+    th {
+        background: #fafafa;
+        color: #71717a;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+
+    .status {
+        display: inline-block;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: capitalize;
+    }
+
+    .pending {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .processing {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .paid {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .rejected {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .action-form {
+        display: inline;
+    }
+
+    .small-button {
+        padding: 7px 10px;
+        font-size: 11px;
+        margin-right: 4px;
+    }
+
+    .danger {
+        background: #991b1b;
+    }
+
+    .empty {
+        padding: 30px;
+        text-align: center;
+        color: #71717a;
+    }
+
+    @media (max-width: 750px) {
+        .wallet-grid,
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .wallet-amount {
+            font-size: 32px;
+        }
+
+        .panel {
+            overflow-x: auto;
+        }
+
+        table {
+            min-width: 700px;
+        }
+    }
+</style>
+
+<div class="earnings-page">
+
+    <div class="earnings-header">
+        <h1>BeatHub Earnings</h1>
+        <p>
+            Manage BeatHub's platform commission separately from creator earnings.
+        </p>
+    </div>
+
+    {% if request.query_params.get('error') %}
+        <div class="alert alert-error">
+            {{ request.query_params.get('error') }}
+        </div>
+    {% endif %}
+
+    {% if request.query_params.get('success') %}
+        <div class="alert alert-success">
+            {{ request.query_params.get('success') }}
+        </div>
+    {% endif %}
+
+    <section class="wallet">
+
+        <div class="wallet-label">
+            Available BeatHub Platform Balance
+        </div>
+
+        <div class="wallet-amount">
+            KES {{ "%.2f"|format(platform.available|float) }}
+        </div>
+
+        <div class="wallet-grid">
+
+            <div class="wallet-stat">
+                <span>Total Commission</span>
+                <strong>
+                    KES {{ "%.2f"|format(platform.total_commission|float) }}
+                </strong>
+            </div>
+
+            <div class="wallet-stat">
+                <span>Already Withdrawn</span>
+                <strong>
+                    KES {{ "%.2f"|format(platform.withdrawn|float) }}
+                </strong>
+            </div>
+
+            <div class="wallet-stat">
+                <span>Reserved / Processing</span>
+                <strong>
+                    KES {{ "%.2f"|format(platform.reserved|float) }}
+                </strong>
+            </div>
+
+        </div>
+
+    </section>
+
+    <section class="panel">
+
+        <div class="panel-header">
+            <h2>Withdraw BeatHub Commission</h2>
+        </div>
+
+        <form
+            method="post"
+            action="/admin/earnings/withdraw"
+            class="withdraw-form"
+        >
+
+            <div class="form-grid">
+
+                <div>
+                    <label for="amount">
+                        Amount (KES)
+                    </label>
+
+                    <input
+                        id="amount"
+                        name="amount"
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        max="{{ platform.available }}"
+                        placeholder="5000"
+                        required
+                    >
+                </div>
+
+                <div>
+                    <label for="phone_number">
+                        M-Pesa Number
+                    </label>
+
+                    <input
+                        id="phone_number"
+                        name="phone_number"
+                        type="tel"
+                        placeholder="0712345678"
+                        required
+                    >
+                </div>
+
+                <button
+                    type="submit"
+                    {% if platform.available <= 0 %}
+                        disabled
+                    {% endif %}
+                >
+                    Withdraw to M-Pesa
+                </button>
+
+            </div>
+
+        </form>
+
+    </section>
+
+    <section class="panel">
+
+        <div class="panel-header">
+            <h2>Platform Withdrawal History</h2>
+        </div>
+
+        {% if withdrawals %}
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Amount</th>
+                        <th>M-Pesa</th>
+                        <th>Status</th>
+                        <th>Reference</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                {% for withdrawal in withdrawals %}
+
+                    {% set status = withdrawal.status.value if withdrawal.status.value is defined else withdrawal.status %}
+
+                    <tr>
+
+                        <td>
+                            <strong>
+                                KES {{ "%.2f"|format(withdrawal.amount|float) }}
+                            </strong>
+                        </td>
+
+                        <td>
+                            {{ withdrawal.phone_number }}
+                        </td>
+
+                        <td>
+                            <span class="status {{ status }}">
+                                {{ status }}
+                            </span>
+                        </td>
+
+                        <td>
+                            {{ withdrawal.conversation_id or "—" }}
+                        </td>
+
+                        <td>
+                            {% if withdrawal.created_at %}
+                                {{ withdrawal.created_at.strftime("%d %b %Y, %H:%M") }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+
+                        <td>
+
+                            {% if status in ["processing", "approved"] %}
+
+                                <form
+                                    method="post"
+                                    action="/admin/earnings/{{ withdrawal.id }}/mark-paid"
+                                    class="action-form"
+                                >
+                                    <button
+                                        type="submit"
+                                        class="small-button"
+                                    >
+                                        Mark Paid
+                                    </button>
+                                </form>
+
+                                <form
+                                    method="post"
+                                    action="/admin/earnings/{{ withdrawal.id }}/reject"
+                                    class="action-form"
+                                >
+                                    <button
+                                        type="submit"
+                                        class="small-button danger"
+                                    >
+                                        Reject
+                                    </button>
+                                </form>
+
+                            {% else %}
+
+                                —
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        {% else %}
+
+            <div class="empty">
+                No BeatHub platform withdrawals yet.
+            </div>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+{% endblock %}
