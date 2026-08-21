@@ -1,454 +1,260 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
 
-    <title>BeatHub — Withdrawals</title>
+{% block title %}BeatHub — Admin Withdraw{% endblock %}
 
-    <link rel="stylesheet" href="/static/css/style.css">
+{% block content %}
 
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            background: #09090b;
-            color: #f4f4f5;
-            font-family: Arial, sans-serif;
-        }
-
-        .topbar {
-            min-height: 72px;
-            padding: 0 32px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: #111113;
-            border-bottom: 1px solid #27272a;
-        }
-
-        .brand {
-            color: #fff;
-            text-decoration: none;
-            font-size: 22px;
-            font-weight: 800;
-        }
-
-        .brand span {
-            color: #a1a1aa;
-        }
-
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .topbar-right span {
-            color: #a1a1aa;
-            font-size: 13px;
-        }
-
-        .logout {
-            padding: 9px 14px;
-            border: 1px solid #3f3f46;
-            border-radius: 8px;
-            background: transparent;
-            color: #fff;
-            cursor: pointer;
-        }
-
-        .layout {
-            display: flex;
-            min-height: calc(100vh - 72px);
-        }
-
-        .sidebar {
-            width: 230px;
-            flex-shrink: 0;
-            padding: 24px 16px;
-            background: #111113;
-            border-right: 1px solid #27272a;
-        }
-
-        .sidebar-label {
-            margin: 0 12px 12px;
-            color: #71717a;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: .08em;
-        }
-
-        .sidebar a {
-            display: block;
-            padding: 11px 12px;
-            margin-bottom: 4px;
-            border-radius: 8px;
-            color: #a1a1aa;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .sidebar a:hover,
-        .sidebar a.active {
-            background: #27272a;
-            color: #fff;
-        }
-
-        .main {
-            flex: 1;
-            min-width: 0;
-            padding: 32px;
-        }
-
-        .heading {
-            margin-bottom: 24px;
-        }
-
-        .heading h1 {
-            margin: 0 0 7px;
-            font-size: 30px;
-        }
-
-        .heading p {
-            margin: 0;
-            color: #a1a1aa;
-        }
-
-        .success {
-            margin-bottom: 20px;
-            padding: 12px 14px;
-            border: 1px solid #166534;
-            border-radius: 9px;
-            background: #14251a;
-            color: #86efac;
-        }
-
-        .panel {
-            border: 1px solid #27272a;
-            border-radius: 14px;
-            background: #111113;
-            overflow: hidden;
-        }
-
-        .table-wrap {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 15px 16px;
-            border-bottom: 1px solid #27272a;
-            text-align: left;
-            white-space: nowrap;
-            vertical-align: middle;
-        }
-
-        th {
-            color: #71717a;
-            font-size: 11px;
-            text-transform: uppercase;
-        }
-
-        td {
-            color: #d4d4d8;
-            font-size: 13px;
-        }
-
-        tr:last-child td {
-            border-bottom: 0;
-        }
-
-        .amount {
-            color: #fff;
-            font-weight: 700;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 5px 8px;
-            border-radius: 999px;
-            background: #27272a;
-            color: #d4d4d8;
-            font-size: 11px;
-            text-transform: uppercase;
-        }
-
-        .withdrawal-form {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-        }
-
-        .withdrawal-form select,
-        .withdrawal-form input {
-            padding: 8px 9px;
-            border: 1px solid #3f3f46;
-            border-radius: 7px;
-            background: #18181b;
-            color: #fff;
-            font-size: 12px;
-        }
-
-        .withdrawal-form input {
-            width: 145px;
-        }
-
-        .action {
-            padding: 8px 11px;
-            border: 0;
-            border-radius: 7px;
-            background: #fff;
-            color: #09090b;
-            font-weight: 700;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        .empty {
-            padding: 35px;
-            text-align: center;
-            color: #71717a;
-        }
-
-        @media (max-width: 1100px) {
-            .withdrawal-form {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .withdrawal-form input {
-                width: auto;
-            }
-        }
-
-        @media (max-width: 700px) {
-            .layout {
-                display: block;
-            }
-
-            .sidebar {
-                width: 100%;
-                display: flex;
-                gap: 5px;
-                overflow-x: auto;
-                border-right: 0;
-                border-bottom: 1px solid #27272a;
-            }
-
-            .sidebar-label {
-                display: none;
-            }
-
-            .sidebar a {
-                white-space: nowrap;
-            }
-
-            .main {
-                padding: 20px 16px;
-            }
-
-            .topbar {
-                padding: 0 16px;
-            }
-
-            .topbar-right span {
-                display: none;
-            }
-        }
-    </style>
-</head>
-
-<body>
-
-<header class="topbar">
-
-    <a href="/admin" class="brand">
-        BEAT<span>HUB</span> ADMIN
-    </a>
-
-    <div class="topbar-right">
-
-        <span>{{ current_user.email }}</span>
-
-        <form action="/logout" method="post">
-            <button class="logout" type="submit">
-                Logout
-            </button>
-        </form>
-
+<div class="page-header">
+    <div>
+        <h1>Admin Withdraw</h1>
+        <p>
+            Withdraw BeatHub's platform earnings to M-Pesa.
+        </p>
     </div>
 
-</header>
-
-<div class="layout">
-
-    <aside class="sidebar">
-
-        <div class="sidebar-label">Management</div>
-
-        <a href="/admin">
-            Overview
+    <div>
+        <a href="/admin" class="btn btn-outline">
+            ← Admin Dashboard
         </a>
+    </div>
+</div>
 
-        <a href="/admin/users">
-            Users
-        </a>
 
-        <a href="/admin/content">
-            Content
-        </a>
+{% if request.query_params.get('error') %}
+<div class="alert alert-error">
+    {{ request.query_params.get('error') }}
+</div>
+{% endif %}
 
-        <a href="/admin/sales">
-            Sales
-        </a>
+{% if request.query_params.get('success') %}
+<div class="alert alert-success">
+    {{ request.query_params.get('success') }}
+</div>
+{% endif %}
 
-        <a href="/admin/withdrawals" class="active">
-            Withdrawals
-        </a>
 
-    </aside>
+<div class="dashboard-grid">
 
-    <main class="main">
-
-        <div class="heading">
-            <h1>Withdrawals</h1>
-            <p>Review and process creator payout requests.</p>
+    <div class="card">
+        <div class="card-label">
+            Platform Commission
         </div>
 
-        {% if request.query_params.get('success') %}
-            <div class="success">
-                {{ request.query_params.get('success') }}
-            </div>
-        {% endif %}
+        <div class="card-value">
+            KSh {{ "%.2f"|format(balance.commission_total|float) }}
+        </div>
 
-        <section class="panel">
+        <p class="muted">
+            Total BeatHub commission from completed sales.
+        </p>
+    </div>
 
-            <div class="table-wrap">
 
-                <table>
+    <div class="card">
+        <div class="card-label">
+            Already Withdrawn
+        </div>
 
-                    <thead>
+        <div class="card-value">
+            KSh {{ "%.2f"|format(balance.withdrawn_total|float) }}
+        </div>
 
-                        <tr>
-                            <th>Creator</th>
-                            <th>Amount</th>
-                            <th>Phone</th>
-                            <th>Status</th>
-                            <th>Requested</th>
-                            <th>Action</th>
-                        </tr>
+        <p class="muted">
+            Approved, processing and paid admin withdrawals.
+        </p>
+    </div>
 
-                    </thead>
 
-                    <tbody>
+    <div class="card">
+        <div class="card-label">
+            Pending Withdrawals
+        </div>
 
-                    {% for withdrawal in withdrawals %}
+        <div class="card-value">
+            KSh {{ "%.2f"|format(balance.pending_total|float) }}
+        </div>
 
-                        <tr>
+        <p class="muted">
+            Amount currently reserved by pending requests.
+        </p>
+    </div>
 
-                            <td>
-                                {{ withdrawal.creator_profile_id }}
-                            </td>
 
-                            <td class="amount">
-                                KES {{ "{:,.2f}".format(withdrawal.amount or 0) }}
-                            </td>
+    <div class="card">
+        <div class="card-label">
+            Available Balance
+        </div>
 
-                            <td>
-                                {{ withdrawal.phone_number or '—' }}
-                            </td>
+        <div class="card-value">
+            KSh {{ "%.2f"|format(balance.available_balance|float) }}
+        </div>
 
-                            <td>
-                                <span class="status">
-                                    {{ withdrawal.status.value if withdrawal.status.value else withdrawal.status }}
-                                </span>
-                            </td>
-
-                            <td>
-                                {{ withdrawal.created_at.strftime('%d %b %Y %H:%M') if withdrawal.created_at else '—' }}
-                            </td>
-
-                            <td>
-
-                                <form
-                                    method="post"
-                                    action="/admin/withdrawals/{{ withdrawal.id }}/update"
-                                    class="withdrawal-form"
-                                >
-
-                                    <select name="action" required>
-
-                                        <option value="">
-                                            Action
-                                        </option>
-
-                                        <option value="approve">
-                                            Approve
-                                        </option>
-
-                                        <option value="process">
-                                            Processing
-                                        </option>
-
-                                        <option value="mark_paid">
-                                            Mark Paid
-                                        </option>
-
-                                        <option value="reject">
-                                            Reject
-                                        </option>
-
-                                    </select>
-
-                                    <input
-                                        type="text"
-                                        name="payout_reference"
-                                        placeholder="Payout reference"
-                                    >
-
-                                    <button
-                                        type="submit"
-                                        class="action"
-                                    >
-                                        Update
-                                    </button>
-
-                                </form>
-
-                            </td>
-
-                        </tr>
-
-                    {% else %}
-
-                        <tr>
-                            <td colspan="6" class="empty">
-                                No withdrawal requests yet.
-                            </td>
-                        </tr>
-
-                    {% endfor %}
-
-                    </tbody>
-
-                </table>
-
-            </div>
-
-        </section>
-
-    </main>
+        <p class="muted">
+            Available BeatHub platform funds.
+        </p>
+    </div>
 
 </div>
 
-</body>
-</html>
+
+<div class="card" style="margin-top: 24px;">
+
+    <h2>Withdraw to M-Pesa</h2>
+
+    <p class="muted">
+        This withdraws BeatHub's platform earnings.
+        It does not affect producer balances.
+    </p>
+
+    <form
+        method="post"
+        action="/admin/withdraw"
+        style="max-width: 600px;"
+    >
+
+        <div class="form-group">
+
+            <label for="amount">
+                Amount (KSh)
+            </label>
+
+            <input
+                type="number"
+                id="amount"
+                name="amount"
+                min="1"
+                step="0.01"
+                max="{{ balance.available_balance }}"
+                placeholder="Enter amount"
+                required
+            >
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label for="phone_number">
+                M-Pesa Phone Number
+            </label>
+
+            <input
+                type="tel"
+                id="phone_number"
+                name="phone_number"
+                placeholder="07XXXXXXXX"
+                required
+            >
+
+            <small class="muted">
+                Example: 0712345678
+            </small>
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label for="admin_note">
+                Note (optional)
+            </label>
+
+            <textarea
+                id="admin_note"
+                name="admin_note"
+                rows="3"
+                placeholder="Optional withdrawal note"
+            ></textarea>
+
+        </div>
+
+
+        <button
+            type="submit"
+            class="btn btn-primary"
+            {% if balance.available_balance <= 0 %}
+                disabled
+            {% endif %}
+        >
+            Withdraw to M-Pesa
+        </button>
+
+    </form>
+
+</div>
+
+
+<div class="card" style="margin-top: 24px;">
+
+    <h2>Admin Withdrawal History</h2>
+
+    {% if withdrawals %}
+
+    <div style="overflow-x:auto;">
+
+        <table class="admin-table">
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>M-Pesa</th>
+                    <th>Status</th>
+                    <th>Reference</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+            {% for withdrawal in withdrawals %}
+
+                <tr>
+
+                    <td>
+                        {{ withdrawal.created_at.strftime("%d %b %Y %H:%M") }}
+                    </td>
+
+                    <td>
+                        KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+                    </td>
+
+                    <td>
+                        {{ withdrawal.phone_number }}
+                    </td>
+
+                    <td>
+                        <span class="status status-{{ withdrawal.status.value }}">
+                            {{ withdrawal.status.value|replace("_", " ")|title }}
+                        </span>
+                    </td>
+
+                    <td>
+                        {{ withdrawal.payout_reference or "—" }}
+                    </td>
+
+                    <td>
+                        {{ withdrawal.admin_note or "—" }}
+                    </td>
+
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    {% else %}
+
+    <p class="muted">
+        No admin withdrawals yet.
+    </p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
