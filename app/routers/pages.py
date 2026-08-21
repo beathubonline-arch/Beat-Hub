@@ -190,10 +190,20 @@ def terms(
 
 
 # ----------------------------------------------------------------------
-# PUBLIC CREATOR PROFILE
+# PUBLIC CREATOR PROFILE / PUBLIC STORE
+# ----------------------------------------------------------------------
+#
+# Both URLs intentionally use the same page:
+#
+# /profile/{slug}
+# /store/{slug}
+#
+# This keeps the existing profile URL working while also supporting
+# the public store URL used by the producer dashboard.
 # ----------------------------------------------------------------------
 
 @router.get("/profile/{slug}")
+@router.get("/store/{slug}")
 def public_profile(
     request: Request,
     slug: str,
