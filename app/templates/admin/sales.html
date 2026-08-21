@@ -1,30 +1,490 @@
-{% extends "admin/base_admin.html" %}
-{% block admin_content %}
-<h1 style="font-size: 26px;">Sales &amp; Transactions</h1>
+{% extends "base.html" %}
 
-<div style="display:flex; gap:10px; margin: 16px 0;">
-  <a href="/admin/sales" class="btn {{ 'btn-primary' if not status else 'btn-outline' }}">All</a>
-  <a href="/admin/sales?status=completed" class="btn {{ 'btn-primary' if status=='completed' else 'btn-outline' }}">Completed</a>
-  <a href="/admin/sales?status=pending" class="btn {{ 'btn-primary' if status=='pending' else 'btn-outline' }}">Pending</a>
-  <a href="/admin/sales?status=failed" class="btn {{ 'btn-primary' if status=='failed' else 'btn-outline' }}">Failed</a>
-  <a href="/admin/sales?status=rejected" class="btn {{ 'btn-primary' if status=='rejected' else 'btn-outline' }}">Rejected</a>
+{% block title %}Sales — BeatHub Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+    .admin-page {
+        padding: 32px 0 60px;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 20px;
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+    }
+
+    .admin-header h1 {
+        margin: 0;
+        font-size: 32px;
+    }
+
+    .admin-header p {
+        margin: 8px 0 0;
+        color: #71717a;
+    }
+
+    .admin-nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+    }
+
+    .admin-nav a {
+        text-decoration: none;
+        padding: 9px 14px;
+        border: 1px solid #e4e4e7;
+        border-radius: 8px;
+        color: #3f3f46;
+        background: #fff;
+        font-size: 14px;
+    }
+
+    .admin-nav a:hover,
+    .admin-nav a.active {
+        background: #18181b;
+        color: #fff;
+        border-color: #18181b;
+    }
+
+    .sales-card {
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 14px;
+        overflow: hidden;
+    }
+
+    .sales-toolbar {
+        padding: 18px;
+        border-bottom: 1px solid #e4e4e7;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .sales-toolbar h2 {
+        margin: 0;
+        font-size: 18px;
+    }
+
+    .filter-form {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .filter-form select {
+        padding: 10px 12px;
+        border: 1px solid #d4d4d8;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 14px;
+    }
+
+    .filter-form button {
+        padding: 10px 15px;
+        border: 0;
+        border-radius: 8px;
+        background: #18181b;
+        color: #fff;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .filter-form button:hover {
+        opacity: .9;
+    }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 900px;
+    }
+
+    th {
+        padding: 13px 16px;
+        text-align: left;
+        background: #fafafa;
+        border-bottom: 1px solid #e4e4e7;
+        color: #52525b;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        white-space: nowrap;
+    }
+
+    td {
+        padding: 15px 16px;
+        border-bottom: 1px solid #f4f4f5;
+        vertical-align: middle;
+        font-size: 14px;
+    }
+
+    tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .order-id {
+        font-family: monospace;
+        font-size: 12px;
+        color: #71717a;
+    }
+
+    .customer {
+        font-weight: 600;
+        color: #18181b;
+    }
+
+    .muted {
+        color: #71717a;
+    }
+
+    .amount {
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .status {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: capitalize;
+        white-space: nowrap;
+    }
+
+    .status-completed {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-pending {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .status-failed,
+    .status-rejected {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .status-cancelled {
+        background: #f4f4f5;
+        color: #52525b;
+    }
+
+    .status-default {
+        background: #e4e4e7;
+        color: #3f3f46;
+    }
+
+    .empty {
+        padding: 60px 20px;
+        text-align: center;
+        color: #71717a;
+    }
+
+    .empty strong {
+        display: block;
+        color: #27272a;
+        font-size: 17px;
+        margin-bottom: 6px;
+    }
+
+    .success-message,
+    .error-message {
+        margin-bottom: 20px;
+        padding: 12px 15px;
+        border-radius: 9px;
+        font-size: 14px;
+    }
+
+    .success-message {
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
+
+    .error-message {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+
+    @media (max-width: 700px) {
+        .admin-page {
+            padding-top: 20px;
+        }
+
+        .admin-header h1 {
+            font-size: 26px;
+        }
+
+        .sales-toolbar {
+            align-items: stretch;
+        }
+
+        .filter-form {
+            width: 100%;
+        }
+
+        .filter-form select {
+            flex: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="admin-page">
+
+    <div class="admin-header">
+        <div>
+            <h1>Sales</h1>
+            <p>Monitor BeatHub orders, payments, and completed sales.</p>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a href="/admin">Overview</a>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/content">Content</a>
+        <a href="/admin/sales" class="active">Sales</a>
+        <a href="/admin/withdrawals">Withdrawals</a>
+    </nav>
+
+    {% if request.query_params.get('success') %}
+        <div class="success-message">
+            {{ request.query_params.get('success') }}
+        </div>
+    {% endif %}
+
+    {% if request.query_params.get('error') %}
+        <div class="error-message">
+            {{ request.query_params.get('error') }}
+        </div>
+    {% endif %}
+
+    <section class="sales-card">
+
+        <div class="sales-toolbar">
+
+            <h2>Order History</h2>
+
+            <form
+                method="get"
+                action="/admin/sales"
+                class="filter-form"
+            >
+
+                <select name="status">
+                    <option value="" {% if not status %}selected{% endif %}>
+                        All statuses
+                    </option>
+
+                    <option
+                        value="COMPLETED"
+                        {% if status|lower == 'completed' %}selected{% endif %}
+                    >
+                        Completed
+                    </option>
+
+                    <option
+                        value="PENDING"
+                        {% if status|lower == 'pending' %}selected{% endif %}
+                    >
+                        Pending
+                    </option>
+
+                    <option
+                        value="FAILED"
+                        {% if status|lower == 'failed' %}selected{% endif %}
+                    >
+                        Failed
+                    </option>
+
+                    <option
+                        value="REJECTED"
+                        {% if status|lower == 'rejected' %}selected{% endif %}
+                    >
+                        Rejected
+                    </option>
+
+                </select>
+
+                <button type="submit">
+                    Filter
+                </button>
+
+            </form>
+
+        </div>
+
+        {% if orders %}
+
+            <div class="table-wrap">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th>Order</th>
+                            <th>Customer</th>
+                            <th>Track</th>
+                            <th>Gross</th>
+                            <th>Commission</th>
+                            <th>Creator Net</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                    {% for order in orders %}
+
+                        <tr>
+
+                            <td>
+                                <div class="order-id">
+                                    {{ order.id }}
+                                </div>
+                            </td>
+
+                            <td>
+                                {% if order.buyer %}
+                                    <div class="customer">
+                                        {{ order.buyer.email }}
+                                    </div>
+                                {% elif order.user %}
+                                    <div class="customer">
+                                        {{ order.user.email }}
+                                    </div>
+                                {% else %}
+                                    <span class="muted">
+                                        Unknown customer
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if order.track %}
+                                    {{ order.track.title }}
+                                {% else %}
+                                    <span class="muted">
+                                        Track unavailable
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <td class="amount">
+                                {% if order.gross_amount is not none %}
+                                    KES {{ "%.2f"|format(order.gross_amount|float) }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if order.commission_amount is not none %}
+                                    KES {{ "%.2f"|format(order.commission_amount|float) }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td class="amount">
+                                {% if order.net_amount is not none %}
+                                    KES {{ "%.2f"|format(order.net_amount|float) }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td>
+
+                                {% set order_status = order.status.value if order.status.value is defined else order.status %}
+                                {% set status_class = order_status|string|lower %}
+
+                                {% if status_class == 'completed' %}
+                                    <span class="status status-completed">
+                                        Completed
+                                    </span>
+
+                                {% elif status_class == 'pending' %}
+                                    <span class="status status-pending">
+                                        Pending
+                                    </span>
+
+                                {% elif status_class == 'failed' %}
+                                    <span class="status status-failed">
+                                        Failed
+                                    </span>
+
+                                {% elif status_class == 'rejected' %}
+                                    <span class="status status-rejected">
+                                        Rejected
+                                    </span>
+
+                                {% elif status_class == 'cancelled' %}
+                                    <span class="status status-cancelled">
+                                        Cancelled
+                                    </span>
+
+                                {% else %}
+                                    <span class="status status-default">
+                                        {{ order_status }}
+                                    </span>
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+                                <span class="muted">
+                                    {% if order.created_at %}
+                                        {{ order.created_at.strftime("%d %b %Y, %H:%M") }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </span>
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        {% else %}
+
+            <div class="empty">
+                <strong>No sales found</strong>
+                There are no orders matching the selected filter.
+            </div>
+
+        {% endif %}
+
+    </section>
+
 </div>
 
-<table class="data-table">
-  <thead><tr><th>Order</th><th>Buyer</th><th>Item</th><th>Gross</th><th>Commission</th><th>Net</th><th>Status</th><th>Date</th></tr></thead>
-  <tbody>
-    {% for o in orders %}
-      <tr>
-        <td>{{ o.order_number }}</td>
-        <td>{{ o.buyer.email }}</td>
-        <td>{{ o.track.title if o.track else (o.album.title if o.album else '—') }}</td>
-        <td>KSh {{ '%.2f'|format(o.gross_amount) }}</td>
-        <td>KSh {{ '%.2f'|format(o.commission_amount) }}</td>
-        <td>KSh {{ '%.2f'|format(o.net_amount) }}</td>
-        <td>{{ o.status.value }}</td>
-        <td>{{ o.created_at.strftime('%d %b %Y %H:%M') }}</td>
-      </tr>
-    {% else %}<tr><td colspan="8" class="sub">No transactions found.</td></tr>{% endfor %}
-  </tbody>
-</table>
 {% endblock %}
