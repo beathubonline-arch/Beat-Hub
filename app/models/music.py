@@ -215,9 +215,6 @@ class Track(Base):
             SalesModel,
             name="salesmodel",
             native_enum=False,
-            values_callable=lambda enum_cls: [
-                member.value for member in enum_cls
-            ],
         ),
         nullable=False,
         default=SalesModel.NON_EXCLUSIVE,
