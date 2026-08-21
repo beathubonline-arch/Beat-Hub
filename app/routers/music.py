@@ -1,3 +1,27 @@
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.music import Album, Track
+from app.models.profile import Profile
+from app.models.user import User
+from app.services.storage import r2_url
+from app.utils.deps import get_optional_user
+
+
+router = APIRouter(
+    tags=["music"],
+)
+
+templates = Jinja2Templates(
+    directory="app/templates",
+)
+
+
 # ============================================================
 # PUBLIC CREATOR STORE
 # ============================================================
@@ -12,7 +36,8 @@ def creator_store(
     ),
 ):
     """
-    Public storefront for a creator (producer / DJ / artist).
+    Public storefront for a creator
+    (producer / DJ / artist).
     """
 
     profile = (
@@ -22,15 +47,10 @@ def creator_store(
     )
 
     if not profile:
-
         raise HTTPException(
             status_code=404,
             detail="Creator not found.",
         )
-
-    # --------------------------------------------------------
-    # Published tracks / albums only
-    # --------------------------------------------------------
 
     tracks = (
         db.query(Track)
@@ -56,14 +76,9 @@ def creator_store(
         .all()
     )
 
-    # --------------------------------------------------------
-    # Avatar
-    # --------------------------------------------------------
-
     avatar_url = None
 
-    if profile.avatar_path:
-
+    if getattr(profile, "avatar_path", None):
         try:
             avatar_url = r2_url(
                 profile.avatar_path,
