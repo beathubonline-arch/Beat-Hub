@@ -1,74 +1,28 @@
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
-# ============================================================
-# CREATOR WITHDRAWAL STATUS
-# ============================================================
-
 class WithdrawalStatus(str, enum.Enum):
-    """
-    IMPORTANT:
-
-    The PostgreSQL database already stores the enum MEMBERS
-    as uppercase names:
-
-        PENDING
-        APPROVED
-        PROCESSING
-        PAID
-        REJECTED
-
-    SQLAlchemy Enum stores the enum member names by default.
-
-    Therefore DO NOT change these to lowercase enum values.
-    """
-
     PENDING = "pending"
     APPROVED = "approved"
     PROCESSING = "processing"
     PAID = "paid"
     REJECTED = "rejected"
 
-
-# ============================================================
-# ADMIN WITHDRAWAL STATUS
-# ============================================================
-
-class AdminWithdrawalStatus(str, enum.Enum):
-    """
-    Status for BeatHub/platform withdrawals.
-
-    Kept as a separate enum because the admin withdrawal table
-    was created separately in the database.
-    """
-
-    PENDING = "pending"
-    APPROVED = "approved"
-    PROCESSING = "processing"
-    PAID = "paid"
-    REJECTED = "rejected"
-
-
-# ============================================================
-# CREATOR LEDGER
-# ============================================================
 
 class CreatorLedgerEntry(Base):
     """
-    Append-only financial ledger for creators.
+    Append-only creator ledger.
 
-    Positive:
-        money credited to creator.
-
-    Negative:
-        money deducted from creator.
+    Positive amount  = creator credit
+    Negative amount  = creator withdrawal/debit
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -90,17 +44,15 @@ class CreatorLedgerEntry(Base):
         String(36),
         ForeignKey("orders.id"),
         nullable=True,
-        index=True,
     )
 
     withdrawal_request_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("withdrawal_requests.id"),
         nullable=True,
-        index=True,
     )
 
-    amount: Mapped[Numeric] = mapped_column(
+    amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
@@ -117,11 +69,17 @@ class CreatorLedgerEntry(Base):
     )
 
 
-# ============================================================
-# CREATOR WITHDRAWAL REQUEST
-# ============================================================
-
 class WithdrawalRequest(Base):
+    """
+    Creator withdrawal request.
+
+    IMPORTANT:
+    status is deliberately VARCHAR/String instead of PostgreSQL ENUM.
+
+    This prevents the previous PostgreSQL problem where the database
+    expected PENDING while the application sent pending.
+    """
+
     __tablename__ = "withdrawal_requests"
 
     id: Mapped[str] = mapped_column(
@@ -137,7 +95,7 @@ class WithdrawalRequest(Base):
         index=True,
     )
 
-    amount: Mapped[Numeric] = mapped_column(
+    amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
@@ -147,30 +105,10 @@ class WithdrawalRequest(Base):
         nullable=False,
     )
 
-    # IMPORTANT:
-    #
-    # No values_callable here.
-    #
-    # SQLAlchemy will use the enum member names:
-    #
-    # PENDING
-    # APPROVED
-    # PROCESSING
-    # PAID
-    # REJECTED
-    #
-    # This matches the existing PostgreSQL enum.
-
-    status: Mapped[WithdrawalStatus] = mapped_column(
-        Enum(
-            WithdrawalStatus,
-            name="withdrawalstatus",
-            native_enum=True,
-            create_constraint=False,
-            validate_strings=True,
-        ),
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default=WithdrawalStatus.PENDING.value,
         nullable=False,
-        default=WithdrawalStatus.PENDING,
         index=True,
     )
 
@@ -204,19 +142,32 @@ class WithdrawalRequest(Base):
 
     creator_profile = relationship(
         "Profile",
-        lazy="joined",
+        foreign_keys=[creator_profile_id],
     )
 
 
-# ============================================================
-# ADMIN / PLATFORM WITHDRAWAL
-# ============================================================
+class AdminWithdrawalStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    PROCESSING = "processing"
+    PAID = "paid"
+    REJECTED = "rejected"
+
 
 class AdminWithdrawal(Base):
     """
-    BeatHub's own platform withdrawal.
+    Platform/administrator withdrawal.
 
     This is separate from creator withdrawals.
+
+    Creator money:
+        withdrawal_requests
+
+    BeatHub/platform money:
+        admin_withdrawals
+
+    The admin withdrawal is intended for withdrawing the platform's
+    accumulated commission to the administrator's M-Pesa number.
     """
 
     __tablename__ = "admin_withdrawals"
@@ -227,7 +178,7 @@ class AdminWithdrawal(Base):
         default=lambda: str(uuid.uuid4()),
     )
 
-    amount: Mapped[Numeric] = mapped_column(
+    amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
@@ -237,16 +188,10 @@ class AdminWithdrawal(Base):
         nullable=False,
     )
 
-    status: Mapped[AdminWithdrawalStatus] = mapped_column(
-        Enum(
-            AdminWithdrawalStatus,
-            name="adminwithdrawalstatus",
-            native_enum=True,
-            create_constraint=False,
-            validate_strings=True,
-        ),
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default=AdminWithdrawalStatus.PENDING.value,
         nullable=False,
-        default=AdminWithdrawalStatus.PENDING,
         index=True,
     )
 
