@@ -1178,4 +1178,3 @@ return RedirectResponse(
     ),
     status_code=303,
 )
-```
