@@ -1,258 +1,75 @@
-{% extends "base.html" %}
+{% extends "base.html" %} {% block title %}Dashboard — BeatHub{% endblock %} {% block content %}
+{# ==================================================== #} {# HEADER #} {# ==================================================== #}
+PRODUCER DASHBOARD
+Welcome back, {{ current_user.username if current_user.username else current_user.email }}
+{% if store_url %}
+View your public store →
 
-{% block title %}Producer Dashboard{% endblock %}
+{% endif %}
+Upload Track
+New Album
+Withdraw Funds
+{# ==================================================== #} {# STATS GRID #} {# ==================================================== #}
+Available
+KSh {{ "%.2f"|format(available_balance) }}
+Pending Withdrawal
+KSh {{ "%.2f"|format(pending_withdrawal) }}
+Net Earnings
+KSh {{ "%.2f"|format(net_earnings) }}
+Total Sales
+{{ total_sales }}
+Tracks
+{{ track_count }}
+Albums
+{{ album_count }}
+{# ==================================================== #} {# TRACKS #} {# ==================================================== #}
+YOUR TRACKS
++ Add track
+{% if tracks %}
+{% for track in tracks %}
+{% if track.cover_art_path %}{{ track.title }}{% else %}
+{% endif %}
+{{ track.title }}
+{% if track.genre %}{{ track.genre }}{% endif %} {% if track.bpm %} · {{ track.bpm }} BPM{% endif %}
+KSh {{ "%.2f"|format(track.price) }}
+{% if track.is_sold %} Sold {% else %} Available {% endif %}
+{% endfor %}
+{% if track_total_pages > 1 %}
+Page {{ track_page }} of {{ track_total_pages }}
 
-{% block content %}
-<div class="dashboard">
+{% endif %} {% else %}
+You haven't uploaded any tracks yet. Upload your first track →
 
-    {# ==================================================== #}
-    {# FLASH MESSAGES                                       #}
-    {# ==================================================== #}
+{% endif %} {# ==================================================== #} {# ALBUMS #} {# ==================================================== #}
+YOUR ALBUMS
++ New album
+{% if albums %}
+{% for album in albums %}
+{% if album.artwork_path %}{{ album.title }}{% else %}
+{% endif %}
+{{ album.title }}
+{% endfor %}
+{% else %}
+No albums yet. Create one →
 
-    {% if success %}
-    <div class="alert alert-success">{{ success }}</div>
-    {% endif %}
+{% endif %} {# ==================================================== #} {# RECENT ORDERS #} {# ==================================================== #}
+RECENT ORDERS
+{% if recent_orders %}
+{% for order in recent_orders %} {% endfor %}
+Track	Gross	Commission	Net	Date
+{{ order.track.title if order.track else "—" }}	KSh {{ "%.2f"|format(order.gross_amount) }}	KSh {{ "%.2f"|format(order.commission_amount) }}	KSh {{ "%.2f"|format(order.net_amount) }}	{{ order.completed_at.strftime("%b %d, %Y") if order.completed_at else "—" }}
+{% else %}
+No completed orders yet.
 
-    {% if error %}
-    <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
+{% endif %} {# ==================================================== #} {# WITHDRAWAL HISTORY #} {# ==================================================== #}
+WITHDRAWAL HISTORY
+New withdrawal
+{% if withdrawal_requests %}
+{% for w in withdrawal_requests %} {% endfor %}
+Amount	Phone	Status	Requested
+KSh {{ "%.2f"|format(w.amount) }}	{{ w.phone_number }}	{% if w.status == "paid" %} Paid {% elif w.status == "pending" %} Pending {% else %} {{ w.status|capitalize }} {% endif %}	{{ w.created_at.strftime("%b %d, %Y") if w.created_at else "—" }}
+{% else %}
+No withdrawal requests yet.
 
-    {% if request.query_params.get('success') %}
-    <div class="alert alert-success">{{ request.query_params.get('success') }}</div>
-    {% endif %}
-
-    {% if request.query_params.get('error') %}
-    <div class="alert alert-error">{{ request.query_params.get('error') }}</div>
-    {% endif %}
-
-    {# ==================================================== #}
-    {# HEADER                                                #}
-    {# ==================================================== #}
-
-    <div class="dashboard-header">
-        <div>
-            <h1>Welcome back, {{ current_user.username if current_user.username else current_user.email }}</h1>
-            {% if store_url %}
-            <p><a href="{{ store_url }}" target="_blank">View your public store &rarr;</a></p>
-            {% endif %}
-        </div>
-
-        <div class="dashboard-actions">
-            <a href="/dashboard/upload" class="btn btn-primary">Upload Track</a>
-            <a href="/dashboard/albums/new" class="btn btn-secondary">New Album</a>
-            <a href="/dashboard/withdraw" class="btn btn-secondary">Withdraw Funds</a>
-        </div>
-    </div>
-
-    {# ==================================================== #}
-    {# STATS SUMMARY                                         #}
-    {# ==================================================== #}
-
-    <div class="stats-grid">
-
-        <div class="stat-card">
-            <span class="stat-label">Available Balance</span>
-            <span class="stat-value">KES {{ "%.2f"|format(available_balance) }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Pending Withdrawal</span>
-            <span class="stat-value">KES {{ "%.2f"|format(pending_withdrawal) }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Total Sales</span>
-            <span class="stat-value">{{ total_sales }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Gross Revenue</span>
-            <span class="stat-value">KES {{ "%.2f"|format(gross_revenue) }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Platform Commission</span>
-            <span class="stat-value">KES {{ "%.2f"|format(platform_commission) }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Net Earnings</span>
-            <span class="stat-value">KES {{ "%.2f"|format(net_earnings) }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Tracks</span>
-            <span class="stat-value">{{ track_count }}</span>
-        </div>
-
-        <div class="stat-card">
-            <span class="stat-label">Albums</span>
-            <span class="stat-value">{{ album_count }}</span>
-        </div>
-
-    </div>
-
-    {# ==================================================== #}
-    {# CATALOG - TRACKS                                      #}
-    {# ==================================================== #}
-
-    <div class="dashboard-section">
-        <div class="section-header">
-            <h2>Your Tracks ({{ track_total_count }})</h2>
-        </div>
-
-        {% if tracks %}
-        <div class="track-list">
-            {% for track in tracks %}
-            <div class="track-row">
-                {% if track.cover_art_path %}
-                <img src="/{{ track.cover_art_path }}" alt="{{ track.title }}" class="track-thumb">
-                {% endif %}
-
-                <div class="track-info">
-                    <span class="track-title">{{ track.title }}</span>
-                    {% if track.genre %}<span class="track-genre">{{ track.genre }}</span>{% endif %}
-                    {% if track.bpm %}<span class="track-bpm">{{ track.bpm }} BPM</span>{% endif %}
-                </div>
-
-                <div class="track-price">
-                    KES {{ "%.2f"|format(track.price) }}
-                </div>
-
-                <div class="track-status">
-                    {% if track.is_sold %}
-                        <span class="badge badge-sold">Sold</span>
-                    {% else %}
-                        <span class="badge badge-available">Available</span>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-
-        {% if track_total_pages > 1 %}
-        <div class="pagination">
-            <span>Page {{ track_page }} of {{ track_total_pages }}</span>
-        </div>
-        {% endif %}
-
-        {% else %}
-        <p class="empty-state">You haven't uploaded any tracks yet. <a href="/dashboard/upload">Upload your first track</a>.</p>
-        {% endif %}
-    </div>
-
-    {# ==================================================== #}
-    {# CATALOG - ALBUMS                                      #}
-    {# ==================================================== #}
-
-    <div class="dashboard-section">
-        <div class="section-header">
-            <h2>Your Albums ({{ album_count }})</h2>
-        </div>
-
-        {% if albums %}
-        <div class="album-grid">
-            {% for album in albums %}
-            <a href="/album/{{ album.slug }}" class="album-card">
-                {% if album.artwork_path %}
-                <img src="/{{ album.artwork_path }}" alt="{{ album.title }}">
-                {% endif %}
-                <span class="album-title">{{ album.title }}</span>
-            </a>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p class="empty-state">No albums yet. <a href="/dashboard/albums/new">Create one</a>.</p>
-        {% endif %}
-    </div>
-
-    {# ==================================================== #}
-    {# RECENT ORDERS                                         #}
-    {# ==================================================== #}
-
-    <div class="dashboard-section">
-        <div class="section-header">
-            <h2>Recent Orders</h2>
-        </div>
-
-        {% if recent_orders %}
-        <table class="orders-table">
-            <thead>
-                <tr>
-                    <th>Track</th>
-                    <th>Gross</th>
-                    <th>Commission</th>
-                    <th>Net</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for order in recent_orders %}
-                <tr>
-                    <td>{{ order.track.title if order.track else "—" }}</td>
-                    <td>KES {{ "%.2f"|format(order.gross_amount) }}</td>
-                    <td>KES {{ "%.2f"|format(order.commission_amount) }}</td>
-                    <td>KES {{ "%.2f"|format(order.net_amount) }}</td>
-                    <td>{{ order.completed_at.strftime("%b %d, %Y") if order.completed_at else "—" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="empty-state">No completed orders yet.</p>
-        {% endif %}
-    </div>
-
-    {# ==================================================== #}
-    {# WITHDRAWAL HISTORY                                    #}
-    {# ==================================================== #}
-
-    <div class="dashboard-section">
-        <div class="section-header">
-            <h2>Withdrawal History</h2>
-            <a href="/dashboard/withdraw" class="btn btn-sm">New Withdrawal</a>
-        </div>
-
-        {% if withdrawal_requests %}
-        <table class="orders-table">
-            <thead>
-                <tr>
-                    <th>Amount</th>
-                    <th>Phone</th>
-                    <th>Status</th>
-                    <th>Requested</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for w in withdrawal_requests %}
-                <tr>
-                    <td>KES {{ "%.2f"|format(w.amount) }}</td>
-                    <td>{{ w.phone_number }}</td>
-                    <td><span class="badge badge-{{ w.status }}">{{ w.status|capitalize }}</span></td>
-                    <td>{{ w.created_at.strftime("%b %d, %Y") if w.created_at else "—" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="empty-state">No withdrawal requests yet.</p>
-        {% endif %}
-    </div>
-
-    {# ==================================================== #}
-    {# SOCIAL LINKS                                          #}
-    {# ==================================================== #}
-
-    {% if youtube_url or discord_url %}
-    <div class="dashboard-section social-links">
-        {% if youtube_url %}
-        <a href="{{ youtube_url }}" target="_blank">YouTube</a>
-        {% endif %}
-        {% if discord_url %}
-        <a href="{{ discord_url }}" target="_blank">Discord</a>
-        {% endif %}
-    </div>
-    {% endif %}
-
-</div>
+{% endif %}
 {% endblock %}
