@@ -21,6 +21,8 @@ router = APIRouter(tags=["checkout"])
 
 templates = Jinja2Templates(directory="app/templates")
 
+COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+
 
 # ======================================================================
 # CONTEXT
@@ -45,36 +47,42 @@ def page_context(
 # ======================================================================
 # TRACK AVAILABILITY
 # ======================================================================
-#
-# DO NOT use track.is_available.
-#
-# Track has:
-#
-#   is_published
-#   is_sold
-#   sales_model
-#
-# Availability is calculated from those real fields.
-#
-# Rules:
-#
-# NON-EXCLUSIVE:
-#     published = available
-#     even if is_sold == True
-#
-# EXCLUSIVE:
-#     published AND is_sold == False = available
-#     published AND is_sold == True  = unavailable
-# ======================================================================
 
 def track_is_available(track: Track) -> bool:
+    """
+    Determines whether a track can currently be purchased.
+
+    Rules:
+
+    NON-EXCLUSIVE
+        Published = available.
+        It can be purchased multiple times.
+
+    EXCLUSIVE
+        Published + not sold = available.
+        Once sold, it is unavailable.
+
+    This deliberately does NOT use track.is_available because
+    Track does not have that database field.
+    """
+
     if not track:
         return False
 
-    if not bool(getattr(track, "is_published", False)):
+    if not bool(
+        getattr(
+            track,
+            "is_published",
+            False,
+        )
+    ):
         return False
 
-    sales_model = getattr(track, "sales_model", None)
+    sales_model = getattr(
+        track,
+        "sales_model",
+        None,
+    )
 
     sales_model_value = getattr(
         sales_model,
@@ -87,15 +95,19 @@ def track_is_available(track: Track) -> bool:
     ).strip().lower()
 
     is_exclusive = (
-        sales_model_value == SalesModel.EXCLUSIVE.value
+        sales_model_value
+        == SalesModel.EXCLUSIVE.value
     )
 
     if is_exclusive:
         return not bool(
-            getattr(track, "is_sold", False)
+            getattr(
+                track,
+                "is_sold",
+                False,
+            )
         )
 
-    # Non-exclusive tracks can be sold repeatedly.
     return True
 
 
@@ -107,9 +119,12 @@ def get_track(
     db: Session,
     slug: str,
 ) -> Track | None:
+
     return (
         db.query(Track)
-        .filter(Track.slug == slug)
+        .filter(
+            Track.slug == slug
+        )
         .first()
     )
 
@@ -137,7 +152,7 @@ def checkout_page(
         )
 
     # --------------------------------------------------------------
-    # Creator cannot purchase their own track.
+    # Creator cannot purchase own track
     # --------------------------------------------------------------
 
     profile = getattr(
@@ -162,7 +177,7 @@ def checkout_page(
         )
 
     # --------------------------------------------------------------
-    # Server-side availability check.
+    # Availability
     # --------------------------------------------------------------
 
     if not track_is_available(track):
@@ -186,7 +201,7 @@ def checkout_page(
 
 
 # ======================================================================
-# START CHECKOUT / M-PESA STK PUSH
+# START CHECKOUT
 # ======================================================================
 
 @router.post("/checkout/track/{slug}")
@@ -213,7 +228,7 @@ async def checkout_submit(
         )
 
     # --------------------------------------------------------------
-    # 2. PREVENT CREATOR FROM BUYING OWN TRACK
+    # 2. CREATOR CANNOT BUY OWN TRACK
     # --------------------------------------------------------------
 
     profile = getattr(
@@ -238,7 +253,7 @@ async def checkout_submit(
         )
 
     # --------------------------------------------------------------
-    # 3. SERVER IS THE AUTHORITY ON AVAILABILITY
+    # 3. SERVER-SIDE AVAILABILITY
     # --------------------------------------------------------------
 
     if not track_is_available(track):
@@ -267,11 +282,14 @@ async def checkout_submit(
     if price <= Decimal("0"):
         raise HTTPException(
             status_code=400,
-            detail="This track cannot be purchased at its current price.",
+            detail=(
+                "This track cannot be purchased "
+                "at its current price."
+            ),
         )
 
     # --------------------------------------------------------------
-    # 5. CALCULATE PLATFORM SPLIT
+    # 5. CALCULATE SPLIT
     # --------------------------------------------------------------
 
     split = calculate_split(
@@ -279,23 +297,31 @@ async def checkout_submit(
     )
 
     gross_amount = Decimal(
-        str(split["gross_amount"])
+        str(
+            split["gross_amount"]
+        )
     )
 
     commission_amount = Decimal(
-        str(split["commission_amount"])
+        str(
+            split["commission_amount"]
+        )
     )
 
     net_amount = Decimal(
-        str(split["net_amount"])
+        str(
+            split["net_amount"]
+        )
     )
 
     commission_percent = Decimal(
-        str(split["commission_percent"])
+        str(
+            split["commission_percent"]
+        )
     )
 
     # --------------------------------------------------------------
-    # 6. NORMALIZE PHONE NUMBER
+    # 6. NORMALIZE PHONE
     # --------------------------------------------------------------
 
     try:
@@ -305,20 +331,7 @@ async def checkout_submit(
             )
         )
     except Exception:
-        return templates.TemplateResponse(
-            request,
-            "checkout.html",
-            page_context(
-                request,
-                user,
-                track=track,
-                error=(
-                    "Please enter a valid Kenyan M-Pesa "
-                    "phone number."
-                ),
-            ),
-            status_code=400,
-        )
+        normalized_phone = None
 
     if not normalized_phone:
         return templates.TemplateResponse(
@@ -329,8 +342,8 @@ async def checkout_submit(
                 user,
                 track=track,
                 error=(
-                    "Please enter a valid Kenyan M-Pesa "
-                    "phone number."
+                    "Please enter a valid Kenyan "
+                    "M-Pesa phone number."
                 ),
             ),
             status_code=400,
@@ -371,6 +384,7 @@ async def checkout_submit(
 
     try:
         db.flush()
+
     except Exception:
         db.rollback()
 
@@ -390,10 +404,11 @@ async def checkout_submit(
         )
 
     # --------------------------------------------------------------
-    # 8. INITIATE M-PESA STK PUSH
+    # 8. M-PESA STK PUSH
     # --------------------------------------------------------------
 
     try:
+
         stk_response = (
             await mpesa.initiate_stk_push(
                 phone_number=normalized_phone,
@@ -410,6 +425,7 @@ async def checkout_submit(
         )
 
     except mpesa.MpesaError as exc:
+
         order.status = OrderStatus.FAILED
 
         db.commit()
@@ -426,7 +442,13 @@ async def checkout_submit(
             status_code=400,
         )
 
-    except Exception:
+    except Exception as exc:
+
+        print(
+            "[BeatHub] STK error:",
+            repr(exc),
+        )
+
         order.status = OrderStatus.FAILED
 
         db.commit()
@@ -440,21 +462,24 @@ async def checkout_submit(
                 track=track,
                 error=(
                     "M-Pesa could not be started. "
-                    "Please check the phone number and try again."
+                    "Please check the phone number "
+                    "and try again."
                 ),
             ),
             status_code=400,
         )
 
     # --------------------------------------------------------------
-    # 9. VALIDATE STK RESPONSE
+    # 9. VALIDATE RESPONSE
     # --------------------------------------------------------------
 
     if not isinstance(
         stk_response,
         dict,
     ):
+
         order.status = OrderStatus.FAILED
+
         db.commit()
 
         return templates.TemplateResponse(
@@ -484,7 +509,9 @@ async def checkout_submit(
     )
 
     if not checkout_request_id:
+
         order.status = OrderStatus.FAILED
+
         db.commit()
 
         error_message = (
@@ -513,7 +540,7 @@ async def checkout_submit(
         )
 
     # --------------------------------------------------------------
-    # 10. SAVE PAYMENT TRANSACTION
+    # 10. SAVE PAYMENT
     # --------------------------------------------------------------
 
     payment = PaymentTransaction(
@@ -527,14 +554,37 @@ async def checkout_submit(
 
     db.add(payment)
 
-    db.commit()
+    try:
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        return templates.TemplateResponse(
+            request,
+            "checkout.html",
+            page_context(
+                request,
+                user,
+                track=track,
+                error=(
+                    "The payment was started, "
+                    "but BeatHub could not save the "
+                    "payment record. Please contact support "
+                    "before making another payment."
+                ),
+            ),
+            status_code=500,
+        )
 
     # --------------------------------------------------------------
-    # 11. SEND BUYER TO ORDER STATUS PAGE
+    # 11. GO TO STATUS PAGE
     # --------------------------------------------------------------
 
     return RedirectResponse(
-        url=f"/orders/{order.id}/status",
+        url=(
+            f"/orders/{order.id}/status"
+        ),
         status_code=303,
     )
 
@@ -588,18 +638,24 @@ def order_status_api(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    order = db.get(
-        Order,
-        order_id,
+    """
+    Polling endpoint.
+
+    IMPORTANT:
+    Ownership/security is preserved.
+    A buyer can only inspect their own order.
+    """
+
+    order = (
+        db.query(Order)
+        .filter(
+            Order.id == order_id,
+            Order.buyer_id == user.id,
+        )
+        .first()
     )
 
     if not order:
-        raise HTTPException(
-            status_code=404,
-            detail="Order not found.",
-        )
-
-    if order.buyer_id != user.id:
         raise HTTPException(
             status_code=404,
             detail="Order not found.",
@@ -615,12 +671,15 @@ def order_status_api(
         "order_number": order.order_number,
         "track_slug": track_slug,
         "completed": (
-            order.status == OrderStatus.COMPLETED
+            order.status
+            == OrderStatus.COMPLETED
         ),
         "failed": (
-            order.status == OrderStatus.FAILED
+            order.status
+            == OrderStatus.FAILED
         ),
         "rejected": (
-            order.status == OrderStatus.REJECTED
+            order.status
+            == OrderStatus.REJECTED
         ),
     }
