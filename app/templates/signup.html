@@ -5,7 +5,6 @@
 {% block content %}
 
 <div class="form-page">
-
   <div class="form-card">
 
     <div class="brand">
@@ -31,17 +30,13 @@
       </div>
     {% endif %}
 
-
     <form
       action="/signup"
       method="post"
       autocomplete="on"
     >
 
-      <!-- STAGE NAME -->
-
       <div class="field">
-
         <label for="stage_name">
           Your Producer / Stage Name
         </label>
@@ -52,19 +47,13 @@
           name="stage_name"
           placeholder="e.g. Mr Mapema"
           value="{{ stage_name|default('') }}"
-          maxlength="100"
           required
           autofocus
           autocomplete="nickname"
         >
-
       </div>
 
-
-      <!-- EMAIL -->
-
       <div class="field">
-
         <label for="email">
           Email Address
         </label>
@@ -78,14 +67,9 @@
           required
           autocomplete="email"
         >
-
       </div>
 
-
-      <!-- PASSWORD -->
-
       <div class="field">
-
         <label for="password">
           Password
         </label>
@@ -99,14 +83,9 @@
           required
           autocomplete="new-password"
         >
-
       </div>
 
-
-      <!-- CONFIRM PASSWORD -->
-
       <div class="field">
-
         <label for="confirm_password">
           Confirm Password
         </label>
@@ -120,14 +99,9 @@
           required
           autocomplete="new-password"
         >
-
       </div>
 
-
-      <!-- ACCOUNT TYPE -->
-
       <div class="field">
-
         <label for="role">
           Account Type
         </label>
@@ -137,31 +111,15 @@
           name="role"
           required
         >
-
-          <option
-            value="creator"
-            {% if role|default('creator') == 'creator' %}
-              selected
-            {% endif %}
-          >
+          <option value="creator" selected>
             Producer / Artist / DJ — I want to sell music
           </option>
 
-          <option
-            value="buyer"
-            {% if role|default('creator') == 'buyer' %}
-              selected
-            {% endif %}
-          >
+          <option value="buyer">
             Buyer / Artist — I want to purchase music
           </option>
-
         </select>
-
       </div>
-
-
-      <!-- CREATOR INFORMATION -->
 
       <div
         id="creator-info"
@@ -173,7 +131,6 @@
           border:1px solid rgba(212,175,55,.20);
         "
       >
-
         <div
           class="eyebrow"
           style="margin-bottom:5px;"
@@ -193,58 +150,14 @@
           upload beats/tracks, create your public store, share your
           store with fans and earn from sales.
         </p>
-
       </div>
-
-
-      <!-- BUYER INFORMATION -->
-
-      <div
-        id="buyer-info"
-        style="
-          display:none;
-          margin:-4px 0 18px;
-          padding:13px 15px;
-          border-radius:10px;
-          background:rgba(212,175,55,.07);
-          border:1px solid rgba(212,175,55,.20);
-        "
-      >
-
-        <div
-          class="eyebrow"
-          style="margin-bottom:5px;"
-        >
-          BUYER ACCOUNT
-        </div>
-
-        <p
-          class="sub"
-          style="
-            margin:0;
-            line-height:1.5;
-            font-size:13px;
-          "
-        >
-          You'll be able to discover beats and tracks, purchase music,
-          view your orders and securely download music you've purchased.
-        </p>
-
-      </div>
-
-
-      <!-- TERMS -->
 
       <div class="checkbox-row">
-
         <input
           type="checkbox"
           id="terms"
           name="agree_terms"
           value="yes"
-          {% if agree_terms|default(false) %}
-            checked
-          {% endif %}
           required
         >
 
@@ -260,11 +173,7 @@
             Terms &amp; Conditions
           </a>.
         </label>
-
       </div>
-
-
-      <!-- SUBMIT -->
 
       <button
         type="submit"
@@ -274,9 +183,6 @@
       </button>
 
     </form>
-
-
-    <!-- LOGIN -->
 
     <p
       class="sub"
@@ -293,34 +199,22 @@
     </p>
 
   </div>
-
 </div>
-
 
 <script>
 (function () {
-
   const roleSelect = document.getElementById("role");
   const creatorInfo = document.getElementById("creator-info");
-  const buyerInfo = document.getElementById("buyer-info");
 
-  if (!roleSelect) {
+  if (!roleSelect || !creatorInfo) {
     return;
   }
 
   function updateAccountInfo() {
-
-    const isCreator = roleSelect.value === "creator";
-
-    if (creatorInfo) {
-      creatorInfo.style.display =
-        isCreator ? "block" : "none";
-    }
-
-    if (buyerInfo) {
-      buyerInfo.style.display =
-        isCreator ? "none" : "block";
-    }
+    creatorInfo.style.display =
+      roleSelect.value === "creator"
+        ? "block"
+        : "none";
   }
 
   roleSelect.addEventListener(
@@ -329,7 +223,6 @@
   );
 
   updateAccountInfo();
-
 })();
 </script>
 
