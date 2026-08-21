@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import inspect, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
@@ -40,7 +41,6 @@ app = FastAPI(
     title=settings.APP_NAME
 )
 
-
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
@@ -68,33 +68,84 @@ Base.metadata.create_all(
 
 
 # ----------------------------------------------------------------------
+# DATABASE COMPATIBILITY
+# ----------------------------------------------------------------------
+
+def ensure_username_column():
+    """
+    Add the username column to existing BeatHub databases.
+
+    create_all() does not modify existing tables, so this check is
+    required when upgrading an existing installation.
+    """
+
+    try:
+        inspector = inspect(engine)
+
+        columns = {
+            column["name"]
+            for column in inspector.get_columns("users")
+        }
+
+        if "username" in columns:
+            return
+
+        logger.info(
+            "Adding username column to users table."
+        )
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE users "
+                    "ADD COLUMN username VARCHAR(100)"
+                )
+            )
+
+        logger.info(
+            "Username column added successfully."
+        )
+
+    except Exception:
+        logger.exception(
+            "Failed to add username column."
+        )
+        raise
+
+
+ensure_username_column()
+
+
+# ----------------------------------------------------------------------
 # ADMIN ACCOUNT INITIALIZATION
 # ----------------------------------------------------------------------
 
 def initialize_admin_account():
     """
-    Create the BeatHub administrator from Render environment variables.
+    Creates the BeatHub administrator from Render environment variables.
 
-    Supported environment variables:
+    Required:
 
-        ADMIN_EMAIL
         ADMIN_USERNAME
         ADMIN_PASSWORD
 
-    ADMIN_EMAIL is preferred.
+    Optional:
 
-    ADMIN_USERNAME is supported as a fallback so an existing Render
-    variable named ADMIN_USERNAME can also be used.
+        ADMIN_EMAIL
 
-    The admin is created only when an account with that email does
-    not already exist.
+    ADMIN_USERNAME is the login identity for the administrator.
 
-    Existing users are never overwritten automatically.
+    ADMIN_EMAIL is stored as the admin's email address if supplied.
+
+    If ADMIN_EMAIL is not supplied, a private internal placeholder
+    address is generated from the username because the existing User
+    model requires email to be non-null.
+
+    Existing users are never automatically promoted to admin.
     """
 
-    admin_email = (
-        os.getenv("ADMIN_EMAIL")
-        or os.getenv("ADMIN_USERNAME")
+    admin_username = (
+        os.getenv("ADMIN_USERNAME")
         or ""
     ).strip().lower()
 
@@ -103,26 +154,22 @@ def initialize_admin_account():
         or ""
     )
 
-    # --------------------------------------------------------------
-    # Nothing to do if admin credentials are not configured.
-    # --------------------------------------------------------------
+    admin_email = (
+        os.getenv("ADMIN_EMAIL")
+        or ""
+    ).strip().lower()
 
-    if not admin_email or not admin_password:
+    if not admin_username or not admin_password:
         logger.info(
             "Admin initialization skipped: "
-            "ADMIN_EMAIL/ADMIN_USERNAME and ADMIN_PASSWORD "
-            "are not both configured."
+            "ADMIN_USERNAME and ADMIN_PASSWORD are not both set."
         )
         return
-
-    # --------------------------------------------------------------
-    # Basic validation.
-    # --------------------------------------------------------------
 
     if len(admin_password) < 8:
         logger.error(
             "ADMIN_PASSWORD must contain at least 8 characters. "
-            "Admin initialization was skipped."
+            "Admin initialization skipped."
         )
         return
 
@@ -130,47 +177,113 @@ def initialize_admin_account():
 
     try:
         # ----------------------------------------------------------
-        # Look for an existing account.
+        # Look for admin by username.
         # ----------------------------------------------------------
 
-        existing_user = (
+        existing_admin = (
             db.query(User)
-            .filter(User.email == admin_email)
+            .filter(
+                User.username == admin_username
+            )
             .first()
         )
 
-        if existing_user:
+        if existing_admin:
 
-            existing_role = getattr(
-                existing_user.role,
+            role = getattr(
+                existing_admin.role,
                 "value",
-                existing_user.role,
+                existing_admin.role,
             )
 
-            existing_role = str(
-                existing_role
+            role = str(
+                role
             ).strip().lower()
 
-            # ------------------------------------------------------
-            # Already an admin.
-            # ------------------------------------------------------
-
-            if existing_role == "admin":
+            if role == "admin":
                 logger.info(
-                    "BeatHub admin account already exists: %s",
+                    "BeatHub admin already exists: %s",
+                    admin_username,
+                )
+                return
+
+            logger.warning(
+                "Username %s belongs to a non-admin account. "
+                "No automatic promotion performed.",
+                admin_username,
+            )
+            return
+
+        # ----------------------------------------------------------
+        # Check whether ADMIN_EMAIL already belongs to an account.
+        # ----------------------------------------------------------
+
+        if admin_email:
+            email_owner = (
+                db.query(User)
+                .filter(
+                    User.email == admin_email
+                )
+                .first()
+            )
+
+            if email_owner:
+                role = getattr(
+                    email_owner.role,
+                    "value",
+                    email_owner.role,
+                )
+
+                role = str(
+                    role
+                ).strip().lower()
+
+                if role == "admin":
+                    # Give an existing admin the configured username
+                    # if it doesn't conflict.
+                    if not email_owner.username:
+                        email_owner.username = admin_username
+                        db.commit()
+
+                    logger.info(
+                        "Existing admin linked to username: %s",
+                        admin_username,
+                    )
+                    return
+
+                logger.warning(
+                    "ADMIN_EMAIL %s already belongs to a "
+                    "non-admin account. Admin was not created.",
                     admin_email,
                 )
                 return
 
-            # ------------------------------------------------------
-            # An ordinary account already owns this email.
-            #
-            # We deliberately DO NOT promote it automatically.
-            # ------------------------------------------------------
+        # ----------------------------------------------------------
+        # If no real admin email was supplied, use an internal
+        # placeholder because User.email is currently required.
+        # ----------------------------------------------------------
 
+        if not admin_email:
+            admin_email = (
+                f"{admin_username}@admin.beathub.local"
+            )
+
+        # ----------------------------------------------------------
+        # Final email uniqueness check.
+        # ----------------------------------------------------------
+
+        email_owner = (
+            db.query(User)
+            .filter(
+                User.email == admin_email
+            )
+            .first()
+        )
+
+        if email_owner:
             logger.warning(
-                "ADMIN_EMAIL %s already belongs to a non-admin "
-                "account. Admin was NOT created or promoted.",
+                "Cannot create admin because email %s "
+                "already belongs to another account.",
                 admin_email,
             )
             return
@@ -180,7 +293,9 @@ def initialize_admin_account():
         # ----------------------------------------------------------
 
         admin_user = User(
+            id=None,
             email=admin_email,
+            username=admin_username,
             hashed_password=hash_password(
                 admin_password
             ),
@@ -195,7 +310,7 @@ def initialize_admin_account():
 
         logger.info(
             "BeatHub administrator created successfully: %s",
-            admin_email,
+            admin_username,
         )
 
     except Exception:
@@ -208,10 +323,6 @@ def initialize_admin_account():
     finally:
         db.close()
 
-
-# ----------------------------------------------------------------------
-# INITIALIZE ADMIN
-# ----------------------------------------------------------------------
 
 initialize_admin_account()
 
@@ -231,9 +342,6 @@ app.include_router(admin.router)
 
 # ----------------------------------------------------------------------
 # HOMEPAGE COMPATIBILITY ROUTES
-# ----------------------------------------------------------------------
-# These are intentionally defined here so the public homepage links
-# always exist even if an older pages.py is deployed.
 # ----------------------------------------------------------------------
 
 @app.get(
