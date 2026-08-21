@@ -17,12 +17,23 @@ class WithdrawalStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
+class AdminWithdrawalStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    PROCESSING = "processing"
+    PAID = "paid"
+    REJECTED = "rejected"
+
+
 class CreatorLedgerEntry(Base):
     """
-    Append-only creator ledger.
+    Creator financial ledger.
 
-    Positive amount  = creator credit
-    Negative amount  = creator withdrawal/debit
+    Positive amount:
+        creator earning / credit
+
+    Negative amount:
+        creator withdrawal / debit
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -74,10 +85,9 @@ class WithdrawalRequest(Base):
     Creator withdrawal request.
 
     IMPORTANT:
-    status is deliberately VARCHAR/String instead of PostgreSQL ENUM.
-
-    This prevents the previous PostgreSQL problem where the database
-    expected PENDING while the application sent pending.
+    status is deliberately VARCHAR, not PostgreSQL ENUM.
+    This prevents the pending/PENDING mismatch that was breaking
+    the Render deployment.
     """
 
     __tablename__ = "withdrawal_requests"
@@ -107,8 +117,8 @@ class WithdrawalRequest(Base):
 
     status: Mapped[str] = mapped_column(
         String(30),
-        default=WithdrawalStatus.PENDING.value,
         nullable=False,
+        default=WithdrawalStatus.PENDING.value,
         index=True,
     )
 
@@ -142,32 +152,17 @@ class WithdrawalRequest(Base):
 
     creator_profile = relationship(
         "Profile",
-        foreign_keys=[creator_profile_id],
     )
-
-
-class AdminWithdrawalStatus(str, enum.Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    PROCESSING = "processing"
-    PAID = "paid"
-    REJECTED = "rejected"
 
 
 class AdminWithdrawal(Base):
     """
-    Platform/administrator withdrawal.
+    BeatHub's own withdrawal.
 
     This is separate from creator withdrawals.
 
-    Creator money:
-        withdrawal_requests
-
-    BeatHub/platform money:
-        admin_withdrawals
-
-    The admin withdrawal is intended for withdrawing the platform's
-    accumulated commission to the administrator's M-Pesa number.
+    Use this when YOU want to withdraw BeatHub's platform
+    earnings to your own M-Pesa number.
     """
 
     __tablename__ = "admin_withdrawals"
@@ -190,8 +185,8 @@ class AdminWithdrawal(Base):
 
     status: Mapped[str] = mapped_column(
         String(30),
-        default=AdminWithdrawalStatus.PENDING.value,
         nullable=False,
+        default=AdminWithdrawalStatus.PENDING.value,
         index=True,
     )
 
