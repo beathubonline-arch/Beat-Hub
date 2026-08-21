@@ -38,6 +38,19 @@ def admin_ctx(
         "request": request,
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
+
+        # Safe defaults for templates
+        "users_count": 0,
+        "tracks_count": 0,
+        "completed_sales": 0,
+        "pending_creator_withdrawals": 0,
+        "total_sales_volume": Decimal("0"),
+        "platform_revenue": Decimal("0"),
+        "already_withdrawn": Decimal("0"),
+        "pending_admin": Decimal("0"),
+        "available_balance": Decimal("0"),
+        "withdrawals": [],
+        "admin_withdrawals": [],
     }
 
     data.update(extra)
@@ -68,6 +81,49 @@ def admin_home(
         .count()
     )
 
+    # -----------------------------------------------------
+    # TOTAL SALES VOLUME
+    # -----------------------------------------------------
+    total_sales_volume_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.total_amount),
+                0,
+            )
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    total_sales_volume = Decimal(
+        str(total_sales_volume_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # PLATFORM REVENUE / COMMISSION
+    # -----------------------------------------------------
+    platform_revenue_raw = (
+        db.query(
+            func.coalesce(
+                func.sum(Order.commission_amount),
+                0,
+            )
+        )
+        .filter(
+            Order.status == OrderStatus.COMPLETED
+        )
+        .scalar()
+    )
+
+    platform_revenue = Decimal(
+        str(platform_revenue_raw or 0)
+    )
+
+    # -----------------------------------------------------
+    # PENDING CREATOR WITHDRAWALS
+    # -----------------------------------------------------
     pending_creator_withdrawals = (
         db.query(WithdrawalRequest)
         .filter(
@@ -76,6 +132,9 @@ def admin_home(
         .count()
     )
 
+    # -----------------------------------------------------
+    # RECENT ADMIN WITHDRAWALS
+    # -----------------------------------------------------
     admin_withdrawals = (
         db.query(AdminWithdrawal)
         .order_by(
@@ -91,12 +150,21 @@ def admin_home(
         admin_ctx(
             request,
             user,
+
             users_count=users_count,
             tracks_count=tracks_count,
             completed_sales=completed_sales,
+
             pending_creator_withdrawals=(
                 pending_creator_withdrawals
             ),
+
+            # IMPORTANT:
+            # dashboard.html requires this
+            total_sales_volume=total_sales_volume,
+
+            platform_revenue=platform_revenue,
+
             admin_withdrawals=admin_withdrawals,
         ),
     )
@@ -275,10 +343,18 @@ def admin_withdraw_page(
         .scalar()
     )
 
+    already_withdrawn = Decimal(
+        str(already_withdrawn or 0)
+    )
+
+    pending_admin = Decimal(
+        str(pending_admin or 0)
+    )
+
     available = (
         platform_revenue
-        - Decimal(str(already_withdrawn or 0))
-        - Decimal(str(pending_admin or 0))
+        - already_withdrawn
+        - pending_admin
     )
 
     withdrawals = (
@@ -296,17 +372,17 @@ def admin_withdraw_page(
             request,
             user,
             platform_revenue=platform_revenue,
-            already_withdrawn=Decimal(
-                str(already_withdrawn or 0)
-            ),
-            pending_admin=Decimal(
-                str(pending_admin or 0)
-            ),
+            already_withdrawn=already_withdrawn,
+            pending_admin=pending_admin,
             available_balance=available,
             withdrawals=withdrawals,
         ),
     )
 
+
+# ---------------------------------------------------------
+# CREATE ADMIN WITHDRAWAL
+# ---------------------------------------------------------
 
 @router.post("/withdraw")
 def create_admin_withdrawal(
@@ -431,6 +507,10 @@ def create_admin_withdrawal(
     )
 
 
+# ---------------------------------------------------------
+# APPROVE ADMIN WITHDRAWAL
+# ---------------------------------------------------------
+
 @router.post(
     "/withdraw/{withdrawal_id}/approve"
 )
@@ -476,6 +556,10 @@ def approve_admin_withdrawal(
     )
 
 
+# ---------------------------------------------------------
+# REJECT ADMIN WITHDRAWAL
+# ---------------------------------------------------------
+
 @router.post(
     "/withdraw/{withdrawal_id}/reject"
 )
@@ -500,10 +584,12 @@ def reject_admin_withdrawal(
         )
 
     withdrawal.status = "rejected"
+
     withdrawal.admin_note = (
         note.strip()
         or "Admin withdrawal rejected."
     )
+
     withdrawal.updated_at = datetime.utcnow()
     withdrawal.resolved_at = datetime.utcnow()
 
@@ -517,6 +603,10 @@ def reject_admin_withdrawal(
         status_code=303,
     )
 
+
+# ---------------------------------------------------------
+# MARK ADMIN WITHDRAWAL PAID
+# ---------------------------------------------------------
 
 @router.post(
     "/withdraw/{withdrawal_id}/paid"
