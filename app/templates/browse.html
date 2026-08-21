@@ -1,29 +1,1135 @@
 {% extends "base.html" %}
-{% block title %}{{ title or 'Browse Beats' }} — BeatHub{% endblock %}
+
+{% block title %}{{ title or "Find Your Sound" }} — BeatHub{% endblock %}
+
 {% block content %}
-<section style="padding: 40px 0;">
-  <h1 style="font-size: 30px;">{{ title or 'Browse Beats' }}</h1>
-  <div class="results-grid" style="margin-top: 20px;">
-    {% for track in tracks %}
-      <a href="/track/{{ track.slug }}" class="result-card">
-        <div class="kind">{{ track.genre or 'Beat' }}</div>
-        <div class="title">{{ track.title }}</div>
-        <div class="sub">{{ track.creator_profile.stage_name }} &middot; KSh {{ '%.0f'|format(track.price) }}</div>
-        <div style="margin-top:8px;">
-          {% if track.sales_model.value == 'exclusive' %}
-            {% if track.is_sold %}
-              <span class="badge badge-sold">SOLD</span>
-            {% else %}
-              <span class="badge badge-exclusive">EXCLUSIVE</span>
-            {% endif %}
-          {% else %}
-            <span class="badge badge-nonexclusive">NON-EXCLUSIVE</span>
-          {% endif %}
-        </div>
+
+<style>
+  .market-wrap {
+    max-width: 1250px;
+    margin: 0 auto;
+    padding: 30px 18px 70px;
+  }
+
+  .market-hero {
+    padding: 34px 28px;
+    border-radius: 22px;
+    margin-bottom: 24px;
+    background:
+      radial-gradient(
+        circle at 90% 10%,
+        rgba(212,175,55,.16),
+        transparent 35%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255,255,255,.035),
+        rgba(255,255,255,.015)
+      );
+    border: 1px solid rgba(212,175,55,.18);
+  }
+
+  .market-eyebrow {
+    color: var(--gold, #d4af37);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    margin-bottom: 9px;
+  }
+
+  .market-title {
+    margin: 0;
+    font-size: clamp(30px, 5vw, 52px);
+    line-height: 1.02;
+  }
+
+  .market-subtitle {
+    max-width: 700px;
+    margin: 13px 0 0;
+    opacity: .72;
+    line-height: 1.6;
+  }
+
+  .market-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .market-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 17px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: 750;
+    border: 1px solid rgba(255,255,255,.1);
+  }
+
+  .market-action.primary {
+    background: var(--gold, #d4af37);
+    color: #080808;
+  }
+
+  .market-action.secondary {
+    background: rgba(255,255,255,.035);
+    color: inherit;
+  }
+
+  .market-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .market-search input {
+    width: 100%;
+    min-height: 48px;
+    box-sizing: border-box;
+    padding: 0 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+    color: inherit;
+    outline: none;
+  }
+
+  .market-search input:focus {
+    border-color: rgba(212,175,55,.55);
+  }
+
+  .search-button {
+    min-width: 110px;
+    border: 0;
+    border-radius: 12px;
+    padding: 0 20px;
+    font-weight: 800;
+    cursor: pointer;
+    background: var(--gold, #d4af37);
+    color: #080808;
+  }
+
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 27px;
+  }
+
+  .filter-label {
+    font-size: 12px;
+    opacity: .55;
+    margin-right: 3px;
+  }
+
+  .filter-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: inherit;
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(255,255,255,.09);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .filter-pill.active {
+    background: rgba(212,175,55,.13);
+    border-color: rgba(212,175,55,.42);
+    color: var(--gold, #d4af37);
+  }
+
+  .sort-wrap {
+    margin-left: auto;
+  }
+
+  .sort-wrap select {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: 9px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1);
+    color: inherit;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 15px;
+    margin: 30px 0 14px;
+  }
+
+  .section-head h2 {
+    margin: 0;
+    font-size: 21px;
+  }
+
+  .section-head p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    opacity: .6;
+  }
+
+  .track-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 17px;
+  }
+
+  .track-card {
+    overflow: hidden;
+    border-radius: 17px;
+    border: 1px solid rgba(255,255,255,.09);
+    background: rgba(255,255,255,.025);
+    transition:
+      transform .18s ease,
+      border-color .18s ease,
+      background .18s ease;
+  }
+
+  .track-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(212,175,55,.32);
+    background: rgba(255,255,255,.04);
+  }
+
+  .cover-wrap {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: rgba(255,255,255,.04);
+    overflow: hidden;
+  }
+
+  .cover-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 44px;
+    background:
+      radial-gradient(
+        circle at 30% 20%,
+        rgba(212,175,55,.2),
+        transparent 35%
+      ),
+      rgba(255,255,255,.025);
+  }
+
+  .preview-button {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 43px;
+    height: 43px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.72);
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    backdrop-filter: blur(8px);
+  }
+
+  .track-info {
+    padding: 15px;
+  }
+
+  .track-title {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.25;
+  }
+
+  .track-title a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .track-title a:hover {
+    color: var(--gold, #d4af37);
+  }
+
+  .producer {
+    margin-top: 5px;
+    font-size: 13px;
+    opacity: .6;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 11px;
+  }
+
+  .meta {
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 7px;
+    background: rgba(255,255,255,.05);
+    opacity: .8;
+  }
+
+  .price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+  }
+
+  .price {
+    font-size: 18px;
+    font-weight: 850;
+  }
+
+  .buy-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 9px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 850;
+    background: var(--gold, #d4af37);
+    color: #080808;
+  }
+
+  .view-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 13px;
+    border-radius: 9px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 750;
+    border: 1px solid rgba(255,255,255,.1);
+    color: inherit;
+  }
+
+  .card-buttons {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+  }
+
+  .empty-state {
+    padding: 50px 25px;
+    text-align: center;
+    border-radius: 18px;
+    border: 1px dashed rgba(255,255,255,.14);
+    background: rgba(255,255,255,.02);
+  }
+
+  .empty-icon {
+    font-size: 42px;
+    margin-bottom: 12px;
+  }
+
+  .empty-state h3 {
+    margin: 0 0 8px;
+  }
+
+  .empty-state p {
+    margin: 0 auto 20px;
+    max-width: 500px;
+    opacity: .6;
+    line-height: 1.6;
+  }
+
+  .results-note {
+    font-size: 13px;
+    opacity: .58;
+  }
+
+  @media (max-width: 900px) {
+    .track-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 600px) {
+    .market-wrap {
+      padding: 20px 12px 50px;
+    }
+
+    .market-hero {
+      padding: 25px 19px;
+      border-radius: 17px;
+    }
+
+    .market-search {
+      grid-template-columns: 1fr;
+    }
+
+    .search-button {
+      min-height: 46px;
+    }
+
+    .track-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .sort-wrap {
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .sort-wrap select {
+      width: 100%;
+    }
+
+    .section-head {
+      align-items: start;
+      flex-direction: column;
+    }
+  }
+</style>
+
+
+<div class="market-wrap">
+
+  <!-- ============================================================
+       HERO
+  ============================================================ -->
+
+  <section class="market-hero">
+
+    <div class="market-eyebrow">
+      BEATHUB MUSIC MARKETPLACE
+    </div>
+
+    <h1 class="market-title">
+      Find Your Sound.
+    </h1>
+
+    <p class="market-subtitle">
+      Discover beats and tracks from BeatHub producers.
+      Preview your favourites, choose your sound and get
+      your next release moving.
+    </p>
+
+    <div class="market-actions">
+
+      <a
+        href="#beats"
+        class="market-action primary"
+      >
+        🎧 Browse Beats
       </a>
-    {% else %}
-      <p class="sub">No beats published yet.</p>
+
+      {% if current_user %}
+        <a
+          href="/account"
+          class="market-action secondary"
+        >
+          My Purchases
+        </a>
+      {% else %}
+        <a
+          href="/login"
+          class="market-action secondary"
+        >
+          Login
+        </a>
+      {% endif %}
+
+    </div>
+
+  </section>
+
+
+  <!-- ============================================================
+       SEARCH
+  ============================================================ -->
+
+  <form
+    class="market-search"
+    action="/beats"
+    method="get"
+  >
+
+    <input
+      type="search"
+      name="q"
+      value="{{ search or '' }}"
+      placeholder="Search beats, genres, producers or keywords..."
+      autocomplete="off"
+      aria-label="Search BeatHub beats"
+    >
+
+    {% if selected_genre %}
+      <input
+        type="hidden"
+        name="genre"
+        value="{{ selected_genre }}"
+      >
+    {% endif %}
+
+    <button
+      type="submit"
+      class="search-button"
+    >
+      Search
+    </button>
+
+  </form>
+
+
+  <!-- ============================================================
+       FILTERS
+  ============================================================ -->
+
+  <div class="filter-bar">
+
+    <span class="filter-label">
+      Explore:
+    </span>
+
+    <a
+      href="/beats"
+      class="filter-pill {% if not selected_genre and not search %}active{% endif %}"
+    >
+      All Beats
+    </a>
+
+    {% for item in genres %}
+
+      <a
+        href="/beats?genre={{ item | urlencode }}"
+        class="filter-pill {% if selected_genre|lower == item|lower %}active{% endif %}"
+      >
+        {{ item }}
+      </a>
+
     {% endfor %}
+
+    <div class="sort-wrap">
+
+      <form
+        action="/beats"
+        method="get"
+      >
+
+        {% if search %}
+          <input
+            type="hidden"
+            name="q"
+            value="{{ search }}"
+          >
+        {% endif %}
+
+        {% if selected_genre %}
+          <input
+            type="hidden"
+            name="genre"
+            value="{{ selected_genre }}"
+          >
+        {% endif %}
+
+        <select
+          name="sort"
+          onchange="this.form.submit()"
+          aria-label="Sort beats"
+        >
+
+          <option
+            value="newest"
+            {% if sort == "newest" %}selected{% endif %}
+          >
+            Newest
+          </option>
+
+          <option
+            value="oldest"
+            {% if sort == "oldest" %}selected{% endif %}
+          >
+            Oldest
+          </option>
+
+          <option
+            value="price_low"
+            {% if sort == "price_low" %}selected{% endif %}
+          >
+            Price: Low → High
+          </option>
+
+          <option
+            value="price_high"
+            {% if sort == "price_high" %}selected{% endif %}
+          >
+            Price: High → Low
+          </option>
+
+        </select>
+
+      </form>
+
+    </div>
+
   </div>
-</section>
+
+
+  <!-- ============================================================
+       FEATURED / NEWEST
+  ============================================================ -->
+
+  {% if featured_tracks %}
+
+    <section>
+
+      <div class="section-head">
+
+        <div>
+          <h2>🔥 Fresh on BeatHub</h2>
+
+          <p>
+            New sounds from producers on the platform.
+          </p>
+        </div>
+
+        <a
+          href="/beats"
+          class="view-button"
+        >
+          View all
+        </a>
+
+      </div>
+
+
+      <div class="track-grid">
+
+        {% for track in featured_tracks %}
+
+          <article class="track-card">
+
+            <div class="cover-wrap">
+
+              {% if track.cover_art_url %}
+
+                <img
+                  src="{{ track.cover_art_url }}"
+                  alt="{{ track.title }} cover"
+                  loading="lazy"
+                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                >
+
+                <div
+                  class="cover-placeholder"
+                  style="display:none;"
+                >
+                  🎵
+                </div>
+
+              {% else %}
+
+                <div class="cover-placeholder">
+                  🎵
+                </div>
+
+              {% endif %}
+
+              {% if track.preview_file_path %}
+
+                <button
+                  type="button"
+                  class="preview-button"
+                  onclick="togglePreview(this, '{{ track.preview_file_path | e }}')"
+                  aria-label="Preview {{ track.title }}"
+                >
+                  ▶
+                </button>
+
+              {% endif %}
+
+            </div>
+
+
+            <div class="track-info">
+
+              <h3 class="track-title">
+                <a href="/track/{{ track.slug }}">
+                  {{ track.title }}
+                </a>
+              </h3>
+
+              <div class="producer">
+
+                {% if track.creator_profile %}
+                  {{ track.creator_profile.stage_name }}
+                {% else %}
+                  BeatHub Producer
+                {% endif %}
+
+              </div>
+
+              <div class="meta-row">
+
+                {% if track.genre %}
+                  <span class="meta">
+                    {{ track.genre }}
+                  </span>
+                {% endif %}
+
+                {% if track.bpm %}
+                  <span class="meta">
+                    {{ track.bpm }} BPM
+                  </span>
+                {% endif %}
+
+                {% if track.sales_model %}
+                  <span class="meta">
+                    {{ track.sales_model.value | replace("_", " ") | title }}
+                  </span>
+                {% endif %}
+
+              </div>
+
+              <div class="price-row">
+
+                <div class="price">
+                  KSh {{ "{:,.0f}".format(track.price or 0) }}
+                </div>
+
+                <div class="card-buttons">
+
+                  <a
+                    href="/track/{{ track.slug }}"
+                    class="view-button"
+                  >
+                    View
+                  </a>
+
+                  {% if track.is_available %}
+                    <a
+                      href="/checkout/track/{{ track.slug }}"
+                      class="buy-button"
+                    >
+                      Buy
+                    </a>
+                  {% endif %}
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </article>
+
+        {% endfor %}
+
+      </div>
+
+    </section>
+
+  {% endif %}
+
+
+  <!-- ============================================================
+       ALL RESULTS
+  ============================================================ -->
+
+  <section id="beats">
+
+    <div class="section-head">
+
+      <div>
+
+        <h2>
+          {% if search %}
+            Search results
+          {% elif selected_genre %}
+            {{ selected_genre }}
+          {% else %}
+            Browse all beats
+          {% endif %}
+        </h2>
+
+        <p>
+
+          {% if search %}
+
+            Results for
+            <strong>{{ search }}</strong>
+
+          {% elif selected_genre %}
+
+            Beats in
+            <strong>{{ selected_genre }}</strong>
+
+          {% else %}
+
+            Find the sound for your next song.
+
+          {% endif %}
+
+        </p>
+
+      </div>
+
+      {% if tracks %}
+        <span class="results-note">
+          {{ tracks|length }} beat{% if tracks|length != 1 %}s{% endif %}
+        </span>
+      {% endif %}
+
+    </div>
+
+
+    {% if tracks %}
+
+      <div class="track-grid">
+
+        {% for track in tracks %}
+
+          <article class="track-card">
+
+            <div class="cover-wrap">
+
+              {% if track.cover_art_url %}
+
+                <img
+                  src="{{ track.cover_art_url }}"
+                  alt="{{ track.title }} cover"
+                  loading="lazy"
+                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                >
+
+                <div
+                  class="cover-placeholder"
+                  style="display:none;"
+                >
+                  🎵
+                </div>
+
+              {% else %}
+
+                <div class="cover-placeholder">
+                  🎵
+                </div>
+
+              {% endif %}
+
+
+              {% if track.preview_file_path %}
+
+                <button
+                  type="button"
+                  class="preview-button"
+                  onclick="togglePreview(this, '{{ track.preview_file_path | e }}')"
+                  aria-label="Preview {{ track.title }}"
+                >
+                  ▶
+                </button>
+
+              {% endif %}
+
+            </div>
+
+
+            <div class="track-info">
+
+              <h3 class="track-title">
+
+                <a
+                  href="/track/{{ track.slug }}"
+                >
+                  {{ track.title }}
+                </a>
+
+              </h3>
+
+
+              <div class="producer">
+
+                {% if track.creator_profile %}
+
+                  {{ track.creator_profile.stage_name }}
+
+                {% else %}
+
+                  BeatHub Producer
+
+                {% endif %}
+
+              </div>
+
+
+              <div class="meta-row">
+
+                {% if track.genre %}
+
+                  <span class="meta">
+                    {{ track.genre }}
+                  </span>
+
+                {% endif %}
+
+
+                {% if track.bpm %}
+
+                  <span class="meta">
+                    {{ track.bpm }} BPM
+                  </span>
+
+                {% endif %}
+
+
+                {% if track.sales_model %}
+
+                  <span class="meta">
+                    {{ track.sales_model.value
+                      | replace("_", " ")
+                      | title
+                    }}
+                  </span>
+
+                {% endif %}
+
+              </div>
+
+
+              <div class="price-row">
+
+                <div class="price">
+
+                  KSh
+                  {{ "{:,.0f}".format(track.price or 0) }}
+
+                </div>
+
+
+                <div class="card-buttons">
+
+                  <a
+                    href="/track/{{ track.slug }}"
+                    class="view-button"
+                  >
+                    View
+                  </a>
+
+                  {% if track.is_available %}
+
+                    <a
+                      href="/checkout/track/{{ track.slug }}"
+                      class="buy-button"
+                    >
+                      Buy
+                    </a>
+
+                  {% else %}
+
+                    <span
+                      class="view-button"
+                      style="opacity:.5;"
+                    >
+                      Unavailable
+                    </span>
+
+                  {% endif %}
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </article>
+
+        {% endfor %}
+
+      </div>
+
+
+    {% else %}
+
+      <div class="empty-state">
+
+        <div class="empty-icon">
+          🎧
+        </div>
+
+        {% if search or selected_genre %}
+
+          <h3>
+            No beats found
+          </h3>
+
+          <p>
+            We couldn't find a beat matching your search.
+            Try another keyword or explore all available beats.
+          </p>
+
+          <a
+            href="/beats"
+            class="market-action primary"
+          >
+            Browse all beats
+          </a>
+
+        {% else %}
+
+          <h3>
+            Your next sound starts here
+          </h3>
+
+          <p>
+            BeatHub doesn't have published beats available yet.
+            Once producers publish their tracks, they'll appear here.
+          </p>
+
+          {% if current_user %}
+
+            <a
+              href="/account"
+              class="market-action secondary"
+            >
+              Go to my account
+            </a>
+
+          {% else %}
+
+            <a
+              href="/signup"
+              class="market-action primary"
+            >
+              Join BeatHub
+            </a>
+
+          {% endif %}
+
+        {% endif %}
+
+      </div>
+
+    {% endif %}
+
+  </section>
+
+</div>
+
+
+<!-- ================================================================
+     PREVIEW PLAYER
+================================================================ -->
+
+<script>
+
+let beatHubPreview = null;
+let beatHubPreviewButton = null;
+
+function togglePreview(button, source) {
+
+  if (!source) {
+    return;
+  }
+
+  // Stop current preview if the same button is clicked.
+  if (
+    beatHubPreview &&
+    beatHubPreviewButton === button
+  ) {
+
+    if (!beatHubPreview.paused) {
+
+      beatHubPreview.pause();
+
+      button.textContent = "▶";
+
+      return;
+    }
+
+    beatHubPreview.play();
+
+    button.textContent = "❚❚";
+
+    return;
+  }
+
+
+  // Stop previous preview.
+  if (beatHubPreview) {
+
+    beatHubPreview.pause();
+
+    beatHubPreview.currentTime = 0;
+  }
+
+  if (beatHubPreviewButton) {
+
+    beatHubPreviewButton.textContent = "▶";
+  }
+
+
+  // Create new preview.
+  beatHubPreview = new Audio(source);
+
+  beatHubPreviewButton = button;
+
+  button.textContent = "❚❚";
+
+
+  beatHubPreview.addEventListener(
+    "ended",
+    function () {
+
+      button.textContent = "▶";
+
+      beatHubPreview = null;
+
+      beatHubPreviewButton = null;
+
+    }
+  );
+
+
+  beatHubPreview.addEventListener(
+    "error",
+    function () {
+
+      button.textContent = "▶";
+
+      beatHubPreview = null;
+
+      beatHubPreviewButton = null;
+
+    }
+  );
+
+
+  beatHubPreview.play().catch(
+    function () {
+
+      button.textContent = "▶";
+
+    }
+  );
+}
+
+</script>
+
 {% endblock %}
