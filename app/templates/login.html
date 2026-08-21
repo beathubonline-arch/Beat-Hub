@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <title>Login — BeatHub</title>
-
-    <link rel="stylesheet" href="/static/css/style.css">
+    <title>BeatHub — Login</title>
 
     <style>
         * {
@@ -16,26 +17,22 @@
         body {
             margin: 0;
             min-height: 100vh;
-            background: #09090b;
-            color: #ffffff;
-            font-family: Arial, sans-serif;
-        }
-
-        .login-page {
-            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 24px;
+            background: #09090b;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            padding: 20px;
         }
 
         .login-box {
             width: 100%;
-            max-width: 430px;
-            padding: 38px;
+            max-width: 420px;
+            padding: 36px;
             background: #111113;
             border: 1px solid #27272a;
-            border-radius: 18px;
+            border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
         }
 
@@ -44,67 +41,59 @@
             margin-bottom: 30px;
         }
 
-        .brand a {
-            color: #ffffff;
-            text-decoration: none;
-        }
-
         .brand h1 {
             margin: 0;
             font-size: 32px;
             letter-spacing: -1px;
         }
 
-        .brand h1 span {
+        .brand .hub {
             color: #a1a1aa;
         }
 
         .brand p {
-            margin: 9px 0 0;
+            margin-top: 9px;
             color: #a1a1aa;
             font-size: 14px;
         }
 
-        .alert {
-            padding: 12px 14px;
-            border-radius: 9px;
+        .error {
             margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .alert-error {
+            padding: 12px 14px;
+            border-radius: 8px;
             background: #3f1515;
             color: #fca5a5;
-            border: 1px solid #7f1d1d;
+            font-size: 14px;
+            line-height: 1.4;
         }
 
-        .alert-success {
+        .success {
+            margin-bottom: 20px;
+            padding: 12px 14px;
+            border-radius: 8px;
             background: #12351f;
             color: #86efac;
-            border: 1px solid #166534;
-        }
-
-        .field {
-            margin-bottom: 19px;
+            font-size: 14px;
+            line-height: 1.4;
         }
 
         label {
             display: block;
             margin-bottom: 8px;
-            color: #d4d4d8;
             font-size: 14px;
-            font-weight: 600;
+            color: #d4d4d8;
         }
 
         input {
             width: 100%;
-            padding: 14px;
+            padding: 13px 14px;
+            margin-bottom: 20px;
             border-radius: 9px;
             border: 1px solid #3f3f46;
             background: #18181b;
             color: #ffffff;
-            font-size: 15px;
             outline: none;
+            font-size: 15px;
         }
 
         input:focus {
@@ -115,7 +104,7 @@
             color: #71717a;
         }
 
-        .login-button {
+        button {
             width: 100%;
             padding: 14px;
             border: 0;
@@ -125,153 +114,150 @@
             font-weight: 700;
             font-size: 15px;
             cursor: pointer;
-            margin-top: 3px;
         }
 
-        .login-button:hover {
+        button:hover {
             opacity: .9;
         }
 
-        .forgot {
-            text-align: right;
-            margin-top: 12px;
-        }
-
-        .forgot a,
-        .bottom a {
-            color: #d4d4d8;
-            text-decoration: none;
-        }
-
-        .forgot a:hover,
-        .bottom a:hover {
-            color: #ffffff;
-            text-decoration: underline;
-        }
-
-        .bottom {
+        .links {
+            margin-top: 22px;
             text-align: center;
-            margin-top: 25px;
-            padding-top: 22px;
-            border-top: 1px solid #27272a;
+        }
+
+        .links a {
+            color: #a1a1aa;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .links a:hover {
+            color: #ffffff;
+        }
+
+        .divider {
+            height: 1px;
+            background: #27272a;
+            margin: 22px 0;
+        }
+
+        .signup {
+            text-align: center;
             color: #a1a1aa;
             font-size: 14px;
-            line-height: 1.8;
         }
 
-        .back-home {
-            display: block;
-            margin-top: 10px;
+        .signup a {
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .back {
+            text-align: center;
+            margin-top: 18px;
+        }
+
+        .back a {
             color: #71717a;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .back a:hover {
+            color: #ffffff;
         }
     </style>
 </head>
 
 <body>
 
-<div class="login-page">
+<div class="login-box">
 
-    <div class="login-box">
+    <div class="brand">
+        <h1>BEAT<span class="hub">HUB</span></h1>
+        <p>Log in to your BeatHub account</p>
+    </div>
 
-        <div class="brand">
-            <h1>
-                <a href="/">
-                    BEAT<span>HUB</span>
-                </a>
-            </h1>
-
-            <p>Welcome back. Sign in to continue.</p>
+    {% if error %}
+        <div class="error">
+            {{ error }}
         </div>
+    {% endif %}
 
-        {% if error %}
-            <div class="alert alert-error">
-                {{ error }}
-            </div>
-        {% endif %}
-
-        {% if request.query_params.get('error') %}
-            <div class="alert alert-error">
-                {{ request.query_params.get('error') }}
-            </div>
-        {% endif %}
-
-        {% if request.query_params.get('success') %}
-            <div class="alert alert-success">
-                {{ request.query_params.get('success') }}
-            </div>
-        {% endif %}
-
-        <form method="post" action="/login">
-
-            <div class="field">
-
-                <label for="identifier">
-                    Email or Username
-                </label>
-
-                <input
-                    type="text"
-                    id="identifier"
-                    name="identifier"
-                    value="{{ identifier or '' }}"
-                    placeholder="Enter your email or username"
-                    autocomplete="username"
-                    required
-                    autofocus
-                >
-
-            </div>
-
-            <div class="field">
-
-                <label for="password">
-                    Password
-                </label>
-
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    placeholder="Enter your password"
-                    autocomplete="current-password"
-                    required
-                >
-
-            </div>
-
-            <button
-                type="submit"
-                class="login-button"
-            >
-                Sign In
-            </button>
-
-        </form>
-
-        <div class="forgot">
-            <a href="/forgot-password">
-                Forgot your password?
-            </a>
+    {% if success %}
+        <div class="success">
+            {{ success }}
         </div>
+    {% endif %}
 
-        <div class="bottom">
-
-            <div>
-                Don't have a BeatHub account?
-                <a href="/signup">
-                    Create an account
-                </a>
-            </div>
-
-            <a
-                href="/"
-                class="back-home"
-            >
-                ← Back to BeatHub
-            </a>
-
+    {% if request.query_params.get("error") %}
+        <div class="error">
+            {{ request.query_params.get("error") }}
         </div>
+    {% endif %}
 
+    {% if request.query_params.get("success") %}
+        <div class="success">
+            {{ request.query_params.get("success") }}
+        </div>
+    {% endif %}
+
+    <form
+        method="post"
+        action="/login"
+    >
+
+        <label for="identifier">
+            Email or Username
+        </label>
+
+        <input
+            type="text"
+            id="identifier"
+            name="identifier"
+            placeholder="Email or username"
+            required
+            autocomplete="username"
+            autofocus
+        >
+
+        <label for="password">
+            Password
+        </label>
+
+        <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Enter your password"
+            required
+            autocomplete="current-password"
+        >
+
+        <button type="submit">
+            Log In
+        </button>
+
+    </form>
+
+    <div class="links">
+        <a href="/forgot-password">
+            Forgot your password?
+        </a>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="signup">
+        Don't have a BeatHub account?
+        <a href="/signup">Create Account</a>
+    </div>
+
+    <div class="back">
+        <a href="/">
+            ← Back to BeatHub
+        </a>
     </div>
 
 </div>
