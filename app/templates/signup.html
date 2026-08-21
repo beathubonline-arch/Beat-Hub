@@ -1,47 +1,307 @@
 {% extends "base.html" %}
+
 {% block title %}Join BeatHub{% endblock %}
+
 {% block content %}
+
 <div class="form-page">
+
   <div class="form-card">
-    <div class="brand">BEAT<span class="hub">HUB</span></div>
-    <h2>Create your account</h2>
-    <p class="subtitle">Join BeatHub and start sharing your beats, building your audience and earning from your music.</p>
 
-    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <!-- ============================================================
+         BRAND
+    ============================================================ -->
 
-    <form action="/signup" method="post">
-      <div class="field">
-        <label>Your Producer / Stage Name</label>
-        <input type="text" name="stage_name" placeholder="e.g. Mr Mapema" required autofocus>
-      </div>
-      <div class="field">
-        <label>Email Address</label>
-        <input type="email" name="email" placeholder="you@example.com" required>
-      </div>
-      <div class="field">
-        <label>Password</label>
-        <input type="password" name="password" placeholder="At least 8 characters" minlength="8" required>
-      </div>
-      <div class="field">
-        <label>Confirm Password</label>
-        <input type="password" name="confirm_password" placeholder="Repeat your password" minlength="8" required>
-      </div>
-      <div class="field">
-        <label>Account Type</label>
-        <select name="role">
-          <option value="buyer">Buyer / Artist — I want to purchase music</option>
-          <option value="creator">Producer / Artist / DJ — I want to sell music</option>
-        </select>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="terms" name="agree_terms" required>
-        <label for="terms" style="margin:0;text-transform:none;">I agree to the <a href="/terms">Terms &amp; Conditions</a>.</label>
-      </div>
-      <button type="submit" class="btn btn-primary btn-block">Create account</button>
-    </form>
-    <p class="sub" style="margin-top:18px;">
-      Already have an account? <a href="/login" style="color:var(--gold);">Login</a>
+    <div class="brand">
+      BEAT<span class="hub">HUB</span>
+    </div>
+
+    <h2>Create your BeatHub account</h2>
+
+    <p class="subtitle">
+      Join BeatHub and start sharing your music, building your audience,
+      selling beats and earning from your work.
     </p>
+
+
+    <!-- ============================================================
+         ERROR
+    ============================================================ -->
+
+    {% if error %}
+      <div class="alert alert-error">
+        {{ error }}
+      </div>
+    {% endif %}
+
+
+    <!-- ============================================================
+         SIGNUP FORM
+    ============================================================ -->
+
+    <form
+      action="/signup"
+      method="post"
+      autocomplete="on"
+    >
+
+      <!-- STAGE NAME -->
+
+      <div class="field">
+
+        <label for="stage_name">
+          Your Producer / Stage Name
+        </label>
+
+        <input
+          id="stage_name"
+          type="text"
+          name="stage_name"
+          placeholder="e.g. Mr Mapema"
+          value="{{ request.form.get('stage_name', '') if request.form else '' }}"
+          required
+          autofocus
+          autocomplete="nickname"
+        >
+
+      </div>
+
+
+      <!-- EMAIL -->
+
+      <div class="field">
+
+        <label for="email">
+          Email Address
+        </label>
+
+        <input
+          id="email"
+          type="email"
+          name="email"
+          placeholder="you@example.com"
+          value="{{ request.form.get('email', '') if request.form else '' }}"
+          required
+          autocomplete="email"
+        >
+
+      </div>
+
+
+      <!-- PASSWORD -->
+
+      <div class="field">
+
+        <label for="password">
+          Password
+        </label>
+
+        <input
+          id="password"
+          type="password"
+          name="password"
+          placeholder="At least 8 characters"
+          minlength="8"
+          required
+          autocomplete="new-password"
+        >
+
+      </div>
+
+
+      <!-- CONFIRM PASSWORD -->
+
+      <div class="field">
+
+        <label for="confirm_password">
+          Confirm Password
+        </label>
+
+        <input
+          id="confirm_password"
+          type="password"
+          name="confirm_password"
+          placeholder="Repeat your password"
+          minlength="8"
+          required
+          autocomplete="new-password"
+        >
+
+      </div>
+
+
+      <!-- ============================================================
+           ACCOUNT TYPE
+      ============================================================ -->
+
+      <div class="field">
+
+        <label for="role">
+          Account Type
+        </label>
+
+        <select
+          id="role"
+          name="role"
+          required
+        >
+
+          <!-- CREATOR IS THE DEFAULT -->
+
+          <option
+            value="creator"
+            selected
+          >
+            Producer / Artist / DJ — I want to sell music
+          </option>
+
+          <option value="buyer">
+            Buyer / Artist — I want to purchase music
+          </option>
+
+        </select>
+
+      </div>
+
+
+      <!-- ACCOUNT TYPE EXPLANATION -->
+
+      <div
+        id="creator-info"
+        style="
+          margin:-4px 0 18px;
+          padding:13px 15px;
+          border-radius:10px;
+          background:rgba(212,175,55,.07);
+          border:1px solid rgba(212,175,55,.20);
+        "
+      >
+
+        <div
+          class="eyebrow"
+          style="margin-bottom:5px;"
+        >
+          CREATOR ACCOUNT
+        </div>
+
+        <p
+          class="sub"
+          style="
+            margin:0;
+            line-height:1.5;
+            font-size:13px;
+          "
+        >
+          You'll get your BeatHub creator dashboard where you can
+          upload beats/tracks, create your public store, share your
+          store with fans and earn from sales.
+        </p>
+
+      </div>
+
+
+      <!-- ============================================================
+           TERMS
+      ============================================================ -->
+
+      <div class="checkbox-row">
+
+        <input
+          type="checkbox"
+          id="terms"
+          name="agree_terms"
+          required
+        >
+
+        <label
+          for="terms"
+          style="
+            margin:0;
+            text-transform:none;
+          "
+        >
+          I agree to the
+          <a href="/terms">
+            Terms &amp; Conditions
+          </a>.
+        </label>
+
+      </div>
+
+
+      <!-- ============================================================
+           SUBMIT
+      ============================================================ -->
+
+      <button
+        type="submit"
+        class="btn btn-primary btn-block"
+      >
+        Create account
+      </button>
+
+    </form>
+
+
+    <!-- ============================================================
+         LOGIN
+    ============================================================ -->
+
+    <p
+      class="sub"
+      style="margin-top:18px;"
+    >
+      Already have an account?
+
+      <a
+        href="/login"
+        style="color:var(--gold);"
+      >
+        Login
+      </a>
+    </p>
+
   </div>
+
 </div>
+
+
+<!-- ================================================================
+     ACCOUNT TYPE UI
+================================================================ -->
+
+<script>
+(function () {
+
+  const roleSelect = document.getElementById("role");
+  const creatorInfo = document.getElementById("creator-info");
+
+  if (!roleSelect || !creatorInfo) {
+    return;
+  }
+
+  function updateAccountInfo() {
+
+    if (roleSelect.value === "creator") {
+
+      creatorInfo.style.display = "block";
+
+    } else {
+
+      creatorInfo.style.display = "none";
+
+    }
+
+  }
+
+  roleSelect.addEventListener(
+    "change",
+    updateAccountInfo
+  );
+
+  updateAccountInfo();
+
+})();
+</script>
+
 {% endblock %}
