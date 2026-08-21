@@ -1,26 +1,20 @@
-"""Fix BeatHub withdrawal status columns.
+"""Fix BeatHub withdrawal status storage.
 
-Convert creator and admin withdrawal status columns from PostgreSQL
-ENUM types to VARCHAR so status values are stored consistently.
+Revision ID: fix_withdrawal_status_001
+Revises: 654395e9ee8e
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 
-# IMPORTANT:
-# Give this revision a unique ID.
 revision = "fix_withdrawal_status_001"
-
-# If your latest migration has a different revision ID, replace this
-# value with that migration's revision ID.
-down_revision = None
-
+down_revision = "654395e9ee8e"
 branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     bind = op.get_bind()
 
     # ------------------------------------------------------------
@@ -40,6 +34,14 @@ def upgrade():
     ).scalar()
 
     if creator_exists:
+        # Convert the PostgreSQL enum to VARCHAR.
+        #
+        # The initial schema created:
+        # withdrawalstatus =
+        # PENDING, APPROVED, PROCESSING, PAID, REJECTED
+        #
+        # Our application uses lowercase values, so VARCHAR is safer
+        # and avoids PostgreSQL enum casing conflicts.
         bind.execute(
             sa.text(
                 """
@@ -56,6 +58,15 @@ def upgrade():
                 UPDATE withdrawal_requests
                 SET status = LOWER(status)
                 WHERE status IS NOT NULL
+                """
+            )
+        )
+
+        bind.execute(
+            sa.text(
+                """
+                ALTER TABLE withdrawal_requests
+                ALTER COLUMN status SET DEFAULT 'pending'
                 """
             )
         )
@@ -97,8 +108,19 @@ def upgrade():
             )
         )
 
+        bind.execute(
+            sa.text(
+                """
+                ALTER TABLE admin_withdrawals
+                ALTER COLUMN status SET DEFAULT 'pending'
+                """
+            )
+        )
 
-def downgrade():
-    # We intentionally do not convert the columns back to PostgreSQL
-    # ENUMs because doing so would reintroduce the original problem.
+
+def downgrade() -> None:
+    # Intentionally leave withdrawal statuses as VARCHAR.
+    #
+    # Recreating PostgreSQL ENUMs would reintroduce the casing problem
+    # that this migration is specifically designed to eliminate.
     pass
