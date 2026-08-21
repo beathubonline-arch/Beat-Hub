@@ -17,9 +17,9 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # ------------------------------------------------------------
+    # ---------------------------------------------------------
     # CREATOR WITHDRAWALS
-    # ------------------------------------------------------------
+    # ---------------------------------------------------------
 
     creator_exists = bind.execute(
         sa.text(
@@ -34,7 +34,6 @@ def upgrade() -> None:
     ).scalar()
 
     if creator_exists:
-        # PostgreSQL enum -> VARCHAR
         bind.execute(
             sa.text(
                 """
@@ -45,7 +44,6 @@ def upgrade() -> None:
             )
         )
 
-        # Normalize existing values.
         bind.execute(
             sa.text(
                 """
@@ -56,10 +54,9 @@ def upgrade() -> None:
             )
         )
 
-
-    # ------------------------------------------------------------
+    # ---------------------------------------------------------
     # ADMIN WITHDRAWALS
-    # ------------------------------------------------------------
+    # ---------------------------------------------------------
 
     admin_exists = bind.execute(
         sa.text(
@@ -96,8 +93,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Intentionally left empty.
-    #
-    # Converting these columns back into PostgreSQL ENUMs would
-    # recreate the original status mismatch problem.
     pass
