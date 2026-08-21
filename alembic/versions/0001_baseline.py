@@ -6,7 +6,6 @@ Create Date: 2026-08-21
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision = "beathub_baseline_001"
