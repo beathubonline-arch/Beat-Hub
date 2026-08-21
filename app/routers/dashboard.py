@@ -103,6 +103,9 @@ def _decimal(value) -> Decimal:
 
 
 def _absolute_store_url(request: Request, slug: str) -> str:
+    # Render terminates TLS before forwarding the request.
+    # Prefer forwarded protocol so the dashboard always exposes
+    # the real public HTTPS URL instead of localhost/http.
     forwarded_proto = request.headers.get("x-forwarded-proto")
     forwarded_host = request.headers.get("x-forwarded-host")
 
@@ -283,6 +286,8 @@ def _track_page(
         .all()
     )
 
+    # Keep the database's original R2 path untouched.
+    # Templates can use cover_art_url when available.
     for track in tracks:
         try:
             from app.services.storage import r2_presigned_url
@@ -1038,6 +1043,7 @@ def _public_creator_store(
         if getattr(album, "is_published", True)
     ]
 
+    # Do not overwrite database paths.
     for track in tracks:
         try:
             from app.services.storage import r2_presigned_url
