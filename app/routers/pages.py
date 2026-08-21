@@ -13,13 +13,21 @@ from app.models.order import License, Order, OrderStatus
 from app.models.profile import Profile
 from app.models.user import User
 from app.services.search import run_search
-from app.utils.deps import get_optional_user, require_user
+from app.utils.deps import (
+    get_optional_user,
+    get_role_name,
+    require_user,
+)
 
 
 router = APIRouter(tags=["pages"])
 
 templates = Jinja2Templates(directory="app/templates")
 
+
+# ======================================================================
+# COMMON TEMPLATE CONTEXT
+# ======================================================================
 
 def ctx(
     request: Request,
@@ -29,6 +37,7 @@ def ctx(
     context = {
         "request": request,
         "current_user": current_user,
+        "user": current_user,
         "current_year": datetime.utcnow().year,
     }
 
@@ -37,9 +46,117 @@ def ctx(
     return context
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
+# ROLE / DASHBOARD HELPERS
+# ======================================================================
+
+def dashboard_destination(user: User) -> str:
+    """
+    Single source of truth for dashboard routing.
+
+    ADMIN
+        /admin
+
+    CREATOR / PRODUCER
+        /dashboard
+
+    BUYER / ARTIST
+        /artist/dashboard
+    """
+
+    role = get_role_name(user)
+
+    if role == "admin":
+        return "/admin"
+
+    if role == "creator":
+        return "/dashboard"
+
+    return "/artist/dashboard"
+
+
+def render_buyer_dashboard(
+    request: Request,
+    db: Session,
+    current_user: User,
+):
+    """
+    Render the buyer/artist dashboard.
+
+    This intentionally does NOT use require_creator.
+
+    A buyer/artist must never be redirected to the producer
+    dashboard at /dashboard.
+    """
+
+    profile = getattr(
+        current_user,
+        "profile",
+        None,
+    )
+
+    completed_orders = (
+        db.query(Order)
+        .filter(
+            Order.buyer_id == current_user.id,
+            Order.status == OrderStatus.COMPLETED,
+        )
+        .order_by(
+            Order.completed_at.desc()
+        )
+        .all()
+    )
+
+    pending_orders = (
+        db.query(Order)
+        .filter(
+            Order.buyer_id == current_user.id,
+            Order.status == OrderStatus.PENDING,
+        )
+        .order_by(
+            Order.created_at.desc()
+        )
+        .all()
+    )
+
+    total_spent = sum(
+        (
+            order.gross_amount or 0
+            for order in completed_orders
+        ),
+        0,
+    )
+
+    licenses = (
+        db.query(License)
+        .filter(
+            License.buyer_id == current_user.id
+        )
+        .order_by(
+            License.granted_at.desc()
+        )
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "account.html",
+        ctx(
+            request,
+            current_user,
+            profile=profile,
+            completed_orders=completed_orders,
+            pending_orders=pending_orders,
+            purchase_count=len(completed_orders),
+            total_spent=total_spent,
+            licenses=licenses,
+        ),
+    )
+
+
+# ======================================================================
 # HOMEPAGE
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/")
 def home(
@@ -49,7 +166,10 @@ def home(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     if q.strip():
-        found = run_search(db, q.strip())
+        found = run_search(
+            db,
+            q.strip(),
+        )
 
         return templates.TemplateResponse(
             request,
@@ -58,8 +178,14 @@ def home(
                 request,
                 current_user,
                 query=q,
-                results=found.get("results", {}),
-                total_results=found.get("total", 0),
+                results=found.get(
+                    "results",
+                    {},
+                ),
+                total_results=found.get(
+                    "total",
+                    0,
+                ),
             ),
         )
 
@@ -76,9 +202,9 @@ def home(
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # SEARCH
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/search")
 def search(
@@ -95,9 +221,9 @@ def search(
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # BEATS
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/beats")
 def beats(
@@ -105,7 +231,10 @@ def beats(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    found = run_search(db, "beats")
+    found = run_search(
+        db,
+        "beats",
+    )
 
     return templates.TemplateResponse(
         request,
@@ -114,15 +243,21 @@ def beats(
             request,
             current_user,
             query="beats",
-            results=found.get("results", {}),
-            total_results=found.get("total", 0),
+            results=found.get(
+                "results",
+                {},
+            ),
+            total_results=found.get(
+                "total",
+                0,
+            ),
         ),
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # SESSIONS
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/sessions")
 def sessions(
@@ -130,7 +265,10 @@ def sessions(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    found = run_search(db, "sessions")
+    found = run_search(
+        db,
+        "sessions",
+    )
 
     return templates.TemplateResponse(
         request,
@@ -139,15 +277,21 @@ def sessions(
             request,
             current_user,
             query="sessions",
-            results=found.get("results", {}),
-            total_results=found.get("total", 0),
+            results=found.get(
+                "results",
+                {},
+            ),
+            total_results=found.get(
+                "total",
+                0,
+            ),
         ),
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # HOT PICKS
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/hot-picks")
 def hot_picks(
@@ -155,7 +299,10 @@ def hot_picks(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    found = run_search(db, "hot")
+    found = run_search(
+        db,
+        "hot",
+    )
 
     return templates.TemplateResponse(
         request,
@@ -164,15 +311,21 @@ def hot_picks(
             request,
             current_user,
             query="hot",
-            results=found.get("results", {}),
-            total_results=found.get("total", 0),
+            results=found.get(
+                "results",
+                {},
+            ),
+            total_results=found.get(
+                "total",
+                0,
+            ),
         ),
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # TERMS
-# ----------------------------------------------------------------------
+# ======================================================================
 
 @router.get("/terms")
 def terms(
@@ -189,18 +342,9 @@ def terms(
     )
 
 
-# ----------------------------------------------------------------------
-# PUBLIC CREATOR PROFILE / PUBLIC STORE
-# ----------------------------------------------------------------------
-#
-# Both URLs intentionally use the same page:
-#
-# /profile/{slug}
-# /store/{slug}
-#
-# This keeps the existing profile URL working while also supporting
-# the public store URL used by the producer dashboard.
-# ----------------------------------------------------------------------
+# ======================================================================
+# PUBLIC CREATOR PROFILE / STORE
+# ======================================================================
 
 @router.get("/profile/{slug}")
 @router.get("/store/{slug}")
@@ -212,7 +356,9 @@ def public_profile(
 ):
     profile = (
         db.query(Profile)
-        .filter(Profile.slug == slug)
+        .filter(
+            Profile.slug == slug
+        )
         .first()
     )
 
@@ -223,17 +369,31 @@ def public_profile(
         )
 
     tracks = list(
-        getattr(profile, "tracks", None) or []
+        getattr(
+            profile,
+            "tracks",
+            None,
+        )
+        or []
     )
 
     albums = list(
-        getattr(profile, "albums", None) or []
+        getattr(
+            profile,
+            "albums",
+            None,
+        )
+        or []
     )
 
     public_tracks = []
 
     for track in tracks:
-        if not getattr(track, "is_published", True):
+        if not getattr(
+            track,
+            "is_published",
+            True,
+        ):
             continue
 
         sales_model = getattr(
@@ -251,8 +411,13 @@ def public_profile(
         )
 
         if (
-            str(sales_model_value).lower() == "exclusive"
-            and getattr(track, "is_sold", False)
+            str(sales_model_value).lower()
+            == "exclusive"
+            and getattr(
+                track,
+                "is_sold",
+                False,
+            )
         ):
             continue
 
@@ -261,7 +426,11 @@ def public_profile(
     public_albums = [
         album
         for album in albums
-        if getattr(album, "is_published", True)
+        if getattr(
+            album,
+            "is_published",
+            True,
+        )
     ]
 
     creator = getattr(
@@ -285,7 +454,52 @@ def public_profile(
 
 
 # ======================================================================
-# BUYER ACCOUNT
+# BUYER / ARTIST DASHBOARD
+# ======================================================================
+
+@router.get(
+    "/artist/dashboard",
+    include_in_schema=False,
+)
+def artist_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Correct destination for buyer/artist accounts.
+
+    IMPORTANT:
+    This route does NOT redirect to /dashboard.
+
+    /dashboard belongs to producers/creators.
+    """
+
+    role = get_role_name(
+        current_user
+    )
+
+    if role == "admin":
+        return RedirectResponse(
+            url="/admin",
+            status_code=303,
+        )
+
+    if role == "creator":
+        return RedirectResponse(
+            url="/dashboard",
+            status_code=303,
+        )
+
+    return render_buyer_dashboard(
+        request,
+        db,
+        current_user,
+    )
+
+
+# ======================================================================
+# ACCOUNT
 # ======================================================================
 
 @router.get("/account")
@@ -294,10 +508,8 @@ def account(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    role = getattr(
-        current_user.role,
-        "value",
-        current_user.role,
+    role = get_role_name(
+        current_user
     )
 
     if role == "creator":
@@ -312,49 +524,10 @@ def account(
             status_code=303,
         )
 
-    profile = getattr(
-        current_user,
-        "profile",
-        None,
-    )
-
-    completed_orders = (
-        db.query(Order)
-        .filter(
-            Order.buyer_id == current_user.id,
-            Order.status == OrderStatus.COMPLETED,
-        )
-        .order_by(Order.completed_at.desc())
-        .all()
-    )
-
-    pending_orders = (
-        db.query(Order)
-        .filter(
-            Order.buyer_id == current_user.id,
-            Order.status == OrderStatus.PENDING,
-        )
-        .order_by(Order.created_at.desc())
-        .all()
-    )
-
-    total_spent = sum(
-        (order.gross_amount or 0)
-        for order in completed_orders
-    )
-
-    return templates.TemplateResponse(
+    return render_buyer_dashboard(
         request,
-        "account.html",
-        ctx(
-            request,
-            current_user,
-            profile=profile,
-            completed_orders=completed_orders,
-            pending_orders=pending_orders,
-            purchase_count=len(completed_orders),
-            total_spent=total_spent,
-        ),
+        db,
+        current_user,
     )
 
 
@@ -373,7 +546,9 @@ def account_purchases(
         .filter(
             License.buyer_id == current_user.id
         )
-        .order_by(License.granted_at.desc())
+        .order_by(
+            License.granted_at.desc()
+        )
         .all()
     )
 
@@ -403,7 +578,9 @@ def account_downloads(
         .filter(
             License.buyer_id == current_user.id
         )
-        .order_by(License.granted_at.desc())
+        .order_by(
+            License.granted_at.desc()
+        )
         .all()
     )
 
@@ -445,7 +622,9 @@ def download_track(
 
     track = (
         db.query(Track)
-        .filter(Track.id == track_id)
+        .filter(
+            Track.id == track_id
+        )
         .first()
     )
 
@@ -455,13 +634,38 @@ def download_track(
             detail="Track not found.",
         )
 
-    file_path = Path(track.audio_file_path)
+    stored_path = getattr(
+        track,
+        "audio_file_path",
+        None,
+    )
+
+    if not stored_path:
+        raise HTTPException(
+            status_code=404,
+            detail="The purchased audio file is currently unavailable.",
+        )
+
+    file_path = Path(
+        str(stored_path)
+    )
 
     if not file_path.is_absolute():
-        project_root = Path(__file__).resolve().parents[2]
-        file_path = project_root / file_path
+        project_root = (
+            Path(__file__)
+            .resolve()
+            .parents[2]
+        )
 
-    if not file_path.exists() or not file_path.is_file():
+        file_path = (
+            project_root
+            / file_path
+        )
+
+    if (
+        not file_path.exists()
+        or not file_path.is_file()
+    ):
         raise HTTPException(
             status_code=404,
             detail="The purchased audio file is currently unavailable.",
@@ -469,12 +673,20 @@ def download_track(
 
     safe_title = "".join(
         character
-        if character.isalnum() or character in " ._-"
+        if (
+            character.isalnum()
+            or character in " ._-"
+        )
         else "_"
-        for character in track.title
+        for character in (
+            track.title
+            or "BeatHub_Track"
+        )
     ).strip()
 
-    filename = f"{safe_title or 'BeatHub_Track'}.mp3"
+    filename = (
+        f"{safe_title or 'BeatHub_Track'}.mp3"
+    )
 
     return FileResponse(
         path=str(file_path),
@@ -498,7 +710,9 @@ def account_orders(
         .filter(
             Order.buyer_id == current_user.id
         )
-        .order_by(Order.created_at.desc())
+        .order_by(
+            Order.created_at.desc()
+        )
         .all()
     )
 
@@ -533,13 +747,9 @@ def account_settings(
 
 
 # ======================================================================
-# DASHBOARD COMPATIBILITY
+# LEGACY DASHBOARD COMPATIBILITY ROUTES
 # ======================================================================
 
-@router.get(
-    "/artist/dashboard",
-    include_in_schema=False,
-)
 @router.get(
     "/creator/dashboard",
     include_in_schema=False,
@@ -556,11 +766,21 @@ def account_settings(
     "/dashboard/index",
     include_in_schema=False,
 )
-def dashboard_alias(
-    user=Depends(require_user),
+def creator_dashboard_alias(
+    current_user: User = Depends(require_user),
 ):
+    """
+    Legacy producer dashboard URLs.
+
+    Creators go to /dashboard.
+    Buyers go to /artist/dashboard.
+    Admins go to /admin.
+    """
+
     return RedirectResponse(
-        url="/dashboard",
+        url=dashboard_destination(
+            current_user
+        ),
         status_code=303,
     )
 
@@ -574,4 +794,6 @@ def dashboard_alias(
     include_in_schema=False,
 )
 def healthz_compat():
-    return {"status": "ok"}
+    return {
+        "status": "ok"
+    }
