@@ -18,13 +18,10 @@ class WithdrawalStatus(str, enum.Enum):
 
 class CreatorLedgerEntry(Base):
     """
-    Append-only ledger of creator credits and debits.
+    Append-only ledger for creator balances.
 
-    Positive amount:
-        creator earns money
-
-    Negative amount:
-        creator withdraws money
+    Positive amounts = creator credits.
+    Negative amounts = creator debits/withdrawals.
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -72,9 +69,9 @@ class CreatorLedgerEntry(Base):
 
 class WithdrawalRequest(Base):
     """
-    Creator withdrawal request.
+    Producer/creator withdrawal request.
 
-    This table is ONLY for creator withdrawals.
+    This table is intentionally NOT used for admin withdrawals.
     """
 
     __tablename__ = "withdrawal_requests"
@@ -137,18 +134,17 @@ class WithdrawalRequest(Base):
     creator_profile = relationship("Profile")
 
 
-class PlatformWithdrawal(Base):
+class AdminWithdrawal(Base):
     """
-    BeatHub platform-money withdrawal.
+    BeatHub platform/admin withdrawal.
 
-    This is completely separate from creator withdrawals.
+    This is separate from producer withdrawals.
 
-    The available platform balance is calculated from completed
-    order commissions minus platform withdrawals that have already
-    been paid or are currently being processed.
+    The admin withdraws BeatHub's own platform earnings,
+    normally represented by completed-order commission.
     """
 
-    __tablename__ = "platform_withdrawals"
+    __tablename__ = "admin_withdrawals"
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -169,27 +165,16 @@ class PlatformWithdrawal(Base):
     status: Mapped[WithdrawalStatus] = mapped_column(
         Enum(WithdrawalStatus),
         default=WithdrawalStatus.PENDING,
-        nullable=False,
         index=True,
-    )
-
-    payout_reference: Mapped[str | None] = mapped_column(
-        String(150),
-        nullable=True,
-    )
-
-    conversation_id: Mapped[str | None] = mapped_column(
-        String(150),
-        nullable=True,
-    )
-
-    originator_conversation_id: Mapped[str | None] = mapped_column(
-        String(150),
-        nullable=True,
     )
 
     admin_note: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    payout_reference: Mapped[str | None] = mapped_column(
+        String(100),
         nullable=True,
     )
 
