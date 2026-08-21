@@ -1,21 +1,13 @@
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
-
 from alembic import context
 
 from app.database import Base
 from app.config import settings
 
-# Import all models so SQLAlchemy metadata contains every table.
-from app.models import (  # noqa: F401
-    user,
-    track,
-    album,
-    order,
-    payment,
-    withdrawal,
-)
+# Import the models package so the model metadata is loaded.
+import app.models  # noqa: F401
 
 
 config = context.config
@@ -24,17 +16,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-# Use the application's SQLAlchemy metadata.
 target_metadata = Base.metadata
 
 
 def get_database_url() -> str:
-    """
-    Get DATABASE_URL from the application settings.
-
-    Render/PostgreSQL URLs sometimes use the postgres:// scheme,
-    while SQLAlchemy expects postgresql://.
-    """
     url = settings.DATABASE_URL
 
     if not url:
@@ -47,7 +32,6 @@ def get_database_url() -> str:
 
 
 def run_migrations_offline() -> None:
-    """Run migrations without creating a DB connection."""
     url = get_database_url()
 
     context.configure(
@@ -63,7 +47,6 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations using a live database connection."""
     configuration = config.get_section(config.config_ini_section) or {}
 
     configuration["sqlalchemy.url"] = get_database_url()
