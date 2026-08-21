@@ -3,7 +3,15 @@ from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -34,12 +42,12 @@ templates = Jinja2Templates(directory="app/templates")
 # COMMON TEMPLATE CONTEXT
 # ============================================================
 
-def ctx(request: Request, current_user, **extra):
+def ctx(request: Request, current_user: User, **extra):
     """
-    Common template context.
+    Common template context used by dashboard-related pages.
 
-    Provides safe defaults so older and newer dashboard
-    templates can use the same context without crashing.
+    The context intentionally contains compatibility variables used
+    by both older and newer BeatHub templates.
     """
 
     base = {
@@ -47,6 +55,7 @@ def ctx(request: Request, current_user, **extra):
         "current_user": current_user,
         "current_year": datetime.utcnow().year,
 
+        # Financial defaults
         "available_balance": Decimal("0"),
         "pending_withdrawal": Decimal("0"),
         "total_sales": 0,
@@ -54,17 +63,19 @@ def ctx(request: Request, current_user, **extra):
         "platform_commission": Decimal("0"),
         "net_earnings": Decimal("0"),
 
+        # Withdrawal
         "withdrawal_requests": [],
 
+        # Catalog
         "track_count": 0,
         "album_count": 0,
-
         "tracks": [],
         "albums": [],
 
+        # Orders
         "recent_orders": [],
 
-        # Dashboard pagination defaults.
+        # Pagination compatibility
         "track_page": 1,
         "track_total_pages": 1,
         "track_total": 0,
@@ -75,7 +86,7 @@ def ctx(request: Request, current_user, **extra):
         "track_end": 0,
         "q": "",
 
-        # Social/store defaults.
+        # Social / store
         "youtube_url": None,
         "discord_url": None,
         "store_url": None,
@@ -113,14 +124,14 @@ def _decimal(value) -> Decimal:
 
 def _creator_stats(db: Session, profile_id: str) -> dict:
     """
-    Calculate creator earnings from completed orders.
+    Calculate creator earnings from completed track orders.
 
-    Uses:
+    BeatHub Order fields:
         gross_amount
         commission_amount
         net_amount
 
-    These are the authoritative Order fields used by BeatHub.
+    Only completed orders are counted.
     """
 
     orders = (
@@ -225,8 +236,8 @@ def _creator_stats(db: Session, profile_id: str) -> dict:
     recent_orders = sorted(
         orders,
         key=lambda order: (
-            order.completed_at
-            or order.created_at
+            getattr(order, "completed_at", None)
+            or getattr(order, "created_at", None)
             or datetime.min
         ),
         reverse=True,
@@ -277,7 +288,10 @@ def _dashboard_context(
     user: User,
 ):
     """
-    Build the complete dashboard context.
+    Build one consistent context for dashboard pages.
+
+    This function deliberately provides all pagination variables
+    expected by the dashboard template.
     """
 
     profile = user.profile
@@ -288,22 +302,111 @@ def _dashboard_context(
             detail="Creator profile missing.",
         )
 
+    # --------------------------------------------------------
+    # Creator statistics
+    # --------------------------------------------------------
+
     stats = _creator_stats(
         db,
         profile.id,
     )
 
     # --------------------------------------------------------
-    # Track count
+    # Search / pagination
     # --------------------------------------------------------
 
-    track_count = (
+    track_per_page = 12
+
+    raw_page = request.query_params.get(
+        "track_page",
+        request.query_params.get("page", "1"),
+    )
+
+    try:
+        track_page = int(raw_page)
+    except (ValueError, TypeError):
+        track_page = 1
+
+    if track_page < 1:
+        track_page = 1
+
+    track_search = (
+        request.query_params.get(
+            "track_search",
+            request.query_params.get("q", ""),
+        )
+        or ""
+    ).strip()
+
+    # --------------------------------------------------------
+    # All creator tracks count
+    # --------------------------------------------------------
+
+    track_query = (
         db.query(Track)
         .filter(
             Track.creator_profile_id == profile.id
         )
-        .count()
     )
+
+    if track_search:
+        search_pattern = f"%{track_search}%"
+
+        track_query = track_query.filter(
+            Track.title.ilike(search_pattern)
+            | Track.genre.ilike(search_pattern)
+            | Track.tags.ilike(search_pattern)
+        )
+
+    track_total_count = track_query.count()
+
+    # --------------------------------------------------------
+    # Total pages
+    # --------------------------------------------------------
+
+    if track_total_count == 0:
+        track_total_pages = 1
+    else:
+        track_total_pages = (
+            (track_total_count + track_per_page - 1)
+            // track_per_page
+        )
+
+    if track_page > track_total_pages:
+        track_page = track_total_pages
+
+    # --------------------------------------------------------
+    # Pagination offset
+    # --------------------------------------------------------
+
+    offset = (
+        (track_page - 1)
+        * track_per_page
+    )
+
+    tracks = (
+        track_query
+        .order_by(
+            Track.created_at.desc()
+        )
+        .offset(offset)
+        .limit(track_per_page)
+        .all()
+    )
+
+    # --------------------------------------------------------
+    # Track display range
+    # --------------------------------------------------------
+
+    if track_total_count == 0:
+        track_start = 0
+        track_end = 0
+    else:
+        track_start = offset + 1
+        track_end = min(
+            offset + len(tracks),
+            track_total_count,
+        )
 
     # --------------------------------------------------------
     # Album count
@@ -370,19 +473,18 @@ def _dashboard_context(
     )
 
     # --------------------------------------------------------
-    # Default dashboard tracks
-    #
-    # Pagination is handled by dashboard_home().
+    # Full dashboard context
     # --------------------------------------------------------
 
     return ctx(
         request,
         user,
 
+        # Profile
         profile=profile,
 
+        # Statistics
         stats=stats,
-
         total_sales=stats["total_sales"],
         gross_revenue=stats["gross_revenue"],
         platform_commission=stats["platform_commission"],
@@ -391,14 +493,36 @@ def _dashboard_context(
         pending_withdrawal=stats["pending_withdrawal"],
         recent_orders=stats["recent_orders"],
 
-        track_count=track_count,
+        # Catalog
+        track_count=(
+            db.query(Track)
+            .filter(
+                Track.creator_profile_id == profile.id
+            )
+            .count()
+        ),
         album_count=album_count,
+        tracks=tracks,
+        albums=[],
 
+        # Withdrawal
         withdrawal_requests=withdrawal_requests,
 
+        # Social / store
         youtube_url=youtube_url,
         discord_url=discord_url,
         store_url=store_url,
+
+        # Pagination compatibility
+        track_page=track_page,
+        track_total_pages=track_total_pages,
+        track_total=track_total_count,
+        track_total_count=track_total_count,
+        track_per_page=track_per_page,
+        track_search=track_search,
+        track_start=track_start,
+        track_end=track_end,
+        q=track_search,
     )
 
 
@@ -411,112 +535,15 @@ def dashboard_home(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
-    page: int = 1,
-    q: str = "",
 ):
-    """
-    Creator dashboard.
-
-    Includes stable pagination variables so dashboard.html
-    never receives an undefined track_total_pages variable.
-    """
-
-    if page < 1:
-        page = 1
-
-    context = _dashboard_context(
-        request,
-        db,
-        user,
-    )
-
-    profile = user.profile
-
-    if not profile:
-        raise HTTPException(
-            status_code=400,
-            detail="Creator profile missing.",
-        )
-
-    # --------------------------------------------------------
-    # Track pagination
-    # --------------------------------------------------------
-
-    track_per_page = 12
-
-    search = (q or "").strip()
-
-    tracks_query = (
-        db.query(Track)
-        .filter(
-            Track.creator_profile_id == profile.id
-        )
-    )
-
-    if search:
-        search_term = f"%{search}%"
-
-        tracks_query = tracks_query.filter(
-            Track.title.ilike(search_term)
-        )
-
-    track_total = tracks_query.count()
-
-    track_total_pages = max(
-        1,
-        (track_total + track_per_page - 1)
-        // track_per_page,
-    )
-
-    if page > track_total_pages:
-        page = track_total_pages
-
-    track_start = (
-        (page - 1)
-        * track_per_page
-    )
-
-    tracks = (
-        tracks_query
-        .order_by(
-            Track.created_at.desc()
-        )
-        .offset(track_start)
-        .limit(track_per_page)
-        .all()
-    )
-
-    track_end = (
-        track_start + len(tracks)
-    )
-
-    # --------------------------------------------------------
-    # Add pagination context
-    # --------------------------------------------------------
-
-    context.update(
-        {
-            "tracks": tracks,
-
-            "track_page": page,
-            "track_total_pages": track_total_pages,
-            "track_total": track_total,
-            "track_total_count": track_total,
-
-            "track_per_page": track_per_page,
-
-            "track_search": search,
-            "q": search,
-
-            "track_start": track_start,
-            "track_end": track_end,
-        }
-    )
-
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        context,
+        _dashboard_context(
+            request,
+            db,
+            user,
+        ),
     )
 
 
@@ -530,10 +557,6 @@ def withdrawal_page(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    """
-    Display the creator withdrawal page.
-    """
-
     context = _dashboard_context(
         request,
         db,
@@ -556,6 +579,12 @@ def upload_page(
     request: Request,
     user: User = Depends(require_creator),
 ):
+    if not user.profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
+
     return templates.TemplateResponse(
         request,
         "upload_track.html",
@@ -585,7 +614,7 @@ async def upload_submit(
     sales_models: List[str] = Form(...),
 
     audio_files: List[UploadFile] = File(...),
-    cover_files: Optional[List[UploadFile]] = File(None),
+    cover_files: List[Optional[UploadFile]] = File(None),
 ):
     profile = user.profile
 
@@ -624,9 +653,8 @@ async def upload_submit(
     created = []
 
     try:
-        for i, title in enumerate(titles):
-
-            title = (title or "").strip()
+        for i, raw_title in enumerate(titles):
+            title = (raw_title or "").strip()
 
             if not title:
                 return error(
@@ -671,6 +699,13 @@ async def upload_submit(
             try:
                 price_val = Decimal(price_raw)
 
+                if price_val < 0:
+                    raise ValueError
+
+                price_val = price_val.quantize(
+                    Decimal("0.01")
+                )
+
             except (
                 InvalidOperation,
                 ValueError,
@@ -679,16 +714,6 @@ async def upload_submit(
                 return error(
                     f"Price for '{title}' is invalid."
                 )
-
-            if price_val < 0:
-                return error(
-                    f"Price for '{title}' cannot be negative."
-                )
-
-            # Keep money to two decimal places.
-            price_val = price_val.quantize(
-                Decimal("0.01")
-            )
 
             # ------------------------------------------------
             # Sales model
@@ -708,6 +733,11 @@ async def upload_submit(
             # ------------------------------------------------
             # Audio
             # ------------------------------------------------
+
+            if not audio_files[i].filename:
+                return error(
+                    f"Audio file for '{title}' is required."
+                )
 
             audio_path = await save_upload(
                 audio_files[i],
@@ -750,37 +780,28 @@ async def upload_submit(
 
             track = Track(
                 creator_profile_id=profile.id,
-
                 title=title,
                 slug=slug,
-
                 description=(
                     descriptions[i].strip()
                     if i < len(descriptions)
                     else None
                 ) or None,
-
                 genre=(
                     genres[i].strip()
                     if i < len(genres)
                     else None
                 ) or None,
-
                 bpm=bpm_val,
-
                 tags=(
                     tags_list[i].strip()
                     if i < len(tags_list)
                     else None
                 ) or None,
-
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
-
                 price=price_val,
-
                 sales_model=sales_model,
-
                 is_sold=False,
                 is_published=True,
             )
@@ -799,13 +820,14 @@ async def upload_submit(
         db.rollback()
         raise
 
+    message = (
+        f"{len(created)} track(s) uploaded successfully."
+    )
+
     return RedirectResponse(
         url=(
             "/dashboard?success="
-            + quote(
-                str(len(created))
-                + " track(s) uploaded successfully."
-            )
+            + quote(message)
         ),
         status_code=303,
     )
@@ -919,6 +941,58 @@ async def new_album_submit(
             "Select at least one track for this album."
         )
 
+    # Remove duplicate IDs while preserving order.
+    cleaned_track_ids = []
+
+    for track_id in track_ids:
+        track_id = str(track_id).strip()
+
+        if track_id and track_id not in cleaned_track_ids:
+            cleaned_track_ids.append(track_id)
+
+    if not cleaned_track_ids:
+        return error(
+            "Select at least one valid track."
+        )
+
+    # --------------------------------------------------------
+    # Validate tracks belong to creator BEFORE creating album
+    # --------------------------------------------------------
+
+    valid_tracks = (
+        db.query(Track)
+        .filter(
+            Track.id.in_(cleaned_track_ids),
+            Track.creator_profile_id == profile.id,
+        )
+        .all()
+    )
+
+    if not valid_tracks:
+        return error(
+            "None of the selected tracks belong to your account."
+        )
+
+    track_map = {
+        str(track.id): track
+        for track in valid_tracks
+    }
+
+    ordered_tracks = []
+
+    for track_id in cleaned_track_ids:
+        track = track_map.get(
+            str(track_id)
+        )
+
+        if track:
+            ordered_tracks.append(track)
+
+    if not ordered_tracks:
+        return error(
+            "The selected tracks could not be found."
+        )
+
     # --------------------------------------------------------
     # Artwork
     # --------------------------------------------------------
@@ -953,12 +1027,14 @@ async def new_album_submit(
         slug=slug,
         description=(
             description.strip()
-            or None
-        ),
+            if description
+            else None
+        ) or None,
         genre=(
             genre.strip()
-            or None
-        ),
+            if genre
+            else None
+        ) or None,
         artwork_path=artwork_path,
         is_published=True,
     )
@@ -967,60 +1043,16 @@ async def new_album_submit(
     db.flush()
 
     # --------------------------------------------------------
-    # Validate tracks belong to creator
+    # Album tracks
     # --------------------------------------------------------
 
-    valid_tracks = (
-        db.query(Track)
-        .filter(
-            Track.id.in_(track_ids),
-            Track.creator_profile_id == profile.id,
-        )
-        .all()
-    )
-
-    if not valid_tracks:
-        db.rollback()
-
-        return error(
-            "None of the selected tracks belong to your account."
-        )
-
-    # --------------------------------------------------------
-    # Preserve selected order
-    # --------------------------------------------------------
-
-    track_map = {
-        str(track.id): track
-        for track in valid_tracks
-    }
-
-    position = 0
-
-    for track_id in track_ids:
-
-        track = track_map.get(
-            str(track_id)
-        )
-
-        if not track:
-            continue
-
+    for position, track in enumerate(ordered_tracks):
         db.add(
             AlbumTrack(
                 album_id=album.id,
                 track_id=track.id,
                 position=position,
             )
-        )
-
-        position += 1
-
-    if position == 0:
-        db.rollback()
-
-        return error(
-            "None of the selected tracks could be added to the album."
         )
 
     db.commit()
@@ -1053,8 +1085,6 @@ def request_withdrawal(
     This creates a PENDING withdrawal.
 
     It does NOT automatically send B2C money.
-    Admin/payment processing can approve/process
-    the request.
     """
 
     profile = user.profile
@@ -1081,6 +1111,8 @@ def request_withdrawal(
     try:
         amount_val = Decimal(
             str(amount).strip()
+        ).quantize(
+            Decimal("0.01")
         )
 
     except (
@@ -1108,10 +1140,6 @@ def request_withdrawal(
             ),
             status_code=303,
         )
-
-    amount_val = amount_val.quantize(
-        Decimal("0.01")
-    )
 
     # --------------------------------------------------------
     # Available balance
@@ -1145,9 +1173,7 @@ def request_withdrawal(
 
     # --------------------------------------------------------
     # Normalize only for validation.
-    #
-    # The original entered value is retained in the database
-    # for compatibility with existing admin/payment logic.
+    # Store the original entered value.
     # --------------------------------------------------------
 
     normalized_phone = (
@@ -1161,6 +1187,7 @@ def request_withdrawal(
 
     valid_phone = False
 
+    # 0712345678 / 0112345678
     if (
         len(normalized_phone) == 10
         and normalized_phone.isdigit()
@@ -1170,6 +1197,7 @@ def request_withdrawal(
     ):
         valid_phone = True
 
+    # 254712345678 / 254112345678
     elif (
         len(normalized_phone) == 12
         and normalized_phone.isdigit()
