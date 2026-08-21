@@ -1,63 +1,59 @@
+import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
 # ============================================================
-# WITHDRAWAL STATUS
-# ============================================================
-#
-# IMPORTANT:
-# These are plain strings.
-#
-# DO NOT change this back to sqlalchemy.Enum.
-#
-# Database values are always:
-#
-#   pending
-#   approved
-#   processing
-#   paid
-#   rejected
-#
-# This prevents PostgreSQL enum-name/value mismatches.
+# CREATOR WITHDRAWAL STATUS
 # ============================================================
 
-class WithdrawalStatus:
+class WithdrawalStatus(str, enum.Enum):
+    """
+    IMPORTANT:
+
+    The PostgreSQL database already stores the enum MEMBERS
+    as uppercase names:
+
+        PENDING
+        APPROVED
+        PROCESSING
+        PAID
+        REJECTED
+
+    SQLAlchemy Enum stores the enum member names by default.
+
+    Therefore DO NOT change these to lowercase enum values.
+    """
+
     PENDING = "pending"
     APPROVED = "approved"
     PROCESSING = "processing"
     PAID = "paid"
     REJECTED = "rejected"
 
-    ALL = (
-        PENDING,
-        APPROVED,
-        PROCESSING,
-        PAID,
-        REJECTED,
-    )
-
 
 # ============================================================
-# BACKWARD COMPATIBILITY
-# ============================================================
-#
-# Some versions of admin.py may still import:
-#
-#   AdminWithdrawalStatus
-#
-# Keep this alias so the application cannot crash simply because
-# an older router still uses that name.
-#
-# Both names point to exactly the same status values.
+# ADMIN WITHDRAWAL STATUS
 # ============================================================
 
-AdminWithdrawalStatus = WithdrawalStatus
+class AdminWithdrawalStatus(str, enum.Enum):
+    """
+    Status for BeatHub/platform withdrawals.
+
+    Kept as a separate enum because the admin withdrawal table
+    was created separately in the database.
+    """
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    PROCESSING = "processing"
+    PAID = "paid"
+    REJECTED = "rejected"
 
 
 # ============================================================
@@ -66,13 +62,13 @@ AdminWithdrawalStatus = WithdrawalStatus
 
 class CreatorLedgerEntry(Base):
     """
-    Append-only financial ledger for creator earnings.
+    Append-only financial ledger for creators.
 
-    Positive amount:
-        Creator receives money.
+    Positive:
+        money credited to creator.
 
-    Negative amount:
-        Creator money is deducted, e.g. withdrawal.
+    Negative:
+        money deducted from creator.
     """
 
     __tablename__ = "creator_ledger_entries"
@@ -122,16 +118,10 @@ class CreatorLedgerEntry(Base):
 
 
 # ============================================================
-# CREATOR WITHDRAWAL
+# CREATOR WITHDRAWAL REQUEST
 # ============================================================
 
 class WithdrawalRequest(Base):
-    """
-    Withdrawal requested by a BeatHub creator.
-
-    This is separate from BeatHub/admin withdrawals.
-    """
-
     __tablename__ = "withdrawal_requests"
 
     id: Mapped[str] = mapped_column(
@@ -157,11 +147,28 @@ class WithdrawalRequest(Base):
         nullable=False,
     )
 
-    # Plain VARCHAR.
+    # IMPORTANT:
     #
-    # This is intentional.
-    status: Mapped[str] = mapped_column(
-        String(30),
+    # No values_callable here.
+    #
+    # SQLAlchemy will use the enum member names:
+    #
+    # PENDING
+    # APPROVED
+    # PROCESSING
+    # PAID
+    # REJECTED
+    #
+    # This matches the existing PostgreSQL enum.
+
+    status: Mapped[WithdrawalStatus] = mapped_column(
+        Enum(
+            WithdrawalStatus,
+            name="withdrawalstatus",
+            native_enum=True,
+            create_constraint=False,
+            validate_strings=True,
+        ),
         nullable=False,
         default=WithdrawalStatus.PENDING,
         index=True,
@@ -207,15 +214,9 @@ class WithdrawalRequest(Base):
 
 class AdminWithdrawal(Base):
     """
-    Withdrawal of BeatHub's own platform money.
+    BeatHub's own platform withdrawal.
 
-    This is NOT a creator withdrawal.
-
-    Creator:
-        WithdrawalRequest
-
-    BeatHub platform/admin:
-        AdminWithdrawal
+    This is separate from creator withdrawals.
     """
 
     __tablename__ = "admin_withdrawals"
@@ -236,11 +237,16 @@ class AdminWithdrawal(Base):
         nullable=False,
     )
 
-    # Plain VARCHAR.
-    status: Mapped[str] = mapped_column(
-        String(30),
+    status: Mapped[AdminWithdrawalStatus] = mapped_column(
+        Enum(
+            AdminWithdrawalStatus,
+            name="adminwithdrawalstatus",
+            native_enum=True,
+            create_constraint=False,
+            validate_strings=True,
+        ),
         nullable=False,
-        default=WithdrawalStatus.PENDING,
+        default=AdminWithdrawalStatus.PENDING,
         index=True,
     )
 
