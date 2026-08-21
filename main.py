@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.database import Base, engine, get_db
+from app.database import Base, engine
 from app.routers import (
     admin,
     auth,
@@ -31,14 +31,10 @@ logger = logging.getLogger(
 )
 
 
-BASE_DIR = Path(
-    __file__
-).resolve().parent
-
+BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
 
 TEMPLATES_DIR = APP_DIR / "templates"
-
 STATIC_DIR = APP_DIR / "static"
 
 
@@ -46,75 +42,50 @@ app = FastAPI(
     title=settings.APP_NAME
 )
 
-
 templates = Jinja2Templates(
-    directory=str(
-        TEMPLATES_DIR
-    )
+    directory=str(TEMPLATES_DIR)
 )
 
 
-# ----------------------------------------------------------------------
-# STATIC FILES
-# ----------------------------------------------------------------------
+# ============================================================
+# STATIC
+# ============================================================
 
 if STATIC_DIR.exists():
     app.mount(
         "/static",
         StaticFiles(
-            directory=str(
-                STATIC_DIR
-            )
+            directory=str(STATIC_DIR)
         ),
         name="static",
     )
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # DATABASE
-# ----------------------------------------------------------------------
+# ============================================================
 
 Base.metadata.create_all(
     bind=engine
 )
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # ROUTERS
-# ----------------------------------------------------------------------
+# ============================================================
 
-app.include_router(
-    auth.router
-)
-
-app.include_router(
-    pages.router
-)
-
-app.include_router(
-    music.router
-)
-
-app.include_router(
-    checkout.router
-)
-
-app.include_router(
-    mpesa_callback.router
-)
-
-app.include_router(
-    dashboard.router
-)
-
-app.include_router(
-    admin.router
-)
+app.include_router(auth.router)
+app.include_router(pages.router)
+app.include_router(music.router)
+app.include_router(checkout.router)
+app.include_router(mpesa_callback.router)
+app.include_router(dashboard.router)
+app.include_router(admin.router)
 
 
-# ----------------------------------------------------------------------
-# HOMEPAGE COMPATIBILITY ROUTES
-# ----------------------------------------------------------------------
+# ============================================================
+# PUBLIC COMPATIBILITY ROUTES
+# ============================================================
 
 @app.get(
     "/beats",
@@ -122,9 +93,14 @@ app.include_router(
 )
 def beats_compat(
     request: Request,
-    db=Depends(get_db),
     current_user=Depends(
         get_optional_user
+    ),
+    db=Depends(
+        __import__(
+            "app.database",
+            fromlist=["get_db"],
+        ).get_db
     ),
 ):
     found = run_search(
@@ -152,9 +128,14 @@ def beats_compat(
 )
 def sessions_compat(
     request: Request,
-    db=Depends(get_db),
     current_user=Depends(
         get_optional_user
+    ),
+    db=Depends(
+        __import__(
+            "app.database",
+            fromlist=["get_db"],
+        ).get_db
     ),
 ):
     found = run_search(
@@ -182,9 +163,14 @@ def sessions_compat(
 )
 def hot_picks_compat(
     request: Request,
-    db=Depends(get_db),
     current_user=Depends(
         get_optional_user
+    ),
+    db=Depends(
+        __import__(
+            "app.database",
+            fromlist=["get_db"],
+        ).get_db
     ),
 ):
     found = run_search(
@@ -206,9 +192,9 @@ def hot_picks_compat(
     )
 
 
-# ----------------------------------------------------------------------
+# ============================================================
 # DASHBOARD COMPATIBILITY
-# ----------------------------------------------------------------------
+# ============================================================
 
 @app.get(
     "/artist/dashboard",
@@ -231,9 +217,7 @@ def hot_picks_compat(
     include_in_schema=False,
 )
 def dashboard_alias(
-    user=Depends(
-        require_creator
-    ),
+    user=Depends(require_creator),
 ):
     return RedirectResponse(
         url="/dashboard",
@@ -241,16 +225,61 @@ def dashboard_alias(
     )
 
 
-# ----------------------------------------------------------------------
-# HEALTH CHECK
-# ----------------------------------------------------------------------
+# ============================================================
+# WITHDRAWAL COMPATIBILITY
+# ============================================================
+
+@app.get(
+    "/creator/withdraw",
+    include_in_schema=False,
+)
+def creator_withdraw_alias(
+    user=Depends(require_creator),
+):
+    return RedirectResponse(
+        url="/dashboard/withdraw",
+        status_code=303,
+    )
+
+
+@app.get(
+    "/producer/withdraw",
+    include_in_schema=False,
+)
+def producer_withdraw_alias(
+    user=Depends(require_creator),
+):
+    return RedirectResponse(
+        url="/dashboard/withdraw",
+        status_code=303,
+    )
+
+
+@app.get(
+    "/admin/withdrawal",
+    include_in_schema=False,
+)
+def admin_withdraw_alias(
+    user=Depends(
+        __import__(
+            "app.utils.deps",
+            fromlist=["require_admin"],
+        ).require_admin
+    ),
+):
+    return RedirectResponse(
+        url="/admin/withdraw",
+        status_code=303,
+    )
+
+
+# ============================================================
+# HEALTH
+# ============================================================
 
 @app.api_route(
     "/healthz",
-    methods=[
-        "GET",
-        "HEAD",
-    ],
+    methods=["GET", "HEAD"],
 )
 def healthz():
     return {
@@ -268,9 +297,9 @@ def healthz():
     }
 
 
-# ----------------------------------------------------------------------
-# ERROR HANDLERS
-# ----------------------------------------------------------------------
+# ============================================================
+# ERRORS
+# ============================================================
 
 @app.exception_handler(
     StarletteHTTPException
