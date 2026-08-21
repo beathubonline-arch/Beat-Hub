@@ -1,4 +1,4 @@
-"""Fix BeatHub withdrawal status storage.
+"""Normalize BeatHub withdrawal status columns.
 
 Revision ID: fix_withdrawal_status_001
 Revises: 654395e9ee8e
@@ -8,40 +8,86 @@ from alembic import op
 import sqlalchemy as sa
 
 
+# ---------------------------------------------------------------------
+# Revision identifiers
+# ---------------------------------------------------------------------
+
 revision = "fix_withdrawal_status_001"
+
+# THIS IS THE IMPORTANT FIX.
+# This migration now belongs to the initial migration chain.
 down_revision = "654395e9ee8e"
+
 branch_labels = None
 depends_on = None
 
 
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
+
+def _table_exists(bind, table_name: str) -> bool:
+    return bool(
+        bind.execute(
+            sa.text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_schema = current_schema()
+                      AND table_name = :table_name
+                )
+                """
+            ),
+            {"table_name": table_name},
+        ).scalar()
+    )
+
+
+def _column_exists(bind, table_name: str, column_name: str) -> bool:
+    return bool(
+        bind.execute(
+            sa.text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = :table_name
+                      AND column_name = :column_name
+                )
+                """
+            ),
+            {
+                "table_name": table_name,
+                "column_name": column_name,
+            },
+        ).scalar()
+    )
+
+
+# ---------------------------------------------------------------------
+# Upgrade
+# ---------------------------------------------------------------------
+
 def upgrade() -> None:
+
     bind = op.get_bind()
 
-    # ------------------------------------------------------------
+    # ================================================================
     # CREATOR WITHDRAWALS
-    # ------------------------------------------------------------
+    # ================================================================
 
-    creator_exists = bind.execute(
-        sa.text(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_name = 'withdrawal_requests'
-            )
-            """
-        )
-    ).scalar()
+    if _table_exists(bind, "withdrawal_requests") and _column_exists(
+        bind,
+        "withdrawal_requests",
+        "status",
+    ):
 
-    if creator_exists:
-        # Convert the PostgreSQL enum to VARCHAR.
+        # Convert PostgreSQL ENUM -> VARCHAR.
         #
-        # The initial schema created:
-        # withdrawalstatus =
-        # PENDING, APPROVED, PROCESSING, PAID, REJECTED
-        #
-        # Our application uses lowercase values, so VARCHAR is safer
-        # and avoids PostgreSQL enum casing conflicts.
+        # This is deliberately done using PostgreSQL's text cast so
+        # existing records are preserved.
         bind.execute(
             sa.text(
                 """
@@ -52,6 +98,15 @@ def upgrade() -> None:
             )
         )
 
+        # Normalize both:
+        #
+        # PENDING    -> pending
+        # APPROVED   -> approved
+        # PROCESSING -> processing
+        # PAID       -> paid
+        # REJECTED   -> rejected
+        #
+        # Also handles records that were already lowercase.
         bind.execute(
             sa.text(
                 """
@@ -71,29 +126,53 @@ def upgrade() -> None:
             )
         )
 
-    # ------------------------------------------------------------
+    # ================================================================
     # ADMIN WITHDRAWALS
-    # ------------------------------------------------------------
+    #
+    # This table may already exist from the admin withdrawal feature.
+    # Do NOT create it here because it is not part of the initial
+    # schema supplied by the project.
+    # ================================================================
 
-    admin_exists = bind.execute(
-        sa.text(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_name = 'admin_withdrawals'
-            )
-            """
-        )
-    ).scalar()
+    if _table_exists(bind, "admin_withdrawals") and _column_exists(
+        bind,
+        "admin_withdrawals",
+        "status",
+    ):
 
-    if admin_exists:
+        # If this is currently a PostgreSQL enum, convert it.
+        #
+        # Using a DO block makes this safe when the column is already
+        # VARCHAR/TEXT.
         bind.execute(
             sa.text(
                 """
-                ALTER TABLE admin_withdrawals
-                ALTER COLUMN status TYPE VARCHAR(30)
-                USING status::text
+                DO $$
+                DECLARE
+                    current_type TEXT;
+                BEGIN
+
+                    SELECT format_type(a.atttypid, a.atttypmod)
+                    INTO current_type
+                    FROM pg_attribute a
+                    JOIN pg_class c
+                      ON c.oid = a.attrelid
+                    WHERE c.relname = 'admin_withdrawals'
+                      AND a.attname = 'status'
+                      AND a.attnum > 0
+                      AND NOT a.attisdropped;
+
+                    IF current_type IS NOT NULL
+                       AND current_type NOT IN ('character varying', 'text') THEN
+
+                        ALTER TABLE admin_withdrawals
+                        ALTER COLUMN status TYPE VARCHAR(30)
+                        USING status::text;
+
+                    END IF;
+
+                END
+                $$;
                 """
             )
         )
@@ -118,9 +197,13 @@ def upgrade() -> None:
         )
 
 
+# ---------------------------------------------------------------------
+# Downgrade
+# ---------------------------------------------------------------------
+
 def downgrade() -> None:
-    # Intentionally leave withdrawal statuses as VARCHAR.
+    # Intentionally left empty.
     #
-    # Recreating PostgreSQL ENUMs would reintroduce the casing problem
-    # that this migration is specifically designed to eliminate.
+    # Converting back to PostgreSQL ENUMs would reintroduce the exact
+    # PENDING/pending problem that caused the production failures.
     pass
