@@ -1,119 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>{% block title %}BeatHub — The Home of Beats{% endblock %}</title>
+    <meta charset="UTF-8">
 
-  <link rel="stylesheet" href="/static/css/style.css">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-  {% block extra_head %}{% endblock %}
+    <title>
+        {% block title %}
+            BeatHub — The Home of Beats
+        {% endblock %}
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+
+    {% block extra_head %}{% endblock %}
+
 </head>
 
 <body>
 
-  <div class="stripe-bar"></div>
+    <div class="stripe-bar"></div>
 
-  <div class="container">
+    <div class="container">
 
-    <nav class="navbar">
+        <!-- =========================================================
+             NAVIGATION
+        ========================================================== -->
 
-      <a href="/" class="brand">
-        BEAT<span class="hub">HUB</span>
-      </a>
+        <nav class="navbar">
 
-      <div class="nav-links">
-        <a href="/beats">Beats</a>
-        <a href="/sessions">Sessions</a>
-        <a href="/hot-picks">Hot Picks</a>
-        <a href="/terms">Terms</a>
-      </div>
-
-      <div class="nav-actions">
-
-        {% if current_user %}
-
-          {% set role = current_user.role.value if current_user.role else '' %}
-
-          {% if role == 'creator' %}
-
-            <a href="/dashboard" class="btn btn-outline">
-              Dashboard
-            </a>
-
-          {% elif role == 'admin' %}
-
-            <a href="/admin" class="btn btn-outline">
-              Admin
-            </a>
-
-          {% else %}
-
-            <a href="/account" class="btn btn-outline">
-              My Account
-            </a>
-
-          {% endif %}
-
-          <form
-            action="/logout"
-            method="post"
-            style="display:inline;"
-          >
-            <button
-              type="submit"
-              class="btn btn-primary"
+            <a
+                href="/"
+                class="brand"
             >
-              Logout
-            </button>
-          </form>
+                BEAT<span class="hub">HUB</span>
+            </a>
 
-        {% else %}
+            <div class="nav-links">
 
-          <a
-            href="/login"
-            class="btn btn-outline"
-          >
-            Login
-          </a>
+                <a href="/beats">
+                    Beats
+                </a>
 
-          <a
-            href="/signup"
-            class="btn btn-primary"
-          >
-            Join BeatHub
-          </a>
+                <a href="/sessions">
+                    Sessions
+                </a>
+
+                <a href="/hot-picks">
+                    Hot Picks
+                </a>
+
+                <a href="/terms">
+                    Terms
+                </a>
+
+            </div>
+
+            <div class="nav-actions">
+
+                {% if current_user %}
+
+                    {% set role = current_user.role.value
+                        if current_user.role and current_user.role.value
+                        else current_user.role %}
+
+                    {% if role == 'admin' %}
+
+                        <a
+                            href="/admin"
+                            class="btn btn-outline"
+                        >
+                            Admin
+                        </a>
+
+                    {% elif role == 'creator' %}
+
+                        <a
+                            href="/dashboard"
+                            class="btn btn-outline"
+                        >
+                            Dashboard
+                        </a>
+
+                    {% else %}
+
+                        <a
+                            href="/account"
+                            class="btn btn-outline"
+                        >
+                            My Account
+                        </a>
+
+                    {% endif %}
+
+                    <form
+                        action="/logout"
+                        method="post"
+                        style="display:inline;"
+                    >
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                        >
+                            Logout
+                        </button>
+
+                    </form>
+
+                {% else %}
+
+                    <a
+                        href="/login"
+                        class="btn btn-outline"
+                    >
+                        Login
+                    </a>
+
+                    <a
+                        href="/signup"
+                        class="btn btn-primary"
+                    >
+                        Join BeatHub
+                    </a>
+
+                {% endif %}
+
+            </div>
+
+        </nav>
+
+
+        <!-- =========================================================
+             FLASH MESSAGES
+        ========================================================== -->
+
+        {% if error %}
+
+            <div class="alert alert-error">
+                {{ error }}
+            </div>
 
         {% endif %}
 
-      </div>
 
-    </nav>
+        {% if success %}
 
-    {% if request.query_params.get('error') %}
+            <div class="alert alert-success">
+                {{ success }}
+            </div>
 
-      <div class="alert alert-error">
-        {{ request.query_params.get('error') }}
-      </div>
+        {% endif %}
 
-    {% endif %}
 
-    {% if request.query_params.get('success') %}
+        {% if request.query_params.get('error') %}
 
-      <div class="alert alert-success">
-        {{ request.query_params.get('success') }}
-      </div>
+            <div class="alert alert-error">
+                {{ request.query_params.get('error') }}
+            </div>
 
-    {% endif %}
+        {% endif %}
 
-    {% block content %}{% endblock %}
 
-    <footer>
-      &copy; {{ current_year }} BeatHub. All rights reserved.
-    </footer>
+        {% if request.query_params.get('success') %}
 
-  </div>
+            <div class="alert alert-success">
+                {{ request.query_params.get('success') }}
+            </div>
+
+        {% endif %}
+
+
+        <!-- =========================================================
+             PAGE CONTENT
+        ========================================================== -->
+
+        {% block content %}{% endblock %}
+
+
+        <!-- =========================================================
+             FOOTER
+        ========================================================== -->
+
+        <footer>
+
+            &copy; {{ current_year }} BeatHub.
+            All rights reserved.
+
+        </footer>
+
+    </div>
 
 </body>
+
 </html>
