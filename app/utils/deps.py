@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.utils.security import decode_access_token
 
 
@@ -19,7 +19,9 @@ def get_optional_user(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    token = request.cookies.get(SESSION_COOKIE_NAME)
+    token = request.cookies.get(
+        SESSION_COOKIE_NAME
+    )
 
     if not token:
         return None
@@ -34,7 +36,10 @@ def get_optional_user(
     if not user_id:
         return None
 
-    user = db.get(User, user_id)
+    user = db.get(
+        User,
+        user_id,
+    )
 
     if not user or not user.is_active:
         return None
@@ -58,24 +63,27 @@ def get_role_name(user: User) -> str:
     """
     Safely normalize the user's role.
 
-    Works whether SQLAlchemy gives us:
-        UserRole.BUYER
-
-    or a plain string such as:
-        "buyer"
-        "artist"
-        "creator"
-        "admin"
+    Supports SQLAlchemy Enum values and plain strings.
     """
 
-    role = getattr(user, "role", None)
+    role = getattr(
+        user,
+        "role",
+        None,
+    )
 
     if role is None:
         return "buyer"
 
-    value = getattr(role, "value", role)
+    value = getattr(
+        role,
+        "value",
+        role,
+    )
 
-    value = str(value).strip().lower()
+    value = str(
+        value
+    ).strip().lower()
 
     if value in {
         "creator",
@@ -100,7 +108,6 @@ def get_role_name(user: User) -> str:
     }:
         return "buyer"
 
-    # Public accounts default safely to buyer.
     return "buyer"
 
 
