@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>BeatHub — The Home of Cool Beats</title>
+
+    <meta
+        name="description"
+        content="BeatHub — The Home of Cool Beats. Discover, buy and sell premium beats and tracks."
+    >
+
+    <style>
+        :root {
+            --bg: #050505;
+            --bg-soft: #0b0b0b;
+            --panel: rgba(17, 17, 17, 0.78);
+            --panel-solid: #111111;
+            --gold: #d4af37;
+            --gold-light: #f4d77a;
+            --gold-dark: #8f7420;
+            --text: #ffffff;
+            --muted: #a5a5a5;
+            --border: rgba(212, 175, 55, 0.18);
+            --border-strong: rgba(212, 175, 55, 0.38);
+            --shadow: 0 25px 70px rgba(0, 0, 0, 0.55);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Roboto,
+                Helvetica,
+                Arial,
+                sans-serif;
+
+            color: var(--text);
+            background:
+                radial-gradient(
+                    circle at 50% -10%,
+                    rgba(212, 175, 55, 0.13),
+                    transparent 35%
+                ),
+                radial-gradient(
+                    circle at 85% 30%,
+                    rgba(212, 175, 55, 0.06),
+                    transparent 30%
+                ),
+                linear-gradient(
+                    180deg,
+                    #050505 0%,
+                    #080808 45%,
+                    #030303 100%
+                );
+
+            overflow-x: hidden;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        button,
+        a {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* =========================================================
+           BACKGROUND
+        ========================================================= */
+
+        .background-glow {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .glow {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.12;
+        }
+
+        .glow.one {
+            width: 360px;
+            height: 360px;
+            background: var(--gold);
+            top: -160px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .glow.two {
+            width: 240px;
+            height: 240px;
+            background: var(--gold);
+            top: 42%;
+            right: -120px;
+        }
+
+        .glow.three {
+            width: 220px;
+            height: 220px;
+            background: var(--gold-dark);
+            bottom: 5%;
+            left: -110px;
+        }
+
+        /* =========================================================
+           NAVIGATION
+        ========================================================= */
+
+        .navbar {
+            position: relative;
+            z-index: 20;
+
+            width: min(1180px, calc(100% - 36px));
+            margin: 18px auto 0;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            padding: 14px 16px 14px 20px;
+
+            background: rgba(8, 8, 8, 0.76);
+            border: 1px solid var(--border);
+
+            border-radius: 18px;
+
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+
+            box-shadow:
+                0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 12px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    var(--gold-light),
+                    var(--gold)
+                );
+
+            color: #050505;
+
+            font-weight: 1000;
+            font-size: 15px;
+
+            box-shadow:
+                0 8px 25px rgba(212, 175, 55, 0.18);
+        }
+
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.05;
+        }
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-tagline {
+            margin-top: 4px;
+            font-size: 10px;
+            color: var(--gold-light);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .nav-link {
+            padding: 11px 15px;
+            border-radius: 11px;
+
+            color: #cfcfcf;
+
+            font-size: 13px;
+            font-weight: 700;
+
+            transition:
+                color 0.2s ease,
+                background 0.2s ease,
+                transform 0.2s ease;
+        }
+
+        .nav-link:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateY(-1px);
+        }
+
+        .nav-login {
+            border: 1px solid rgba(255, 255, 255, 0.10);
+        }
+
+        .nav-signup {
+            color: #080808;
+            background: var(--gold);
+            border: 1px solid var(--gold);
+
+            box-shadow:
+                0 8px 24px rgba(212, 175, 55, 0.13);
+        }
+
+        .nav-signup:hover {
+            color: #080808;
+            background: var(--gold-light);
+        }
+
+        /* =========================================================
+           HERO
+        ========================================================= */
+
+        .hero {
+            position: relative;
+            z-index: 2;
+
+            width: min(1180px, calc(100% - 36px));
+            margin: 0 auto;
+
+            min-height: 690px;
+
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+
+            align-items: center;
+            gap: 50px;
+
+            padding: 90px 0 70px;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 3;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+
+            padding: 8px 12px;
+
+            border: 1px solid var(--border);
+            border-radius: 999px;
+
+            background: rgba(212, 175, 55, 0.055);
+
+            color: var(--gold-light);
+
+            font-size: 11px;
+            font-weight: 800;
+
+            letter-spacing: 1.3px;
+            text-transform: uppercase;
+        }
+
+        .eyebrow-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--gold);
+
+            box-shadow:
+                0 0 12px rgba(212, 175, 55, 0.8);
+        }
+
+        .hero h1 {
+            margin-top: 24px;
+
+            max-width: 760px;
+
+            font-size: clamp(48px, 7vw, 88px);
+            line-height: 0.94;
+
+            letter-spacing: -4px;
+            font-weight: 950;
+        }
+
+        .hero h1 .gold {
+            color: var(--gold);
+            text-shadow:
+                0 0 35px rgba(212, 175, 55, 0.10);
+        }
+
+        .hero-description {
+            max-width: 600px;
+
+            margin-top: 25px;
+
+            color: #aaa;
+
+            font-size: 17px;
+            line-height: 1.75;
+        }
+
+        .hero-description strong {
+            color: #e9e9e9;
+            font-weight: 800;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+
+            margin-top: 34px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+
+            min-height: 50px;
+            padding: 0 22px;
+
+            border-radius: 13px;
+
+            font-size: 13px;
+            font-weight: 850;
+
+            transition:
+                transform 0.2s ease,
+                box-shadow 0.2s ease,
+                background 0.2s ease,
+                border-color 0.2s ease;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .button-primary {
+            color: #070707;
+            background:
+                linear-gradient(
+                    135deg,
+                    var(--gold-light),
+                    var(--gold)
+                );
+
+            border: 1px solid var(--gold);
+
+            box-shadow:
+                0 14px 35px rgba(212, 175, 55, 0.18);
+        }
+
+        .button-primary:hover {
+            box-shadow:
+                0 18px 45px rgba(212, 175, 55, 0.27);
+        }
+
+        .button-secondary {
+            color: #eee;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .button-secondary:hover {
+            background: rgba(255, 255, 255, 0.065);
+            border-color: rgba(212, 175, 55, 0.28);
+        }
+
+        .hero-trust {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+
+            margin-top: 32px;
+
+            color: #777;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .trust-check {
+            color: var(--gold);
+            font-size: 14px;
+        }
+
+        /* =========================================================
+           HERO VISUAL
+        ========================================================= */
+
+        .hero-visual {
+            position: relative;
+
+            min-height: 470px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .studio-card {
+            position: relative;
+
+            width: min(440px, 100%);
+            min-height: 420px;
+
+            padding: 28px;
+
+            border-radius: 28px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(25, 25, 25, 0.92),
+                    rgba(8, 8, 8, 0.96)
+                );
+
+            border: 1px solid var(--border-strong);
+
+            box-shadow:
+                var(--shadow),
+                inset 0 1px 0 rgba(255,255,255,0.035);
+
+            overflow: hidden;
+        }
+
+        .studio-card::before {
+            content: "";
+
+            position: absolute;
+            width: 260px;
+            height: 260px;
+
+            top: -130px;
+            right: -90px;
+
+            border-radius: 50%;
+
+            background: rgba(212, 175, 55, 0.10);
+            filter: blur(15px);
+        }
+
+        .studio-card::after {
+            content: "";
+
+            position: absolute;
+            inset: 0;
+
+            background:
+                linear-gradient(
+                    125deg,
+                    transparent 0%,
+                    rgba(212, 175, 55, 0.035) 45%,
+                    transparent 70%
+                );
+
+            pointer-events: none;
+        }
+
+        .studio-top {
+            position: relative;
+            z-index: 2;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .studio-label {
+            color: var(--gold-light);
+
+            font-size: 10px;
+            font-weight: 900;
+
+            letter-spacing: 1.7px;
+            text-transform: uppercase;
+        }
+
+        .live-pill {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+
+            padding: 7px 10px;
+
+            border-radius: 999px;
+
+            background: rgba(255,255,255,0.035);
+            border: 1px solid rgba(255,255,255,0.08);
+
+            color: #aaa;
+
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--gold);
+
+            box-shadow:
+                0 0 10px rgba(212,175,55,0.9);
+        }
+
+        .record-display {
+            position: relative;
+            z-index: 2;
+
+            margin-top: 42px;
+
+            height: 160px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .record {
+            width: 145px;
+            height: 145px;
+
+            border-radius: 50%;
+
+            background:
+                repeating-radial-gradient(
+                    circle,
+                    #080808 0px,
+                    #080808 4px,
+                    #171717 5px,
+                    #080808 7px
+                );
+
+            border: 5px solid #1c1c1c;
+
+            box-shadow:
+                0 20px 45px rgba(0,0,0,0.7),
+                0 0 0 10px rgba(212,175,55,0.025);
+
+            animation: spin 12s linear infinite;
+        }
+
+        .record::after {
+            content: "";
+
+            position: absolute;
+
+            width: 31px;
+            height: 31px;
+
+            border-radius: 50%;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    var(--gold-light),
+                    var(--gold)
+                );
+
+            box-shadow:
+                0 0 25px rgba(212,175,55,0.15);
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .waveform {
+            position: relative;
+            z-index: 2;
+
+            height: 80px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+
+            margin-top: 22px;
+        }
+
+        .wave {
+            width: 4px;
+
+            border-radius: 99px;
+
+            background:
+                linear-gradient(
+                    to top,
+                    var(--gold-dark),
+                    var(--gold-light)
+                );
+
+            opacity: 0.8;
+
+            animation: pulse 1.15s ease-in-out infinite alternate;
+        }
+
+        .wave:nth-child(1) { height: 25%; animation-delay: -0.3s; }
+        .wave:nth-child(2) { height: 50%; animation-delay: -0.8s; }
+        .wave:nth-child(3) { height: 75%; animation-delay: -0.2s; }
+        .wave:nth-child(4) { height: 42%; animation-delay: -0.6s; }
+        .wave:nth-child(5) { height: 90%; animation-delay: -0.1s; }
+        .wave:nth-child(6) { height: 58%; animation-delay: -0.7s; }
+        .wave:nth-child(7) { height: 76%; animation-delay: -0.4s; }
+        .wave:nth-child(8) { height: 38%; animation-delay: -0.9s; }
+        .wave:nth-child(9) { height: 68%; animation-delay: -0.2s; }
+        .wave:nth-child(10) { height: 48%; animation-delay: -0.5s; }
+        .wave:nth-child(11) { height: 84%; animation-delay: -0.8s; }
+        .wave:nth-child(12) { height: 35%; animation-delay: -0.1s; }
+        .wave:nth-child(13) { height: 65%; animation-delay: -0.6s; }
+        .wave:nth-child(14) { height: 44%; animation-delay: -0.3s; }
+        .wave:nth-child(15) { height: 78%; animation-delay: -0.9s; }
+        .wave:nth-child(16) { height: 53%; animation-delay: -0.4s; }
+        .wave:nth-child(17) { height: 70%; animation-delay: -0.7s; }
+        .wave:nth-child(18) { height: 30%; animation-delay: -0.2s; }
+
+        @keyframes pulse {
+            from {
+                transform: scaleY(0.55);
+            }
+
+            to {
+                transform: scaleY(1);
+            }
+        }
+
+        .track-preview {
+            position: relative;
+            z-index: 2;
+
+            margin-top: 24px;
+
+            padding: 15px;
+
+            border-radius: 15px;
+
+            background: rgba(255,255,255,0.035);
+            border: 1px solid rgba(255,255,255,0.07);
+
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .play-button {
+            width: 38px;
+            height: 38px;
+
+            flex: 0 0 38px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 50%;
+
+            background: var(--gold);
+            color: #070707;
+
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .track-info {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .track-title {
+            color: #eee;
+
+            font-size: 12px;
+            font-weight: 800;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .track-meta {
+            margin-top: 4px;
+
+            color: #777;
+
+            font-size: 10px;
+        }
+
+        .price {
+            color: var(--gold-light);
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        /* =========================================================
+           FLOATING BADGES
+        ========================================================= */
+
+        .floating-card {
+            position: absolute;
+
+            padding: 12px 15px;
+
+            border-radius: 15px;
+
+            background: rgba(12,12,12,0.9);
+            border: 1px solid var(--border);
+
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+
+            box-shadow:
+                0 18px 45px rgba(0,0,0,0.4);
+        }
+
+        .floating-card.one {
+            top: 48px;
+            right: -15px;
+        }
+
+        .floating-card.two {
+            bottom: 50px;
+            left: -25px;
+        }
+
+        .floating-number {
+            color: var(--gold-light);
+            font-size: 18px;
+            font-weight: 950;
+        }
+
+        .floating-label {
+            margin-top: 3px;
+            color: #777;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* =========================================================
+           FEATURES
+        ========================================================= */
+
+        .features-section {
+            position: relative;
+            z-index: 2;
+
+            width: min(1180px, calc(100% - 36px));
+            margin: 0 auto;
+
+            padding: 35px 0 100px;
+        }
+
+        .section-heading {
+            text-align: center;
+            max-width: 650px;
+            margin: 0 auto 38px;
+        }
+
+        .section-kicker {
+            color: var(--gold);
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .section-heading h2 {
+            margin-top: 12px;
+
+            font-size: clamp(30px, 5vw, 48px);
+            line-height: 1.05;
+
+            letter-spacing: -2px;
+        }
+
+        .section-heading p {
+            margin-top: 14px;
+
+            color: #858585;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .feature-card {
+            position: relative;
+
+            padding: 28px;
+
+            min-height: 205px;
+
+            border-radius: 21px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(20,20,20,0.9),
+                    rgba(9,9,9,0.9)
+                );
+
+            border: 1px solid rgba(255,255,255,0.07);
+
+            transition:
+                transform 0.25s ease,
+                border-color 0.25s ease,
+                box-shadow 0.25s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+
+            border-color: var(--border);
+
+            box-shadow:
+                0 20px 45px rgba(0,0,0,0.35);
+        }
+
+        .feature-icon {
+            width: 46px;
+            height: 46px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 14px;
+
+            background: rgba(212,175,55,0.08);
+            border: 1px solid rgba(212,175,55,0.16);
+
+            color: var(--gold-light);
+
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        .feature-card h3 {
+            margin-top: 20px;
+
+            font-size: 17px;
+            font-weight: 900;
+        }
+
+        .feature-card p {
+            margin-top: 9px;
+
+            color: #777;
+            font-size: 12px;
+            line-height: 1.65;
+        }
+
+        /* =========================================================
+           CTA
+        ========================================================= */
+
+        .cta-section {
+            position: relative;
+            z-index: 2;
+
+            width: min(1180px, calc(100% - 36px));
+            margin: 0 auto;
+
+            padding-bottom: 80px;
+        }
+
+        .cta-box {
+            position: relative;
+
+            padding: 60px 35px;
+
+            text-align: center;
+
+            border-radius: 27px;
+
+            background:
+                radial-gradient(
+                    circle at 50% 0%,
+                    rgba(212,175,55,0.12),
+                    transparent 48%
+                ),
+                linear-gradient(
+                    145deg,
+                    #111,
+                    #080808
+                );
+
+            border: 1px solid var(--border-strong);
+
+            box-shadow:
+                var(--shadow);
+
+            overflow: hidden;
+        }
+
+        .cta-box h2 {
+            font-size: clamp(30px, 5vw, 50px);
+            letter-spacing: -2px;
+        }
+
+        .cta-box p {
+            max-width: 560px;
+            margin: 14px auto 0;
+
+            color: #858585;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .cta-actions {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 11px;
+
+            margin-top: 27px;
+        }
+
+        /* =========================================================
+           FOOTER
+        ========================================================= */
+
+        footer {
+            position: relative;
+            z-index: 2;
+
+            width: min(1180px, calc(100% - 36px));
+            margin: 0 auto;
+
+            padding: 28px 0 35px;
+
+            border-top: 1px solid rgba(255,255,255,0.06);
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .footer-brand {
+            color: #777;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .footer-brand strong {
+            color: #aaa;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 17px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: #666;
+            font-size: 10px;
+            font-weight: 700;
+            transition: color 0.2s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--gold);
+        }
+
+        /* =========================================================
+           MOBILE
+        ========================================================= */
+
+        @media (max-width: 900px) {
+            .hero {
+                grid-template-columns: 1fr;
+                padding-top: 65px;
+            }
+
+            .hero-content {
+                text-align: center;
+            }
+
+            .hero-description {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .hero-actions,
+            .hero-trust {
+                justify-content: center;
+            }
+
+            .hero-visual {
+                min-height: 430px;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .navbar {
+                width: calc(100% - 22px);
+                margin-top: 11px;
+                padding: 11px;
+                border-radius: 15px;
+            }
+
+            .brand-mark {
+                width: 38px;
+                height: 38px;
+                border-radius: 10px;
+            }
+
+            .brand-name {
+                font-size: 16px;
+            }
+
+            .brand-tagline {
+                display: none;
+            }
+
+            .nav-link {
+                padding: 9px 10px;
+                font-size: 11px;
+            }
+
+            .hero {
+                width: calc(100% - 28px);
+                padding-top: 55px;
+                padding-bottom: 45px;
+            }
+
+            .hero h1 {
+                font-size: clamp(45px, 14vw, 68px);
+                letter-spacing: -3px;
+            }
+
+            .hero-description {
+                font-size: 14px;
+                line-height: 1.65;
+            }
+
+            .hero-actions {
+                flex-direction: column;
+            }
+
+            .button {
+                width: 100%;
+            }
+
+            .hero-visual {
+                min-height: 400px;
+            }
+
+            .studio-card {
+                min-height: 390px;
+                padding: 21px;
+                border-radius: 22px;
+            }
+
+            .record {
+                width: 125px;
+                height: 125px;
+            }
+
+            .floating-card.one {
+                top: 18px;
+                right: -5px;
+            }
+
+            .floating-card.two {
+                bottom: 20px;
+                left: -5px;
+            }
+
+            .features-section,
+            .cta-section,
+            footer {
+                width: calc(100% - 28px);
+            }
+
+            .features-section {
+                padding-bottom: 70px;
+            }
+
+            .feature-card {
+                padding: 23px;
+            }
+
+            .cta-box {
+                padding: 45px 20px;
+            }
+
+            footer {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .footer-links {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- =========================================================
+         BACKGROUND
+    ========================================================== -->
+
+    <div class="background-glow" aria-hidden="true">
+        <div class="glow one"></div>
+        <div class="glow two"></div>
+        <div class="glow three"></div>
+    </div>
+
+
+    <!-- =========================================================
+         NAVIGATION
+    ========================================================== -->
+
+    <header class="navbar">
+
+        <a href="/" class="brand" aria-label="BeatHub home">
+
+            <div class="brand-mark">
+                BH
+            </div>
+
+            <div class="brand-text">
+                <div class="brand-name">
+                    BeatHub
+                </div>
+
+                <div class="brand-tagline">
+                    The Home of Cool Beats
+                </div>
+            </div>
+
+        </a>
+
+
+        <nav class="nav-actions">
+
+            <a
+                href="/beats"
+                class="nav-link"
+            >
+                Explore Beats
+            </a>
+
+            <a
+                href="/login"
+                class="nav-link nav-login"
+            >
+                Login
+            </a>
+
+            <a
+                href="/signup"
+                class="nav-link nav-signup"
+            >
+                Create Account
+            </a>
+
+        </nav>
+
+    </header>
+
+
+    <!-- =========================================================
+         HERO
+    ========================================================== -->
+
+    <main>
+
+        <section class="hero">
+
+            <div class="hero-content">
+
+                <div class="eyebrow">
+                    <span class="eyebrow-dot"></span>
+                    Your sound starts here
+                </div>
+
+
+                <h1>
+                    <span>Find your</span>
+                    <br>
+                    <span class="gold">next sound.</span>
+                </h1>
+
+
+                <p class="hero-description">
+                    Welcome to <strong>BeatHub</strong> —
+                    the home of cool beats.
+                    Discover fresh sounds, connect with talented
+                    producers, and find the perfect beat for your
+                    next record.
+                </p>
+
+
+                <div class="hero-actions">
+
+                    <a
+                        href="/beats"
+                        class="button button-primary"
+                    >
+                        Explore Beats
+                        <span>→</span>
+                    </a>
+
+                    <a
+                        href="/signup"
+                        class="button button-secondary"
+                    >
+                        Create Your Account
+                    </a>
+
+                </div>
+
+
+                <div class="hero-trust">
+
+                    <div class="trust-item">
+                        <span class="trust-check">✓</span>
+                        Discover fresh beats
+                    </div>
+
+                    <div class="trust-item">
+                        <span class="trust-check">✓</span>
+                        Support independent producers
+                    </div>
+
+                    <div class="trust-item">
+                        <span class="trust-check">✓</span>
+                        Built for artists
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 STUDIO VISUAL
+            ================================================== -->
+
+            <div class="hero-visual">
+
+                <div class="floating-card one">
+                    <div class="floating-number">
+                        24/7
+                    </div>
+
+                    <div class="floating-label">
+                        Music energy
+                    </div>
+                </div>
+
+
+                <div class="studio-card">
+
+                    <div class="studio-top">
+
+                        <div class="studio-label">
+                            BeatHub Studio
+                        </div>
+
+                        <div class="live-pill">
+                            <span class="live-dot"></span>
+                            Live
+                        </div>
+
+                    </div>
+
+
+                    <div class="record-display">
+                        <div class="record"></div>
+                    </div>
+
+
+                    <div class="waveform" aria-hidden="true">
+
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+                        <span class="wave"></span>
+
+                    </div>
+
+
+                    <div class="track-preview">
+
+                        <div class="play-button">
+                            ▶
+                        </div>
+
+                        <div class="track-info">
+
+                            <div class="track-title">
+                                Your next hit starts here
+                            </div>
+
+                            <div class="track-meta">
+                                BeatHub • Premium Sound
+                            </div>
+
+                        </div>
+
+                        <div class="price">
+                            BEATHUB
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="floating-card two">
+
+                    <div class="floating-number">
+                        ✦
+                    </div>
+
+                    <div class="floating-label">
+                        Premium sound
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             FEATURES
+        ====================================================== -->
+
+        <section class="features-section">
+
+            <div class="section-heading">
+
+                <div class="section-kicker">
+                    Built for the culture
+                </div>
+
+                <h2>
+                    More than a beat store.
+                </h2>
+
+                <p>
+                    BeatHub brings artists and producers together
+                    in one place — giving great music the platform
+                    it deserves.
+                </p>
+
+            </div>
+
+
+            <div class="feature-grid">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ♪
+                    </div>
+
+                    <h3>
+                        Discover Your Sound
+                    </h3>
+
+                    <p>
+                        Explore beats and tracks from independent
+                        producers and find the sound that fits
+                        your next project.
+                    </p>
+
+                </article>
+
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ◇
+                    </div>
+
+                    <h3>
+                        Built for Producers
+                    </h3>
+
+                    <p>
+                        Upload your music, build your own public
+                        store and share your sound directly with
+                        your audience.
+                    </p>
+
+                </article>
+
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ♫
+                    </div>
+
+                    <h3>
+                        Made for Artists
+                    </h3>
+
+                    <p>
+                        Find the right production for your next
+                        song, project or creative idea without
+                        losing the connection to the producer.
+                    </p>
+
+                </article>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             CTA
+        ====================================================== -->
+
+        <section class="cta-section">
+
+            <div class="cta-box">
+
+                <h2>
+                    Your next record
+                    <span class="gold">starts here.</span>
+                </h2>
+
+                <p>
+                    Join BeatHub and step into a growing community
+                    built around producers, artists and great music.
+                </p>
+
+
+                <div class="cta-actions">
+
+                    <a
+                        href="/signup"
+                        class="button button-primary"
+                    >
+                        Create Account
+                        <span>→</span>
+                    </a>
+
+                    <a
+                        href="/login"
+                        class="button button-secondary"
+                    >
+                        I Already Have an Account
+                    </a>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- =========================================================
+         FOOTER
+    ========================================================== -->
+
+    <footer>
+
+        <div class="footer-brand">
+            <strong>BeatHub</strong> — The Home of Cool Beats.
+            <br>
+            © {{ current_year }} BeatHub. All rights reserved.
+        </div>
+
+
+        <div class="footer-links">
+
+            <a href="/beats">
+                Explore
+            </a>
+
+            <a href="/login">
+                Login
+            </a>
+
+            <a href="/signup">
+                Create Account
+            </a>
+
+        </div>
+
+    </footer>
+
+</body>
+</html>
