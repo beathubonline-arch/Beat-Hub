@@ -1,5 +1,5 @@
 """
-BeatHub music, marketplace, purchases and secure downloads.
+BeatHub music and marketplace routes.
 
 Public:
     /beats
@@ -10,33 +10,30 @@ Public:
     /profile/{slug}
 
 Protected:
-    /purchases
     /download/{track_ref}
     /download/track/{track_ref}
 
-Storage:
-    - R2 / S3 style r2://bucket/key
-    - s3://bucket/key
-    - full HTTPS object URLs
-    - existing local media files
+Availability rules:
 
-Security:
-    - Download requires authenticated user.
-    - Download requires a License belonging to that user.
-    - License must belong to a COMPLETED Order.
-    - R2 objects are never exposed directly from the database.
-    - R2 downloads use short-lived presigned URLs.
+NON-EXCLUSIVE
+    published + not hidden = available
+    is_sold does NOT make it unavailable
+
+EXCLUSIVE
+    published + is_sold == False = available
+    published + is_sold == True  = unavailable
+
+Downloads:
+    - Existing purchased licenses are verified.
+    - Local media files remain supported.
+    - R2 references are supported.
+    - Existing route aliases remain supported.
 """
 
-import os
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
-
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -46,10 +43,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.music import Album, Track
+from app.models.music import Album, SalesModel, Track
 from app.models.order import License, Order, OrderStatus
-from app.models.profile import Profile
 from app.models.user import User
+from app.models.profile import Profile
 from app.utils.deps import get_optional_user, require_user
 
 
@@ -59,12 +56,12 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 # ======================================================================
-# CONTEXT
+# TEMPLATE CONTEXT
 # ======================================================================
 
 def ctx(
     request: Request,
-    current_user=None,
+    current_user,
     **extra,
 ):
     data = {
@@ -79,358 +76,145 @@ def ctx(
 
 
 # ======================================================================
-# HELPERS
+# SEARCH HELPERS
 # ======================================================================
 
 def clean_search(value: Optional[str]) -> str:
     return (value or "").strip()
 
 
-def track_is_visible(track: Track) -> bool:
-    return bool(
-        track
-        and getattr(track, "is_published", False)
-    )
-
+# ======================================================================
+# SALES MODEL HELPERS
+# ======================================================================
 
 def sales_model_value(track: Track) -> str:
+    """
+    Safely return the track's sales model as a plain string.
+
+    Supports SQLAlchemy Enum values such as:
+        SalesModel.EXCLUSIVE
+        SalesModel.NON_EXCLUSIVE
+    """
+
     value = getattr(
-        getattr(track, "sales_model", None),
-        "value",
-        getattr(track, "sales_model", ""),
-    )
-
-    return str(value or "").strip().lower()
-
-
-def track_is_available(track: Track) -> bool:
-    """
-    Non-exclusive:
-        published = available
-
-    Exclusive:
-        published AND not sold = available
-    """
-
-    if not track_is_visible(track):
-        return False
-
-    if (
-        sales_model_value(track)
-        == "exclusive"
-    ):
-        return not bool(
-            getattr(track, "is_sold", False)
-        )
-
-    return True
-
-
-def safe_download_name(track: Track) -> str:
-    title = str(
-        getattr(track, "title", "")
-        or "BeatHub-Track"
-    )
-
-    title = "".join(
-        character
-        for character in title
-        if character.isalnum()
-        or character in (
-            " ",
-            "-",
-            "_",
-        )
-    ).strip()
-
-    if not title:
-        title = "BeatHub-Track"
-
-    return title
-
-
-# ======================================================================
-# R2 CONFIGURATION
-# ======================================================================
-
-def env_first(*names: str) -> str:
-    for name in names:
-        value = os.getenv(name)
-
-        if value:
-            value = value.strip()
-
-            if value:
-                return value
-
-    return ""
-
-
-def r2_endpoint() -> str:
-    return env_first(
-        "R2_ENDPOINT",
-        "R2_ENDPOINT_URL",
-        "AWS_S3_ENDPOINT",
-        "S3_ENDPOINT_URL",
-    )
-
-
-def r2_access_key() -> str:
-    return env_first(
-        "R2_ACCESS_KEY_ID",
-        "AWS_ACCESS_KEY_ID",
-        "S3_ACCESS_KEY_ID",
-    )
-
-
-def r2_secret_key() -> str:
-    return env_first(
-        "R2_SECRET_ACCESS_KEY",
-        "AWS_SECRET_ACCESS_KEY",
-        "S3_SECRET_ACCESS_KEY",
-    )
-
-
-def r2_default_bucket() -> str:
-    return env_first(
-        "R2_BUCKET_NAME",
-        "R2_BUCKET",
-        "AWS_S3_BUCKET",
-        "S3_BUCKET",
-    )
-
-
-def r2_presign_seconds() -> int:
-    raw = env_first(
-        "R2_DOWNLOAD_EXPIRES",
-        "R2_PRESIGNED_URL_EXPIRES",
-    )
-
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        value = 300
-
-    return max(
-        60,
-        min(value, 900),
-    )
-
-
-def is_r2_reference(value: str) -> bool:
-    value = str(value or "").strip().lower()
-
-    return (
-        value.startswith("r2://")
-        or value.startswith("s3://")
-    )
-
-
-def is_http_reference(value: str) -> bool:
-    value = str(value or "").strip().lower()
-
-    return (
-        value.startswith("https://")
-        or value.startswith("http://")
-    )
-
-
-def parse_object_reference(
-    stored_value: str,
-):
-    """
-    Returns:
-
-        ("r2", bucket, key)
-
-    for:
-        r2://bucket/key
-        s3://bucket/key
-
-    Returns:
-
-        ("url", None, url)
-
-    for:
-        https://...
-
-    Returns:
-
-        ("local", None, stored_value)
-
-    for local filesystem references.
-    """
-
-    value = str(
-        stored_value or ""
-    ).strip()
-
-    if not value:
-        return (
-            "local",
-            None,
-            value,
-        )
-
-    if (
-        value.startswith("r2://")
-        or value.startswith("s3://")
-    ):
-        parsed = urlparse(value)
-
-        bucket = parsed.netloc.strip()
-        key = parsed.path.lstrip("/")
-
-        if not bucket or not key:
-            raise HTTPException(
-                status_code=404,
-                detail="Invalid cloud storage reference.",
-            )
-
-        return (
-            "r2",
-            bucket,
-            key,
-        )
-
-    if is_http_reference(value):
-        return (
-            "url",
-            None,
-            value,
-        )
-
-    return (
-        "local",
+        track,
+        "sales_model",
         None,
+    )
+
+    value = getattr(
+        value,
+        "value",
         value,
     )
 
+    return str(
+        value or ""
+    ).strip().lower()
 
-def create_r2_client():
-    endpoint = r2_endpoint()
-    access_key = r2_access_key()
-    secret_key = r2_secret_key()
 
-    if not endpoint:
-        raise RuntimeError(
-            "R2_ENDPOINT is not configured."
-        )
-
-    if not access_key:
-        raise RuntimeError(
-            "R2_ACCESS_KEY_ID is not configured."
-        )
-
-    if not secret_key:
-        raise RuntimeError(
-            "R2_SECRET_ACCESS_KEY is not configured."
-        )
-
-    return boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name="auto",
+def is_exclusive_track(track: Track) -> bool:
+    return (
+        sales_model_value(track)
+        == SalesModel.EXCLUSIVE.value
     )
 
 
-def create_presigned_download(
-    stored_value: str,
-    download_name: str,
-) -> str:
+# ======================================================================
+# TRACK AVAILABILITY
+# ======================================================================
+
+def track_is_available(track: Optional[Track]) -> bool:
     """
-    Creates a short-lived private download URL.
+    Central marketplace availability rule.
 
-    For r2://bucket/key:
-        signs that exact bucket/key.
+    IMPORTANT:
 
-    For s3://bucket/key:
-        signs that exact bucket/key.
+    Do NOT use:
+        track.is_available
 
-    For a full HTTP URL:
-        returns the URL as-is.
+    because Track does not have an is_available database column.
 
-    Local files are not handled here.
+    NON-EXCLUSIVE:
+        published = available
+
+    EXCLUSIVE:
+        published AND not sold = available
     """
 
-    kind, bucket, value = (
-        parse_object_reference(
-            stored_value
+    if not track:
+        return False
+
+    # Unpublished tracks must never be purchasable publicly.
+    if not bool(
+        getattr(
+            track,
+            "is_published",
+            False,
+        )
+    ):
+        return False
+
+    # Non-exclusive tracks can be purchased repeatedly.
+    if not is_exclusive_track(track):
+        return True
+
+    # Exclusive tracks become unavailable after sale.
+    return not bool(
+        getattr(
+            track,
+            "is_sold",
+            False,
         )
     )
 
-    if kind == "url":
-        return value
 
-    if kind != "r2":
-        raise RuntimeError(
-            "Storage reference is not an R2 object."
+# ======================================================================
+# PUBLIC AVAILABILITY LABEL
+# ======================================================================
+
+def availability_reason(track: Track) -> str:
+    """
+    Human-readable availability state for templates.
+    """
+
+    if not track:
+        return "Track not found."
+
+    if not bool(
+        getattr(
+            track,
+            "is_published",
+            False,
         )
+    ):
+        return "This track is not currently published."
 
-    if not bucket:
-        bucket = r2_default_bucket()
-
-    if not bucket:
-        raise RuntimeError(
-            "R2 bucket is missing."
+    if is_exclusive_track(track) and bool(
+        getattr(
+            track,
+            "is_sold",
+            False,
         )
+    ):
+        return "This exclusive track has already been sold."
 
-    key = value
-
-    client = create_r2_client()
-
-    try:
-        return client.generate_presigned_url(
-            ClientMethod="get_object",
-            Params={
-                "Bucket": bucket,
-                "Key": key,
-                "ResponseContentDisposition": (
-                    f'attachment; filename="{download_name}"'
-                ),
-            },
-            ExpiresIn=r2_presign_seconds(),
-        )
-
-    except (
-        BotoCoreError,
-        ClientError,
-    ) as exc:
-        raise RuntimeError(
-            f"Could not create R2 download URL: {exc}"
-        ) from exc
+    return "Available for purchase."
 
 
 # ======================================================================
-# OWNERSHIP
+# FIND TRACK
 # ======================================================================
 
-def get_completed_license(
+def get_track(
     db: Session,
-    user_id: str,
-    track_id: str,
-):
-    """
-    Authoritative ownership check.
-
-    A buyer owns a track only when:
-        License.buyer_id == user_id
-        License.track_id == track_id
-        Order.status == COMPLETED
-    """
+    slug: str,
+) -> Optional[Track]:
 
     return (
-        db.query(License)
-        .join(
-            Order,
-            License.order_id == Order.id,
-        )
+        db.query(Track)
         .filter(
-            License.buyer_id == user_id,
-            License.track_id == track_id,
-            Order.status == OrderStatus.COMPLETED,
+            Track.slug == slug
         )
         .first()
     )
@@ -461,10 +245,7 @@ def browse_beats(
     ),
 ):
     search = clean_search(q)
-
-    selected_genre = clean_search(
-        genre
-    )
+    selected_genre = clean_search(genre)
 
     query = (
         db.query(Track)
@@ -473,24 +254,48 @@ def browse_beats(
         )
     )
 
+    # --------------------------------------------------------------
+    # SEARCH
+    # --------------------------------------------------------------
+
     if search:
-        pattern = f"%{search}%"
+
+        search_pattern = (
+            f"%{search}%"
+        )
 
         query = query.filter(
             or_(
-                Track.title.ilike(pattern),
-                Track.genre.ilike(pattern),
-                Track.tags.ilike(pattern),
-                Track.description.ilike(pattern),
+                Track.title.ilike(
+                    search_pattern
+                ),
+                Track.genre.ilike(
+                    search_pattern
+                ),
+                Track.tags.ilike(
+                    search_pattern
+                ),
+                Track.description.ilike(
+                    search_pattern
+                ),
             )
         )
 
+    # --------------------------------------------------------------
+    # GENRE
+    # --------------------------------------------------------------
+
     if selected_genre:
+
         query = query.filter(
             Track.genre.ilike(
                 selected_genre
             )
         )
+
+    # --------------------------------------------------------------
+    # SORT
+    # --------------------------------------------------------------
 
     if sort == "oldest":
 
@@ -526,12 +331,27 @@ def browse_beats(
         .all()
     )
 
+    # --------------------------------------------------------------
+    # ADD AVAILABILITY INFORMATION
+    # --------------------------------------------------------------
+
+    available_track_ids = {
+        track.id
+        for track in tracks
+        if track_is_available(track)
+    }
+
+    # --------------------------------------------------------------
+    # FEATURED
+    # --------------------------------------------------------------
+
     featured_tracks = []
 
     if (
         not search
         and not selected_genre
     ):
+
         featured_tracks = (
             db.query(Track)
             .filter(
@@ -544,8 +364,14 @@ def browse_beats(
             .all()
         )
 
+    # --------------------------------------------------------------
+    # GENRES
+    # --------------------------------------------------------------
+
     genre_rows = (
-        db.query(Track.genre)
+        db.query(
+            Track.genre
+        )
         .filter(
             Track.is_published == True,  # noqa: E712
             Track.genre.isnot(None),
@@ -578,6 +404,7 @@ def browse_beats(
             selected_genre=selected_genre,
             sort=sort,
             has_results=bool(tracks),
+            available_track_ids=available_track_ids,
             title="Find Your Sound",
         ),
     )
@@ -595,6 +422,7 @@ def hot_picks(
         get_optional_user
     ),
 ):
+
     tracks = (
         db.query(Track)
         .filter(
@@ -620,6 +448,11 @@ def hot_picks(
             selected_genre="",
             sort="newest",
             has_results=bool(tracks),
+            available_track_ids={
+                track.id
+                for track in tracks
+                if track_is_available(track)
+            },
             title="Hot Picks",
         ),
     )
@@ -636,6 +469,7 @@ def sessions_page(
         get_optional_user
     ),
 ):
+
     return templates.TemplateResponse(
         request,
         "sessions.html",
@@ -659,30 +493,76 @@ def track_detail(
         get_optional_user
     ),
 ):
-    track = (
-        db.query(Track)
-        .filter(
-            Track.slug == slug
-        )
-        .first()
+
+    track = get_track(
+        db,
+        slug,
     )
 
     if not track:
         raise HTTPException(
             status_code=404,
-            detail="Track not found.",
+            detail="Track not found",
         )
+
+    # --------------------------------------------------------------
+    # AVAILABILITY
+    # --------------------------------------------------------------
+
+    available = track_is_available(
+        track
+    )
+
+    # --------------------------------------------------------------
+    # PURCHASE CHECK
+    # --------------------------------------------------------------
 
     purchased = False
 
     if current_user:
+
         purchased = (
-            get_completed_license(
-                db,
-                current_user.id,
-                track.id,
+            db.query(License)
+            .join(
+                Order,
+                License.order_id
+                == Order.id,
             )
+            .filter(
+                License.buyer_id
+                == current_user.id,
+                License.track_id
+                == track.id,
+                Order.status
+                == OrderStatus.COMPLETED,
+            )
+            .first()
             is not None
+        )
+
+    # --------------------------------------------------------------
+    # OWNER CHECK
+    # --------------------------------------------------------------
+
+    is_owner = False
+
+    profile = getattr(
+        track,
+        "creator_profile",
+        None,
+    )
+
+    if profile and current_user:
+
+        creator_user_id = getattr(
+            profile,
+            "user_id",
+            None,
+        )
+
+        is_owner = (
+            creator_user_id
+            == current_user.id
         )
 
     return templates.TemplateResponse(
@@ -692,10 +572,18 @@ def track_detail(
             request,
             current_user,
             track=track,
-            purchased=purchased,
-            available=track_is_available(
+
+            # IMPORTANT:
+            # The template must use these values,
+            # NOT track.is_available.
+            available=available,
+            track_available=available,
+            availability_reason=availability_reason(
                 track
             ),
+
+            purchased=purchased,
+            is_owner=is_owner,
         ),
     )
 
@@ -713,6 +601,7 @@ def album_detail(
         get_optional_user
     ),
 ):
+
     album = (
         db.query(Album)
         .filter(
@@ -724,7 +613,7 @@ def album_detail(
     if not album:
         raise HTTPException(
             status_code=404,
-            detail="Album not found.",
+            detail="Album not found",
         )
 
     return templates.TemplateResponse(
@@ -739,7 +628,7 @@ def album_detail(
 
 
 # ======================================================================
-# PROFILE
+# CREATOR PROFILE
 # ======================================================================
 
 @router.get("/profile/{slug}")
@@ -751,6 +640,7 @@ def profile_detail(
         get_optional_user
     ),
 ):
+
     profile = (
         db.query(Profile)
         .filter(
@@ -762,7 +652,7 @@ def profile_detail(
     if not profile:
         raise HTTPException(
             status_code=404,
-            detail="Profile not found.",
+            detail="Profile not found",
         )
 
     tracks = [
@@ -791,81 +681,7 @@ def profile_detail(
 
 
 # ======================================================================
-# PURCHASES
-# ======================================================================
-
-@router.get("/purchases")
-def purchases_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-):
-    """
-    Buyer's permanent purchase library.
-
-    Only completed purchases are shown.
-    """
-
-    licenses = (
-        db.query(License)
-        .join(
-            Order,
-            License.order_id == Order.id,
-        )
-        .filter(
-            License.buyer_id == user.id,
-            Order.status == OrderStatus.COMPLETED,
-        )
-        .order_by(
-            License.granted_at.desc()
-        )
-        .all()
-    )
-
-    purchases = []
-
-    for license_record in licenses:
-
-        order = license_record.order
-        track = None
-
-        if license_record.track_id:
-            track = (
-                db.query(Track)
-                .filter(
-                    Track.id
-                    == license_record.track_id
-                )
-                .first()
-            )
-
-        if not track and order:
-            track = order.track
-
-        if not track:
-            continue
-
-        purchases.append(
-            {
-                "license": license_record,
-                "order": order,
-                "track": track,
-            }
-        )
-
-    return templates.TemplateResponse(
-        request,
-        "purchases.html",
-        ctx(
-            request,
-            user,
-            purchases=purchases,
-        ),
-    )
-
-
-# ======================================================================
-# SECURE DOWNLOAD
+# PURCHASE DOWNLOAD
 # ======================================================================
 
 @router.get("/download/track/{track_ref}")
@@ -873,7 +689,9 @@ def purchases_page(
 def download_track(
     track_ref: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(
+        require_user
+    ),
 ):
     """
     Secure purchased-track download.
@@ -884,17 +702,11 @@ def download_track(
         /download/track/{slug}
         /download/{slug}
 
-    R2:
-        r2://bucket/key
-        s3://bucket/key
-        HTTPS object URL
-
-    Local:
-        existing MEDIA_ROOT/media files
+    Ownership must exist through a COMPLETED order.
     """
 
     # --------------------------------------------------------------
-    # FIND TRACK BY ID
+    # FIND BY ID
     # --------------------------------------------------------------
 
     track = (
@@ -906,10 +718,11 @@ def download_track(
     )
 
     # --------------------------------------------------------------
-    # FALL BACK TO SLUG
+    # FALLBACK TO SLUG
     # --------------------------------------------------------------
 
     if not track:
+
         track = (
             db.query(Track)
             .filter(
@@ -925,109 +738,170 @@ def download_track(
         )
 
     # --------------------------------------------------------------
-    # OWNERSHIP
+    # VERIFY PURCHASE
     # --------------------------------------------------------------
 
     license_record = (
-        get_completed_license(
-            db,
-            user.id,
-            track.id,
+        db.query(License)
+        .join(
+            Order,
+            License.order_id
+            == Order.id,
         )
+        .filter(
+            License.buyer_id
+            == user.id,
+            License.track_id
+            == track.id,
+            Order.status
+            == OrderStatus.COMPLETED,
+        )
+        .first()
     )
 
     if not license_record:
+
         raise HTTPException(
             status_code=403,
             detail="You do not own this track.",
         )
 
     # --------------------------------------------------------------
-    # AUDIO REFERENCE
+    # AUDIO PATH
     # --------------------------------------------------------------
 
-    stored_value = str(
-        getattr(
-            track,
-            "audio_file_path",
-            "",
-        )
-        or ""
-    ).strip()
+    if not track.audio_file_path:
 
-    if not stored_value:
         raise HTTPException(
             status_code=404,
             detail="Audio file is not available.",
         )
 
-    download_title = safe_download_name(
-        track
-    )
+    stored_text = str(
+        track.audio_file_path
+    ).strip()
 
     # --------------------------------------------------------------
-    # R2 / S3 / CLOUD URL
+    # R2 PUBLIC HTTPS URL
+    # --------------------------------------------------------------
+
+    if stored_text.startswith(
+        "https://"
+    ) or stored_text.startswith(
+        "http://"
+    ):
+
+        return RedirectResponse(
+            url=stored_text,
+            status_code=307,
+        )
+
+    # --------------------------------------------------------------
+    # R2 URI
+    #
+    # Example:
+    # r2://beathub-r2/audio/file.mp3
+    #
+    # This cannot be served using FileResponse.
+    # Try the application's R2 helper if one exists.
     # --------------------------------------------------------------
 
     if (
-        is_r2_reference(stored_value)
-        or is_http_reference(stored_value)
+        stored_text.startswith("r2://")
+        or stored_text.startswith("s3://")
     ):
+
+        # Look for an existing application-level R2
+        # signed URL helper without breaking installations
+        # where that helper has not been imported.
         try:
-            download_url = (
-                create_presigned_download(
-                    stored_value,
-                    download_title,
-                )
-            )
 
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "The purchased audio is stored "
-                    "in cloud storage, but a secure "
-                    "download link could not be created."
-                ),
-            ) from exc
+            from app.services import storage
 
-        return RedirectResponse(
-            url=download_url,
-            status_code=307,
-            headers={
-                "Cache-Control": (
-                    "private, no-store"
+        except ImportError:
+
+            storage = None
+
+        if storage:
+
+            for function_name in (
+                "create_download_url",
+                "generate_download_url",
+                "get_download_url",
+                "presigned_download_url",
+            ):
+
+                helper = getattr(
+                    storage,
+                    function_name,
+                    None,
                 )
-            },
+
+                if helper:
+
+                    try:
+
+                        result = helper(
+                            stored_text
+                        )
+
+                        if result:
+
+                            return RedirectResponse(
+                                url=str(result),
+                                status_code=307,
+                            )
+
+                    except TypeError:
+
+                        try:
+
+                            result = helper(
+                                stored_text,
+                                expires_in=900,
+                            )
+
+                            if result:
+
+                                return RedirectResponse(
+                                    url=str(result),
+                                    status_code=307,
+                                )
+
+                        except Exception:
+                            pass
+
+                    except Exception:
+                        pass
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "This purchased track is stored in R2, "
+                "but the R2 download signer is not configured."
+            ),
         )
 
     # --------------------------------------------------------------
-    # LOCAL FILE COMPATIBILITY
+    # LOCAL FILE SUPPORT
     # --------------------------------------------------------------
 
     stored_path = Path(
-        stored_value
+        stored_text
     )
 
-    media_root_value = env_first(
-        "MEDIA_ROOT"
+    media_root_value = getattr(
+        settings,
+        "MEDIA_ROOT",
+        "media",
     )
-
-    if not media_root_value:
-        media_root_value = str(
-            getattr(
-                settings,
-                "MEDIA_ROOT",
-                "media",
-            )
-            or "media"
-        )
 
     media_root = Path(
         media_root_value
     )
 
     if not media_root.is_absolute():
+
         media_root = (
             Path.cwd()
             / media_root
@@ -1035,19 +909,25 @@ def download_track(
 
     media_root = media_root.resolve()
 
+    # --------------------------------------------------------------
+    # EXACT STORED PATH
+    # --------------------------------------------------------------
+
     if stored_path.is_absolute():
+
         audio_path = (
-            stored_path
-            .resolve()
+            stored_path.resolve()
         )
+
     else:
+
         audio_path = (
             Path.cwd()
             / stored_path
         ).resolve()
 
     # --------------------------------------------------------------
-    # COMPATIBILITY LOCATIONS
+    # COMPATIBILITY PATHS
     # --------------------------------------------------------------
 
     if (
@@ -1055,15 +935,19 @@ def download_track(
         or not audio_path.is_file()
     ):
 
-        filename = stored_path.name
+        filename = (
+            stored_path.name
+        )
 
         candidates = [
             media_root / stored_path,
             media_root / "audio" / filename,
-            Path.cwd()
-            / "media"
-            / "audio"
-            / filename,
+            (
+                Path.cwd()
+                / "media"
+                / "audio"
+                / filename
+            ),
         ]
 
         found = None
@@ -1075,21 +959,25 @@ def download_track(
             )
 
             try:
+
                 candidate.relative_to(
                     media_root
                 )
 
             except ValueError:
+
                 continue
 
             if (
                 candidate.exists()
                 and candidate.is_file()
             ):
+
                 found = candidate
                 break
 
         if found is None:
+
             raise HTTPException(
                 status_code=404,
                 detail=(
@@ -1101,21 +989,24 @@ def download_track(
         audio_path = found
 
     # --------------------------------------------------------------
-    # LOCAL PATH SECURITY
+    # SECURITY
     # --------------------------------------------------------------
 
     try:
+
         audio_path.relative_to(
             media_root
         )
 
     except ValueError:
+
         raise HTTPException(
             status_code=403,
             detail="Invalid audio file location.",
         )
 
     if not audio_path.is_file():
+
         raise HTTPException(
             status_code=404,
             detail="Audio file is unavailable.",
@@ -1125,15 +1016,36 @@ def download_track(
     # DOWNLOAD NAME
     # --------------------------------------------------------------
 
+    safe_title = "".join(
+        character
+        for character in track.title
+        if character.isalnum()
+        or character in (
+            " ",
+            "-",
+            "_",
+        )
+    ).strip()
+
+    if not safe_title:
+
+        safe_title = (
+            "BeatHub-Track"
+        )
+
     extension = (
         audio_path.suffix.lower()
     )
 
     download_name = (
-        f"{download_title}{extension}"
+        f"{safe_title}{extension}"
         if extension
-        else download_title
+        else safe_title
     )
+
+    # --------------------------------------------------------------
+    # FILE RESPONSE
+    # --------------------------------------------------------------
 
     return FileResponse(
         path=str(audio_path),
@@ -1146,6 +1058,5 @@ def download_track(
             "Cache-Control": (
                 "private, no-store"
             ),
-            "Pragma": "no-cache",
         },
     )
