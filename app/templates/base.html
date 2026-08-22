@@ -1,55 +1,146 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}BeatHub — The Home of Beats{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-  {% block extra_head %}{% endblock %}
-</head>
-<body>
-  <div class="stripe-bar"></div>
-  <div class="container">
-    <nav class="navbar">
-      <a href="/" class="brand">BEAT<span class="hub">HUB</span></a>
-      <div class="nav-links">
-        <a href="/beats">Beats</a>
-        <a href="/sessions">Sessions</a>
-        <a href="/hot-picks">Hot Picks</a>
-        <a href="/merch">Merch</a>
-        <a href="/terms">Terms</a>
-      </div>
-      <div class="nav-actions">
-        {% if current_user %}
-          {% if current_user.role.value == 'creator' %}
-            <a href="/dashboard" class="btn btn-outline">Dashboard</a>
-          {% elif current_user.role.value == 'admin' %}
-            <a href="/admin" class="btn btn-outline">Admin</a>
-          {% else %}
-            <a href="/account" class="btn btn-outline">My Account</a>
-          {% endif %}
-          <form action="/logout" method="post" style="display:inline;">
-            <button type="submit" class="btn btn-primary">Logout</button>
-          </form>
-        {% else %}
-          <a href="/login" class="btn btn-outline">Login</a>
-          <a href="/signup" class="btn btn-primary">Join BeatHub</a>
-        {% endif %}
-      </div>
-    </nav>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    {% if request.query_params.get('error') %}
-      <div class="alert alert-error">{{ request.query_params.get('error') }}</div>
-    {% endif %}
-    {% if request.query_params.get('success') %}
-      <div class="alert alert-success">{{ request.query_params.get('success') }}</div>
-    {% endif %}
+```
+<title>{% block title %}BeatHub — The Home of Beats{% endblock %}</title>
+
+<link rel="stylesheet" href="/static/css/style.css">
+
+{% block extra_head %}{% endblock %}
+```
+
+</head>
+
+<body>
+
+<div class="stripe-bar"></div>
+
+<div class="container">
+
+```
+<nav class="navbar">
+
+    <a href="/" class="brand" aria-label="BeatHub home">
+        BEAT<span class="hub">HUB</span>
+    </a>
+
+    <div class="nav-links">
+
+        <a href="/beats"
+           class="{% if request.url.path == '/beats' %}active{% endif %}">
+            Beats
+        </a>
+
+        <a href="/sessions"
+           class="{% if request.url.path == '/sessions' %}active{% endif %}">
+            Sessions
+        </a>
+
+        <a href="/hot-picks"
+           class="{% if request.url.path == '/hot-picks' %}active{% endif %}">
+            Hot Picks
+        </a>
+
+        <a href="/merch"
+           class="{% if request.url.path == '/merch' %}active{% endif %}">
+            Merch
+        </a>
+
+        <a href="/terms"
+           class="{% if request.url.path == '/terms' %}active{% endif %}">
+            Terms
+        </a>
+
+    </div>
+
+    <div class="nav-actions">
+
+        {% if current_user %}
+
+            {% set role_name = current_user.role.value if current_user.role is not none and current_user.role.value is defined else current_user.role %}
+
+            {% if role_name == 'creator' %}
+
+                <a href="/dashboard"
+                   class="btn btn-outline">
+                    Dashboard
+                </a>
+
+            {% elif role_name == 'admin' %}
+
+                <a href="/admin"
+                   class="btn btn-outline">
+                    Admin
+                </a>
+
+            {% else %}
+
+                <a href="/account"
+                   class="btn btn-outline">
+                    My Account
+                </a>
+
+            {% endif %}
+
+            <a href="/logout"
+               class="btn btn-primary">
+                Logout
+            </a>
+
+        {% else %}
+
+            <a href="/login"
+               class="btn btn-outline">
+                Login
+            </a>
+
+            <a href="/signup"
+               class="btn btn-primary">
+                Join BeatHub
+            </a>
+
+        {% endif %}
+
+    </div>
+
+</nav>
+
+
+{% if request.query_params.get('error') %}
+
+    <div class="alert alert-error">
+        {{ request.query_params.get('error') }}
+    </div>
+
+{% endif %}
+
+
+{% if request.query_params.get('success') %}
+
+    <div class="alert alert-success">
+        {{ request.query_params.get('success') }}
+    </div>
+
+{% endif %}
+
+
+<main>
 
     {% block content %}{% endblock %}
 
-    <footer>
-      &copy; {{ current_year }} BeatHub. All rights reserved.
-    </footer>
-  </div>
+</main>
+
+
+<footer>
+    &copy; {{ current_year }} BeatHub. All rights reserved.
+</footer>
+```
+
+</div>
+
 </body>
 </html>
