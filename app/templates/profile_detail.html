@@ -1,348 +1,40 @@
 {% extends "base.html" %}
-
-{% block title %}{{ profile.stage_name }} — BeatHub Store{% endblock %}
-
+{% block title %}{{ profile.stage_name }} — BeatHub{% endblock %}
 {% block content %}
-
-<section style="padding:40px 0;">
-
-  <div style="max-width:1100px; margin:0 auto;">
-
-    <!-- STORE HEADER -->
-    <div style="text-align:center; margin-bottom:35px;">
-
-      <div class="eyebrow">BEATHUB STORE</div>
-
-      <h1 style="font-size:36px; margin:6px 0;">
-        {{ profile.stage_name }}
-      </h1>
-
-      {% if profile.bio %}
-        <p class="sub"
-           style="
-             max-width:650px;
-             margin:10px auto;
-             line-height:1.6;
-           ">
-          {{ profile.bio }}
-        </p>
-      {% endif %}
-
-      <p class="sub">
-        Preview the music below and choose a track to view its details
-        and purchase.
-      </p>
-
-    </div>
-
-
-    <!-- TRACK STORE -->
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:end;
-      margin-bottom:18px;
-      gap:15px;
-      flex-wrap:wrap;
-    ">
-
-      <div>
-        <h2 style="font-size:23px; margin:0;">
-          Available Tracks
-        </h2>
-
-        <p class="sub" style="margin:5px 0 0;">
-          {{ tracks|length }}
-          track{{ '' if tracks|length == 1 else 's' }}
-        </p>
-      </div>
-
-    </div>
-
-
-    {% if tracks %}
-
-      <div class="dashboard-grid">
-
-        {% for track in tracks %}
-
-          {% if track.is_published and not track.is_sold %}
-
-            <div class="form-card" style="padding:18px;">
-
-              <!-- COVER ART -->
-              {% if track.cover_art_url %}
-
-                <div style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  overflow:hidden;
-                  border-radius:10px;
-                  margin-bottom:14px;
-                  background:#111;
-                ">
-
-                  <img
-                    src="{{ track.cover_art_url }}"
-                    alt="{{ track.title }}"
-                    loading="lazy"
-                    style="
-                      width:100%;
-                      height:100%;
-                      object-fit:cover;
-                      display:block;
-                    "
-                  >
-
-                </div>
-
-              {% endif %}
-
-
-              <!-- GENRE / BPM -->
-              <div class="eyebrow">
-
-                {{ track.genre or 'BEAT' }}
-
-                {% if track.bpm %}
-                  &middot; {{ track.bpm }} BPM
-                {% endif %}
-
-              </div>
-
-
-              <!-- TITLE -->
-              <h3 style="
-                font-size:20px;
-                margin:5px 0 8px;
-              ">
-                {{ track.title }}
-              </h3>
-
-
-              <!-- DESCRIPTION -->
-              {% if track.description %}
-
-                <p class="sub" style="
-                  line-height:1.5;
-                  margin-bottom:12px;
-                ">
-                  {{ track.description[:140] }}
-
-                  {% if track.description|length > 140 %}
-                    ...
-                  {% endif %}
-                </p>
-
-              {% endif %}
-
-
-              <!-- PREVIEW -->
-              {% if track.preview_file_path %}
-
-                <div style="
-                  margin:16px 0;
-                  padding:13px;
-                  border-radius:10px;
-                  background:rgba(255,255,255,.035);
-                  border:1px solid rgba(255,255,255,.08);
-                ">
-
-                  <div class="eyebrow"
-                       style="margin-bottom:8px;">
-                    30-SECOND PREVIEW
-                  </div>
-
-                  <audio
-                    controls
-                    preload="none"
-                    style="
-                      width:100%;
-                      height:42px;
-                    "
-                  >
-                    <source
-                      src="/preview/track/{{ track.id }}"
-                      type="audio/mpeg"
-                    >
-
-                    Your browser does not support audio playback.
-                  </audio>
-
-                  <p class="sub"
-                     style="
-                       font-size:12px;
-                       margin:8px 0 0;
-                     ">
-                    Listen to a short preview before purchasing.
-                  </p>
-
-                </div>
-
-              {% endif %}
-
-
-              <!-- PRICE -->
-              <div class="value gold" style="font-size:20px;">
-                KSh {{ '%.2f'|format(track.price) }}
-              </div>
-
-
-              <!-- SALES MODEL -->
-              <div style="margin:10px 0;">
-
-                {% if track.sales_model %}
-
-                  {% if track.sales_model.value == 'exclusive' %}
-
-                    <span class="badge badge-exclusive">
-                      EXCLUSIVE
-                    </span>
-
-                  {% else %}
-
-                    <span class="badge badge-nonexclusive">
-                      NON-EXCLUSIVE
-                    </span>
-
-                  {% endif %}
-
-                {% else %}
-
-                  <span class="badge badge-nonexclusive">
-                    NON-EXCLUSIVE
-                  </span>
-
-                {% endif %}
-
-              </div>
-
-
-              <!-- VIEW / BUY -->
-              <a
-                href="/track/{{ track.slug }}"
-                class="btn btn-primary btn-block"
-                style="margin-top:12px;"
-              >
-                View &amp; Buy
-              </a>
-
-            </div>
-
-          {% endif %}
-
-        {% endfor %}
-
-      </div>
-
+<section style="padding: 40px 0;">
+  <div class="eyebrow">
+    {% if profile.is_producer %}PRODUCER{% endif %}
+    {% if profile.is_dj %} &middot; DJ{% endif %}
+    {% if profile.is_artist %} &middot; ARTIST{% endif %}
+  </div>
+  <h1 style="font-size: 36px; margin: 6px 0;">{{ profile.stage_name }}</h1>
+  {% if profile.bio %}<p class="sub" style="color: var(--text-muted); max-width: 600px; line-height:1.6;">{{ profile.bio }}</p>{% endif %}
+
+  <h2 style="font-size: 20px; margin-top: 36px;">Beats &amp; Tracks</h2>
+  <div class="results-grid">
+    {% for track in tracks %}
+      <a href="/track/{{ track.slug }}" class="result-card">
+        <div class="title">{{ track.title }}</div>
+        <div class="sub">KSh {{ '%.0f'|format(track.price) }}</div>
+      </a>
     {% else %}
-
-      <div class="form-card"
-           style="
-             padding:35px;
-             text-align:center;
-           ">
-
-        <h3>No music available yet</h3>
-
-        <p class="sub">
-          This store has no published tracks available for purchase.
-        </p>
-
-      </div>
-
-    {% endif %}
-
-
-    <!-- ALBUMS -->
-    {% if albums %}
-
-      <div style="margin-top:50px;">
-
-        <h2 style="font-size:23px;">
-          Albums
-        </h2>
-
-        <div class="dashboard-grid">
-
-          {% for album in albums %}
-
-            <div class="form-card" style="padding:18px;">
-
-              {% if album.artwork_url %}
-
-                <div style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  overflow:hidden;
-                  border-radius:10px;
-                  margin-bottom:14px;
-                  background:#111;
-                ">
-
-                  <img
-                    src="{{ album.artwork_url }}"
-                    alt="{{ album.title }}"
-                    loading="lazy"
-                    style="
-                      width:100%;
-                      height:100%;
-                      object-fit:cover;
-                      display:block;
-                    "
-                  >
-
-                </div>
-
-              {% endif %}
-
-
-              <div class="eyebrow">
-                {{ album.genre or 'ALBUM' }}
-              </div>
-
-
-              <h3 style="
-                font-size:20px;
-                margin:5px 0;
-              ">
-                {{ album.title }}
-              </h3>
-
-
-              {% if album.description %}
-
-                <p class="sub">
-                  {{ album.description[:120] }}
-
-                  {% if album.description|length > 120 %}
-                    ...
-                  {% endif %}
-                </p>
-
-              {% endif %}
-
-
-              <a
-                href="/album/{{ album.slug }}"
-                class="btn btn-outline btn-block"
-                style="margin-top:12px;"
-              >
-                View Album
-              </a>
-
-            </div>
-
-          {% endfor %}
-
-        </div>
-
-      </div>
-
-    {% endif %}
-
+      <p class="sub">No tracks published yet.</p>
+    {% endfor %}
   </div>
 
-</section>
+  <div style="margin-top:28px;">
+    <a href="/store/{{ profile.slug }}/merch" class="btn btn-primary">Shop {{ profile.stage_name }} Merch</a>
+  </div>
 
+  <h2 style="font-size: 20px; margin-top: 36px;">Albums</h2>
+  <div class="results-grid">
+    {% for album in albums %}
+      <a href="/album/{{ album.slug }}" class="result-card">
+        <div class="title">{{ album.title }}</div>
+      </a>
+    {% else %}
+      <p class="sub">No albums published yet.</p>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}
