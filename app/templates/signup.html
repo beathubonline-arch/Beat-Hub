@@ -1,229 +1,1566 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-{% block title %}Join BeatHub{% endblock %}
+    <title>Create Account | BeatHub</title>
 
-{% block content %}
-
-<div class="form-page">
-  <div class="form-card">
-
-    <div class="brand">
-      BEAT<span class="hub">HUB</span>
-    </div>
-
-    <h2>Create your BeatHub account</h2>
-
-    <p class="subtitle">
-      Join BeatHub and start sharing your music, building your audience,
-      selling beats and earning from your work.
-    </p>
-
-    {% if error %}
-      <div class="alert alert-error">
-        {{ error }}
-      </div>
-    {% endif %}
-
-    {% if success %}
-      <div class="alert alert-success">
-        {{ success }}
-      </div>
-    {% endif %}
-
-    <form
-      action="/signup"
-      method="post"
-      autocomplete="on"
+    <meta
+        name="description"
+        content="Create your BeatHub account — the home of cool beats."
     >
 
-      <div class="field">
-        <label for="stage_name">
-          Your Producer / Stage Name
-        </label>
+    <style>
+        :root {
+            --gold: #d4af37;
+            --gold-light: #f4d675;
+            --gold-dark: #9c7a16;
 
-        <input
-          id="stage_name"
-          type="text"
-          name="stage_name"
-          placeholder="e.g. Mr Mapema"
-          value="{{ stage_name|default('') }}"
-          required
-          autofocus
-          autocomplete="nickname"
-        >
-      </div>
+            --black: #050505;
+            --black-soft: #0b0b0b;
+            --panel: rgba(16, 16, 16, 0.92);
+            --panel-light: rgba(255, 255, 255, 0.045);
 
-      <div class="field">
-        <label for="email">
-          Email Address
-        </label>
+            --text: #f7f7f7;
+            --muted: #a7a7a7;
+            --border: rgba(212, 175, 55, 0.22);
 
-        <input
-          id="email"
-          type="email"
-          name="email"
-          placeholder="you@example.com"
-          value="{{ email|default('') }}"
-          required
-          autocomplete="email"
-        >
-      </div>
+            --danger: #ff6b6b;
+            --success: #55d88a;
+        }
 
-      <div class="field">
-        <label for="password">
-          Password
-        </label>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-        <input
-          id="password"
-          type="password"
-          name="password"
-          placeholder="At least 8 characters"
-          minlength="8"
-          required
-          autocomplete="new-password"
-        >
-      </div>
+        html {
+            min-height: 100%;
+            scroll-behavior: smooth;
+        }
 
-      <div class="field">
-        <label for="confirm_password">
-          Confirm Password
-        </label>
+        body {
+            min-height: 100vh;
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Roboto,
+                Helvetica,
+                Arial,
+                sans-serif;
 
-        <input
-          id="confirm_password"
-          type="password"
-          name="confirm_password"
-          placeholder="Repeat your password"
-          minlength="8"
-          required
-          autocomplete="new-password"
-        >
-      </div>
+            color: var(--text);
+            background:
+                radial-gradient(
+                    circle at 15% 15%,
+                    rgba(212, 175, 55, 0.12),
+                    transparent 28%
+                ),
+                radial-gradient(
+                    circle at 85% 20%,
+                    rgba(212, 175, 55, 0.08),
+                    transparent 25%
+                ),
+                radial-gradient(
+                    circle at 50% 100%,
+                    rgba(212, 175, 55, 0.07),
+                    transparent 35%
+                ),
+                #050505;
 
-      <div class="field">
-        <label for="role">
-          Account Type
-        </label>
+            overflow-x: hidden;
+        }
 
-        <select
-          id="role"
-          name="role"
-          required
-        >
-          <option value="creator" selected>
-            Producer / Artist / DJ — I want to sell music
-          </option>
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
 
-          <option value="buyer">
-            Buyer / Artist — I want to purchase music
-          </option>
-        </select>
-      </div>
+            background-image:
+                linear-gradient(
+                    rgba(255, 255, 255, 0.015) 1px,
+                    transparent 1px
+                ),
+                linear-gradient(
+                    90deg,
+                    rgba(255, 255, 255, 0.015) 1px,
+                    transparent 1px
+                );
 
-      <div
-        id="creator-info"
-        style="
-          margin:-4px 0 18px;
-          padding:13px 15px;
-          border-radius:10px;
-          background:rgba(212,175,55,.07);
-          border:1px solid rgba(212,175,55,.20);
-        "
-      >
-        <div
-          class="eyebrow"
-          style="margin-bottom:5px;"
-        >
-          CREATOR ACCOUNT
+            background-size: 55px 55px;
+            mask-image: linear-gradient(
+                to bottom,
+                black,
+                transparent 90%
+            );
+
+            z-index: 0;
+        }
+
+        /* =====================================================
+           BACKGROUND DECORATION
+        ===================================================== */
+
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(1px);
+            opacity: 0.55;
+            z-index: 0;
+        }
+
+        .orb.one {
+            width: 260px;
+            height: 260px;
+            top: -100px;
+            left: -80px;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(212, 175, 55, 0.15),
+                    transparent 70%
+                );
+        }
+
+        .orb.two {
+            width: 320px;
+            height: 320px;
+            right: -130px;
+            bottom: -120px;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(212, 175, 55, 0.12),
+                    transparent 70%
+                );
+        }
+
+        /* =====================================================
+           PAGE
+        ===================================================== */
+
+        .page {
+            position: relative;
+            z-index: 1;
+
+            min-height: 100vh;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 40px 20px;
+        }
+
+        .layout {
+            width: 100%;
+            max-width: 1180px;
+
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+
+            gap: 70px;
+            align-items: center;
+        }
+
+        /* =====================================================
+           BRAND SIDE
+        ===================================================== */
+
+        .brand-side {
+            padding: 20px 0;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 13px;
+
+            margin-bottom: 30px;
+
+            text-decoration: none;
+            color: white;
+        }
+
+        .brand-mark {
+            width: 50px;
+            height: 50px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 15px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    var(--gold-light),
+                    var(--gold),
+                    var(--gold-dark)
+                );
+
+            color: #080808;
+
+            font-size: 22px;
+            font-weight: 900;
+
+            box-shadow:
+                0 10px 30px rgba(212, 175, 55, 0.18);
+        }
+
+        .brand-name {
+            font-size: 25px;
+            font-weight: 850;
+            letter-spacing: -0.7px;
+        }
+
+        .brand-name span {
+            color: var(--gold);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+
+            margin-bottom: 17px;
+
+            color: var(--gold-light);
+
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2.3px;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 28px;
+            height: 1px;
+
+            background:
+                linear-gradient(
+                    90deg,
+                    transparent,
+                    var(--gold)
+                );
+        }
+
+        .brand-side h1 {
+            max-width: 560px;
+
+            font-size: clamp(42px, 5vw, 68px);
+            line-height: 0.98;
+
+            letter-spacing: -3px;
+            font-weight: 900;
+
+            margin-bottom: 25px;
+        }
+
+        .brand-side h1 span {
+            color: var(--gold);
+        }
+
+        .brand-description {
+            max-width: 500px;
+
+            color: var(--muted);
+
+            font-size: 17px;
+            line-height: 1.75;
+        }
+
+        /* =====================================================
+           FEATURE LIST
+        ===================================================== */
+
+        .features {
+            display: grid;
+            gap: 14px;
+
+            margin-top: 35px;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .feature-icon {
+            width: 38px;
+            height: 38px;
+
+            flex: 0 0 38px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 11px;
+
+            background: rgba(212, 175, 55, 0.08);
+            border: 1px solid rgba(212, 175, 55, 0.17);
+
+            color: var(--gold-light);
+
+            font-size: 15px;
+        }
+
+        .feature-text {
+            color: #d4d4d4;
+            font-size: 14px;
+        }
+
+        /* =====================================================
+           SIGNUP CARD
+        ===================================================== */
+
+        .card {
+            position: relative;
+
+            width: 100%;
+
+            padding: 38px;
+
+            border-radius: 28px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(255, 255, 255, 0.055),
+                    rgba(255, 255, 255, 0.018)
+                ),
+                var(--panel);
+
+            border: 1px solid var(--border);
+
+            box-shadow:
+                0 35px 90px rgba(0, 0, 0, 0.65),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: "";
+
+            position: absolute;
+
+            width: 240px;
+            height: 240px;
+
+            top: -150px;
+            right: -120px;
+
+            border-radius: 50%;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(212, 175, 55, 0.13),
+                    transparent 70%
+                );
+
+            pointer-events: none;
+        }
+
+        .card-top {
+            position: relative;
+            z-index: 1;
+
+            margin-bottom: 30px;
+        }
+
+        .card-top h2 {
+            font-size: 30px;
+            line-height: 1.1;
+
+            letter-spacing: -1px;
+
+            margin-bottom: 9px;
+        }
+
+        .card-top p {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* =====================================================
+           ALERTS
+        ===================================================== */
+
+        .alert {
+            margin-bottom: 22px;
+            padding: 13px 15px;
+
+            border-radius: 12px;
+
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .alert.error {
+            color: #ffd0d0;
+
+            background: rgba(255, 75, 75, 0.08);
+            border: 1px solid rgba(255, 75, 75, 0.22);
+        }
+
+        .alert.success {
+            color: #c8ffe0;
+
+            background: rgba(85, 216, 138, 0.08);
+            border: 1px solid rgba(85, 216, 138, 0.22);
+        }
+
+        /* =====================================================
+           FORM
+        ===================================================== */
+
+        form {
+            position: relative;
+            z-index: 1;
+        }
+
+        .field {
+            margin-bottom: 19px;
+        }
+
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+
+            margin-bottom: 8px;
+
+            color: #dedede;
+
+            font-size: 12px;
+            font-weight: 750;
+
+            letter-spacing: 0.35px;
+        }
+
+        .input-wrap {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+
+            transform: translateY(-50%);
+
+            color: #777;
+
+            font-size: 15px;
+
+            pointer-events: none;
+
+            transition: color 0.2s ease;
+        }
+
+        input,
+        select {
+            width: 100%;
+            height: 52px;
+
+            border-radius: 13px;
+
+            border: 1px solid rgba(255, 255, 255, 0.09);
+
+            background:
+                rgba(0, 0, 0, 0.32);
+
+            color: white;
+
+            outline: none;
+
+            padding: 0 15px;
+
+            font-size: 14px;
+
+            transition:
+                border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                background 0.2s ease;
+        }
+
+        .has-icon input {
+            padding-left: 45px;
+        }
+
+        input::placeholder {
+            color: #626262;
+        }
+
+        input:hover,
+        select:hover {
+            border-color: rgba(212, 175, 55, 0.25);
+        }
+
+        input:focus,
+        select:focus {
+            border-color: rgba(212, 175, 55, 0.65);
+
+            background:
+                rgba(212, 175, 55, 0.025);
+
+            box-shadow:
+                0 0 0 4px rgba(212, 175, 55, 0.07);
+        }
+
+        .input-wrap:focus-within .input-icon {
+            color: var(--gold);
+        }
+
+        select {
+            cursor: pointer;
+
+            appearance: none;
+            -webkit-appearance: none;
+
+            padding-right: 42px;
+        }
+
+        .select-arrow {
+            position: absolute;
+
+            right: 16px;
+            top: 50%;
+
+            transform: translateY(-50%);
+
+            color: #777;
+
+            pointer-events: none;
+
+            font-size: 11px;
+        }
+
+        /* =====================================================
+           PASSWORD
+        ===================================================== */
+
+        .password-toggle {
+            position: absolute;
+
+            right: 12px;
+            top: 50%;
+
+            transform: translateY(-50%);
+
+            width: 34px;
+            height: 34px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border: 0;
+            border-radius: 9px;
+
+            background: transparent;
+
+            color: #777;
+
+            cursor: pointer;
+
+            transition:
+                color 0.2s ease,
+                background 0.2s ease;
+        }
+
+        .password-toggle:hover {
+            color: var(--gold-light);
+            background: rgba(212, 175, 55, 0.08);
+        }
+
+        .has-toggle input {
+            padding-right: 52px;
+        }
+
+        /* =====================================================
+           ROLE SELECTOR
+        ===================================================== */
+
+        .role-title {
+            margin-top: 3px;
+            margin-bottom: 10px;
+        }
+
+        .role-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .role-option {
+            position: relative;
+        }
+
+        .role-option input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .role-label {
+            min-height: 88px;
+
+            display: flex;
+            align-items: center;
+            gap: 12px;
+
+            padding: 14px;
+
+            margin: 0;
+
+            border-radius: 14px;
+
+            border: 1px solid rgba(255, 255, 255, 0.08);
+
+            background: rgba(0, 0, 0, 0.22);
+
+            cursor: pointer;
+
+            transition:
+                border-color 0.2s ease,
+                background 0.2s ease,
+                transform 0.2s ease;
+        }
+
+        .role-label:hover {
+            transform: translateY(-1px);
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+
+        .role-option input:checked + .role-label {
+            border-color: rgba(212, 175, 55, 0.75);
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(212, 175, 55, 0.12),
+                    rgba(212, 175, 55, 0.035)
+                );
+
+            box-shadow:
+                inset 0 0 0 1px rgba(212, 175, 55, 0.08);
+        }
+
+        .role-icon {
+            width: 39px;
+            height: 39px;
+
+            flex: 0 0 39px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 11px;
+
+            background: rgba(212, 175, 55, 0.08);
+
+            color: var(--gold-light);
+
+            font-size: 16px;
+        }
+
+        .role-copy strong {
+            display: block;
+
+            color: #f5f5f5;
+
+            font-size: 13px;
+
+            margin-bottom: 4px;
+        }
+
+        .role-copy span {
+            display: block;
+
+            color: #777;
+
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        /* =====================================================
+           TERMS
+        ===================================================== */
+
+        .terms {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+
+            margin: 5px 0 22px;
+        }
+
+        .terms input {
+            width: 17px;
+            height: 17px;
+
+            flex: 0 0 17px;
+
+            margin-top: 1px;
+
+            accent-color: var(--gold);
+
+            cursor: pointer;
+        }
+
+        .terms label {
+            margin: 0;
+
+            color: #858585;
+
+            font-size: 11.5px;
+            line-height: 1.6;
+
+            cursor: pointer;
+        }
+
+        .terms a {
+            color: var(--gold-light);
+            text-decoration: none;
+        }
+
+        .terms a:hover {
+            text-decoration: underline;
+        }
+
+        /* =====================================================
+           SUBMIT BUTTON
+        ===================================================== */
+
+        .submit-btn {
+            width: 100%;
+            height: 56px;
+
+            border: 0;
+            border-radius: 14px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    var(--gold-light),
+                    var(--gold),
+                    #b38d21
+                );
+
+            color: #080808;
+
+            font-size: 14px;
+            font-weight: 900;
+
+            letter-spacing: 0.15px;
+
+            cursor: pointer;
+
+            box-shadow:
+                0 12px 30px rgba(212, 175, 55, 0.16);
+
+            transition:
+                transform 0.2s ease,
+                box-shadow 0.2s ease,
+                filter 0.2s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+
+            box-shadow:
+                0 17px 38px rgba(212, 175, 55, 0.24);
+
+            filter: brightness(1.04);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: wait;
+            transform: none;
+        }
+
+        /* =====================================================
+           FOOTER LOGIN
+        ===================================================== */
+
+        .login-link {
+            margin-top: 22px;
+
+            text-align: center;
+
+            color: #777;
+
+            font-size: 13px;
+        }
+
+        .login-link a {
+            color: var(--gold-light);
+
+            font-weight: 750;
+
+            text-decoration: none;
+        }
+
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* =====================================================
+           BOTTOM BRANDING
+        ===================================================== */
+
+        .copyright {
+            margin-top: 30px;
+
+            text-align: center;
+
+            color: #4f4f4f;
+
+            font-size: 10px;
+            letter-spacing: 0.7px;
+        }
+
+        .copyright span {
+            color: var(--gold-dark);
+        }
+
+        /* =====================================================
+           RESPONSIVE
+        ===================================================== */
+
+        @media (max-width: 900px) {
+            .layout {
+                grid-template-columns: 1fr;
+
+                max-width: 620px;
+
+                gap: 25px;
+            }
+
+            .brand-side {
+                text-align: center;
+            }
+
+            .brand {
+                justify-content: center;
+            }
+
+            .brand-side h1 {
+                margin-left: auto;
+                margin-right: auto;
+
+                font-size: clamp(40px, 10vw, 58px);
+            }
+
+            .brand-description {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .features {
+                display: none;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .page {
+                padding: 25px 14px;
+                align-items: flex-start;
+            }
+
+            .layout {
+                gap: 20px;
+            }
+
+            .brand-side {
+                padding-top: 10px;
+            }
+
+            .brand-mark {
+                width: 44px;
+                height: 44px;
+
+                border-radius: 13px;
+
+                font-size: 19px;
+            }
+
+            .brand-name {
+                font-size: 22px;
+            }
+
+            .brand-side h1 {
+                font-size: 39px;
+                letter-spacing: -2px;
+
+                margin-bottom: 17px;
+            }
+
+            .brand-description {
+                font-size: 14px;
+                line-height: 1.6;
+            }
+
+            .card {
+                padding: 25px 19px;
+
+                border-radius: 22px;
+            }
+
+            .card-top h2 {
+                font-size: 26px;
+            }
+
+            .field-row {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            .role-options {
+                grid-template-columns: 1fr;
+            }
+
+            .role-label {
+                min-height: 78px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .card {
+                padding: 22px 15px;
+            }
+
+            .brand-side h1 {
+                font-size: 35px;
+            }
+        }
+
+        /* =====================================================
+           REDUCED MOTION
+        ===================================================== */
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="orb one"></div>
+    <div class="orb two"></div>
+
+    <main class="page">
+
+        <div class="layout">
+
+            <!-- =================================================
+                 BRANDING
+            ================================================== -->
+
+            <section class="brand-side">
+
+                <a href="/" class="brand">
+                    <div class="brand-mark">B</div>
+
+                    <div class="brand-name">
+                        Beat<span>Hub</span>
+                    </div>
+                </a>
+
+                <div class="eyebrow">
+                    The home of cool beats
+                </div>
+
+                <h1>
+                    Your sound.
+                    <br>
+                    Your <span>stage.</span>
+                </h1>
+
+                <p class="brand-description">
+                    Create your BeatHub account and step into a
+                    premium home for artists, producers and
+                    unforgettable music.
+                </p>
+
+                <div class="features">
+
+                    <div class="feature">
+                        <div class="feature-icon">♫</div>
+
+                        <div class="feature-text">
+                            Discover and buy beats built for your sound.
+                        </div>
+                    </div>
+
+                    <div class="feature">
+                        <div class="feature-icon">◆</div>
+
+                        <div class="feature-text">
+                            Producers can showcase and sell their catalog.
+                        </div>
+                    </div>
+
+                    <div class="feature">
+                        <div class="feature-icon">↗</div>
+
+                        <div class="feature-text">
+                            Share your personal BeatHub store with your fans.
+                        </div>
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 SIGNUP CARD
+            ================================================== -->
+
+            <section class="card">
+
+                <div class="card-top">
+
+                    <h2>
+                        Create your account
+                    </h2>
+
+                    <p>
+                        Join BeatHub and bring your music world to life.
+                    </p>
+
+                </div>
+
+
+                {% if error %}
+                    <div class="alert error">
+                        {{ error }}
+                    </div>
+                {% endif %}
+
+
+                {% if success %}
+                    <div class="alert success">
+                        {{ success }}
+                    </div>
+                {% endif %}
+
+
+                <form
+                    method="post"
+                    action="/signup"
+                    id="signupForm"
+                    novalidate
+                >
+
+                    <!-- =================================================
+                         NAME + EMAIL
+                    ================================================== -->
+
+                    <div class="field-row">
+
+                        <div class="field">
+
+                            <label for="stage_name">
+                                Stage / Artist Name
+                            </label>
+
+                            <div class="input-wrap has-icon">
+
+                                <span class="input-icon">
+                                    ✦
+                                </span>
+
+                                <input
+                                    type="text"
+                                    id="stage_name"
+                                    name="stage_name"
+                                    value="{{ stage_name or '' }}"
+                                    placeholder="e.g. Mr. Mapema"
+                                    maxlength="255"
+                                    autocomplete="nickname"
+                                    required
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="field">
+
+                            <label for="email">
+                                Email Address
+                            </label>
+
+                            <div class="input-wrap has-icon">
+
+                                <span class="input-icon">
+                                    @
+                                </span>
+
+                                <input
+                                    type="email"
+                                    id="email"
+                                    name="email"
+                                    value="{{ email or '' }}"
+                                    placeholder="you@example.com"
+                                    maxlength="255"
+                                    autocomplete="email"
+                                    required
+                                >
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- =================================================
+                         ACCOUNT TYPE
+                    ================================================== -->
+
+                    <div class="field">
+
+                        <label class="role-title">
+                            I am joining BeatHub as
+                        </label>
+
+                        <div class="role-options">
+
+                            <div class="role-option">
+
+                                <input
+                                    type="radio"
+                                    id="role_buyer"
+                                    name="role"
+                                    value="buyer"
+                                    {% if role != "creator" and role != "producer" %}
+                                        checked
+                                    {% endif %}
+                                >
+
+                                <label
+                                    class="role-label"
+                                    for="role_buyer"
+                                >
+
+                                    <div class="role-icon">
+                                        ♫
+                                    </div>
+
+                                    <div class="role-copy">
+
+                                        <strong>
+                                            Artist / Buyer
+                                        </strong>
+
+                                        <span>
+                                            Discover beats and build your sound.
+                                        </span>
+
+                                    </div>
+
+                                </label>
+
+                            </div>
+
+
+                            <div class="role-option">
+
+                                <input
+                                    type="radio"
+                                    id="role_creator"
+                                    name="role"
+                                    value="creator"
+                                    {% if role == "creator" or role == "producer" %}
+                                        checked
+                                    {% endif %}
+                                >
+
+                                <label
+                                    class="role-label"
+                                    for="role_creator"
+                                >
+
+                                    <div class="role-icon">
+                                        ◆
+                                    </div>
+
+                                    <div class="role-copy">
+
+                                        <strong>
+                                            Producer / Creator
+                                        </strong>
+
+                                        <span>
+                                            Upload, sell and grow your catalog.
+                                        </span>
+
+                                    </div>
+
+                                </label>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- =================================================
+                         PASSWORDS
+                    ================================================== -->
+
+                    <div class="field-row">
+
+                        <div class="field">
+
+                            <label for="password">
+                                Password
+                            </label>
+
+                            <div class="input-wrap has-icon has-toggle">
+
+                                <span class="input-icon">
+                                    ●
+                                </span>
+
+                                <input
+                                    type="password"
+                                    id="password"
+                                    name="password"
+                                    placeholder="At least 8 characters"
+                                    minlength="8"
+                                    autocomplete="new-password"
+                                    required
+                                >
+
+                                <button
+                                    type="button"
+                                    class="password-toggle"
+                                    data-target="password"
+                                    aria-label="Show password"
+                                >
+                                    ◉
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="field">
+
+                            <label for="confirm_password">
+                                Confirm Password
+                            </label>
+
+                            <div class="input-wrap has-icon has-toggle">
+
+                                <span class="input-icon">
+                                    ●
+                                </span>
+
+                                <input
+                                    type="password"
+                                    id="confirm_password"
+                                    name="confirm_password"
+                                    placeholder="Repeat your password"
+                                    minlength="8"
+                                    autocomplete="new-password"
+                                    required
+                                >
+
+                                <button
+                                    type="button"
+                                    class="password-toggle"
+                                    data-target="confirm_password"
+                                    aria-label="Show password"
+                                >
+                                    ◉
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- =================================================
+                         TERMS
+                    ================================================== -->
+
+                    <div class="terms">
+
+                        <input
+                            type="checkbox"
+                            id="agree_terms"
+                            name="agree_terms"
+                            value="yes"
+                            required
+                        >
+
+                        <label for="agree_terms">
+                            I agree to the BeatHub
+                            <a href="/terms" target="_blank">
+                                Terms & Conditions
+                            </a>
+                            and understand that my account information
+                            will be used to provide BeatHub services.
+                        </label>
+
+                    </div>
+
+
+                    <!-- =================================================
+                         SUBMIT
+                    ================================================== -->
+
+                    <button
+                        type="submit"
+                        class="submit-btn"
+                        id="submitBtn"
+                    >
+                        Create My BeatHub Account
+                    </button>
+
+
+                    <!-- =================================================
+                         LOGIN LINK
+                    ================================================== -->
+
+                    <div class="login-link">
+
+                        Already have a BeatHub account?
+
+                        <a href="/login">
+                            Log in
+                        </a>
+
+                    </div>
+
+                </form>
+
+
+                <div class="copyright">
+                    © {{ current_year or 2026 }}
+                    <span>BeatHub</span>
+                    · The home of cool beats.
+                </div>
+
+            </section>
+
         </div>
 
-        <p
-          class="sub"
-          style="
-            margin:0;
-            line-height:1.5;
-            font-size:13px;
-          "
-        >
-          You'll get your BeatHub creator dashboard where you can
-          upload beats/tracks, create your public store, share your
-          store with fans and earn from sales.
-        </p>
-      </div>
+    </main>
 
-      <div class="checkbox-row">
-        <input
-          type="checkbox"
-          id="terms"
-          name="agree_terms"
-          value="yes"
-          required
-        >
 
-        <label
-          for="terms"
-          style="
-            margin:0;
-            text-transform:none;
-          "
-        >
-          I agree to the
-          <a href="/terms">
-            Terms &amp; Conditions
-          </a>.
-        </label>
-      </div>
+    <script>
+        /* =========================================================
+           PASSWORD VISIBILITY
+        ========================================================= */
 
-      <button
-        type="submit"
-        class="btn btn-primary btn-block"
-      >
-        Create account
-      </button>
+        document
+            .querySelectorAll(".password-toggle")
+            .forEach(function(button) {
 
-    </form>
+                button.addEventListener("click", function() {
 
-    <p
-      class="sub"
-      style="margin-top:18px;"
-    >
-      Already have an account?
+                    const targetId =
+                        button.getAttribute("data-target");
 
-      <a
-        href="/login"
-        style="color:var(--gold);"
-      >
-        Login
-      </a>
-    </p>
+                    const input =
+                        document.getElementById(targetId);
 
-  </div>
-</div>
+                    if (!input) {
+                        return;
+                    }
 
-<script>
-(function () {
-  const roleSelect = document.getElementById("role");
-  const creatorInfo = document.getElementById("creator-info");
+                    if (input.type === "password") {
 
-  if (!roleSelect || !creatorInfo) {
-    return;
-  }
+                        input.type = "text";
 
-  function updateAccountInfo() {
-    creatorInfo.style.display =
-      roleSelect.value === "creator"
-        ? "block"
-        : "none";
-  }
+                        button.textContent = "◉";
 
-  roleSelect.addEventListener(
-    "change",
-    updateAccountInfo
-  );
+                        button.setAttribute(
+                            "aria-label",
+                            "Hide password"
+                        );
 
-  updateAccountInfo();
-})();
-</script>
+                    } else {
 
-{% endblock %}
+                        input.type = "password";
+
+                        button.textContent = "◉";
+
+                        button.setAttribute(
+                            "aria-label",
+                            "Show password"
+                        );
+                    }
+                });
+            });
+
+
+        /* =========================================================
+           PASSWORD MATCH CHECK
+        ========================================================= */
+
+        const signupForm =
+            document.getElementById("signupForm");
+
+        const password =
+            document.getElementById("password");
+
+        const confirmPassword =
+            document.getElementById("confirm_password");
+
+        function checkPasswordMatch() {
+
+            if (!password || !confirmPassword) {
+                return;
+            }
+
+            if (
+                confirmPassword.value &&
+                password.value !== confirmPassword.value
+            ) {
+
+                confirmPassword.style.borderColor =
+                    "rgba(255, 75, 75, 0.65)";
+
+            } else {
+
+                confirmPassword.style.borderColor = "";
+            }
+        }
+
+        if (password) {
+            password.addEventListener(
+                "input",
+                checkPasswordMatch
+            );
+        }
+
+        if (confirmPassword) {
+            confirmPassword.addEventListener(
+                "input",
+                checkPasswordMatch
+            );
+        }
+
+
+        /* =========================================================
+           SUBMIT EXPERIENCE
+        ========================================================= */
+
+        if (signupForm) {
+
+            signupForm.addEventListener(
+                "submit",
+                function(event) {
+
+                    if (
+                        password &&
+                        confirmPassword &&
+                        password.value !== confirmPassword.value
+                    ) {
+
+                        event.preventDefault();
+
+                        confirmPassword.focus();
+
+                        confirmPassword.style.borderColor =
+                            "rgba(255, 75, 75, 0.75)";
+
+                        return;
+                    }
+
+                    const terms =
+                        document.getElementById("agree_terms");
+
+                    if (
+                        terms &&
+                        !terms.checked
+                    ) {
+
+                        event.preventDefault();
+
+                        terms.focus();
+
+                        return;
+                    }
+
+                    const submitButton =
+                        document.getElementById("submitBtn");
+
+                    if (submitButton) {
+
+                        submitButton.disabled = true;
+
+                        submitButton.textContent =
+                            "Creating your BeatHub account...";
+                    }
+                }
+            );
+        }
+
+
+        /* =========================================================
+           AUTO FOCUS
+        ========================================================= */
+
+        const stageName =
+            document.getElementById("stage_name");
+
+        if (
+            stageName &&
+            !stageName.value
+        ) {
+            setTimeout(function() {
+                stageName.focus();
+            }, 250);
+        }
+    </script>
+
+</body>
+</html>
