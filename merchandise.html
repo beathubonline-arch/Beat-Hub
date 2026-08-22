@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Merchandise Studio — BeatHub{% endblock %}
+{% block content %}
+<style>
+  .merch-shell{padding:42px 0 70px}
+  .merch-hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:28px}
+  .merch-eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold,#d6ad55);font-weight:800}
+  .merch-hero h1{font-size:38px;line-height:1.05;margin:8px 0}
+  .merch-hero p{max-width:650px;color:var(--text-muted,#9ca3af);line-height:1.65;margin:0}
+  .merch-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+  .merch-card{overflow:hidden;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);border-radius:18px}
+  .merch-image{aspect-ratio:1/1;background:rgba(255,255,255,.045);overflow:hidden}
+  .merch-image img{width:100%;height:100%;object-fit:cover;display:block}
+  .merch-placeholder{height:100%;display:grid;place-items:center;color:var(--text-muted,#9ca3af);font-size:13px}
+  .merch-body{padding:18px}
+  .merch-name{font-size:19px;font-weight:800;margin:0 0 7px}
+  .merch-desc{color:var(--text-muted,#9ca3af);font-size:13px;line-height:1.55;min-height:42px}
+  .merch-price{font-size:20px;font-weight:900;margin-top:14px}
+  .merch-meta{font-size:11px;color:var(--text-muted,#9ca3af);margin-top:5px}
+  .merch-empty{padding:42px;border:1px dashed rgba(255,255,255,.12);border-radius:18px;text-align:center;color:var(--text-muted,#9ca3af)}
+  @media(max-width:900px){.merch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:620px){.merch-hero{flex-direction:column;align-items:flex-start}.merch-grid{grid-template-columns:1fr}.merch-hero h1{font-size:31px}}
+</style>
+
+<section class="merch-shell">
+  <div class="merch-hero">
+    <div>
+      <div class="merch-eyebrow">BeatHub Creator Studio</div>
+      <h1>Your Merchandise</h1>
+      <p>Turn your identity into products your audience can discover. Add a product image, name, description and price. Checkout and fulfilment will be connected in the next commerce layer.</p>
+    </div>
+    <a href="/dashboard/merch/new" class="btn btn-primary">+ Add Merchandise</a>
+  </div>
+
+  {% if products %}
+    <div class="merch-grid">
+      {% for product in products %}
+        <article class="merch-card">
+          <div class="merch-image">
+            {% if product.image_url %}
+              <img src="{{ product.image_url }}" alt="{{ product.name }}">
+            {% else %}
+              <div class="merch-placeholder">Image unavailable</div>
+            {% endif %}
+          </div>
+          <div class="merch-body">
+            <h2 class="merch-name">{{ product.name }}</h2>
+            <div class="merch-desc">{{ product.description or 'No description added yet.' }}</div>
+            <div class="merch-price">KSh {{ '%.2f'|format(product.price|float) }}</div>
+            <div class="merch-meta">Visible on your merchandise store</div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="merch-empty">
+      <strong>No merchandise yet.</strong><br>
+      Add your first product and make your creator brand more than music.
+    </div>
+  {% endif %}
+</section>
+{% endblock %}
