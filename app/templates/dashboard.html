@@ -1,1079 +1,933 @@
 {% extends "base.html" %}
 
-{% block title %}Creator Studio — BeatHub{% endblock %}
+{% block title %}Creator Dashboard — BeatHub{% endblock %}
 
 {% block content %}
 
 <style>
-    :root {
-        --bh-bg: #070609;
-        --bh-panel: #0f0b14;
-        --bh-panel-2: #130e19;
-        --bh-border: #28202f;
-        --bh-border-light: #33283d;
-        --bh-text: #f5f2f7;
-        --bh-muted: #958c9e;
-        --bh-gold: #f5b800;
-        --bh-gold-soft: #ffd34d;
-        --bh-green: #00d9a6;
-        --bh-red: #ff5c68;
-        --bh-blue: #78a8ff;
-    }
-
-    .bh-dashboard {
-        width: min(1220px, calc(100% - 36px));
+    .creator-dashboard {
+        max-width: 1400px;
         margin: 0 auto;
-        padding: 34px 0 80px;
-        color: var(--bh-text);
-    }
-
-    /* =========================================================
-       GLOBAL
-       ========================================================= */
-
-    .bh-dashboard * {
-        box-sizing: border-box;
-    }
-
-    .bh-dashboard a {
-        text-decoration: none;
-    }
-
-    .bh-eyebrow {
-        color: var(--bh-gold-soft);
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: .18em;
-        text-transform: uppercase;
-    }
-
-    .bh-muted {
-        color: var(--bh-muted);
-    }
-
-    /* =========================================================
-       FLASH MESSAGES
-       ========================================================= */
-
-    .bh-alert {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 20px;
-        padding: 14px 16px;
-        border-radius: 14px;
-        border: 1px solid var(--bh-border-light);
-        background: var(--bh-panel);
-        font-size: 13px;
-    }
-
-    .bh-alert-success {
-        border-color: rgba(0, 217, 166, .28);
-        background: rgba(0, 217, 166, .06);
-        color: #a9ffe8;
-    }
-
-    .bh-alert-error {
-        border-color: rgba(255, 92, 104, .28);
-        background: rgba(255, 92, 104, .06);
-        color: #ffc0c5;
+        padding: 10px 0 60px;
     }
 
     /* =========================================================
        HERO
        ========================================================= */
 
-    .bh-hero {
+    .dashboard-hero {
         position: relative;
         overflow: hidden;
         display: flex;
         justify-content: space-between;
-        align-items: flex-end;
+        align-items: center;
         gap: 30px;
         padding: 34px;
-        border: 1px solid var(--bh-border);
-        border-radius: 24px;
+        margin-bottom: 28px;
+        border: 1px solid #27272a;
+        border-radius: 22px;
         background:
             radial-gradient(
                 circle at 85% 15%,
-                rgba(245, 184, 0, .15),
+                rgba(234, 179, 8, .10),
                 transparent 30%
             ),
-            radial-gradient(
-                circle at 10% 90%,
-                rgba(0, 217, 166, .07),
-                transparent 28%
-            ),
             linear-gradient(
-                145deg,
-                #120d17,
-                #09070c 70%
+                135deg,
+                #18181b 0%,
+                #0f0f11 100%
             );
-        box-shadow: 0 24px 80px rgba(0,0,0,.30);
     }
 
-    .bh-hero::after {
+    .dashboard-hero::after {
         content: "";
         position: absolute;
-        width: 220px;
-        height: 220px;
-        right: -90px;
-        top: -90px;
+        width: 240px;
+        height: 240px;
+        right: -80px;
+        bottom: -130px;
         border-radius: 50%;
-        border: 1px solid rgba(245,184,0,.14);
+        border: 1px solid rgba(234, 179, 8, .10);
         pointer-events: none;
     }
 
-    .bh-hero-copy {
+    .hero-content {
         position: relative;
         z-index: 1;
-        min-width: 0;
     }
 
-    .bh-hero h1 {
-        margin: 8px 0 10px;
-        font-size: clamp(32px, 5vw, 48px);
-        line-height: 1.02;
-        letter-spacing: -.045em;
+    .hero-eyebrow {
+        margin: 0 0 8px;
+        color: #eab308;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .14em;
     }
 
-    .bh-hero h1 span {
-        color: var(--bh-gold);
-    }
-
-    .bh-hero-description {
-        max-width: 650px;
+    .dashboard-hero h1 {
         margin: 0;
-        color: var(--bh-muted);
-        font-size: 14px;
-        line-height: 1.7;
+        font-size: clamp(28px, 4vw, 46px);
+        line-height: 1.05;
+        letter-spacing: -.04em;
+        color: #fff;
     }
 
-    .bh-hero-actions {
+    .dashboard-hero p {
+        margin: 12px 0 0;
+        max-width: 650px;
+        color: #a1a1aa;
+        line-height: 1.6;
+    }
+
+    .hero-actions {
         position: relative;
-        z-index: 2;
+        z-index: 1;
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        flex-shrink: 0;
     }
 
-    .bh-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 44px;
-        padding: 0 17px;
-        border-radius: 11px;
-        border: 1px solid var(--bh-border-light);
-        color: #fff;
-        background: #17121c;
-        font-size: 13px;
-        font-weight: 800;
-        transition: .18s ease;
-        cursor: pointer;
-    }
-
-    .bh-btn:hover {
-        transform: translateY(-1px);
-        border-color: #4a3a56;
-        background: #1d1724;
-    }
-
-    .bh-btn-primary {
-        border-color: var(--bh-gold);
-        background: var(--bh-gold);
-        color: #09070a;
-    }
-
-    .bh-btn-primary:hover {
-        border-color: var(--bh-gold-soft);
-        background: var(--bh-gold-soft);
-    }
-
-    .bh-btn-green {
-        border-color: rgba(0,217,166,.35);
-        background: rgba(0,217,166,.08);
-        color: var(--bh-green);
+    .hero-actions a {
+        text-decoration: none;
     }
 
     /* =========================================================
-       PERFORMANCE
+       SECTIONS
        ========================================================= */
 
-    .bh-section {
-        margin-top: 28px;
+    .dashboard-section {
+        margin-bottom: 28px;
     }
 
-    .bh-section-header {
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        gap: 20px;
-        margin-bottom: 14px;
-    }
-
-    .bh-section-header h2 {
-        margin: 0 0 5px;
-        font-size: 19px;
-        letter-spacing: -.02em;
-    }
-
-    .bh-section-header p {
-        margin: 0;
-        color: var(--bh-muted);
-        font-size: 12px;
-    }
-
-    .bh-stats {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
-        gap: 12px;
-    }
-
-    .bh-stat {
-        min-width: 0;
-        padding: 20px;
-        border: 1px solid var(--bh-border);
-        border-radius: 17px;
-        background: var(--bh-panel);
-        transition: .18s ease;
-    }
-
-    .bh-stat:hover {
-        transform: translateY(-2px);
-        border-color: var(--bh-border-light);
-    }
-
-    .bh-stat-label {
-        color: var(--bh-muted);
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-    }
-
-    .bh-stat-value {
-        margin-top: 9px;
-        font-size: 23px;
-        line-height: 1;
-        font-weight: 850;
-        letter-spacing: -.035em;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .bh-stat-gold .bh-stat-value {
-        color: var(--bh-gold);
-    }
-
-    .bh-stat-green .bh-stat-value {
-        color: var(--bh-green);
-    }
-
-    .bh-stat-sub {
-        margin-top: 8px;
-        color: #6e6676;
-        font-size: 10px;
-    }
-
-    /* =========================================================
-       STORE SHARE
-       ========================================================= */
-
-    .bh-store {
-        position: relative;
-        overflow: hidden;
-        padding: 25px;
-        border: 1px solid rgba(245,184,0,.22);
-        border-radius: 20px;
-        background:
-            radial-gradient(
-                circle at 100% 0%,
-                rgba(245,184,0,.13),
-                transparent 36%
-            ),
-            linear-gradient(
-                145deg,
-                #15100b,
-                #0e0a10
-            );
-    }
-
-    .bh-store-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 20px;
-    }
-
-    .bh-store-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .bh-store-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 44px;
-        height: 44px;
-        border-radius: 13px;
-        background: rgba(245,184,0,.12);
-        border: 1px solid rgba(245,184,0,.2);
-        font-size: 20px;
-    }
-
-    .bh-store h2 {
-        margin: 0;
-        font-size: 18px;
-    }
-
-    .bh-store p {
-        margin: 4px 0 0;
-        color: var(--bh-muted);
-        font-size: 12px;
-        line-height: 1.55;
-    }
-
-    .bh-store-badge {
-        padding: 7px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(0,217,166,.22);
-        background: rgba(0,217,166,.07);
-        color: var(--bh-green);
-        font-size: 10px;
-        font-weight: 800;
-        white-space: nowrap;
-    }
-
-    .bh-share-row {
-        display: flex;
-        gap: 9px;
-        margin-top: 20px;
-    }
-
-    .bh-share-input {
-        flex: 1;
-        min-width: 0;
-        height: 48px;
-        padding: 0 14px;
-        border: 1px solid var(--bh-border-light);
-        border-radius: 11px;
-        outline: none;
-        background: #08070a;
-        color: #e9e4eb;
-        font-size: 13px;
-        font-family: inherit;
-    }
-
-    .bh-share-input:focus {
-        border-color: rgba(245,184,0,.55);
-    }
-
-    .bh-copy-btn {
-        min-width: 100px;
-        height: 48px;
-        border: 1px solid var(--bh-gold);
-        border-radius: 11px;
-        background: var(--bh-gold);
-        color: #09070a;
-        font-size: 12px;
-        font-weight: 900;
-        cursor: pointer;
-    }
-
-    .bh-copy-btn:hover {
-        background: var(--bh-gold-soft);
-    }
-
-    .bh-share-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 12px;
-    }
-
-    .bh-small-link {
-        display: inline-flex;
-        align-items: center;
-        min-height: 37px;
-        padding: 0 12px;
-        border: 1px solid var(--bh-border-light);
-        border-radius: 9px;
-        color: #d9d1dd;
-        background: #0d0a11;
-        font-size: 11px;
-        font-weight: 750;
-    }
-
-    .bh-small-link:hover {
-        border-color: #4a3a56;
-        color: #fff;
-    }
-
-    .bh-share-note {
-        margin: 12px 0 0;
-        color: #6e6676;
-        font-size: 11px;
-    }
-
-    /* =========================================================
-       MAIN GRID
-       ========================================================= */
-
-    .bh-main-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(300px, .8fr);
-        gap: 18px;
-        margin-top: 18px;
-    }
-
-    .bh-panel {
-        border: 1px solid var(--bh-border);
-        border-radius: 19px;
-        background: var(--bh-panel);
-        overflow: hidden;
-    }
-
-    .bh-panel-header {
+    .section-heading {
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 15px;
-        padding: 20px 21px;
-        border-bottom: 1px solid var(--bh-border);
+        margin-bottom: 14px;
     }
 
-    .bh-panel-header h2 {
+    .section-heading h2 {
         margin: 0;
-        font-size: 16px;
+        color: #fff;
+        font-size: 20px;
     }
 
-    .bh-panel-header p {
+    .section-heading p {
         margin: 4px 0 0;
-        color: var(--bh-muted);
-        font-size: 11px;
+        color: #71717a;
+        font-size: 13px;
     }
 
-    .bh-panel-link {
-        color: var(--bh-gold);
-        font-size: 11px;
-        font-weight: 800;
-        white-space: nowrap;
+    .section-link {
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .section-link:hover {
+        color: #eab308;
     }
 
     /* =========================================================
-       TRACKS
+       STATS
        ========================================================= */
 
-    .bh-track-search {
-        display: flex;
-        gap: 8px;
-        padding: 14px 21px;
-        border-bottom: 1px solid var(--bh-border);
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
     }
 
-    .bh-track-search input {
-        flex: 1;
-        min-width: 0;
-        height: 38px;
-        padding: 0 11px;
-        border: 1px solid var(--bh-border-light);
-        border-radius: 9px;
-        outline: none;
-        background: #09070b;
+    .stat-card {
+        position: relative;
+        min-height: 150px;
+        padding: 22px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+        overflow: hidden;
+    }
+
+    .stat-card::after {
+        content: "";
+        position: absolute;
+        width: 90px;
+        height: 90px;
+        right: -35px;
+        top: -35px;
+        border-radius: 50%;
+        border: 1px solid rgba(234, 179, 8, .08);
+    }
+
+    .stat-label {
+        position: relative;
+        z-index: 1;
+        color: #a1a1aa;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .stat-value {
+        position: relative;
+        z-index: 1;
+        margin-top: 15px;
         color: #fff;
-        font-family: inherit;
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -.03em;
+    }
+
+    .stat-sub {
+        position: relative;
+        z-index: 1;
+        margin-top: 8px;
+        color: #71717a;
         font-size: 12px;
     }
 
-    .bh-track-search button {
-        height: 38px;
-        padding: 0 13px;
-        border: 1px solid var(--bh-border-light);
-        border-radius: 9px;
-        background: #17121c;
-        color: #fff;
-        font-size: 11px;
-        font-weight: 800;
-        cursor: pointer;
-    }
-
-    .bh-track-list {
-        display: flex;
-        flex-direction: column;
-    }
-
-    .bh-track {
-        display: grid;
-        grid-template-columns: 58px minmax(0, 1fr) auto auto;
-        align-items: center;
-        gap: 14px;
-        padding: 13px 21px;
-        border-bottom: 1px solid var(--bh-border);
-        transition: .16s ease;
-    }
-
-    .bh-track:last-child {
-        border-bottom: 0;
-    }
-
-    .bh-track:hover {
-        background: rgba(255,255,255,.018);
-    }
-
-    /* ARTWORK */
-
-    .bh-art {
-        position: relative;
-        width: 58px;
-        height: 58px;
-        flex: 0 0 58px;
-        border-radius: 11px;
-        overflow: hidden;
-        border: 1px solid var(--bh-border-light);
+    .stat-card.balance {
+        border-color: #4a3b08;
         background:
             radial-gradient(
-                circle at 30% 20%,
-                rgba(245,184,0,.35),
+                circle at 100% 0%,
+                rgba(234, 179, 8, .10),
                 transparent 40%
             ),
             linear-gradient(
                 145deg,
-                #21172a,
-                #0d0a10
+                #18181b,
+                #101012
             );
     }
 
-    .bh-art::before {
-        content: "BH";
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: rgba(255,255,255,.18);
-        font-size: 14px;
-        font-weight: 900;
-        letter-spacing: .12em;
-    }
-
-    .bh-art img {
-        position: relative;
-        z-index: 2;
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .bh-art.is-broken img {
-        display: none;
-    }
-
-    .bh-track-info {
-        min-width: 0;
-    }
-
-    .bh-track-title {
-        display: block;
-        color: #fff;
-        font-size: 14px;
-        font-weight: 850;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .bh-track-title:hover {
-        color: var(--bh-gold);
-    }
-
-    .bh-track-meta {
-        margin-top: 5px;
-        color: var(--bh-muted);
-        font-size: 10px;
-    }
-
-    .bh-track-meta span + span::before {
-        content: "•";
-        margin: 0 6px;
-        color: #514857;
-    }
-
-    .bh-track-price {
-        color: var(--bh-gold);
-        font-size: 14px;
-        font-weight: 900;
-        white-space: nowrap;
-    }
-
-    .bh-track-status {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 72px;
-        padding: 6px 9px;
-        border-radius: 999px;
-        font-size: 9px;
-        font-weight: 900;
-        text-transform: uppercase;
-        white-space: nowrap;
-    }
-
-    .bh-status-live {
-        color: var(--bh-green);
-        border: 1px solid rgba(0,217,166,.18);
-        background: rgba(0,217,166,.07);
-    }
-
-    .bh-status-draft {
-        color: #aaa0b1;
-        border: 1px solid #302735;
-        background: #17121c;
-    }
-
-    .bh-status-sold {
-        color: #ffb4b9;
-        border: 1px solid rgba(255,92,104,.22);
-        background: rgba(255,92,104,.07);
-    }
-
-    .bh-track-action {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 34px;
-        padding: 0 10px;
-        border: 1px solid var(--bh-border-light);
-        border-radius: 8px;
-        color: #d8d1dc;
-        font-size: 10px;
-        font-weight: 800;
-    }
-
-    .bh-track-action:hover {
-        color: #fff;
-        border-color: #51405e;
+    .stat-card.balance .stat-value {
+        color: #eab308;
+        font-size: 34px;
     }
 
     /* =========================================================
-       RIGHT COLUMN
+       QUICK ACTIONS
        ========================================================= */
 
-    .bh-earnings {
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .action-card {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        min-height: 88px;
+        padding: 18px;
+        color: inherit;
+        text-decoration: none;
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        background: #111113;
+        transition:
+            transform .18s ease,
+            border-color .18s ease,
+            background .18s ease;
+    }
+
+    .action-card:hover {
+        transform: translateY(-2px);
+        border-color: #52525b;
+        background: #18181b;
+    }
+
+    .action-icon {
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: #27272a;
+        font-size: 20px;
+    }
+
+    .action-card strong {
+        display: block;
+        color: #fff;
+        font-size: 14px;
+    }
+
+    .action-card span {
+        display: block;
+        margin-top: 4px;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    /* =========================================================
+       TWO COLUMN
+       ========================================================= */
+
+    .dashboard-columns {
+        display: grid;
+        grid-template-columns:
+            minmax(0, 1.55fr)
+            minmax(320px, .85fr);
+        gap: 20px;
+        align-items: start;
+    }
+
+    .panel {
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+        overflow: hidden;
+    }
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        padding: 20px 22px;
+        border-bottom: 1px solid #27272a;
+    }
+
+    .panel-header h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 17px;
+    }
+
+    .panel-header p {
+        margin: 4px 0 0;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .panel-body {
         padding: 22px;
     }
 
-    .bh-earnings-balance {
-        margin-top: 12px;
-        font-size: 34px;
-        font-weight: 900;
-        letter-spacing: -.045em;
-        color: var(--bh-gold);
+    /* =========================================================
+       PUBLIC STORE
+       ========================================================= */
+
+    .store-card {
+        position: relative;
+        padding: 25px;
+        border: 1px solid #3f3208;
+        border-radius: 20px;
+        background:
+            radial-gradient(
+                circle at 100% 0%,
+                rgba(234, 179, 8, .13),
+                transparent 38%
+            ),
+            linear-gradient(
+                145deg,
+                #17140b,
+                #111113
+            );
+        overflow: hidden;
     }
 
-    .bh-earnings-label {
-        color: var(--bh-muted);
-        font-size: 11px;
+    .store-card::before {
+        content: "";
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        right: -80px;
+        bottom: -80px;
+        border-radius: 50%;
+        border: 1px solid rgba(234, 179, 8, .08);
+        pointer-events: none;
     }
 
-    .bh-withdraw {
-        display: flex;
-        width: 100%;
-        margin-top: 18px;
-        align-items: center;
-        justify-content: center;
-        min-height: 42px;
-        border-radius: 10px;
-        background: #fff;
-        color: #09070a;
-        font-size: 12px;
-        font-weight: 900;
-    }
-
-    .bh-withdraw:hover {
-        opacity: .9;
-    }
-
-    .bh-breakdown {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-top: 18px;
-    }
-
-    .bh-breakdown-item {
-        padding: 12px;
-        border: 1px solid var(--bh-border);
-        border-radius: 11px;
-        background: #09070b;
-    }
-
-    .bh-breakdown-item span {
-        display: block;
-        color: #706776;
-        font-size: 9px;
+    .store-eyebrow {
+        margin-bottom: 7px;
+        color: #eab308;
+        font-size: 10px;
+        font-weight: 800;
         text-transform: uppercase;
-        letter-spacing: .05em;
+        letter-spacing: .14em;
     }
 
-    .bh-breakdown-item strong {
-        display: block;
-        margin-top: 5px;
+    .store-card h2 {
+        position: relative;
+        z-index: 1;
+        margin: 0 0 8px;
+        color: #fff;
+        font-size: 21px;
+    }
+
+    .store-card p {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        color: #a1a1aa;
+        line-height: 1.6;
         font-size: 13px;
     }
 
-    /* =========================================================
-       CATALOG / QUICK ACTIONS
-       ========================================================= */
-
-    .bh-quick-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 9px;
-        padding: 15px;
+    .store-link-label {
+        position: relative;
+        z-index: 1;
+        margin-top: 20px;
+        color: #a1a1aa;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .08em;
     }
 
-    .bh-quick {
+    .store-url-box {
+        position: relative;
+        z-index: 1;
         display: flex;
-        align-items: center;
-        gap: 11px;
-        min-height: 68px;
-        padding: 12px;
-        border: 1px solid var(--bh-border);
-        border-radius: 12px;
-        background: #0b090e;
-        color: #fff;
-        transition: .16s ease;
+        gap: 9px;
+        margin-top: 8px;
     }
 
-    .bh-quick:hover {
-        border-color: #4a3a56;
+    /*
+       IMPORTANT:
+       This is an actual INPUT instead of a truncated DIV.
+       The complete URL is stored in its value and can be
+       selected/copied directly.
+    */
+
+    .store-url {
+        flex: 1;
+        min-width: 0;
+        width: 100%;
+        height: 46px;
+        box-sizing: border-box;
+        padding: 0 13px;
+        border: 1px solid #55450c;
+        border-radius: 10px;
+        outline: none;
+        background: #08070a;
+        color: #f4f4f5;
+        font-family: monospace;
+        font-size: 12px;
+    }
+
+    .store-url:focus {
+        border-color: #eab308;
+        box-shadow: 0 0 0 2px rgba(234, 179, 8, .10);
+    }
+
+    .copy-store {
+        flex: 0 0 auto;
+        min-width: 105px;
+        min-height: 46px;
+        border: 1px solid #eab308;
+        border-radius: 10px;
+        padding: 0 15px;
+        background: #eab308;
+        color: #09090b;
+        font-weight: 800;
+        cursor: pointer;
+        transition:
+            background .18s ease,
+            transform .18s ease;
+    }
+
+    .copy-store:hover {
+        background: #facc15;
         transform: translateY(-1px);
     }
 
-    .bh-quick-icon {
+    .copy-store:active {
+        transform: translateY(0);
+    }
+
+    .store-actions {
+        position: relative;
+        z-index: 1;
         display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 12px;
+    }
+
+    .store-action {
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 35px;
-        height: 35px;
-        border-radius: 10px;
-        background: #17121c;
-        border: 1px solid var(--bh-border-light);
-        flex-shrink: 0;
+        min-height: 38px;
+        padding: 0 13px;
+        border: 1px solid #3f3f46;
+        border-radius: 9px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+        background: #111113;
+        cursor: pointer;
     }
 
-    .bh-quick strong {
-        display: block;
+    .store-action:hover {
+        background: #27272a;
+        color: #fff;
+    }
+
+    .store-action.primary {
+        border-color: #eab308;
+        background: #eab308;
+        color: #09090b;
+    }
+
+    .store-action.primary:hover {
+        background: #facc15;
+    }
+
+    .store-copy-message {
+        position: relative;
+        z-index: 1;
+        min-height: 18px;
+        margin-top: 9px;
+        color: #34d399;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .store-share-note {
+        position: relative;
+        z-index: 1;
+        margin-top: 10px;
+        color: #71717a;
         font-size: 11px;
-    }
-
-    .bh-quick span {
-        display: block;
-        margin-top: 3px;
-        color: var(--bh-muted);
-        font-size: 9px;
+        line-height: 1.5;
     }
 
     /* =========================================================
-       SALES
+       EARNINGS
        ========================================================= */
 
-    .bh-sales {
-        overflow-x: auto;
+    .earnings-card {
+        padding: 24px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
     }
 
-    .bh-sales table {
-        width: 100%;
-        min-width: 560px;
-        border-collapse: collapse;
+    .earnings-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
     }
 
-    .bh-sales th,
-    .bh-sales td {
-        padding: 12px 18px;
-        border-bottom: 1px solid var(--bh-border);
-        text-align: left;
+    .earnings-top h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 17px;
+    }
+
+    .earnings-balance {
+        margin-top: 12px;
+        color: #eab308;
+        font-size: 38px;
+        font-weight: 850;
+        letter-spacing: -.04em;
+    }
+
+    .earnings-label {
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .withdraw-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 15px;
+        border-radius: 10px;
+        background: #fff;
+        color: #09090b;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 800;
         white-space: nowrap;
     }
 
-    .bh-sales th {
-        color: #706776;
-        font-size: 9px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: .07em;
+    .withdraw-btn:hover {
+        opacity: .9;
     }
 
-    .bh-sales td {
-        color: #d8d1dc;
+    .earnings-breakdown {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 22px;
+    }
+
+    .earning-item {
+        padding: 14px;
+        border: 1px solid #27272a;
+        border-radius: 12px;
+        background: #09090b;
+    }
+
+    .earning-item span {
+        display: block;
+        color: #71717a;
         font-size: 11px;
     }
 
-    .bh-sales tr:last-child td {
-        border-bottom: 0;
-    }
-
-    .bh-sale-track {
+    .earning-item strong {
+        display: block;
+        margin-top: 5px;
         color: #fff;
-        font-weight: 800;
-    }
-
-    .bh-complete {
-        display: inline-flex;
-        padding: 5px 8px;
-        border-radius: 999px;
-        color: var(--bh-green);
-        background: rgba(0,217,166,.07);
-        border: 1px solid rgba(0,217,166,.18);
-        font-size: 9px;
-        font-weight: 900;
+        font-size: 15px;
     }
 
     /* =========================================================
-       EMPTY
+       RECENT SALES
        ========================================================= */
 
-    .bh-empty {
-        padding: 38px 20px;
-        text-align: center;
-        color: var(--bh-muted);
+    .recent-table-wrap {
+        overflow-x: auto;
     }
 
-    .bh-empty-icon {
-        margin-bottom: 9px;
-        font-size: 30px;
-        opacity: .75;
+    .recent-table {
+        width: 100%;
+        border-collapse: collapse;
     }
 
-    .bh-empty strong {
-        display: block;
-        margin-bottom: 5px;
-        color: #ddd6e1;
+    .recent-table th,
+    .recent-table td {
+        padding: 14px 18px;
+        text-align: left;
+        border-bottom: 1px solid #27272a;
+        white-space: nowrap;
+    }
+
+    .recent-table th {
+        color: #71717a;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .recent-table td {
+        color: #d4d4d8;
         font-size: 13px;
     }
 
-    .bh-empty p {
-        margin: 0;
+    .recent-table tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .order-title {
+        color: #fff;
+        font-weight: 700;
+    }
+
+    .order-date {
+        margin-top: 3px;
+        color: #71717a;
         font-size: 11px;
     }
 
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: #14532d;
+        color: #bbf7d0;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
     /* =========================================================
-       PAGINATION
+       EMPTY STATES
        ========================================================= */
 
-    .bh-pagination {
+    .empty-state {
+        padding: 35px 20px;
+        text-align: center;
+        color: #71717a;
+    }
+
+    .empty-state strong {
+        display: block;
+        margin-bottom: 6px;
+        color: #d4d4d8;
+    }
+
+    /* =========================================================
+       CONTENT OVERVIEW
+       ========================================================= */
+
+    .content-overview {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .content-card {
+        padding: 20px;
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        background: #111113;
+    }
+
+    .content-card-top {
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 10px;
-        padding: 14px 21px;
-        border-top: 1px solid var(--bh-border);
     }
 
-    .bh-page-info {
-        color: #756c7b;
-        font-size: 10px;
+    .content-card h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 15px;
     }
 
-    .bh-page-actions {
-        display: flex;
-        gap: 7px;
-    }
-
-    .bh-page-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 32px;
-        height: 32px;
-        padding: 0 9px;
-        border: 1px solid var(--bh-border-light);
-        border-radius: 8px;
-        color: #ddd6e1;
-        background: #0c0910;
-        font-size: 10px;
+    .content-number {
+        margin-top: 12px;
+        color: #eab308;
+        font-size: 30px;
         font-weight: 800;
     }
 
-    .bh-page-btn.disabled {
-        opacity: .35;
-        pointer-events: none;
+    .content-card p {
+        margin: 4px 0 0;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .content-card a {
+        display: inline-block;
+        margin-top: 16px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .content-card a:hover {
+        color: #eab308;
     }
 
     /* =========================================================
-       MOBILE
+       SOCIAL LINKS
+       ========================================================= */
+
+    .social-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 18px;
+    }
+
+    .social-link {
+        display: inline-flex;
+        align-items: center;
+        padding: 9px 12px;
+        border: 1px solid #3f3f46;
+        border-radius: 9px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .social-link:hover {
+        background: #27272a;
+        color: #fff;
+    }
+
+    /* =========================================================
+       WITHDRAWALS
+       ========================================================= */
+
+    .withdrawals-panel {
+        margin-top: 20px;
+    }
+
+    .withdrawal-row {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 1fr .8fr;
+        gap: 15px;
+        align-items: center;
+        padding: 14px 20px;
+        border-bottom: 1px solid #27272a;
+    }
+
+    .withdrawal-row:last-child {
+        border-bottom: 0;
+    }
+
+    .withdrawal-label {
+        color: #71717a;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .withdrawal-value {
+        margin-top: 4px;
+        color: #e4e4e7;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .badge {
+        display: inline-flex;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: #27272a;
+        color: #d4d4d8;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .badge.pending {
+        background: #713f12;
+        color: #fde68a;
+    }
+
+    .badge.approved,
+    .badge.processing {
+        background: #1e3a5f;
+        color: #bfdbfe;
+    }
+
+    .badge.paid {
+        background: #14532d;
+        color: #bbf7d0;
+    }
+
+    .badge.rejected {
+        background: #7f1d1d;
+        color: #fecaca;
+    }
+
+    /* =========================================================
+       RESPONSIVE
        ========================================================= */
 
     @media (max-width: 1100px) {
-        .bh-stats {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+        .stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .bh-main-grid {
+        .quick-actions {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .dashboard-columns {
             grid-template-columns: 1fr;
         }
     }
 
     @media (max-width: 700px) {
-        .bh-dashboard {
-            width: min(100% - 22px, 1220px);
-            padding-top: 18px;
+        .creator-dashboard {
+            padding-top: 0;
         }
 
-        .bh-hero {
-            padding: 23px;
+        .dashboard-hero {
+            padding: 24px;
             flex-direction: column;
-            align-items: stretch;
+            align-items: flex-start;
         }
 
-        .bh-hero-actions {
+        .hero-actions {
             width: 100%;
         }
 
-        .bh-hero-actions .bh-btn {
+        .hero-actions a {
             flex: 1;
         }
 
-        .bh-stats {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+        .stats-grid,
+        .quick-actions,
+        .content-overview {
+            grid-template-columns: 1fr;
         }
 
-        .bh-store {
-            padding: 20px;
-        }
-
-        .bh-store-top {
+        .earnings-top {
             flex-direction: column;
         }
 
-        .bh-share-row {
-            flex-direction: column;
-        }
-
-        .bh-copy-btn {
+        .withdraw-btn {
             width: 100%;
         }
 
-        .bh-track {
-            grid-template-columns: 50px minmax(0, 1fr);
-            gap: 11px;
+        .store-url-box {
+            flex-direction: column;
         }
 
-        .bh-art {
-            width: 50px;
-            height: 50px;
+        .copy-store {
+            width: 100%;
         }
 
-        .bh-track-price,
-        .bh-track-status,
-        .bh-track-action {
-            grid-column: 2;
+        .store-actions {
+            flex-direction: column;
         }
 
-        .bh-track-price {
-            margin-top: -4px;
+        .store-action {
+            width: 100%;
         }
 
-        .bh-track-status,
-        .bh-track-action {
-            width: fit-content;
-        }
-
-        .bh-track-action {
-            margin-top: -2px;
-        }
-
-        .bh-quick-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    @media (max-width: 430px) {
-        .bh-stats {
-            grid-template-columns: 1fr;
-        }
-
-        .bh-hero h1 {
-            font-size: 32px;
+        .withdrawal-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
 </style>
 
 
-<div class="bh-dashboard">
+<div class="creator-dashboard">
 
-    <!-- =========================================================
-         FLASH MESSAGES
-         ========================================================= -->
+    <!-- ===================================================== -->
+    <!-- HERO -->
+    <!-- ===================================================== -->
 
-    {% if success %}
-        <div class="bh-alert bh-alert-success">
-            <span>✓</span>
-            <span>{{ success }}</span>
-        </div>
-    {% endif %}
+    <section class="dashboard-hero">
 
-    {% if error %}
-        <div class="bh-alert bh-alert-error">
-            <span>!</span>
-            <span>{{ error }}</span>
-        </div>
-    {% endif %}
+        <div class="hero-content">
 
-
-    <!-- =========================================================
-         HERO
-         ========================================================= -->
-
-    <section class="bh-hero">
-
-        <div class="bh-hero-copy">
-
-            <div class="bh-eyebrow">
+            <div class="hero-eyebrow">
                 BeatHub Creator Studio
             </div>
 
             <h1>
-                Welcome back,
-                <span>
-                    {{ profile.stage_name }}
-                </span>
+                Welcome back{% if profile and profile.stage_name %},
+                {{ profile.stage_name }}{% elif current_user and current_user.name %},
+                {{ current_user.name }}{% endif %}
             </h1>
 
-            <p class="bh-hero-description">
-                Your studio is ready. Manage your beats, tracks,
-                albums, sales and earnings — all from one place.
+            <p>
+                Manage your beats, tracks, albums, sales and creator
+                earnings from one professional studio.
             </p>
 
         </div>
 
-        <div class="bh-hero-actions">
+        <div class="hero-actions">
 
             <a
                 href="/dashboard/upload"
-                class="bh-btn bh-btn-primary"
+                class="btn btn-primary"
             >
                 + Upload Beat / Track
             </a>
 
             <a
                 href="/dashboard/albums/new"
-                class="bh-btn"
+                class="btn btn-outline"
             >
-                + New Album
-            </a>
-
-            <a
-                href="/dashboard/withdraw"
-                class="bh-btn"
-            >
-                Withdraw
+                + Create Album
             </a>
 
         </div>
@@ -1081,112 +935,92 @@
     </section>
 
 
-    <!-- =========================================================
-         PERFORMANCE
-         ========================================================= -->
+    <!-- ===================================================== -->
+    <!-- EARNINGS / PERFORMANCE -->
+    <!-- ===================================================== -->
 
-    <section class="bh-section">
+    <section class="dashboard-section">
 
-        <div class="bh-section-header">
+        <div class="section-heading">
 
             <div>
-                <h2>Studio Performance</h2>
+                <h2>Performance</h2>
+
                 <p>
-                    Your BeatHub business at a glance.
+                    Your creator activity and earnings at a glance.
                 </p>
             </div>
 
         </div>
 
-        <div class="bh-stats">
 
-            <div class="bh-stat bh-stat-gold">
-                <div class="bh-stat-label">
-                    Available
+        <div class="stats-grid">
+
+            <div class="stat-card balance">
+
+                <div class="stat-label">
+                    Available Balance
                 </div>
 
-                <div class="bh-stat-value">
+                <div class="stat-value">
                     KSh {{ "%.2f"|format(available_balance|float) }}
                 </div>
 
-                <div class="bh-stat-sub">
+                <div class="stat-sub">
                     Ready for withdrawal
                 </div>
+
             </div>
 
 
-            <div class="bh-stat">
-                <div class="bh-stat-label">
-                    Pending Withdrawal
-                </div>
+            <div class="stat-card">
 
-                <div class="bh-stat-value">
-                    KSh {{ "%.2f"|format(pending_withdrawal|float) }}
-                </div>
-
-                <div class="bh-stat-sub">
-                    Being processed
-                </div>
-            </div>
-
-
-            <div class="bh-stat bh-stat-green">
-                <div class="bh-stat-label">
-                    Net Earnings
-                </div>
-
-                <div class="bh-stat-value">
-                    KSh {{ "%.2f"|format(net_earnings|float) }}
-                </div>
-
-                <div class="bh-stat-sub">
-                    After commission
-                </div>
-            </div>
-
-
-            <div class="bh-stat">
-                <div class="bh-stat-label">
+                <div class="stat-label">
                     Total Sales
                 </div>
 
-                <div class="bh-stat-value">
+                <div class="stat-value">
                     {{ total_sales|default(0) }}
                 </div>
 
-                <div class="bh-stat-sub">
+                <div class="stat-sub">
                     Completed orders
                 </div>
+
             </div>
 
 
-            <div class="bh-stat">
-                <div class="bh-stat-label">
-                    Tracks
+            <div class="stat-card">
+
+                <div class="stat-label">
+                    Net Earnings
                 </div>
 
-                <div class="bh-stat-value">
-                    {{ track_count|default(0) }}
+                <div class="stat-value">
+                    KSh {{ "%.2f"|format(net_earnings|float) }}
                 </div>
 
-                <div class="bh-stat-sub">
-                    In your catalog
+                <div class="stat-sub">
+                    After platform commission
                 </div>
+
             </div>
 
 
-            <div class="bh-stat">
-                <div class="bh-stat-label">
-                    Albums
+            <div class="stat-card">
+
+                <div class="stat-label">
+                    Pending Withdrawal
                 </div>
 
-                <div class="bh-stat-value">
-                    {{ album_count|default(0) }}
+                <div class="stat-value">
+                    KSh {{ "%.2f"|format(pending_withdrawal|float) }}
                 </div>
 
-                <div class="bh-stat-sub">
-                    Published projects
+                <div class="stat-sub">
+                    Currently being processed
                 </div>
+
             </div>
 
         </div>
@@ -1194,429 +1028,276 @@
     </section>
 
 
-    <!-- =========================================================
-         PUBLIC STORE
-         ========================================================= -->
+    <!-- ===================================================== -->
+    <!-- QUICK ACTIONS -->
+    <!-- ===================================================== -->
 
-    <section class="bh-section">
+    <section class="dashboard-section">
 
-        <div class="bh-store">
+        <div class="section-heading">
 
-            <div class="bh-store-top">
+            <div>
+                <h2>Creator Tools</h2>
 
-                <div class="bh-store-title">
+                <p>
+                    Everything you need to manage your BeatHub profile.
+                </p>
+            </div>
 
-                    <div class="bh-store-icon">
-                        🛍
-                    </div>
+        </div>
 
-                    <div>
-                        <h2>Your Public Store</h2>
 
-                        <p>
-                            This is the link you can share with artists,
-                            fans and customers.
-                        </p>
-                    </div>
+        <div class="quick-actions">
 
+            <a
+                href="/dashboard/upload"
+                class="action-card"
+            >
+
+                <div class="action-icon">
+                    🎵
                 </div>
 
-                {% if store_url %}
-                    <div class="bh-store-badge">
-                        LIVE STORE
-                    </div>
-                {% endif %}
+                <div>
+                    <strong>
+                        Upload Beat / Track
+                    </strong>
 
-            </div>
+                    <span>
+                        Add new music to your catalog
+                    </span>
+                </div>
+
+            </a>
+
+
+            <a
+                href="/dashboard/albums/new"
+                class="action-card"
+            >
+
+                <div class="action-icon">
+                    💿
+                </div>
+
+                <div>
+                    <strong>
+                        Create Album
+                    </strong>
+
+                    <span>
+                        Package tracks into an album
+                    </span>
+                </div>
+
+            </a>
 
 
             {% if store_url %}
 
-                <div class="bh-share-row">
+            <a
+                href="{{ store_url }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="action-card"
+            >
 
-                    <input
-                        id="creatorStoreUrl"
-                        class="bh-share-input"
-                        type="text"
-                        value="{{ store_url }}"
-                        readonly
-                        aria-label="Your public BeatHub store URL"
-                        onclick="this.select()"
-                    >
-
-                    <button
-                        id="copyStoreButton"
-                        type="button"
-                        class="bh-copy-btn"
-                        onclick="copyStoreUrl()"
-                    >
-                        Copy Link
-                    </button>
-
+                <div class="action-icon">
+                    🛍️
                 </div>
 
+                <div>
+                    <strong>
+                        View Public Store
+                    </strong>
 
-                <div class="bh-share-actions">
-
-                    <a
-                        href="{{ store_url }}"
-                        target="_blank"
-                        rel="noopener"
-                        class="bh-small-link"
-                    >
-                        Open Store ↗
-                    </a>
-
-                    <button
-                        type="button"
-                        class="bh-small-link"
-                        onclick="shareStoreUrl()"
-                        style="cursor:pointer;"
-                    >
-                        Share Store
-                    </button>
-
-                    {% if youtube_url %}
-                        <a
-                            href="{{ youtube_url }}"
-                            target="_blank"
-                            rel="noopener"
-                            class="bh-small-link"
-                        >
-                            YouTube ↗
-                        </a>
-                    {% endif %}
-
-                    {% if discord_url %}
-                        <a
-                            href="{{ discord_url }}"
-                            target="_blank"
-                            rel="noopener"
-                            class="bh-small-link"
-                        >
-                            Discord ↗
-                        </a>
-                    {% endif %}
-
+                    <span>
+                        See what your customers see
+                    </span>
                 </div>
 
-                <p class="bh-share-note">
-                    Copy this link and paste it into WhatsApp,
-                    Instagram, TikTok, Facebook, your bio or anywhere
-                    you want fans to find your music.
-                </p>
+            </a>
 
             {% else %}
 
-                <div class="bh-empty">
-                    <strong>
-                        Your public store is being prepared.
-                    </strong>
+            <a
+                href="/dashboard"
+                class="action-card"
+            >
 
-                    <p>
-                        Once your creator profile has a public slug,
-                        the share link will appear here.
-                    </p>
+                <div class="action-icon">
+                    🛍️
                 </div>
 
+                <div>
+                    <strong>
+                        Your Public Store
+                    </strong>
+
+                    <span>
+                        Store link will appear here
+                    </span>
+                </div>
+
+            </a>
+
             {% endif %}
+
+
+            <a
+                href="/dashboard/withdraw"
+                class="action-card"
+            >
+
+                <div class="action-icon">
+                    💰
+                </div>
+
+                <div>
+                    <strong>
+                        Withdraw Earnings
+                    </strong>
+
+                    <span>
+                        Request an M-Pesa payout
+                    </span>
+                </div>
+
+            </a>
 
         </div>
 
     </section>
 
 
-    <!-- =========================================================
-         MAIN CONTENT
-         ========================================================= -->
+    <!-- ===================================================== -->
+    <!-- MAIN TWO-COLUMN AREA -->
+    <!-- ===================================================== -->
 
-    <div class="bh-main-grid">
+    <div class="dashboard-columns">
 
 
-        <!-- =====================================================
-             LEFT
-             ===================================================== -->
+        <!-- ================================================= -->
+        <!-- LEFT COLUMN -->
+        <!-- ================================================= -->
 
         <div>
 
 
-            <!-- =================================================
-                 TRACK CATALOG
-                 ================================================= -->
+            <!-- ============================================= -->
+            <!-- EARNINGS -->
+            <!-- ============================================= -->
 
-            <section class="bh-panel">
+            <div class="earnings-card">
 
-                <div class="bh-panel-header">
+                <div class="earnings-top">
 
                     <div>
-                        <h2>Your Tracks</h2>
 
-                        <p>
-                            Manage the music in your BeatHub catalog.
-                        </p>
+                        <h2>
+                            Earnings Overview
+                        </h2>
+
+                        <div class="earnings-balance">
+                            KSh {{ "%.2f"|format(available_balance|float) }}
+                        </div>
+
+                        <div class="earnings-label">
+                            Available for withdrawal
+                        </div>
+
                     </div>
 
+
                     <a
-                        href="/dashboard/upload"
-                        class="bh-panel-link"
+                        href="/dashboard/withdraw"
+                        class="withdraw-btn"
                     >
-                        + Add Track
+                        Withdraw
                     </a>
 
                 </div>
 
 
-                {% if tracks %}
+                <div class="earnings-breakdown">
 
-                    <form
-                        method="get"
-                        action="/dashboard"
-                        class="bh-track-search"
-                    >
+                    <div class="earning-item">
 
-                        <input
-                            type="search"
-                            name="q"
-                            value="{{ track_search|default(q|default('')) }}"
-                            placeholder="Search your tracks..."
-                        >
-
-                        <button type="submit">
-                            Search
-                        </button>
-
-                    </form>
-
-
-                    <div class="bh-track-list">
-
-                        {% for track in tracks %}
-
-                            {% set model_value =
-                                track.sales_model.value
-                                if track.sales_model
-                                else ''
-                            %}
-
-                            <article class="bh-track">
-
-                                <!-- ARTWORK -->
-
-                                <a
-                                    href="/track/{{ track.slug }}"
-                                    class="bh-art"
-                                    aria-label="Open {{ track.title }}"
-                                >
-
-                                    {% if track.cover_art_url %}
-
-                                        <img
-                                            src="{{ track.cover_art_url }}"
-                                            alt="{{ track.title }} artwork"
-                                            loading="lazy"
-                                            onerror="this.parentElement.classList.add('is-broken')"
-                                        >
-
-                                    {% endif %}
-
-                                </a>
-
-
-                                <!-- INFORMATION -->
-
-                                <div class="bh-track-info">
-
-                                    <a
-                                        href="/track/{{ track.slug }}"
-                                        class="bh-track-title"
-                                    >
-                                        {{ track.title }}
-                                    </a>
-
-                                    <div class="bh-track-meta">
-
-                                        {% if track.genre %}
-                                            <span>{{ track.genre }}</span>
-                                        {% endif %}
-
-                                        {% if track.bpm %}
-                                            <span>{{ track.bpm }} BPM</span>
-                                        {% endif %}
-
-                                        {% if model_value == 'exclusive' %}
-                                            <span>Exclusive</span>
-                                        {% else %}
-                                            <span>Non-exclusive</span>
-                                        {% endif %}
-
-                                    </div>
-
-                                </div>
-
-
-                                <!-- PRICE -->
-
-                                <div class="bh-track-price">
-                                    KSh {{ "%.2f"|format(track.price|float) }}
-                                </div>
-
-
-                                <!-- STATUS -->
-
-                                {% if track.sales_model and model_value == 'exclusive' and track.is_sold %}
-
-                                    <span class="bh-track-status bh-status-sold">
-                                        Sold
-                                    </span>
-
-                                {% elif track.is_published %}
-
-                                    <span class="bh-track-status bh-status-live">
-                                        Published
-                                    </span>
-
-                                {% else %}
-
-                                    <span class="bh-track-status bh-status-draft">
-                                        Draft
-                                    </span>
-
-                                {% endif %}
-
-
-                                <!-- OPEN -->
-
-                                <a
-                                    href="/track/{{ track.slug }}"
-                                    class="bh-track-action"
-                                >
-                                    View
-                                </a>
-
-                            </article>
-
-                        {% endfor %}
-
-                    </div>
-
-
-                    <!-- PAGINATION -->
-
-                    {% if track_total_pages|default(1) > 1 %}
-
-                        <div class="bh-pagination">
-
-                            <div class="bh-page-info">
-
-                                Showing
-                                {{ track_start|default(0) }}
-                                –
-                                {{ track_end|default(0) }}
-                                of
-                                {{ track_total|default(0) }}
-
-                            </div>
-
-                            <div class="bh-page-actions">
-
-                                {% if track_page|default(1) > 1 %}
-
-                                    <a
-                                        href="/dashboard?page={{ track_page - 1 }}{% if track_search %}&q={{ track_search|urlencode }}{% endif %}"
-                                        class="bh-page-btn"
-                                    >
-                                        ←
-                                    </a>
-
-                                {% else %}
-
-                                    <span class="bh-page-btn disabled">
-                                        ←
-                                    </span>
-
-                                {% endif %}
-
-
-                                <span class="bh-page-btn">
-                                    {{ track_page|default(1) }}
-                                </span>
-
-
-                                {% if track_page|default(1) < track_total_pages|default(1) %}
-
-                                    <a
-                                        href="/dashboard?page={{ track_page + 1 }}{% if track_search %}&q={{ track_search|urlencode }}{% endif %}"
-                                        class="bh-page-btn"
-                                    >
-                                        →
-                                    </a>
-
-                                {% else %}
-
-                                    <span class="bh-page-btn disabled">
-                                        →
-                                    </span>
-
-                                {% endif %}
-
-                            </div>
-
-                        </div>
-
-                    {% endif %}
-
-                {% else %}
-
-                    <div class="bh-empty">
-
-                        <div class="bh-empty-icon">
-                            🎵
-                        </div>
+                        <span>
+                            Gross Revenue
+                        </span>
 
                         <strong>
-                            Your catalog is empty
+                            KSh {{ "%.2f"|format(gross_revenue|float) }}
                         </strong>
-
-                        <p>
-                            Upload your first beat or track and start building
-                            your public BeatHub store.
-                        </p>
-
-                        <div style="margin-top:16px;">
-
-                            <a
-                                href="/dashboard/upload"
-                                class="bh-btn bh-btn-primary"
-                            >
-                                Upload Your First Track
-                            </a>
-
-                        </div>
 
                     </div>
 
-                {% endif %}
 
-            </section>
+                    <div class="earning-item">
+
+                        <span>
+                            Platform Commission
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(platform_commission|float) }}
+                        </strong>
+
+                    </div>
 
 
-            <!-- =================================================
-                 RECENT SALES
-                 ================================================= -->
+                    <div class="earning-item">
 
-            <section
-                class="bh-panel"
-                style="margin-top:18px;"
+                        <span>
+                            Net Earnings
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(net_earnings|float) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div class="earning-item">
+
+                        <span>
+                            Pending Withdrawal
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(pending_withdrawal|float) }}
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- ============================================= -->
+            <!-- RECENT SALES -->
+            <!-- ============================================= -->
+
+            <div
+                class="panel"
+                style="margin-top:20px;"
             >
 
-                <div class="bh-panel-header">
+                <div class="panel-header">
 
                     <div>
-                        <h2>Recent Sales</h2>
+
+                        <h2>
+                            Recent Sales
+                        </h2>
 
                         <p>
-                            Your latest completed purchases.
+                            Your latest completed orders.
                         </p>
+
                     </div>
 
                 </div>
@@ -1624,446 +1305,583 @@
 
                 {% if recent_orders %}
 
-                    <div class="bh-sales">
+                <div class="recent-table-wrap">
 
-                        <table>
+                    <table class="recent-table">
 
-                            <thead>
+                        <thead>
 
-                                <tr>
-                                    <th>Track</th>
-                                    <th>Date</th>
-                                    <th>Gross</th>
-                                    <th>Commission</th>
-                                    <th>Net</th>
-                                    <th>Status</th>
-                                </tr>
+                            <tr>
 
-                            </thead>
+                                <th>
+                                    Track
+                                </th>
 
-                            <tbody>
+                                <th>
+                                    Amount
+                                </th>
 
-                                {% for order in recent_orders %}
+                                <th>
+                                    Commission
+                                </th>
 
-                                    <tr>
+                                <th>
+                                    Net
+                                </th>
 
-                                        <td>
+                                <th>
+                                    Status
+                                </th>
 
-                                            <div class="bh-sale-track">
+                            </tr>
 
-                                                {% if order.track %}
-                                                    {{ order.track.title }}
-                                                {% else %}
-                                                    Beat purchase
-                                                {% endif %}
+                        </thead>
 
-                                            </div>
 
-                                        </td>
+                        <tbody>
 
-                                        <td>
+                        {% for order in recent_orders %}
 
-                                            {% if order.completed_at %}
-                                                {{ order.completed_at.strftime("%d %b %Y") }}
-                                            {% elif order.created_at %}
-                                                {{ order.created_at.strftime("%d %b %Y") }}
-                                            {% else %}
-                                                —
-                                            {% endif %}
+                            <tr>
 
-                                        </td>
+                                <td>
 
-                                        <td>
-                                            KSh {{ "%.2f"|format(order.gross_amount|float) }}
-                                        </td>
+                                    <div class="order-title">
 
-                                        <td>
-                                            KSh {{ "%.2f"|format(order.commission_amount|float) }}
-                                        </td>
+                                        {% if order.track %}
 
-                                        <td>
-                                            KSh {{ "%.2f"|format(order.net_amount|float) }}
-                                        </td>
+                                            {{ order.track.title }}
 
-                                        <td>
-                                            <span class="bh-complete">
-                                                Completed
-                                            </span>
-                                        </td>
+                                        {% else %}
 
-                                    </tr>
+                                            Beat purchase
 
-                                {% endfor %}
+                                        {% endif %}
 
-                            </tbody>
+                                    </div>
 
-                        </table>
 
-                    </div>
+                                    <div class="order-date">
+
+                                        {% if order.completed_at %}
+
+                                            {{ order.completed_at.strftime("%d %b %Y %H:%M") }}
+
+                                        {% elif order.created_at %}
+
+                                            {{ order.created_at.strftime("%d %b %Y %H:%M") }}
+
+                                        {% endif %}
+
+                                    </div>
+
+                                </td>
+
+
+                                <td>
+                                    KSh {{ "%.2f"|format(order.gross_amount|float) }}
+                                </td>
+
+
+                                <td>
+                                    KSh {{ "%.2f"|format(order.commission_amount|float) }}
+                                </td>
+
+
+                                <td>
+                                    KSh {{ "%.2f"|format(order.net_amount|float) }}
+                                </td>
+
+
+                                <td>
+
+                                    <span class="status-badge">
+                                        Completed
+                                    </span>
+
+                                </td>
+
+                            </tr>
+
+                        {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
 
                 {% else %}
 
-                    <div class="bh-empty">
+                <div class="empty-state">
 
-                        <div class="bh-empty-icon">
-                            💰
-                        </div>
+                    <strong>
+                        No completed sales yet
+                    </strong>
 
-                        <strong>
-                            No completed sales yet
-                        </strong>
+                    Your completed purchases will appear here once
+                    customers buy your music.
+
+                </div>
+
+                {% endif %}
+
+            </div>
+
+
+            <!-- ============================================= -->
+            <!-- WITHDRAWAL HISTORY -->
+            <!-- ============================================= -->
+
+            <div class="panel withdrawals-panel">
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Withdrawal History
+                        </h2>
 
                         <p>
-                            Customer purchases will appear here after
-                            successful payment.
+                            Track your M-Pesa payout requests.
                         </p>
+
+                    </div>
+
+
+                    <a
+                        href="/dashboard/withdraw"
+                        class="section-link"
+                    >
+                        Manage →
+                    </a>
+
+                </div>
+
+
+                {% if withdrawal_requests %}
+
+                    {% for withdrawal in withdrawal_requests[:5] %}
+
+                    <div class="withdrawal-row">
+
+                        <div>
+
+                            <div class="withdrawal-label">
+                                Amount
+                            </div>
+
+                            <div class="withdrawal-value">
+                                KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+                            </div>
+
+                        </div>
+
+
+                        <div>
+
+                            <div class="withdrawal-label">
+                                M-Pesa
+                            </div>
+
+                            <div class="withdrawal-value">
+                                {{ withdrawal.phone_number }}
+                            </div>
+
+                        </div>
+
+
+                        <div>
+
+                            <div class="withdrawal-label">
+                                Date
+                            </div>
+
+                            <div class="withdrawal-value">
+
+                                {% if withdrawal.created_at %}
+
+                                    {{ withdrawal.created_at.strftime("%d %b %Y") }}
+
+                                {% else %}
+
+                                    —
+
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+
+                        <div>
+
+                            {% set withdrawal_status =
+                                withdrawal.status|string|lower
+                            %}
+
+                            <span class="badge {{ withdrawal_status }}">
+                                {{ withdrawal.status }}
+                            </span>
+
+                        </div>
+
+                    </div>
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <div class="empty-state">
+
+                        <strong>
+                            No withdrawal requests
+                        </strong>
+
+                        When you request a payout, its status will appear here.
 
                     </div>
 
                 {% endif %}
 
-            </section>
+            </div>
 
         </div>
 
 
-        <!-- =====================================================
-             RIGHT
-             ===================================================== -->
+        <!-- ================================================= -->
+        <!-- RIGHT COLUMN -->
+        <!-- ================================================= -->
 
-        <aside>
+        <div>
 
 
-            <!-- =================================================
-                 EARNINGS
-                 ================================================= -->
+            <!-- ============================================= -->
+            <!-- PUBLIC STORE -->
+            <!-- ============================================= -->
 
-            <section class="bh-panel">
+            <div class="store-card">
 
-                <div class="bh-panel-header">
-
-                    <div>
-                        <h2>Earnings Overview</h2>
-
-                        <p>
-                            Your creator balance.
-                        </p>
-                    </div>
-
+                <div class="store-eyebrow">
+                    Your BeatHub Store
                 </div>
 
+                <h2>
+                    Share your music with the world
+                </h2>
 
-                <div class="bh-earnings">
+                <p>
+                    This is your permanent public BeatHub store link.
+                    Copy the complete link and share it with your fans,
+                    artists, clients and followers.
+                </p>
 
-                    <div class="bh-eyebrow">
-                        Available Balance
+
+                {% if store_url %}
+
+                    <div class="store-link-label">
+                        Your shareable store link
                     </div>
 
-                    <div class="bh-earnings-balance">
-                        KSh {{ "%.2f"|format(available_balance|float) }}
-                    </div>
 
-                    <div class="bh-earnings-label">
-                        Available for withdrawal
-                    </div>
+                    <div class="store-url-box">
 
-
-                    <a
-                        href="/dashboard/withdraw"
-                        class="bh-withdraw"
-                    >
-                        Withdraw Earnings
-                    </a>
-
-
-                    <div class="bh-breakdown">
-
-                        <div class="bh-breakdown-item">
-                            <span>Gross</span>
-
-                            <strong>
-                                KSh {{ "%.2f"|format(gross_revenue|float) }}
-                            </strong>
-                        </div>
-
-                        <div class="bh-breakdown-item">
-                            <span>Commission</span>
-
-                            <strong>
-                                KSh {{ "%.2f"|format(platform_commission|float) }}
-                            </strong>
-                        </div>
-
-                        <div class="bh-breakdown-item">
-                            <span>Net</span>
-
-                            <strong>
-                                KSh {{ "%.2f"|format(net_earnings|float) }}
-                            </strong>
-                        </div>
-
-                        <div class="bh-breakdown-item">
-                            <span>Pending</span>
-
-                            <strong>
-                                KSh {{ "%.2f"|format(pending_withdrawal|float) }}
-                            </strong>
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            <!-- =================================================
-                 CREATOR TOOLS
-                 ================================================= -->
-
-            <section
-                class="bh-panel"
-                style="margin-top:18px;"
-            >
-
-                <div class="bh-panel-header">
-
-                    <div>
-                        <h2>Creator Tools</h2>
-
-                        <p>
-                            Manage your studio.
-                        </p>
-                    </div>
-
-                </div>
-
-
-                <div class="bh-quick-grid">
-
-                    <a
-                        href="/dashboard/upload"
-                        class="bh-quick"
-                    >
-
-                        <div class="bh-quick-icon">
-                            🎵
-                        </div>
-
-                        <div>
-                            <strong>
-                                Upload Track
-                            </strong>
-
-                            <span>
-                                Add music
-                            </span>
-                        </div>
-
-                    </a>
-
-
-                    <a
-                        href="/dashboard/albums/new"
-                        class="bh-quick"
-                    >
-
-                        <div class="bh-quick-icon">
-                            💿
-                        </div>
-
-                        <div>
-                            <strong>
-                                New Album
-                            </strong>
-
-                            <span>
-                                Package tracks
-                            </span>
-                        </div>
-
-                    </a>
-
-
-                    {% if store_url %}
-
-                        <a
-                            href="{{ store_url }}"
-                            target="_blank"
-                            rel="noopener"
-                            class="bh-quick"
+                        <input
+                            type="text"
+                            id="creatorStoreUrl"
+                            class="store-url"
+                            value="{{ store_url }}"
+                            readonly
+                            aria-label="Your complete BeatHub store link"
+                            onclick="selectStoreUrl()"
                         >
 
-                            <div class="bh-quick-icon">
-                                🛍
-                            </div>
 
-                            <div>
-                                <strong>
-                                    Public Store
-                                </strong>
-
-                                <span>
-                                    Open storefront
-                                </span>
-                            </div>
-
-                        </a>
-
-                    {% endif %}
-
-
-                    <a
-                        href="/dashboard/withdraw"
-                        class="bh-quick"
-                    >
-
-                        <div class="bh-quick-icon">
-                            💰
-                        </div>
-
-                        <div>
-                            <strong>
-                                Withdraw
-                            </strong>
-
-                            <span>
-                                M-Pesa payout
-                            </span>
-                        </div>
-
-                    </a>
-
-                </div>
-
-            </section>
-
-
-            <!-- =================================================
-                 CATALOG SUMMARY
-                 ================================================= -->
-
-            <section
-                class="bh-panel"
-                style="margin-top:18px;"
-            >
-
-                <div class="bh-panel-header">
-
-                    <div>
-                        <h2>Catalog Summary</h2>
-
-                        <p>
-                            Your BeatHub inventory.
-                        </p>
-                    </div>
-
-                </div>
-
-
-                <div style="padding:18px;">
-
-                    <div class="bh-breakdown">
-
-                        <div class="bh-breakdown-item">
-
-                            <span>
-                                Tracks
-                            </span>
-
-                            <strong style="font-size:22px;">
-                                {{ track_count|default(0) }}
-                            </strong>
-
-                        </div>
-
-
-                        <div class="bh-breakdown-item">
-
-                            <span>
-                                Albums
-                            </span>
-
-                            <strong style="font-size:22px;">
-                                {{ album_count|default(0) }}
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            <!-- =================================================
-                 SOCIAL
-                 ================================================= -->
-
-            {% if youtube_url or discord_url %}
-
-                <section
-                    class="bh-panel"
-                    style="margin-top:18px;"
-                >
-
-                    <div class="bh-panel-header">
-
-                        <div>
-                            <h2>Connect</h2>
-
-                            <p>
-                                Your creator community.
-                            </p>
-                        </div>
+                        <button
+                            type="button"
+                            class="copy-store"
+                            id="copyStoreButton"
+                            onclick="copyStoreUrl()"
+                        >
+                            Copy Link
+                        </button>
 
                     </div>
 
 
                     <div
-                        style="
-                            display:flex;
-                            flex-wrap:wrap;
-                            gap:8px;
-                            padding:16px;
-                        "
-                    >
-
-                        {% if youtube_url %}
-
-                            <a
-                                href="{{ youtube_url }}"
-                                target="_blank"
-                                rel="noopener"
-                                class="bh-small-link"
-                            >
-                                ▶ YouTube
-                            </a>
-
-                        {% endif %}
+                        id="storeCopyMessage"
+                        class="store-copy-message"
+                        aria-live="polite"
+                    ></div>
 
 
-                        {% if discord_url %}
+                    <div class="store-actions">
 
-                            <a
-                                href="{{ discord_url }}"
-                                target="_blank"
-                                rel="noopener"
-                                class="bh-small-link"
-                            >
-                                💬 Discord
-                            </a>
+                        <a
+                            href="{{ store_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="store-action primary"
+                        >
+                            Open My Store ↗
+                        </a>
 
-                        {% endif %}
+
+                        <button
+                            type="button"
+                            class="store-action"
+                            onclick="shareStoreUrl()"
+                        >
+                            Share Store
+                        </button>
 
                     </div>
 
-                </section>
 
-            {% endif %}
+                    <div class="store-share-note">
+                        Copy this full URL and paste it anywhere you want
+                        your audience to find your BeatHub music.
+                    </div>
 
-        </aside>
+
+                    {% if youtube_url %}
+
+                    <div class="social-links">
+
+                        <a
+                            href="{{ youtube_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="social-link"
+                        >
+                            YouTube ↗
+                        </a>
+
+                    </div>
+
+                    {% endif %}
+
+
+                    {% if discord_url %}
+
+                    <div class="social-links">
+
+                        <a
+                            href="{{ discord_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="social-link"
+                        >
+                            Discord ↗
+                        </a>
+
+                    </div>
+
+                    {% endif %}
+
+
+                {% else %}
+
+                    <div
+                        class="empty-state"
+                        style="padding:25px 0 5px;"
+                    >
+                        Your public store link is not available yet.
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+
+            <!-- ============================================= -->
+            <!-- CATALOG -->
+            <!-- ============================================= -->
+
+            <div
+                class="dashboard-section"
+                style="margin-top:20px;"
+            >
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <h2>
+                            Your Catalog
+                        </h2>
+
+                        <p>
+                            Your published BeatHub content.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="content-overview">
+
+                    <div class="content-card">
+
+                        <div class="content-card-top">
+
+                            <h3>
+                                Beats / Tracks
+                            </h3>
+
+                            <span>
+                                🎵
+                            </span>
+
+                        </div>
+
+
+                        <div class="content-number">
+                            {{ track_count|default(0) }}
+                        </div>
+
+
+                        <p>
+                            Tracks in your catalog
+                        </p>
+
+
+                        <a href="/dashboard/upload">
+                            Add another track →
+                        </a>
+
+                    </div>
+
+
+                    <div class="content-card">
+
+                        <div class="content-card-top">
+
+                            <h3>
+                                Albums
+                            </h3>
+
+                            <span>
+                                💿
+                            </span>
+
+                        </div>
+
+
+                        <div class="content-number">
+                            {{ album_count|default(0) }}
+                        </div>
+
+
+                        <p>
+                            Albums you've created
+                        </p>
+
+
+                        <a href="/dashboard/albums/new">
+                            Create an album →
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- ============================================= -->
+            <!-- REVENUE SUMMARY -->
+            <!-- ============================================= -->
+
+            <div class="panel">
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Revenue Summary
+                        </h2>
+
+                        <p>
+                            How your sales are performing.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="panel-body">
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Total Sales
+                        </span>
+
+                        <strong>
+                            {{ total_sales|default(0) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Gross Revenue
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(gross_revenue|float) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Platform Commission
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(platform_commission|float) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div class="earning-item">
+
+                        <span>
+                            Your Net Earnings
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(net_earnings|float) }}
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
 
     </div>
 
@@ -2071,164 +1889,205 @@
 
 
 <script>
-(function () {
+/* ============================================================
+   SELECT COMPLETE STORE URL
+   ============================================================ */
 
-    function getStoreUrl() {
-        const input = document.getElementById("creatorStoreUrl");
+function selectStoreUrl() {
+    const input =
+        document.getElementById("creatorStoreUrl");
 
-        if (!input) {
-            return null;
-        }
+    if (!input) {
+        return;
+    }
 
-        return input.value.trim();
+    input.focus();
+    input.select();
+
+    try {
+        input.setSelectionRange(
+            0,
+            input.value.length
+        );
+    } catch (error) {
+        /* Older browsers may not support this. */
+    }
+}
+
+
+/* ============================================================
+   COPY COMPLETE STORE URL
+   ============================================================ */
+
+function copyStoreUrl() {
+
+    const input =
+        document.getElementById("creatorStoreUrl");
+
+    const button =
+        document.getElementById("copyStoreButton");
+
+    const message =
+        document.getElementById("storeCopyMessage");
+
+    if (!input) {
+        return;
+    }
+
+    const fullUrl =
+        input.value.trim();
+
+    if (!fullUrl) {
+        return;
     }
 
 
-    window.copyStoreUrl = function () {
+    function showSuccess() {
 
-        const input = document.getElementById("creatorStoreUrl");
-        const button = document.getElementById("copyStoreButton");
-
-        if (!input) {
-            return;
+        if (message) {
+            message.textContent =
+                "✓ Store link copied. You can now share it anywhere.";
         }
 
-        const url = input.value.trim();
+        if (button) {
 
-        if (!url) {
-            return;
-        }
+            const originalText =
+                button.textContent;
 
-
-        function copied() {
-
-            if (!button) {
-                return;
-            }
-
-            const original = button.textContent;
-
-            button.textContent = "Copied ✓";
+            button.textContent =
+                "Copied ✓";
 
             setTimeout(function () {
-                button.textContent = original;
-            }, 1800);
+
+                button.textContent =
+                    originalText;
+
+            }, 2000);
         }
+    }
 
 
-        if (
-            navigator.clipboard &&
-            window.isSecureContext
-        ) {
+    function showFailure() {
 
-            navigator.clipboard
-                .writeText(url)
-                .then(copied)
-                .catch(function () {
+        selectStoreUrl();
 
-                    input.focus();
-                    input.select();
-
-                    try {
-                        document.execCommand("copy");
-                        copied();
-                    } catch (error) {
-                        window.prompt(
-                            "Copy your BeatHub store link:",
-                            url
-                        );
-                    }
-
-                });
-
-        } else {
-
-            input.focus();
-            input.select();
-
-            try {
-
-                document.execCommand("copy");
-                copied();
-
-            } catch (error) {
-
-                window.prompt(
-                    "Copy your BeatHub store link:",
-                    url
-                );
-
-            }
-
+        if (message) {
+            message.textContent =
+                "Select the link above and copy it.";
         }
-
-    };
-
-
-    window.shareStoreUrl = function () {
-
-        const url = getStoreUrl();
-
-        if (!url) {
-            return;
-        }
-
-
-        const shareData = {
-            title: "My BeatHub Store",
-            text: "Check out my music on BeatHub.",
-            url: url
-        };
-
-
-        if (
-            navigator.share &&
-            typeof navigator.share === "function"
-        ) {
-
-            navigator.share(shareData).catch(function () {
-                /* User cancelled share dialog. */
-            });
-
-            return;
-        }
-
-
-        if (
-            navigator.clipboard &&
-            window.isSecureContext
-        ) {
-
-            navigator.clipboard
-                .writeText(url)
-                .then(function () {
-
-                    alert(
-                        "Your BeatHub store link has been copied."
-                    );
-
-                })
-                .catch(function () {
-
-                    window.prompt(
-                        "Copy your BeatHub store link:",
-                        url
-                    );
-
-                });
-
-            return;
-        }
-
 
         window.prompt(
-            "Copy your BeatHub store link:",
-            url
+            "Copy your complete BeatHub store link:",
+            fullUrl
         );
+    }
 
-    };
 
-})();
+    /*
+       Modern secure clipboard API.
+    */
+
+    if (
+        navigator.clipboard &&
+        window.isSecureContext
+    ) {
+
+        navigator.clipboard
+            .writeText(fullUrl)
+            .then(function () {
+                showSuccess();
+            })
+            .catch(function () {
+                fallbackCopy();
+            });
+
+        return;
+    }
+
+
+    /*
+       Fallback for browsers where Clipboard API
+       is unavailable.
+    */
+
+    fallbackCopy();
+
+
+    function fallbackCopy() {
+
+        selectStoreUrl();
+
+        let copied = false;
+
+        try {
+            copied =
+                document.execCommand("copy");
+        } catch (error) {
+            copied = false;
+        }
+
+        if (copied) {
+            showSuccess();
+        } else {
+            showFailure();
+        }
+    }
+}
+
+
+/* ============================================================
+   SHARE STORE
+   ============================================================ */
+
+function shareStoreUrl() {
+
+    const input =
+        document.getElementById("creatorStoreUrl");
+
+    if (!input) {
+        return;
+    }
+
+    const fullUrl =
+        input.value.trim();
+
+    if (!fullUrl) {
+        return;
+    }
+
+
+    /*
+       Use the native phone/browser share sheet
+       where supported.
+    */
+
+    if (
+        navigator.share
+    ) {
+
+        navigator.share({
+            title: "My BeatHub Store",
+            text: "Check out my music on BeatHub:",
+            url: fullUrl
+        })
+        .catch(function () {
+            /*
+               User may simply cancel the share sheet.
+               Do nothing in that case.
+            */
+        });
+
+        return;
+    }
+
+
+    /*
+       Desktop fallback:
+       copy the complete URL.
+    */
+
+    copyStoreUrl();
+}
 </script>
 
 {% endblock %}
