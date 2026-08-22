@@ -1,395 +1,632 @@
 {% extends "base.html" %}
 
 {% block title %}
-    {{ track.title }} — BeatHub
+{{ track.title }} | BeatHub
 {% endblock %}
 
 {% block content %}
 
-<style>
-    .track-page {
-        max-width: 900px;
-        margin: 0 auto;
-        padding: 55px 24px 80px;
-    }
-
-    .track-kicker {
-        font-size: 13px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: #aaa0b8;
-        margin-bottom: 14px;
-    }
-
-    .track-title {
-        font-size: clamp(38px, 6vw, 64px);
-        line-height: 1;
-        margin: 0 0 18px;
-        color: #fff;
-        font-weight: 800;
-    }
-
-    .track-creator {
-        font-size: 16px;
-        margin-bottom: 28px;
-        color: #aaa0b8;
-    }
-
-    .track-creator a {
-        color: #00e6a7;
-        text-decoration: none;
-        font-weight: 700;
-    }
-
-    .track-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 7px 12px;
-        border-radius: 999px;
-        background: rgba(0, 230, 167, 0.10);
-        color: #00e6a7;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        margin-bottom: 30px;
-    }
-
-    .track-cover {
-        width: 100%;
-        max-width: 560px;
-        aspect-ratio: 1 / 1;
-        object-fit: cover;
-        display: block;
-        border-radius: 18px;
-        margin-bottom: 32px;
-        border: 1px solid #2b2334;
-        background: #120d18;
-    }
-
-    .track-card {
-        border: 1px solid #2b2334;
-        background: #130d19;
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 24px;
-    }
-
-    .track-card-label {
-        color: #aaa0b8;
-        font-size: 12px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-    }
-
-    .track-price {
-        color: #ffb900;
-        font-size: 30px;
-        font-weight: 800;
-    }
-
-    .track-description {
-        color: #d0c8d7;
-        line-height: 1.7;
-        margin-top: 28px;
-        white-space: pre-line;
-    }
-
-    .track-actions {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin-top: 24px;
-    }
-
-    .track-button {
-        width: 100%;
-        min-height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 9px;
-        border: 1px solid transparent;
-        text-decoration: none;
-        font-weight: 800;
-        font-size: 15px;
-        box-sizing: border-box;
-    }
-
-    .track-button-primary {
-        background: #ffb900;
-        color: #111;
-    }
-
-    .track-button-primary:hover {
-        background: #ffc72c;
-    }
-
-    .track-button-secondary {
-        background: transparent;
-        border-color: #352a40;
-        color: #fff;
-    }
-
-    .track-button-secondary:hover {
-        background: #1a1221;
-    }
-
-    .track-button-disabled {
-        background: #302b34;
-        color: #6e6872;
-        cursor: not-allowed;
-    }
-
-    .track-status {
-        margin-top: 12px;
-        padding: 13px 15px;
-        border-radius: 9px;
-        background: rgba(255, 185, 0, 0.08);
-        border: 1px solid rgba(255, 185, 0, 0.16);
-        color: #d7cddc;
-        font-size: 14px;
-        line-height: 1.5;
-    }
-
-    .track-status.success {
-        background: rgba(0, 230, 167, 0.08);
-        border-color: rgba(0, 230, 167, 0.16);
-        color: #00e6a7;
-    }
-
-    .back-link {
-        margin-top: 28px;
-    }
-
-    .back-link a {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 48px;
-        border: 1px solid #30263a;
-        border-radius: 9px;
-        color: #fff;
-        text-decoration: none;
-        font-weight: 700;
-    }
-
-    .back-link a:hover {
-        background: #15101b;
-    }
-
-    .preview-player {
-        width: 100%;
-        margin-top: 20px;
-    }
-
-    @media (max-width: 600px) {
-
-        .track-page {
-            padding: 35px 18px 60px;
-        }
-
-        .track-title {
-            font-size: 42px;
-        }
-
-        .track-card {
-            padding: 20px;
-        }
-    }
-</style>
-
-
 <div class="track-page">
 
-    <div class="track-kicker">
-        Beat
-    </div>
+  <div class="track-container">
 
-    <h1 class="track-title">
-        {{ track.title }}
-    </h1>
+    <!-- ================= HERO ================= -->
 
-    {% if track.creator_profile %}
+    <div class="track-hero">
 
-        <div class="track-creator">
+      <div class="track-cover">
+
+        {% if track.cover_art_url %}
+          <img
+            src="{{ track.cover_art_url }}"
+            alt="{{ track.title }}"
+          >
+        {% elif track.cover_art_path %}
+          <img
+            src="{{ track.cover_art_path }}"
+            alt="{{ track.title }}"
+          >
+        {% else %}
+          <div class="cover-placeholder">
+            🎵
+          </div>
+        {% endif %}
+
+      </div>
+
+      <div class="track-info">
+
+        <div class="eyebrow">
+          {{ track.genre or "BeatHub Track" }}
+        </div>
+
+        <h1>
+          {{ track.title }}
+        </h1>
+
+        {% if track.creator_profile %}
+          <p class="producer-name">
+
             By
 
-            {% if track.creator_profile.slug %}
+            <a href="/store/{{ track.creator_profile.slug }}">
+              {{ track.creator_profile.stage_name }}
+            </a>
 
-                <a href="/profile/{{ track.creator_profile.slug }}">
-                    {{ track.creator_profile.display_name
-                        or track.creator_profile.stage_name
-                        or track.creator_profile.user.username
-                        or "Producer" }}
-                </a>
+          </p>
+        {% endif %}
+
+        {% if track.description %}
+          <p class="track-description">
+            {{ track.description }}
+          </p>
+        {% endif %}
+
+        <!-- ================= META ================= -->
+
+        <div class="track-meta">
+
+          {% if track.bpm %}
+            <div class="meta-item">
+              <span>BPM</span>
+              <strong>{{ track.bpm }}</strong>
+            </div>
+          {% endif %}
+
+          {% if track.genre %}
+            <div class="meta-item">
+              <span>Genre</span>
+              <strong>{{ track.genre }}</strong>
+            </div>
+          {% endif %}
+
+          <div class="meta-item">
+            <span>License</span>
+
+            {% if track.sales_model.value == "exclusive" %}
+              <strong>Exclusive</strong>
+            {% else %}
+              <strong>Non Exclusive</strong>
+            {% endif %}
+
+          </div>
+
+        </div>
+
+        <!-- ================= PRICE ================= -->
+
+        <div class="price-box">
+
+          <span class="price-label">
+            Price
+          </span>
+
+          <div class="price">
+
+            KES {{ "{:,.0f}".format(track.price or 0) }}
+
+          </div>
+
+        </div>
+
+        <!-- ================= AUDIO PREVIEW ================= -->
+
+        {% if track.preview_file_path %}
+
+          <div class="audio-preview">
+
+            <audio controls preload="metadata">
+
+              <source
+                src="{{ track.preview_file_path }}"
+                type="audio/mpeg"
+              >
+
+              Your browser does not support audio playback.
+
+            </audio>
+
+          </div>
+
+        {% elif track.audio_file_path and not purchased %}
+
+          <div class="audio-preview">
+
+            <audio controls preload="metadata">
+
+              <source
+                src="{{ track.audio_file_path }}"
+                type="audio/mpeg"
+              >
+
+              Your browser does not support audio playback.
+
+            </audio>
+
+          </div>
+
+        {% endif %}
+
+        <!-- ================= ACTION AREA ================= -->
+
+        <div class="purchase-section">
+
+          {% set sales_model_value = track.sales_model.value if track.sales_model else "non_exclusive" %}
+          {% set is_exclusive = sales_model_value == "exclusive" %}
+          {% set available = track.is_published and (not is_exclusive or not track.is_sold) %}
+
+          <!-- OWNER -->
+
+          {% if current_user and track.creator_profile and track.creator_profile.user_id == current_user.id %}
+
+            <div class="purchase-message">
+
+              <div class="status-icon">
+                🎛️
+              </div>
+
+              <div>
+
+                <strong>
+                  This is your track
+                </strong>
+
+                <p>
+                  You're viewing it as the producer.
+                </p>
+
+              </div>
+
+            </div>
+
+            <a
+              href="/dashboard"
+              class="btn btn-primary btn-block"
+            >
+              Open Dashboard
+            </a>
+
+
+          <!-- PURCHASED -->
+
+          {% elif purchased %}
+
+            <div class="purchase-message success">
+
+              <div class="status-icon">
+                ✓
+              </div>
+
+              <div>
+
+                <strong>
+                  Purchased
+                </strong>
+
+                <p>
+                  You already own this track.
+                </p>
+
+              </div>
+
+            </div>
+
+            <a
+              href="/account/purchases"
+              class="btn btn-primary btn-block"
+            >
+              Go to My Purchases
+            </a>
+
+            <a
+              href="/download/track/{{ track.id }}"
+              class="btn btn-outline btn-block"
+              style="margin-top:10px;"
+            >
+              Download Track
+            </a>
+
+
+          <!-- AVAILABLE -->
+
+          {% elif available %}
+
+            {% if current_user %}
+
+              <a
+                href="/checkout/track/{{ track.slug }}"
+                class="btn btn-primary btn-block buy-button"
+              >
+                Buy Now
+              </a>
 
             {% else %}
 
-                <span>
-                    {{ track.creator_profile.display_name
-                        or track.creator_profile.stage_name
-                        or "Producer" }}
-                </span>
+              <a
+                href="/login?next=/checkout/track/{{ track.slug }}"
+                class="btn btn-primary btn-block buy-button"
+              >
+                Login to Buy
+              </a>
+
+              <p class="login-note">
+                Sign in or create a buyer account to purchase this track.
+              </p>
 
             {% endif %}
-        </div>
-
-    {% endif %}
 
 
-    <div class="track-badge">
+          <!-- UNAVAILABLE -->
 
-        {% if track.sales_model.value == "exclusive" %}
-            Exclusive License
-        {% else %}
-            Non-Exclusive License
-        {% endif %}
+          {% else %}
 
-    </div>
+            <div class="unavailable-box">
 
+              <div class="unavailable-icon">
+                🔒
+              </div>
 
-    {% if track.cover_art_url %}
+              <div>
 
-        <img
-            src="{{ track.cover_art_url }}"
-            alt="{{ track.title }} cover"
-            class="track-cover"
-            loading="lazy"
-        >
+                <strong>
+                  Unavailable
+                </strong>
 
-    {% endif %}
+                {% if not track.is_published %}
 
+                  <p>
+                    This track is currently unpublished by the producer.
+                  </p>
 
-    {% if track.preview_file_path %}
+                {% elif is_exclusive and track.is_sold %}
 
-        <div class="track-card">
-
-            <div class="track-card-label">
-                Preview
-            </div>
-
-            <audio
-                class="preview-player"
-                controls
-                preload="metadata"
-                src="{{ track.preview_file_path }}"
-            ></audio>
-
-        </div>
-
-    {% endif %}
-
-
-    <div class="track-card">
-
-        <div class="track-card-label">
-            Price
-        </div>
-
-        <div class="track-price">
-            KSh {{ "%.2f"|format(track.price|float) }}
-        </div>
-
-
-        {% if track.description %}
-
-            <div class="track-description">
-                {{ track.description }}
-            </div>
-
-        {% endif %}
-
-
-        <div class="track-actions">
-
-            {% if purchased %}
-
-                <div class="track-status success">
-                    ✓ You already own this track.
-                </div>
-
-                <a
-                    class="track-button track-button-primary"
-                    href="/download/track/{{ track.id }}"
-                >
-                    Download Track
-                </a>
-
-                <a
-                    class="track-button track-button-secondary"
-                    href="/purchases"
-                >
-                    View My Purchases
-                </a>
-
-
-            {% elif is_owner %}
-
-                <div class="track-status">
-                    This is your own track. You cannot purchase it.
-                </div>
-
-
-            {% elif available %}
-
-                {% if current_user %}
-
-                    <a
-                        class="track-button track-button-primary"
-                        href="/checkout/track/{{ track.slug }}"
-                    >
-                        Buy This Track
-                    </a>
+                  <p>
+                    This exclusive track has already been sold.
+                  </p>
 
                 {% else %}
 
-                    <a
-                        class="track-button track-button-primary"
-                        href="/login?next=/track/{{ track.slug }}"
-                    >
-                        Login to Buy
-                    </a>
+                  <p>
+                    This track is not available for purchase.
+                  </p>
 
                 {% endif %}
 
+              </div>
 
-            {% else %}
+            </div>
 
-                <div class="track-button track-button-disabled">
-                    Unavailable
-                </div>
-
-                <div class="track-status">
-                    {{ availability_reason }}
-                </div>
-
-            {% endif %}
+          {% endif %}
 
         </div>
 
+      </div>
+
     </div>
 
+    <!-- ================= DETAILS ================= -->
 
-    <div class="back-link">
+    <div class="track-details-grid">
 
-        {% if track.creator_profile and track.creator_profile.slug %}
+      <div class="detail-card">
 
-            <a href="/store/{{ track.creator_profile.slug }}">
-                Back to Store
-            </a>
+        <h3>
+          Track Details
+        </h3>
 
-        {% else %}
+        <div class="detail-row">
 
-            <a href="/beats">
-                Back to Beats
-            </a>
+          <span>Title</span>
+          <strong>{{ track.title }}</strong>
+
+        </div>
+
+        {% if track.genre %}
+          <div class="detail-row">
+
+            <span>Genre</span>
+            <strong>{{ track.genre }}</strong>
+
+          </div>
+        {% endif %}
+
+        {% if track.bpm %}
+          <div class="detail-row">
+
+            <span>BPM</span>
+            <strong>{{ track.bpm }}</strong>
+
+          </div>
+        {% endif %}
+
+        <div class="detail-row">
+
+          <span>License Type</span>
+
+          <strong>
+
+            {% if track.sales_model.value == "exclusive" %}
+              Exclusive
+            {% else %}
+              Non Exclusive
+            {% endif %}
+
+          </strong>
+
+        </div>
+
+      </div>
+
+      <div class="detail-card">
+
+        <h3>
+          Producer
+        </h3>
+
+        {% if track.creator_profile %}
+
+          <div class="producer-card">
+
+            <div class="producer-avatar">
+
+              {{ track.creator_profile.stage_name[:1] }}
+
+            </div>
+
+            <div>
+
+              <strong>
+                {{ track.creator_profile.stage_name }}
+              </strong>
+
+              <p>
+                BeatHub Producer
+              </p>
+
+            </div>
+
+          </div>
+
+          <a
+            href="/store/{{ track.creator_profile.slug }}"
+            class="btn btn-outline btn-block"
+            style="margin-top:16px;"
+          >
+            Visit Producer Store
+          </a>
 
         {% endif %}
 
+      </div>
+
     </div>
 
+  </div>
+
 </div>
+
+<style>
+
+.track-page{
+  padding:40px 20px 70px;
+}
+
+.track-container{
+  max-width:1100px;
+  margin:auto;
+}
+
+.track-hero{
+  display:grid;
+  grid-template-columns:360px 1fr;
+  gap:40px;
+  align-items:start;
+}
+
+.track-cover img{
+  width:100%;
+  aspect-ratio:1/1;
+  object-fit:cover;
+  border-radius:18px;
+  display:block;
+}
+
+.cover-placeholder{
+  width:100%;
+  aspect-ratio:1/1;
+  border-radius:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:70px;
+  background:#171717;
+}
+
+.track-info h1{
+  font-size:42px;
+  margin:8px 0;
+}
+
+.producer-name{
+  color:#aaa;
+  margin-bottom:18px;
+}
+
+.producer-name a{
+  color:var(--gold);
+  text-decoration:none;
+}
+
+.track-description{
+  color:#cfcfcf;
+  line-height:1.7;
+  margin-bottom:25px;
+}
+
+.track-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  margin-bottom:25px;
+}
+
+.meta-item{
+  background:#171717;
+  border:1px solid #262626;
+  border-radius:10px;
+  padding:10px 16px;
+  min-width:100px;
+}
+
+.meta-item span{
+  display:block;
+  font-size:11px;
+  color:#888;
+  text-transform:uppercase;
+}
+
+.meta-item strong{
+  font-size:14px;
+}
+
+.price-box{
+  margin-bottom:22px;
+}
+
+.price-label{
+  display:block;
+  font-size:12px;
+  color:#888;
+  text-transform:uppercase;
+}
+
+.price{
+  font-size:34px;
+  font-weight:700;
+  color:var(--gold);
+}
+
+.audio-preview audio{
+  width:100%;
+  margin:12px 0 24px;
+}
+
+.purchase-section{
+  margin-top:8px;
+}
+
+.buy-button{
+  font-size:17px;
+  padding:15px;
+}
+
+.purchase-message,
+.unavailable-box{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:16px;
+  border-radius:12px;
+  margin-bottom:14px;
+  background:#171717;
+  border:1px solid #303030;
+}
+
+.purchase-message.success{
+  border-color:rgba(80,180,120,.45);
+}
+
+.status-icon,
+.unavailable-icon{
+  font-size:28px;
+}
+
+.purchase-message p,
+.unavailable-box p{
+  margin:4px 0 0;
+  color:#aaa;
+}
+
+.login-note{
+  text-align:center;
+  color:#888;
+  font-size:13px;
+  margin-top:10px;
+}
+
+.track-details-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+  margin-top:40px;
+}
+
+.detail-card{
+  background:#141414;
+  border:1px solid #242424;
+  border-radius:16px;
+  padding:22px;
+}
+
+.detail-card h3{
+  margin-top:0;
+}
+
+.detail-row{
+  display:flex;
+  justify-content:space-between;
+  padding:12px 0;
+  border-bottom:1px solid #222;
+}
+
+.detail-row:last-child{
+  border-bottom:none;
+}
+
+.detail-row span{
+  color:#888;
+}
+
+.producer-card{
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+
+.producer-avatar{
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  background:var(--gold);
+  color:#111;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  font-weight:bold;
+}
+
+.producer-card p{
+  margin:4px 0 0;
+  color:#888;
+}
+
+@media(max-width:800px){
+
+  .track-hero{
+    grid-template-columns:1fr;
+  }
+
+  .track-info h1{
+    font-size:32px;
+  }
+
+  .track-details-grid{
+    grid-template-columns:1fr;
+  }
+
+}
+
+</style>
 
 {% endblock %}
