@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Withdraw Earnings | BeatHub</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --gold: #d4af37;
+            --gold-light: #f0d878;
+            --gold-dark: #9d7d18;
+            --black: #050505;
+            --black-soft: #0b0b0b;
+            --panel: #101010;
+            --panel-light: #151515;
+            --border: rgba(212, 175, 55, 0.20);
+            --text: #f5f5f5;
+            --muted: #929292;
+            --success: #49d17d;
+            --danger: #ff6464;
+        }
+
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(
+                    circle at top right,
+                    rgba(212, 175, 55, 0.09),
+                    transparent 35%
+                ),
+                radial-gradient(
+                    circle at bottom left,
+                    rgba(212, 175, 55, 0.05),
+                    transparent 30%
+                ),
+                var(--black);
+            color: var(--text);
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .page {
+            width: 100%;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 30px 22px 60px;
+        }
+
+        /* =====================================================
+           HEADER
+        ===================================================== */
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .brand-mark {
+            width: 45px;
+            height: 45px;
+            border-radius: 13px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    #f0d878,
+                    #b58d20
+                );
+
+            color: #050505;
+            font-size: 21px;
+            font-weight: 900;
+
+            box-shadow:
+                0 8px 25px rgba(212, 175, 55, 0.20);
+        }
+
+        .brand-text strong {
+            display: block;
+            font-size: 17px;
+            letter-spacing: 1px;
+        }
+
+        .brand-text span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+
+            padding: 11px 17px;
+
+            border: 1px solid var(--border);
+            border-radius: 10px;
+
+            background: rgba(255,255,255,0.025);
+            color: #e8e8e8;
+
+            font-size: 13px;
+            font-weight: 600;
+
+            transition:
+                transform .2s ease,
+                border-color .2s ease,
+                background .2s ease;
+        }
+
+        .back-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(212,175,55,.55);
+            background: rgba(212,175,55,.07);
+        }
+
+        /* =====================================================
+           HERO
+        ===================================================== */
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+
+            padding: 34px;
+
+            border: 1px solid var(--border);
+            border-radius: 22px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(212,175,55,.08),
+                    rgba(255,255,255,.015) 50%,
+                    rgba(212,175,55,.025)
+                );
+
+            box-shadow:
+                0 25px 70px rgba(0,0,0,.35);
+
+            margin-bottom: 24px;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+
+            width: 260px;
+            height: 260px;
+
+            right: -100px;
+            top: -100px;
+
+            border-radius: 50%;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(212,175,55,.13),
+                    transparent 68%
+                );
+
+            pointer-events: none;
+        }
+
+        .eyebrow {
+            color: var(--gold-light);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 11px;
+            font-weight: 800;
+            margin-bottom: 9px;
+        }
+
+        .hero h1 {
+            font-size: clamp(28px, 5vw, 42px);
+            line-height: 1.08;
+            letter-spacing: -1.4px;
+            margin-bottom: 10px;
+        }
+
+        .hero p {
+            color: var(--muted);
+            max-width: 680px;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        /* =====================================================
+           BALANCE
+        ===================================================== */
+
+        .balance-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .balance-card {
+            padding: 23px;
+
+            border-radius: 17px;
+            border: 1px solid var(--border);
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(255,255,255,.035),
+                    rgba(255,255,255,.012)
+                );
+        }
+
+        .balance-card.primary {
+            border-color: rgba(212,175,55,.38);
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(212,175,55,.13),
+                    rgba(212,175,55,.035)
+                );
+        }
+
+        .balance-label {
+            color: var(--muted);
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .balance-value {
+            color: white;
+            font-size: 29px;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        .primary .balance-value {
+            color: var(--gold-light);
+        }
+
+        .balance-note {
+            color: #777;
+            font-size: 11px;
+            margin-top: 7px;
+        }
+
+        /* =====================================================
+           MAIN CONTENT
+        ===================================================== */
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+            gap: 22px;
+            align-items: start;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: var(--panel);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 23px 24px 18px;
+
+            border-bottom: 1px solid rgba(255,255,255,.06);
+        }
+
+        .panel-header h2 {
+            font-size: 19px;
+            margin-bottom: 6px;
+        }
+
+        .panel-header p {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .panel-body {
+            padding: 24px;
+        }
+
+        /* =====================================================
+           ALERTS
+        ===================================================== */
+
+        .alert {
+            border-radius: 12px;
+            padding: 13px 15px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .alert-error {
+            color: #ffd0d0;
+            border: 1px solid rgba(255,100,100,.30);
+            background: rgba(255,100,100,.08);
+        }
+
+        .alert-success {
+            color: #c8ffdc;
+            border: 1px solid rgba(73,209,125,.30);
+            background: rgba(73,209,125,.08);
+        }
+
+        /* =====================================================
+           FORM
+        ===================================================== */
+
+        .field {
+            margin-bottom: 20px;
+        }
+
+        .field label {
+            display: block;
+            color: #dedede;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .field small {
+            display: block;
+            color: #707070;
+            font-size: 11px;
+            margin-top: 7px;
+            line-height: 1.5;
+        }
+
+        .input-wrap {
+            position: relative;
+        }
+
+        .currency {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+
+            color: var(--gold-light);
+            font-weight: 800;
+            font-size: 13px;
+
+            pointer-events: none;
+        }
+
+        input {
+            width: 100%;
+
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: 11px;
+
+            background: #080808;
+            color: white;
+
+            padding: 14px 14px;
+
+            font-size: 14px;
+            outline: none;
+
+            transition:
+                border-color .2s ease,
+                box-shadow .2s ease;
+        }
+
+        .currency + input {
+            padding-left: 42px;
+        }
+
+        input:focus {
+            border-color: rgba(212,175,55,.65);
+
+            box-shadow:
+                0 0 0 3px rgba(212,175,55,.08);
+        }
+
+        input::placeholder {
+            color: #555;
+        }
+
+        .submit-btn {
+            width: 100%;
+
+            border: none;
+            border-radius: 11px;
+
+            padding: 15px 18px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #f0d878,
+                    #c39b2c
+                );
+
+            color: #070707;
+
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: .3px;
+
+            cursor: pointer;
+
+            box-shadow:
+                0 10px 30px rgba(212,175,55,.13);
+
+            transition:
+                transform .2s ease,
+                box-shadow .2s ease,
+                filter .2s ease;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+
+            box-shadow:
+                0 15px 38px rgba(212,175,55,.20);
+
+            filter: brightness(1.04);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        /* =====================================================
+           INFO CARDS
+        ===================================================== */
+
+        .info-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .info-card {
+            padding: 19px;
+
+            border: 1px solid rgba(255,255,255,.07);
+            border-radius: 15px;
+
+            background: rgba(255,255,255,.018);
+        }
+
+        .info-icon {
+            width: 35px;
+            height: 35px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 10px;
+
+            margin-bottom: 12px;
+
+            color: var(--gold-light);
+
+            border: 1px solid rgba(212,175,55,.18);
+            background: rgba(212,175,55,.07);
+
+            font-size: 15px;
+        }
+
+        .info-card h3 {
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .info-card p {
+            color: #777;
+            font-size: 12px;
+            line-height: 1.65;
+        }
+
+        /* =====================================================
+           HISTORY
+        ===================================================== */
+
+        .history {
+            margin-top: 24px;
+        }
+
+        .history-list {
+            padding: 0 24px 8px;
+        }
+
+        .history-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            align-items: center;
+            gap: 18px;
+
+            padding: 17px 0;
+
+            border-bottom: 1px solid rgba(255,255,255,.055);
+        }
+
+        .history-row:last-child {
+            border-bottom: none;
+        }
+
+        .history-title {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .history-date {
+            color: #666;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .history-amount {
+            color: var(--gold-light);
+            font-weight: 800;
+            font-size: 13px;
+        }
+
+        .status {
+            padding: 5px 9px;
+            border-radius: 999px;
+
+            font-size: 10px;
+            font-weight: 800;
+
+            text-transform: uppercase;
+            letter-spacing: .5px;
+
+            background: rgba(255,255,255,.06);
+            color: #bbb;
+        }
+
+        .status.pending {
+            color: #f2d46e;
+            background: rgba(212,175,55,.10);
+        }
+
+        .status.approved,
+        .status.processing {
+            color: #a9d9ff;
+            background: rgba(70,150,220,.10);
+        }
+
+        .status.paid {
+            color: #8ef0b1;
+            background: rgba(73,209,125,.10);
+        }
+
+        .empty {
+            padding: 30px 0;
+            color: #666;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        /* =====================================================
+           FOOTER
+        ===================================================== */
+
+        footer {
+            text-align: center;
+            color: #555;
+            font-size: 11px;
+            margin-top: 42px;
+        }
+
+        footer span {
+            color: var(--gold-dark);
+        }
+
+        /* =====================================================
+           MOBILE
+        ===================================================== */
+
+        @media (max-width: 850px) {
+            .balance-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .page {
+                padding: 20px 14px 45px;
+            }
+
+            .topbar {
+                align-items: flex-start;
+            }
+
+            .hero {
+                padding: 25px 21px;
+            }
+
+            .panel-body {
+                padding: 20px;
+            }
+
+            .history-list {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+
+            .history-row {
+                grid-template-columns: 1fr auto;
+            }
+
+            .history-row .status {
+                grid-column: 2;
+                grid-row: 1;
+            }
+
+            .history-row .history-amount {
+                grid-column: 1;
+                grid-row: 2;
+            }
+
+            .back-btn {
+                padding: 9px 12px;
+            }
+
+            .brand-text span {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="page">
+
+    <!-- =====================================================
+         TOP BAR
+    ====================================================== -->
+
+    <header class="topbar">
+
+        <a href="/dashboard" class="brand">
+            <div class="brand-mark">
+                B
+            </div>
+
+            <div class="brand-text">
+                <strong>BEATHUB</strong>
+                <span>Creator Studio</span>
+            </div>
+        </a>
+
+        <a href="/dashboard" class="back-btn">
+            ← Back to Dashboard
+        </a>
+
+    </header>
+
+
+    <!-- =====================================================
+         HERO
+    ====================================================== -->
+
+    <section class="hero">
+
+        <div class="eyebrow">
+            Creator Finance
+        </div>
+
+        <h1>
+            Withdraw Your Earnings
+        </h1>
+
+        <p>
+            Move your available BeatHub earnings to your
+            M-Pesa account. Withdrawal requests are reviewed
+            and processed securely.
+        </p>
+
+    </section>
+
+
+    <!-- =====================================================
+         BALANCE CARDS
+    ====================================================== -->
+
+    <section class="balance-grid">
+
+        <div class="balance-card primary">
+
+            <div class="balance-label">
+                Available to Withdraw
+            </div>
+
+            <div class="balance-value">
+                KSh {{ "%.2f"|format(available_balance|float) }}
+            </div>
+
+            <div class="balance-note">
+                Funds currently available for withdrawal
+            </div>
+
+        </div>
+
+
+        <div class="balance-card">
+
+            <div class="balance-label">
+                Pending Withdrawals
+            </div>
+
+            <div class="balance-value">
+                KSh {{ "%.2f"|format(pending_withdrawal|float) }}
+            </div>
+
+            <div class="balance-note">
+                Requests awaiting processing
+            </div>
+
+        </div>
+
+
+        <div class="balance-card">
+
+            <div class="balance-label">
+                Total Net Earnings
+            </div>
+
+            <div class="balance-value">
+                KSh {{ "%.2f"|format(net_earnings|float) }}
+            </div>
+
+            <div class="balance-note">
+                Your earnings after platform commission
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =====================================================
+         MAIN CONTENT
+    ====================================================== -->
+
+    <div class="content-grid">
+
+
+        <!-- =================================================
+             WITHDRAWAL FORM
+        ================================================== -->
+
+        <section class="panel">
+
+            <div class="panel-header">
+
+                <h2>
+                    Request Withdrawal
+                </h2>
+
+                <p>
+                    Enter the amount and the Kenyan M-Pesa
+                    number where you want your funds sent.
+                </p>
+
+            </div>
+
+
+            <div class="panel-body">
+
+                {% if error %}
+                    <div class="alert alert-error">
+                        {{ error }}
+                    </div>
+                {% endif %}
+
+
+                {% if success %}
+                    <div class="alert alert-success">
+                        {{ success }}
+                    </div>
+                {% endif %}
+
+
+                <form
+                    method="post"
+                    action="/dashboard/withdraw"
+                    autocomplete="off"
+                >
+
+                    <div class="field">
+
+                        <label for="amount">
+                            Withdrawal Amount
+                        </label>
+
+                        <div class="input-wrap">
+
+                            <span class="currency">
+                                KSh
+                            </span>
+
+                            <input
+                                type="number"
+                                id="amount"
+                                name="amount"
+                                min="1"
+                                max="{{ available_balance|float }}"
+                                step="0.01"
+                                placeholder="Enter amount"
+                                required
+                            >
+
+                        </div>
+
+                        <small>
+                            Maximum available:
+                            KSh {{ "%.2f"|format(available_balance|float) }}
+                        </small>
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label for="phone_number">
+                            M-Pesa Phone Number
+                        </label>
+
+                        <input
+                            type="tel"
+                            id="phone_number"
+                            name="phone_number"
+                            placeholder="0712345678"
+                            autocomplete="tel"
+                            required
+                        >
+
+                        <small>
+                            Accepted formats include
+                            0712345678, 0112345678 or
+                            254712345678.
+                        </small>
+
+                    </div>
+
+
+                    <button
+                        type="submit"
+                        class="submit-btn"
+                        {% if available_balance|float <= 0 %}
+                            disabled
+                            style="opacity:.45;cursor:not-allowed;"
+                        {% endif %}
+                    >
+                        {% if available_balance|float <= 0 %}
+                            No Available Funds
+                        {% else %}
+                            Request M-Pesa Withdrawal
+                        {% endif %}
+                    </button>
+
+                </form>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             INFORMATION
+        ================================================== -->
+
+        <aside class="info-stack">
+
+
+            <div class="info-card">
+
+                <div class="info-icon">
+                    KSh
+                </div>
+
+                <h3>
+                    Your Available Balance
+                </h3>
+
+                <p>
+                    Only completed sales that have become
+                    available for withdrawal are included in
+                    your available balance.
+                </p>
+
+            </div>
+
+
+            <div class="info-card">
+
+                <div class="info-icon">
+                    ✓
+                </div>
+
+                <h3>
+                    Secure Processing
+                </h3>
+
+                <p>
+                    Your withdrawal request is recorded in
+                    BeatHub and reviewed before payment is
+                    processed.
+                </p>
+
+            </div>
+
+
+            <div class="info-card">
+
+                <div class="info-icon">
+                    M
+                </div>
+
+                <h3>
+                    M-Pesa Payments
+                </h3>
+
+                <p>
+                    Make sure the phone number belongs to
+                    an active Kenyan M-Pesa account before
+                    submitting your request.
+                </p>
+
+            </div>
+
+
+            <div class="info-card">
+
+                <div class="info-icon">
+                    !
+                </div>
+
+                <h3>
+                    Important
+                </h3>
+
+                <p>
+                    Double-check the withdrawal amount and
+                    M-Pesa number. Requests are processed
+                    using the details you submit.
+                </p>
+
+            </div>
+
+        </aside>
+
+    </div>
+
+
+    <!-- =====================================================
+         WITHDRAWAL HISTORY
+    ====================================================== -->
+
+    <section class="panel history">
+
+        <div class="panel-header">
+
+            <h2>
+                Withdrawal History
+            </h2>
+
+            <p>
+                Track your previous withdrawal requests.
+            </p>
+
+        </div>
+
+
+        <div class="history-list">
+
+            {% if withdrawal_requests %}
+
+                {% for withdrawal in withdrawal_requests %}
+
+                    <div class="history-row">
+
+                        <div>
+
+                            <div class="history-title">
+                                M-Pesa Withdrawal
+                            </div>
+
+                            <div class="history-date">
+
+                                {% if withdrawal.created_at %}
+                                    {{ withdrawal.created_at.strftime("%d %b %Y, %H:%M") }}
+                                {% else %}
+                                    Date unavailable
+                                {% endif %}
+
+                                {% if withdrawal.phone_number %}
+                                    · {{ withdrawal.phone_number }}
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="history-amount">
+                            KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+                        </div>
+
+
+                        <div class="status
+                            {% if withdrawal.status %}
+                                {{ withdrawal.status|lower }}
+                            {% endif %}
+                        ">
+                            {{ withdrawal.status or "pending" }}
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            {% else %}
+
+                <div class="empty">
+                    You have not submitted any withdrawal requests yet.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    </section>
+
+
+    <footer>
+        © {{ current_year }} <span>BeatHub</span> · Creator Studio
+    </footer>
+
+</div>
+
+</body>
+</html>
