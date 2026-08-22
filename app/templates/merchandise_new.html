@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Add Merchandise — BeatHub{% endblock %}
+{% block content %}
+<style>
+  .merch-form-shell{max-width:820px;margin:0 auto;padding:45px 0 70px}
+  .merch-form-card{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.035);border-radius:22px;padding:30px}
+  .merch-form-card h1{font-size:32px;margin:6px 0 10px}
+  .merch-form-card .intro{color:var(--text-muted,#9ca3af);line-height:1.6;margin-bottom:26px}
+  .field{margin-bottom:18px}
+  .field label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .field input,.field textarea{width:100%;box-sizing:border-box;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);color:inherit;border-radius:12px;padding:13px 14px;outline:none}
+  .field textarea{min-height:130px;resize:vertical}
+  .field small{display:block;margin-top:6px;color:var(--text-muted,#9ca3af)}
+  .actions{display:flex;gap:12px;margin-top:24px}
+  .alert-error{margin-bottom:18px}
+  @media(max-width:620px){.merch-form-card{padding:22px}.actions{flex-direction:column}.actions a,.actions button{width:100%}}
+</style>
+
+<section class="merch-form-shell">
+  <div class="merch-form-card">
+    <div class="eyebrow">Creator Commerce</div>
+    <h1>Add Merchandise</h1>
+    <p class="intro">Create a clean product listing for your audience. Your product belongs to your creator store automatically.</p>
+
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+    <form action="/dashboard/merch/new" method="post" enctype="multipart/form-data">
+      <div class="field">
+        <label for="name">Product Name</label>
+        <input id="name" name="name" type="text" maxlength="160" value="{{ name or '' }}" placeholder="e.g. BeatHub Signature Hoodie" required autofocus>
+      </div>
+
+      <div class="field">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" maxlength="4000" placeholder="Tell fans what makes this product special.">{{ description or '' }}</textarea>
+      </div>
+
+      <div class="field">
+        <label for="price">Price (KSh)</label>
+        <input id="price" name="price" type="number" min="0.01" step="0.01" value="{{ price or '' }}" placeholder="2500" required>
+      </div>
+
+      <div class="field">
+        <label for="image">Product Image / Logo</label>
+        <input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.webp" required>
+        <small>Use a clear product or brand image. JPG, PNG and WebP are supported by the existing BeatHub storage validation.</small>
+      </div>
+
+      <div class="actions">
+        <a href="/dashboard/merch" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Create Merchandise</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
