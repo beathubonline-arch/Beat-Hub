@@ -1,62 +1,544 @@
 {% extends "base.html" %}
-{% block title %}Merchandise Studio — BeatHub{% endblock %}
+
+{% block title %}Your Merchandise — BeatHub{% endblock %}
+
 {% block content %}
+
 <style>
-  .merch-shell{padding:42px 0 70px}
-  .merch-hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:28px}
-  .merch-eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold,#d6ad55);font-weight:800}
-  .merch-hero h1{font-size:38px;line-height:1.05;margin:8px 0}
-  .merch-hero p{max-width:650px;color:var(--text-muted,#9ca3af);line-height:1.65;margin:0}
-  .merch-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
-  .merch-card{overflow:hidden;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);border-radius:18px}
-  .merch-image{aspect-ratio:1/1;background:rgba(255,255,255,.045);overflow:hidden}
-  .merch-image img{width:100%;height:100%;object-fit:cover;display:block}
-  .merch-placeholder{height:100%;display:grid;place-items:center;color:var(--text-muted,#9ca3af);font-size:13px}
-  .merch-body{padding:18px}
-  .merch-name{font-size:19px;font-weight:800;margin:0 0 7px}
-  .merch-desc{color:var(--text-muted,#9ca3af);font-size:13px;line-height:1.55;min-height:42px}
-  .merch-price{font-size:20px;font-weight:900;margin-top:14px}
-  .merch-meta{font-size:11px;color:var(--text-muted,#9ca3af);margin-top:5px}
-  .merch-empty{padding:42px;border:1px dashed rgba(255,255,255,.12);border-radius:18px;text-align:center;color:var(--text-muted,#9ca3af)}
-  @media(max-width:900px){.merch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media(max-width:620px){.merch-hero{flex-direction:column;align-items:flex-start}.merch-grid{grid-template-columns:1fr}.merch-hero h1{font-size:31px}}
+    .merch-page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 24px 0 60px;
+    }
+
+    .merch-hero {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 30px;
+        margin-bottom: 26px;
+        border: 1px solid #27272a;
+        border-radius: 22px;
+        background:
+            radial-gradient(
+                circle at 90% 10%,
+                rgba(255,255,255,.08),
+                transparent 35%
+            ),
+            linear-gradient(
+                135deg,
+                #18181b 0%,
+                #0f0f11 100%
+            );
+    }
+
+    .merch-eyebrow {
+        margin-bottom: 8px;
+        color: #a1a1aa;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .12em;
+    }
+
+    .merch-hero h1 {
+        margin: 0;
+        color: #fff;
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1.05;
+        letter-spacing: -.04em;
+    }
+
+    .merch-hero p {
+        max-width: 680px;
+        margin: 12px 0 0;
+        color: #a1a1aa;
+        font-size: 14px;
+        line-height: 1.65;
+    }
+
+    .merch-add-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 17px;
+        border-radius: 11px;
+        background: #fff;
+        color: #09090b;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .merch-add-button:hover {
+        opacity: .9;
+    }
+
+    .notice {
+        margin-bottom: 20px;
+        padding: 13px 16px;
+        border-radius: 11px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .notice-success {
+        border: 1px solid #166534;
+        background: #052e16;
+        color: #bbf7d0;
+    }
+
+    .notice-error {
+        border: 1px solid #991b1b;
+        background: #450a0a;
+        color: #fecaca;
+    }
+
+    .merch-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        margin-bottom: 16px;
+    }
+
+    .merch-toolbar h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 19px;
+    }
+
+    .merch-count {
+        color: #71717a;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .merch-grid {
+        display: grid;
+        grid-template-columns:
+            repeat(
+                auto-fill,
+                minmax(250px, 1fr)
+            );
+        gap: 18px;
+    }
+
+    .merch-card {
+        overflow: hidden;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+        transition:
+            transform .18s ease,
+            border-color .18s ease,
+            background .18s ease;
+    }
+
+    .merch-card:hover {
+        transform: translateY(-2px);
+        border-color: #3f3f46;
+        background: #151517;
+    }
+
+    .merch-image-link {
+        display: block;
+        text-decoration: none;
+    }
+
+    .merch-image-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        overflow: hidden;
+        background:
+            radial-gradient(
+                circle at 50% 25%,
+                rgba(255,255,255,.09),
+                transparent 45%
+            ),
+            #09090b;
+    }
+
+    .merch-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+    }
+
+    .merch-image-fallback {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        color: #71717a;
+        text-align: center;
+    }
+
+    .merch-image-fallback-icon {
+        font-size: 46px;
+        opacity: .65;
+    }
+
+    .merch-image-fallback-text {
+        padding: 0 20px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .merch-card-body {
+        padding: 18px;
+    }
+
+    .merch-card h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 17px;
+        line-height: 1.3;
+    }
+
+    .merch-description {
+        min-height: 42px;
+        margin: 9px 0 14px;
+        color: #71717a;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    .merch-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .merch-price {
+        color: #fff;
+        font-size: 18px;
+        font-weight: 850;
+        letter-spacing: -.02em;
+    }
+
+    .merch-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 9px;
+        border-radius: 999px;
+        background: #27272a;
+        color: #d4d4d8;
+        font-size: 10px;
+        font-weight: 800;
+    }
+
+    .merch-status.visible {
+        background: #14532d;
+        color: #bbf7d0;
+    }
+
+    .merch-status.missing {
+        background: #713f12;
+        color: #fde68a;
+    }
+
+    .merch-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 15px;
+    }
+
+    .merch-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        min-height: 38px;
+        padding: 0 11px;
+        border: 1px solid #3f3f46;
+        border-radius: 9px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .merch-action:hover {
+        background: #27272a;
+        color: #fff;
+    }
+
+    .merch-empty {
+        padding: 65px 25px;
+        border: 1px dashed #3f3f46;
+        border-radius: 18px;
+        text-align: center;
+        background: #111113;
+    }
+
+    .merch-empty-icon {
+        margin-bottom: 12px;
+        font-size: 42px;
+        opacity: .7;
+    }
+
+    .merch-empty strong {
+        display: block;
+        margin-bottom: 7px;
+        color: #e4e4e7;
+        font-size: 16px;
+    }
+
+    .merch-empty span {
+        display: block;
+        max-width: 500px;
+        margin: 0 auto;
+        color: #71717a;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    @media (max-width: 700px) {
+        .merch-page {
+            padding-top: 8px;
+        }
+
+        .merch-hero {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 23px;
+        }
+
+        .merch-add-button {
+            width: 100%;
+        }
+
+        .merch-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
-<section class="merch-shell">
-  <div class="merch-hero">
-    <div>
-      <div class="merch-eyebrow">BeatHub Creator Studio</div>
-      <h1>Your Merchandise</h1>
-      <p>Turn your identity into products your audience can discover. Add a product image, name, description and price. Checkout and fulfilment will be connected in the next commerce layer.</p>
-    </div>
-    <a href="/dashboard/merch/new" class="btn btn-primary">+ Add Merchandise</a>
-  </div>
+<div class="merch-page">
 
-  {% if products %}
-    <div class="merch-grid">
-      {% for product in products %}
-        <article class="merch-card">
-          <div class="merch-image">
-            {% if product.image_url %}
-              <img src="{{ product.image_url }}" alt="{{ product.name }}">
-            {% else %}
-              <div class="merch-placeholder">Image unavailable</div>
-            {% endif %}
-          </div>
-          <div class="merch-body">
-            <h2 class="merch-name">{{ product.name }}</h2>
-            <div class="merch-desc">{{ product.description or 'No description added yet.' }}</div>
-            <div class="merch-price">KSh {{ '%.2f'|format(product.price|float) }}</div>
-            <div class="merch-meta">Visible on your merchandise store</div>
-          </div>
-        </article>
-      {% endfor %}
+    <section class="merch-hero">
+
+        <div>
+            <div class="merch-eyebrow">
+                BeatHub Creator Studio
+            </div>
+
+            <h1>
+                Your Merchandise
+            </h1>
+
+            <p>
+                Turn your identity into products your audience can discover.
+                Add a product image, name, description and price.
+                Checkout and fulfilment can be connected in the commerce layer.
+            </p>
+        </div>
+
+        <a
+            href="/dashboard/merch/new"
+            class="merch-add-button"
+        >
+            + Add Merchandise
+        </a>
+
+    </section>
+
+    {% if success %}
+        <div class="notice notice-success">
+            {{ success }}
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div class="notice notice-error">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <div class="merch-toolbar">
+
+        <div>
+            <h2>
+                Your Products
+            </h2>
+        </div>
+
+        <div class="merch-count">
+            {{ product_count|default(0) }} product{% if product_count|default(0) != 1 %}s{% endif %}
+        </div>
+
     </div>
-  {% else %}
-    <div class="merch-empty">
-      <strong>No merchandise yet.</strong><br>
-      Add your first product and make your creator brand more than music.
-    </div>
-  {% endif %}
-</section>
+
+    {% if products %}
+
+        <div class="merch-grid">
+
+            {% for product in products %}
+
+                <article class="merch-card">
+
+                    <a
+                        href="/merch/{{ product.slug }}"
+                        class="merch-image-link"
+                    >
+
+                        <div class="merch-image-wrap">
+
+                            {% if product.image_url %}
+
+                                <img
+                                    src="{{ product.image_url }}"
+                                    alt="{{ product.name }}"
+                                    class="merch-image"
+                                    loading="lazy"
+                                    decoding="async"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                >
+
+                                <div
+                                    class="merch-image-fallback"
+                                    style="display:none;"
+                                >
+                                    <div class="merch-image-fallback-icon">
+                                        🛍️
+                                    </div>
+
+                                    <div class="merch-image-fallback-text">
+                                        Product image is unavailable.
+                                    </div>
+                                </div>
+
+                            {% else %}
+
+                                <div class="merch-image-fallback">
+
+                                    <div class="merch-image-fallback-icon">
+                                        🛍️
+                                    </div>
+
+                                    <div class="merch-image-fallback-text">
+                                        Product image is unavailable.
+                                    </div>
+
+                                </div>
+
+                            {% endif %}
+
+                        </div>
+
+                    </a>
+
+                    <div class="merch-card-body">
+
+                        <h3>
+                            {{ product.name }}
+                        </h3>
+
+                        <div class="merch-description">
+
+                            {% if product.description %}
+
+                                {{ product.description }}
+
+                            {% else %}
+
+                                No description added yet.
+
+                            {% endif %}
+
+                        </div>
+
+                        <div class="merch-bottom">
+
+                            <div class="merch-price">
+                                KSh {{ "%.2f"|format(product.price|float) }}
+                            </div>
+
+                            {% if product.image_exists %}
+
+                                <span class="merch-status visible">
+                                    Image ready
+                                </span>
+
+                            {% else %}
+
+                                <span class="merch-status missing">
+                                    Image unavailable
+                                </span>
+
+                            {% endif %}
+
+                        </div>
+
+                        <div class="merch-actions">
+
+                            <a
+                                href="/merch/{{ product.slug }}"
+                                class="merch-action"
+                            >
+                                View Product
+                            </a>
+
+                            <a
+                                href="/store/{{ profile.slug }}/merch"
+                                class="merch-action"
+                            >
+                                Store
+                            </a>
+
+                        </div>
+
+                    </div>
+
+                </article>
+
+            {% endfor %}
+
+        </div>
+
+    {% else %}
+
+        <div class="merch-empty">
+
+            <div class="merch-empty-icon">
+                🛍️
+            </div>
+
+            <strong>
+                No merchandise yet
+            </strong>
+
+            <span>
+                Add your first product with an image, name, description
+                and price to start building your creator merchandise catalog.
+            </span>
+
+            <div style="margin-top:20px;">
+
+                <a
+                    href="/dashboard/merch/new"
+                    class="merch-add-button"
+                >
+                    + Add Merchandise
+                </a>
+
+            </div>
+
+        </div>
+
+    {% endif %}
+
+</div>
+
 {% endblock %}
