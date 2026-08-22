@@ -11,6 +11,7 @@ Handles:
 - Buyer/account access
 - Admin access
 - Compatibility with UserRole enum/string values
+- Robust creator/profile detection
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.profile import Profile
 from app.models.user import User, UserRole
 from app.utils.security import decode_access_token
 
@@ -34,24 +36,28 @@ SESSION_COOKIE_NAME = "beathub_session"
 # Compatibility with the administrator authentication flow.
 ADMIN_SESSION_SUBJECT = "beathub-admin"
 
-# Kept compatible with the existing authentication system.
+# Seven-day login session.
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 
 # ============================================================
-# ROLE HELPER
+# ROLE NORMALIZATION
 # ============================================================
 
 def get_role_name(user: Optional[User]) -> str:
     """
     Return a normalized role string.
 
-    Supports both:
+    Supports:
         UserRole.CREATOR
-    and:
+        UserRole.PRODUCER
         "creator"
+        "producer"
+        "CREATOR"
+        "PRODUCER"
 
-    This prevents enum/string mismatches from causing false 403s.
+    Also handles SQLAlchemy/Python enum implementations where
+    the useful value is stored in either .value or .name.
     """
 
     if user is None:
@@ -62,14 +68,109 @@ def get_role_name(user: Optional[User]) -> str:
     if role is None:
         return ""
 
-    # Enum instance
+    # --------------------------------------------------------
+    # Enum value
+    # --------------------------------------------------------
+
     value = getattr(role, "value", None)
 
     if value is not None:
-        return str(value).strip().lower()
+        normalized = str(value).strip().lower()
 
-    # Plain string
-    return str(role).strip().lower()
+        if normalized:
+            return normalized
+
+    # --------------------------------------------------------
+    # Enum name
+    # --------------------------------------------------------
+
+    name = getattr(role, "name", None)
+
+    if name is not None:
+        normalized = str(name).strip().lower()
+
+        if normalized:
+            return normalized
+
+    # --------------------------------------------------------
+    # Plain string / fallback
+    # --------------------------------------------------------
+
+    normalized = str(role).strip().lower()
+
+    # Handles values such as:
+    #
+    # UserRole.CREATOR
+    # UserRole.PRODUCER
+    #
+    if "." in normalized:
+        normalized = normalized.rsplit(".", 1)[-1]
+
+    return normalized
+
+
+# ============================================================
+# ROLE CLASSIFICATION
+# ============================================================
+
+def _is_creator_role_value(role: str) -> bool:
+    """
+    Determine whether a normalized role represents a producer/
+    creator account.
+
+    This intentionally accepts the role names used across the
+    BeatHub application and older versions of the application.
+    """
+
+    normalized = (
+        str(role or "")
+        .strip()
+        .lower()
+    )
+
+    return normalized in {
+        "creator",
+        "producer",
+        "beatmaker",
+        "music_producer",
+        "music-producer",
+        "creator_producer",
+        "creator-producer",
+    }
+
+
+def _is_buyer_role_value(role: str) -> bool:
+    """
+    Determine whether a normalized role represents a buyer/artist
+    account.
+    """
+
+    normalized = (
+        str(role or "")
+        .strip()
+        .lower()
+    )
+
+    return normalized in {
+        "buyer",
+        "artist",
+        "customer",
+        "user",
+    }
+
+
+def _is_admin_role_value(role: str) -> bool:
+    """
+    Determine whether a normalized role represents an admin.
+    """
+
+    normalized = (
+        str(role or "")
+        .strip()
+        .lower()
+    )
+
+    return normalized == "admin"
 
 
 # ============================================================
@@ -90,16 +191,98 @@ def _get_user_from_subject(
     if not subject:
         return None
 
-    if subject == ADMIN_SESSION_SUBJECT:
+    if str(subject) == ADMIN_SESSION_SUBJECT:
         return None
 
     user = (
         db.query(User)
-        .filter(User.id == str(subject))
+        .filter(
+            User.id == str(subject)
+        )
         .first()
     )
 
     return user
+
+
+# ============================================================
+# PROFILE LOOKUP
+# ============================================================
+
+def _get_user_profile(
+    db: Session,
+    user: User,
+) -> Optional[Profile]:
+    """
+    Reliably retrieve the user's producer profile.
+
+    Normally user.profile should already work through the
+    SQLAlchemy relationship.
+
+    However, older BeatHub database records or relationship
+    loading differences can occasionally make:
+
+        user.profile
+
+    appear empty even though the Profile row exists.
+
+    Therefore we check both:
+        1. SQLAlchemy relationship
+        2. Direct Profile query
+
+    If a profile exists, it is attached back to the user object
+    for the rest of the request.
+    """
+
+    # --------------------------------------------------------
+    # First use the normal SQLAlchemy relationship.
+    # --------------------------------------------------------
+
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
+
+    if profile is not None:
+        return profile
+
+    # --------------------------------------------------------
+    # Fallback: direct database lookup.
+    # --------------------------------------------------------
+
+    user_id = getattr(
+        user,
+        "id",
+        None,
+    )
+
+    if not user_id:
+        return None
+
+    profile = (
+        db.query(Profile)
+        .filter(
+            Profile.user_id == str(user_id)
+        )
+        .first()
+    )
+
+    if profile is None:
+        return None
+
+    # --------------------------------------------------------
+    # Re-attach the profile to the SQLAlchemy object.
+    # --------------------------------------------------------
+
+    try:
+        user.profile = profile
+    except Exception:
+        # The direct profile lookup is still valid even if the
+        # relationship cannot be assigned for some reason.
+        pass
+
+    return profile
 
 
 # ============================================================
@@ -116,11 +299,25 @@ def _get_token_from_request(
     Primary source:
         beathub_session cookie
 
-    Also accepts an Authorization Bearer token for compatibility.
+    Also accepts:
+        Authorization: Bearer <token>
+
+    This preserves compatibility with existing routes.
     """
 
+    # --------------------------------------------------------
+    # Session cookie
+    # --------------------------------------------------------
+
     if cookie_token:
-        return cookie_token.strip() or None
+        token = cookie_token.strip()
+
+        if token:
+            return token
+
+    # --------------------------------------------------------
+    # Authorization header
+    # --------------------------------------------------------
 
     authorization = request.headers.get(
         "Authorization",
@@ -140,17 +337,18 @@ def _get_token_from_request(
 # TOKEN DECODING
 # ============================================================
 
-def _decode_token(token: str) -> Optional[dict]:
+def _decode_token(
+    token: str,
+) -> Optional[dict]:
     """
     Safely decode the existing BeatHub access token.
 
-    Supports security implementations where decode_access_token()
-    returns either:
+    Invalid or expired tokens are treated as unauthenticated.
+
+    decode_access_token() may return:
         dict
     or:
         None
-
-    Any invalid/expired token is treated as unauthenticated.
     """
 
     if not token:
@@ -158,6 +356,7 @@ def _decode_token(token: str) -> Optional[dict]:
 
     try:
         payload = decode_access_token(token)
+
     except Exception:
         return None
 
@@ -189,7 +388,7 @@ def get_optional_user(
     - no session exists
     - token is invalid
     - token is expired
-    - token belongs to the configured admin session
+    - token belongs to the dedicated admin session
     - user no longer exists
     - user is inactive
     """
@@ -220,11 +419,13 @@ def get_optional_user(
     if not subject:
         return None
 
+    subject = str(subject)
+
     # --------------------------------------------------------
-    # Administrator session
+    # Dedicated administrator session
     # --------------------------------------------------------
 
-    if str(subject) == ADMIN_SESSION_SUBJECT:
+    if subject == ADMIN_SESSION_SUBJECT:
         return None
 
     # --------------------------------------------------------
@@ -233,13 +434,21 @@ def get_optional_user(
 
     user = _get_user_from_subject(
         db,
-        str(subject),
+        subject,
     )
 
     if user is None:
         return None
 
-    if not getattr(user, "is_active", True):
+    # --------------------------------------------------------
+    # Active account check
+    # --------------------------------------------------------
+
+    if not getattr(
+        user,
+        "is_active",
+        True,
+    ):
         return None
 
     return user
@@ -250,10 +459,12 @@ def get_optional_user(
 # ============================================================
 
 def require_user(
-    user: Optional[User] = Depends(get_optional_user),
+    user: Optional[User] = Depends(
+        get_optional_user
+    ),
 ) -> User:
     """
-    Require a normal authenticated BeatHub user.
+    Require an authenticated normal BeatHub user.
     """
 
     if user is None:
@@ -272,32 +483,28 @@ def require_user(
 # CREATOR CHECK
 # ============================================================
 
-def _is_creator(user: User) -> bool:
+def _is_creator(
+    user: User,
+) -> bool:
     """
     Central creator-role check.
 
-    IMPORTANT:
-    Both enum and string values are accepted.
+    Supports:
+        creator
+        producer
+        beatmaker
+        music_producer
+        creator_producer
 
-    This fixes the false 403 caused by comparing:
-
-        UserRole.CREATOR
-
-    directly against:
-
-        "creator"
+    and equivalent enum representations.
     """
+
+    if user is None:
+        return False
 
     role = get_role_name(user)
 
-    if role == "creator":
-        return True
-
-    # Compatibility with producer naming used by older code.
-    if role == "producer":
-        return True
-
-    return False
+    return _is_creator_role_value(role)
 
 
 # ============================================================
@@ -306,12 +513,28 @@ def _is_creator(user: User) -> bool:
 
 def require_creator(
     user: User = Depends(require_user),
+    db: Session = Depends(get_db),
 ) -> User:
     """
     Require an authenticated creator/producer.
 
-    /dashboard and all producer functions use this dependency.
+    Used by:
+        /dashboard
+        /dashboard/upload
+        /dashboard/albums/new
+        /dashboard/withdraw
+
+    IMPORTANT:
+    The profile check is now performed through a direct database
+    fallback as well as the normal SQLAlchemy relationship.
+
+    This prevents a legitimate producer from receiving a false
+    403 merely because user.profile was not populated.
     """
+
+    # --------------------------------------------------------
+    # Role
+    # --------------------------------------------------------
 
     if not _is_creator(user):
         raise HTTPException(
@@ -319,12 +542,22 @@ def require_creator(
             detail="Creator access required.",
         )
 
-    # A creator must have a profile because the dashboard,
-    # uploads, withdrawals and store all depend on it.
-    if getattr(user, "profile", None) is None:
+    # --------------------------------------------------------
+    # Producer profile
+    # --------------------------------------------------------
+
+    profile = _get_user_profile(
+        db,
+        user,
+    )
+
+    if profile is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Creator profile is missing.",
+            detail=(
+                "Creator profile is missing. "
+                "Please complete your creator profile."
+            ),
         )
 
     return user
@@ -340,17 +573,12 @@ def require_buyer(
     """
     Require a buyer/artist account.
 
-    Creator and admin users are not treated as buyers here.
+    Creator and admin users are not treated as buyers.
     """
 
     role = get_role_name(user)
 
-    if role not in {
-        "buyer",
-        "artist",
-        "customer",
-        "user",
-    }:
+    if not _is_buyer_role_value(role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Buyer access required.",
@@ -375,8 +603,9 @@ def require_admin(
     Require the configured BeatHub administrator session.
 
     Supports:
-        - admin JWT session
-        - database users whose role is admin
+
+        1. Environment-configured admin JWT
+        2. Database users whose role is admin
     """
 
     token = _get_token_from_request(
@@ -398,14 +627,16 @@ def require_admin(
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Administrator session is invalid or expired.",
+            detail=(
+                "Administrator session is invalid or expired."
+            ),
             headers={
                 "WWW-Authenticate": "Bearer",
             },
         )
 
     # --------------------------------------------------------
-    # Dedicated environment-configured admin session
+    # JWT subject
     # --------------------------------------------------------
 
     subject = (
@@ -414,12 +645,19 @@ def require_admin(
         or payload.get("id")
     )
 
+    if subject is not None:
+        subject = str(subject)
+
     payload_role = str(
         payload.get("role", "")
     ).strip().lower()
 
+    # --------------------------------------------------------
+    # Dedicated environment-configured admin session
+    # --------------------------------------------------------
+
     if (
-        str(subject) == ADMIN_SESSION_SUBJECT
+        subject == ADMIN_SESSION_SUBJECT
         and (
             payload_role == "admin"
             or payload.get("admin") is True
@@ -434,17 +672,34 @@ def require_admin(
     if subject:
         user = _get_user_from_subject(
             db,
-            str(subject),
+            subject,
         )
 
         if user is not None:
-            if not getattr(user, "is_active", True):
+
+            # ------------------------------------------------
+            # Active account
+            # ------------------------------------------------
+
+            if not getattr(
+                user,
+                "is_active",
+                True,
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Administrator account is inactive.",
+                    detail=(
+                        "Administrator account is inactive."
+                    ),
                 )
 
-            if get_role_name(user) == "admin":
+            # ------------------------------------------------
+            # Admin role
+            # ------------------------------------------------
+
+            if _is_admin_role_value(
+                get_role_name(user)
+            ):
                 return user
 
     raise HTTPException(
