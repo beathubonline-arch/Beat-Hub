@@ -1,1299 +1,1081 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{{ title or 'BeatHub Merch' }} · BeatHub</title>
-    <meta name="description" content="BeatHub merchandise">
+from __future__ import annotations
 
-    <style>
-        :root {
-            color-scheme: dark;
-            --bg: #070709;
-            --bg-soft: #0b0b0f;
-            --panel: #111116;
-            --panel-2: #17171d;
-            --panel-3: #1c1c23;
-            --text: #f7f7f8;
-            --muted: #a6a6b0;
-            --muted-2: #777783;
-            --line: #292932;
-            --line-soft: #202027;
-            --white: #ffffff;
-            --black: #08080a;
-            --danger: #ff8c8c;
-            --danger-bg: #281313;
-            --success: #a7f3d0;
-        }
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Optional
+from uuid import uuid4
 
-        * {
-            box-sizing: border-box;
-        }
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-        html {
-            scroll-behavior: smooth;
-        }
+from app.config import settings
+from app.database import get_db
+from app.models.profile import Profile
+from app.models.user import User
+from app.services.storage import (
+    ALLOWED_IMAGE_EXT,
+    UploadValidationError,
+    _r2_is_configured,
+    _r2_client,
+    _r2_bucket,
+    _parse_r2_path,
+    media_url,
+    r2_presigned_url,
+    save_upload,
+    save_upload_to_r2,
+)
+from app.utils.deps import (
+    get_optional_user,
+    require_creator,
+)
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background:
-                radial-gradient(
-                    circle at 15% 5%,
-                    rgba(255,255,255,.055),
-                    transparent 30%
+
+router = APIRouter(tags=["merchandise"])
+
+templates = Jinja2Templates(
+    directory="app/templates"
+)
+
+MERCH_TABLE = "beathub_merchandise"
+
+
+def ensure_merch_table(db: Session) -> None:
+    db.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {MERCH_TABLE} (
+                id VARCHAR(36) PRIMARY KEY,
+                creator_profile_id VARCHAR(255) NOT NULL,
+                name VARCHAR(160) NOT NULL,
+                slug VARCHAR(220) NOT NULL UNIQUE,
+                description TEXT,
+                price NUMERIC(12, 2) NOT NULL,
+                image_path TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+    db.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS
+            idx_{MERCH_TABLE}_creator
+            ON {MERCH_TABLE}(creator_profile_id)
+            """
+        )
+    )
+
+    try:
+        db.execute(
+            text(
+                f"""
+                ALTER TABLE {MERCH_TABLE}
+                ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1
+                """
+            )
+        )
+    except Exception:
+        db.rollback()
+
+    try:
+        db.execute(
+            text(
+                f"""
+                ALTER TABLE {MERCH_TABLE}
+                ADD COLUMN order_note TEXT
+                """
+            )
+        )
+    except Exception:
+        db.rollback()
+
+    db.commit()
+
+
+def _ctx(
+    request: Request,
+    current_user: Optional[User] = None,
+    **extra,
+):
+    context = {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": datetime.utcnow().year,
+        "error": None,
+        "success": None,
+    }
+
+    context.update(extra)
+
+    return context
+
+
+def _slugify(value: str) -> str:
+    value = (value or "").strip().lower()
+
+    chars = []
+    previous_dash = False
+
+    for char in value:
+        if char.isalnum():
+            chars.append(char)
+            previous_dash = False
+        elif not previous_dash:
+            chars.append("-")
+            previous_dash = True
+
+    slug = "".join(chars).strip("-")
+
+    return slug or f"merch-{uuid4().hex[:10]}"
+
+
+def _unique_merch_slug(
+    db: Session,
+    name: str,
+) -> str:
+    base = _slugify(name)[:180]
+
+    if not base:
+        base = f"merch-{uuid4().hex[:10]}"
+
+    slug = base
+    suffix = 2
+
+    while db.execute(
+        text(
+            f"""
+            SELECT 1
+            FROM {MERCH_TABLE}
+            WHERE slug = :slug
+            LIMIT 1
+            """
+        ),
+        {"slug": slug},
+    ).first():
+
+        suffix_text = f"-{suffix}"
+
+        slug = (
+            f"{base[:220 - len(suffix_text)]}"
+            f"{suffix_text}"
+        )
+
+        suffix += 1
+
+    return slug
+
+
+def _local_media_root() -> Path:
+    configured = getattr(
+        settings,
+        "MEDIA_ROOT",
+        None,
+    )
+
+    if configured:
+        return Path(
+            str(configured)
+        ).expanduser().resolve()
+
+    return (
+        Path(__file__)
+        .resolve()
+        .parents[2]
+        / "media"
+    )
+
+
+def _safe_local_path(
+    stored_path: str,
+) -> Optional[Path]:
+    if not stored_path:
+        return None
+
+    value = (
+        str(stored_path)
+        .replace("\\", "/")
+        .lstrip("/")
+    )
+
+    if value.startswith("media/"):
+        value = value[6:]
+
+    if value.startswith("static/"):
+        static_root = Path("static").resolve()
+        candidate = Path(value).resolve()
+
+        try:
+            candidate.relative_to(static_root)
+        except ValueError:
+            return None
+
+        return candidate
+
+    media_root = _local_media_root()
+
+    candidate = (
+        media_root / value
+    ).resolve()
+
+    try:
+        candidate.relative_to(
+            media_root
+        )
+    except ValueError:
+        return None
+
+    return candidate
+
+
+def _local_image_url(
+    request: Request,
+    path: Optional[str],
+) -> Optional[str]:
+    if not path:
+        return None
+
+    clean = (
+        str(path)
+        .replace("\\", "/")
+        .lstrip("/")
+    )
+
+    if clean.startswith("media/"):
+        return request.url_for(
+            "merch_local_media",
+            filename=clean[6:],
+        )
+
+    if clean.startswith("static/"):
+        return f"/{clean}"
+
+    return request.url_for(
+        "merch_local_media",
+        filename=clean,
+    )
+
+
+def _is_r2_path(
+    path: Optional[str],
+) -> bool:
+    if not path:
+        return False
+
+    return str(
+        path
+    ).strip().lower().startswith("r2://")
+
+
+def _r2_image_url(
+    path: Optional[str],
+) -> Optional[str]:
+    if not path:
+        return None
+
+    try:
+        return r2_presigned_url(
+            path,
+            expires=3600,
+        )
+    except Exception:
+        return None
+
+
+def _image_url(
+    request: Request,
+    path: Optional[str],
+) -> Optional[str]:
+    if not path:
+        return None
+
+    value = str(path).strip()
+
+    if not value:
+        return None
+
+    if (
+        value.startswith("https://")
+        or value.startswith("http://")
+    ):
+        return value
+
+    if _is_r2_path(value):
+        return _r2_image_url(value)
+
+    local_path = _safe_local_path(value)
+
+    if local_path is not None:
+        try:
+            if (
+                local_path.exists()
+                and local_path.is_file()
+            ):
+                return _local_image_url(
+                    request,
+                    value,
+                )
+        except Exception:
+            pass
+
+    try:
+        fallback = media_url(value)
+
+        if fallback:
+            return fallback
+    except Exception:
+        pass
+
+    return None
+
+
+async def _migrate_local_image_to_r2(
+    db: Session,
+    product_id: str,
+    image_path: Optional[str],
+) -> Optional[str]:
+    if not image_path:
+        return None
+
+    value = str(image_path).strip()
+
+    if not value:
+        return None
+
+    if _is_r2_path(value):
+        return value
+
+    try:
+        if not _r2_is_configured():
+            return value
+    except Exception:
+        return value
+
+    local_path = _safe_local_path(value)
+
+    if local_path is None:
+        return value
+
+    try:
+        if (
+            not local_path.exists()
+            or not local_path.is_file()
+        ):
+            return value
+    except Exception:
+        return value
+
+    try:
+        contents = local_path.read_bytes()
+    except Exception:
+        return value
+
+    if not contents:
+        return value
+
+    extension = local_path.suffix.lower()
+
+    if extension not in ALLOWED_IMAGE_EXT:
+        return value
+
+    content_type_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+
+    content_type = content_type_map.get(
+        extension,
+        "application/octet-stream",
+    )
+
+    try:
+        bucket = _r2_bucket()
+
+        if not bucket:
+            return value
+
+        key = (
+            f"merch/"
+            f"{uuid4().hex}"
+            f"{extension}"
+        )
+
+        client = _r2_client()
+
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=contents,
+            ContentType=content_type,
+        )
+
+        r2_path = (
+            f"r2://{bucket}/{key}"
+        )
+
+        db.execute(
+            text(
+                f"""
+                UPDATE {MERCH_TABLE}
+                SET image_path = :image_path
+                WHERE id = :id
+                """
+            ),
+            {
+                "image_path": r2_path,
+                "id": str(product_id),
+            },
+        )
+
+        db.commit()
+
+        return r2_path
+
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+        return value
+
+
+def _rows_for_creator(
+    request: Request,
+    db: Session,
+    profile_id: str,
+):
+    rows = db.execute(
+        text(
+            f"""
+            SELECT
+                id,
+                creator_profile_id,
+                name,
+                slug,
+                description,
+                price,
+                image_path,
+                created_at
+            FROM {MERCH_TABLE}
+            WHERE creator_profile_id = :profile_id
+            ORDER BY created_at DESC
+            """
+        ),
+        {
+            "profile_id": str(profile_id),
+        },
+    ).mappings().all()
+
+    products = []
+
+    for row in rows:
+        item = dict(row)
+
+        item["image_url"] = _image_url(
+            request,
+            item.get("image_path"),
+        )
+
+        products.append(item)
+
+    return products
+
+
+def _all_public_rows(
+    request: Request,
+    db: Session,
+):
+    rows = db.execute(
+        text(
+            f"""
+            SELECT
+                id,
+                creator_profile_id,
+                name,
+                slug,
+                description,
+                price,
+                image_path,
+                created_at
+            FROM {MERCH_TABLE}
+            ORDER BY created_at DESC
+            LIMIT 120
+            """
+        )
+    ).mappings().all()
+
+    profile_ids = {
+        str(row["creator_profile_id"])
+        for row in rows
+    }
+
+    profiles = {}
+
+    if profile_ids:
+        profile_rows = (
+            db.query(Profile)
+            .filter(
+                Profile.id.in_(
+                    list(profile_ids)
+                )
+            )
+            .all()
+        )
+
+        for profile in profile_rows:
+            profiles[
+                str(profile.id)
+            ] = profile
+
+    products = []
+
+    for row in rows:
+        item = dict(row)
+
+        owner = profiles.get(
+            str(
+                item.get(
+                    "creator_profile_id"
+                )
+            )
+        )
+
+        item["creator_slug"] = (
+            getattr(
+                owner,
+                "slug",
+                None,
+            )
+        )
+
+        item["creator_name"] = (
+            getattr(
+                owner,
+                "stage_name",
+                None,
+            )
+            or "BeatHub Creator"
+        )
+
+        item["image_url"] = _image_url(
+            request,
+            item.get("image_path"),
+        )
+
+        products.append(item)
+
+    return products
+
+
+@router.get(
+    "/dashboard/merch"
+)
+def merch_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+):
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
+
+    if profile is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
+
+    ensure_merch_table(db)
+
+    products = _rows_for_creator(
+        request,
+        db,
+        str(profile.id),
+    )
+
+    success = request.query_params.get(
+        "success"
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "merchandise.html",
+        _ctx(
+            request,
+            user,
+            profile=profile,
+            products=products,
+            product_count=len(products),
+            success=success,
+        ),
+    )
+
+
+@router.get(
+    "/dashboard/merch/new"
+)
+def merch_new_page(
+    request: Request,
+    user: User = Depends(require_creator),
+):
+    return templates.TemplateResponse(
+        request,
+        "merchandise_new.html",
+        _ctx(
+            request,
+            user,
+        ),
+    )
+
+
+@router.post(
+    "/dashboard/merch/new"
+)
+async def merch_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+    name: str = Form(...),
+    description: str = Form(""),
+    price: str = Form(...),
+    image: UploadFile = File(...),
+):
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
+
+    if profile is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
+
+    ensure_merch_table(db)
+
+    name = (name or "").strip()
+    description = (description or "").strip()
+    price_raw = (price or "").strip()
+
+    def error(message: str):
+        return templates.TemplateResponse(
+            request,
+            "merchandise_new.html",
+            _ctx(
+                request,
+                user,
+                error=message,
+                name=name,
+                description=description,
+                price=price_raw,
+            ),
+            status_code=400,
+        )
+
+    if not name:
+        return error(
+            "Product name is required."
+        )
+
+    if len(name) > 160:
+        return error(
+            "Product name is too long. Keep it under 160 characters."
+        )
+
+    if len(description) > 4000:
+        return error(
+            "Product description is too long. Keep it under 4,000 characters."
+        )
+
+    try:
+        price_value = Decimal(price_raw)
+    except (
+        InvalidOperation,
+        ValueError,
+        TypeError,
+    ):
+        return error(
+            "Enter a valid product price."
+        )
+
+    if price_value <= Decimal("0"):
+        return error(
+            "Product price must be greater than zero."
+        )
+
+    if image is None or not image.filename:
+        return error(
+            "A product image is required."
+        )
+
+    extension = Path(
+        image.filename
+    ).suffix.lower()
+
+    if extension not in ALLOWED_IMAGE_EXT:
+        return error(
+            "Unsupported image type. Use JPG, JPEG, PNG or WEBP."
+        )
+
+    try:
+        try:
+            use_r2 = _r2_is_configured()
+        except Exception:
+            use_r2 = False
+
+        if use_r2:
+            image_path = await save_upload_to_r2(
+                image,
+                "merch",
+                ALLOWED_IMAGE_EXT,
+            )
+        else:
+            image_path = await save_upload(
+                image,
+                "merch",
+                ALLOWED_IMAGE_EXT,
+            )
+
+    except UploadValidationError as exc:
+        return error(str(exc))
+
+    except Exception:
+        return error(
+            "Product image upload failed. Please try again."
+        )
+
+    product_id = str(uuid4())
+
+    slug = _unique_merch_slug(
+        db,
+        name,
+    )
+
+    try:
+        db.execute(
+            text(
+                f"""
+                INSERT INTO {MERCH_TABLE} (
+                    id,
+                    creator_profile_id,
+                    name,
+                    slug,
+                    description,
+                    price,
+                    image_path
+                )
+                VALUES (
+                    :id,
+                    :creator_profile_id,
+                    :name,
+                    :slug,
+                    :description,
+                    :price,
+                    :image_path
+                )
+                """
+            ),
+            {
+                "id": product_id,
+                "creator_profile_id": str(
+                    profile.id
                 ),
-                radial-gradient(
-                    circle at 90% 20%,
-                    rgba(255,255,255,.035),
-                    transparent 28%
+                "name": name,
+                "slug": slug,
+                "description": (
+                    description
+                    or None
                 ),
-                linear-gradient(
-                    180deg,
-                    #070709 0%,
-                    #09090c 45%,
-                    #070709 100%
-                );
-            color: var(--text);
-            font-family:
-                Inter,
-                ui-sans-serif,
-                system-ui,
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        button,
-        input,
-        textarea {
-            font: inherit;
-        }
-
-        .nav {
-            position: sticky;
-            top: 0;
-            z-index: 50;
-            background: rgba(7,7,9,.86);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border-bottom: 1px solid rgba(255,255,255,.08);
-        }
-
-        .nav-inner {
-            max-width: 1220px;
-            margin: 0 auto;
-            min-height: 72px;
-            padding: 0 24px;
-            display: flex;
-            align-items: center;
-            gap: 28px;
-        }
-
-        .brand {
-            font-size: 15px;
-            font-weight: 950;
-            letter-spacing: .16em;
-            white-space: nowrap;
-        }
-
-        .links {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 22px;
-            color: #cfcfd7;
-            font-size: 13px;
-            font-weight: 650;
-            flex-wrap: wrap;
-        }
-
-        .links a {
-            transition:
-                color .2s ease,
-                opacity .2s ease;
-        }
-
-        .links a:hover {
-            color: #fff;
-        }
-
-        .wrap {
-            width: 100%;
-            max-width: 1220px;
-            margin: 0 auto;
-            padding: 54px 24px 90px;
-        }
-
-        .eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: #9c9ca7;
-            font-size: 11px;
-            line-height: 1;
-            text-transform: uppercase;
-            letter-spacing: .18em;
-            font-weight: 850;
-            margin-bottom: 12px;
-        }
-
-        .eyebrow::before {
-            content: "";
-            width: 22px;
-            height: 1px;
-            background: #777783;
-        }
-
-        h1,
-        h2,
-        p {
-            margin-top: 0;
-        }
-
-        h1 {
-            font-size: clamp(32px, 5vw, 58px);
-            line-height: .98;
-            letter-spacing: -.045em;
-            margin-bottom: 14px;
-        }
-
-        h2 {
-            font-size: 25px;
-            line-height: 1.1;
-            letter-spacing: -.025em;
-            margin-bottom: 9px;
-        }
-
-        p {
-            color: var(--muted);
-            line-height: 1.65;
-        }
-
-        /* ============================================================
-           PRODUCT DETAIL
-           ============================================================ */
-
-        .product {
-            display: grid;
-            grid-template-columns:
-                minmax(0, 1.08fr)
-                minmax(360px, .92fr);
-            gap: 38px;
-            align-items: start;
-            margin-top: 20px;
-        }
-
-        .visual-column {
-            min-width: 0;
-        }
-
-        .product-image {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            overflow: hidden;
-            border-radius: 30px;
-            border: 1px solid rgba(255,255,255,.10);
-            background:
-                radial-gradient(
-                    circle at 50% 35%,
-                    #24242b 0%,
-                    #15151b 42%,
-                    #0d0d11 100%
-                );
-            box-shadow:
-                0 30px 80px rgba(0,0,0,.45),
-                inset 0 1px 0 rgba(255,255,255,.04);
-        }
-
-        .product-image::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(255,255,255,.08),
-                    transparent 24%,
-                    transparent 72%,
-                    rgba(255,255,255,.025)
-                );
-        }
-
-        .product-image img {
-            position: relative;
-            z-index: 1;
-            display: block;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            object-position: center;
-            transition:
-                transform .45s ease,
-                opacity .25s ease;
-        }
-
-        .product-image:hover img {
-            transform: scale(1.025);
-        }
-
-        .image-fallback {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            gap: 12px;
-            color: #777783;
-            text-align: center;
-        }
-
-        .image-fallback-icon {
-            width: 74px;
-            height: 74px;
-            border-radius: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255,255,255,.045);
-            border: 1px solid rgba(255,255,255,.08);
-            font-size: 31px;
-        }
-
-        .image-fallback-text {
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: .04em;
-        }
-
-        .image-badge {
-            position: absolute;
-            z-index: 3;
-            left: 18px;
-            bottom: 18px;
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 9px 12px;
-            border-radius: 999px;
-            background: rgba(7,7,9,.78);
-            border: 1px solid rgba(255,255,255,.10);
-            color: #e5e5ea;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            font-size: 11px;
-            font-weight: 800;
-        }
-
-        .image-badge-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #fff;
-        }
-
-        .panel {
-            position: sticky;
-            top: 94px;
-            min-width: 0;
-            padding: 30px;
-            border-radius: 28px;
-            background:
-                linear-gradient(
-                    180deg,
-                    rgba(24,24,30,.98),
-                    rgba(15,15,20,.98)
-                );
-            border: 1px solid rgba(255,255,255,.09);
-            box-shadow:
-                0 25px 70px rgba(0,0,0,.32),
-                inset 0 1px 0 rgba(255,255,255,.035);
-        }
-
-        .creator {
-            color: #92929d;
-            font-size: 13px;
-            line-height: 1.5;
-            margin-bottom: 10px;
-        }
-
-        .creator strong {
-            color: #ededf0;
-            font-weight: 850;
-        }
-
-        .product-title {
-            margin-bottom: 13px;
-        }
-
-        .description {
-            max-width: 600px;
-            margin-bottom: 18px;
-            font-size: 14px;
-        }
-
-        .price {
-            display: flex;
-            align-items: baseline;
-            gap: 7px;
-            margin: 4px 0 25px;
-            color: #fff;
-            font-size: 28px;
-            font-weight: 950;
-            letter-spacing: -.025em;
-        }
-
-        .price-currency {
-            color: #a8a8b2;
-            font-size: 12px;
-            font-weight: 750;
-            letter-spacing: .08em;
-            text-transform: uppercase;
-        }
-
-        .checkout-heading {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            padding-top: 22px;
-            border-top: 1px solid var(--line);
-            margin-bottom: 2px;
-        }
-
-        .checkout-heading strong {
-            font-size: 14px;
-            font-weight: 900;
-        }
-
-        .checkout-heading span {
-            color: #7e7e89;
-            font-size: 11px;
-            font-weight: 700;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1.4fr;
-            gap: 12px;
-        }
-
-        label {
-            display: block;
-            margin: 16px 0 7px;
-            color: #dedee5;
-            font-size: 12px;
-            font-weight: 850;
-            letter-spacing: .01em;
-        }
-
-        .optional {
-            color: #777783;
-            font-weight: 600;
-        }
-
-        input,
-        textarea {
-            width: 100%;
-            border: 1px solid #303039;
-            background: #09090d;
-            color: #fff;
-            border-radius: 14px;
-            padding: 14px 15px;
-            outline: none;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
-            transition:
-                border-color .2s ease,
-                background .2s ease,
-                box-shadow .2s ease;
-        }
-
-        input {
-            min-height: 50px;
-        }
-
-        textarea {
-            min-height: 96px;
-            resize: vertical;
-            line-height: 1.5;
-        }
-
-        input::placeholder,
-        textarea::placeholder {
-            color: #5f5f69;
-        }
-
-        input:focus,
-        textarea:focus {
-            border-color: #686873;
-            background: #0c0c11;
-            box-shadow:
-                0 0 0 3px rgba(255,255,255,.045);
-        }
-
-        .hint {
-            margin-top: 7px;
-            color: #777783;
-            font-size: 11px;
-            line-height: 1.5;
-        }
-
-        .notice {
-            padding: 13px 15px;
-            margin: 17px 0;
-            border: 1px solid #34343d;
-            border-radius: 14px;
-            background: #141419;
-            color: #d8d8df;
-            font-size: 13px;
-            line-height: 1.55;
-        }
-
-        .notice.error {
-            border-color: #633737;
-            background: var(--danger-bg);
-            color: #ffc0c0;
-        }
-
-        .summary {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            margin-top: 22px;
-            padding: 18px 0;
-            border-top: 1px solid var(--line);
-        }
-
-        .summary-label {
-            color: #a4a4ae;
-            font-size: 13px;
-            font-weight: 750;
-        }
-
-        .summary-total {
-            color: #fff;
-            font-size: 21px;
-            font-weight: 950;
-        }
-
-        .btn {
-            display: inline-flex;
-            width: 100%;
-            min-height: 52px;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 0 20px;
-            border: 0;
-            border-radius: 15px;
-            background: #fff;
-            color: #09090b;
-            font-size: 13px;
-            font-weight: 950;
-            cursor: pointer;
-            box-shadow:
-                0 10px 25px rgba(0,0,0,.18);
-            transition:
-                transform .18s ease,
-                opacity .18s ease,
-                box-shadow .18s ease;
-        }
-
-        .btn:hover {
-            opacity: .94;
-            transform: translateY(-1px);
-            box-shadow:
-                0 14px 30px rgba(0,0,0,.25);
-        }
-
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        .mpesa-icon {
-            width: 25px;
-            height: 25px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            background: #09090b;
-            color: #fff;
-            font-size: 11px;
-            font-weight: 950;
-        }
-
-        .delivery {
-            display: flex;
-            gap: 12px;
-            margin-top: 18px;
-            padding: 16px;
-            border-radius: 16px;
-            background: #111116;
-            border: 1px solid #292932;
-            color: #aaaab4;
-            font-size: 12px;
-            line-height: 1.6;
-        }
-
-        .delivery-icon {
-            flex: 0 0 auto;
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #1b1b21;
-            border: 1px solid #303039;
-            font-size: 15px;
-        }
-
-        .delivery strong {
-            display: block;
-            color: #e5e5e9;
-            font-size: 12px;
-            margin-bottom: 2px;
-        }
-
-        .back-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 22px;
-            color: #9696a1;
-            font-size: 12px;
-            font-weight: 750;
-            transition: color .2s ease;
-        }
-
-        .back-link:hover {
-            color: #fff;
-        }
-
-        /* ============================================================
-           MARKETPLACE
-           ============================================================ */
-
-        .market-header {
-            max-width: 760px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns:
-                repeat(
-                    auto-fit,
-                    minmax(240px, 1fr)
-                );
-            gap: 22px;
-            margin-top: 32px;
-        }
-
-        .card {
-            overflow: hidden;
-            border-radius: 22px;
-            background: var(--panel);
-            border: 1px solid var(--line);
-            box-shadow: 0 18px 45px rgba(0,0,0,.22);
-            transition:
-                transform .22s ease,
-                border-color .22s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-3px);
-            border-color: #393943;
-        }
-
-        .image-box {
-            position: relative;
-            aspect-ratio: 1 / 1;
-            overflow: hidden;
-            background:
-                linear-gradient(
-                    135deg,
-                    #19191f,
-                    #0d0d11
-                );
-        }
-
-        .image-box img {
-            width: 100%;
-            height: 100%;
-            display: block;
-            object-fit: cover;
-            transition: transform .35s ease;
-        }
-
-        .card:hover .image-box img {
-            transform: scale(1.025);
-        }
-
-        .fallback {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 48px;
-            opacity: .3;
-        }
-
-        .body {
-            padding: 20px;
-        }
-
-        .body .creator {
-            margin-bottom: 8px;
-        }
-
-        .body h2 {
-            margin-bottom: 8px;
-        }
-
-        .body p {
-            margin-bottom: 0;
-            font-size: 13px;
-        }
-
-        .body .price {
-            margin: 15px 0;
-            font-size: 20px;
-        }
-
-        .body .btn {
-            min-height: 44px;
-        }
-
-        /* ============================================================
-           FOOTER
-           ============================================================ */
-
-        footer {
-            max-width: 1220px;
-            margin: 0 auto;
-            padding: 22px 24px 38px;
-            border-top: 1px solid rgba(255,255,255,.07);
-            color: #6f6f79;
-            font-size: 12px;
-        }
-
-        /* ============================================================
-           MOBILE
-           ============================================================ */
-
-        @media (max-width: 900px) {
-            .product {
-                grid-template-columns: 1fr;
-                gap: 22px;
-            }
-
-            .panel {
-                position: static;
-            }
-
-            .product-image {
-                max-width: 760px;
-                margin: 0 auto;
-            }
-        }
-
-        @media (max-width: 700px) {
-            .nav-inner {
-                min-height: auto;
-                padding: 16px 18px;
-                gap: 15px;
-            }
-
-            .brand {
-                width: 100%;
-            }
-
-            .links {
-                width: 100%;
-                justify-content: flex-start;
-                gap: 13px 18px;
-            }
-
-            .wrap {
-                padding:
-                    32px 18px
-                    65px;
-            }
-
-            .product {
-                margin-top: 10px;
-            }
-
-            .product-image {
-                border-radius: 22px;
-            }
-
-            .panel {
-                padding: 22px;
-                border-radius: 22px;
-            }
-
-            .form-row {
-                grid-template-columns: 1fr;
-                gap: 0;
-            }
-
-            h1 {
-                font-size: 39px;
-            }
-
-            .grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 420px) {
-            .links {
-                font-size: 12px;
-                gap: 11px 14px;
-            }
-
-            .panel {
-                padding: 19px;
-            }
-
-            .product-image {
-                border-radius: 18px;
-            }
-
-            .summary-total {
-                font-size: 19px;
-            }
-        }
-    </style>
-</head>
-
-<body>
-
-<header class="nav">
-    <div class="nav-inner">
-        <a class="brand" href="/">BEATHUB</a>
-
-        <nav class="links">
-            <a href="/beats">Beats</a>
-            <a href="/sessions">Sessions</a>
-            <a href="/hot-picks">Hot Picks</a>
-            <a href="/merch">Merch</a>
-            <a href="/terms">Terms</a>
-
-            {% if current_user %}
-                <a href="/dashboard">Dashboard</a>
-                <a href="/logout">Logout</a>
-            {% else %}
-                <a href="/login">Login</a>
-            {% endif %}
-        </nav>
-    </div>
-</header>
-
-<main class="wrap">
-
-{% if product_detail and products %}
-
-    {% set product = products[0] %}
-
-    <div class="eyebrow">BeatHub Merchandise</div>
-
-    <div class="product">
-
-        <div class="visual-column">
-
-            <div class="product-image" id="product-image-box">
-
-                {% if product.image_url %}
-
-                    <img
-                        id="product-image"
-                        src="{{ product.image_url }}"
-                        alt="{{ product.name }}"
-                        loading="eager"
-                        decoding="async"
-                        onerror="handleProductImageError(this)"
-                    >
-
-                    <div
-                        class="image-fallback"
-                        id="product-image-fallback"
-                        style="display:none"
-                    >
-                        <div class="image-fallback-icon">
-                            🛍️
-                        </div>
-
-                        <div class="image-fallback-text">
-                            Product image unavailable
-                        </div>
-                    </div>
-
-                {% else %}
-
-                    <div class="image-fallback">
-                        <div class="image-fallback-icon">
-                            🛍️
-                        </div>
-
-                        <div class="image-fallback-text">
-                            Product image unavailable
-                        </div>
-                    </div>
-
-                {% endif %}
-
-                <div class="image-badge">
-                    <span class="image-badge-dot"></span>
-                    BeatHub Merchandise
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <section class="panel">
-
-            <div class="creator">
-                Merchandise from
-                <strong>
-                    {{ creator.stage_name if creator else 'BeatHub Creator' }}
-                </strong>
-            </div>
-
-            <h1 class="product-title">
-                {{ product.name }}
-            </h1>
-
-            <p class="description">
-                {{ product.description or 'A physical BeatHub merchandise item.' }}
-            </p>
-
-            <div class="price">
-                <span class="price-currency">KSh</span>
-                {{ '%.2f'|format(product.price|float) }}
-            </div>
-
-
-            {% if query_error %}
-                <div class="notice error">
-                    {{ query_error }}
-                </div>
-            {% endif %}
-
-
-            <div class="checkout-heading">
-                <strong>Complete your purchase</strong>
-                <span>Secure M-Pesa checkout</span>
-            </div>
-
-
-            {% if current_user %}
-
-                <form
-                    method="post"
-                    action="/merch/{{ product.slug }}/buy"
-                    id="merch-checkout-form"
-                >
-
-                    <div class="form-row">
-
-                        <div>
-                            <label for="quantity">
-                                Quantity
-                            </label>
-
-                            <input
-                                id="quantity"
-                                name="quantity"
-                                type="number"
-                                min="1"
-                                max="20"
-                                value="1"
-                                inputmode="numeric"
-                                required
-                            >
-                        </div>
-
-
-                        <div>
-                            <label for="phone">
-                                M-Pesa phone
-                            </label>
-
-                            <input
-                                id="phone"
-                                name="phone"
-                                type="tel"
-                                inputmode="numeric"
-                                autocomplete="tel"
-                                placeholder="0712 345 678"
-                                required
-                            >
-                        </div>
-
-                    </div>
-
-
-                    <label for="order_note">
-                        Order note
-                        <span class="optional">
-                            (optional)
-                        </span>
-                    </label>
-
-                    <textarea
-                        id="order_note"
-                        name="order_note"
-                        maxlength="300"
-                        placeholder="Size, colour, delivery instructions, etc."
-                    ></textarea>
-
-                    <div class="hint">
-                        Example: Size M · Black · Please call before delivery.
-                    </div>
-
-
-                    <div class="summary">
-                        <span class="summary-label">
-                            Total
-                        </span>
-
-                        <span
-                            class="summary-total"
-                            id="total"
-                        >
-                            KSh {{ '%.2f'|format(product.price|float) }}
-                        </span>
-                    </div>
-
-
-                    <button
-                        class="btn"
-                        type="submit"
-                        id="buy-button"
-                    >
-                        <span class="mpesa-icon">M</span>
-                        <span>Buy Merchandise with M-Pesa</span>
-                    </button>
-
-
-                    <div class="delivery">
-
-                        <div class="delivery-icon">
-                            📦
-                        </div>
-
-                        <div>
-                            <strong>
-                                Physical merchandise
-                            </strong>
-
-                            After payment, your order is queued for fulfilment.
-                            Delivery time varies depending on your location
-                            and the creator's fulfilment process.
-                        </div>
-
-                    </div>
-
-                </form>
-
-            {% else %}
-
-                <div class="notice">
-                    Please
-                    <a
-                        href="/login"
-                        style="text-decoration:underline;font-weight:800"
-                    >
-                        log in
-                    </a>
-                    to purchase this merchandise.
-                </div>
-
-            {% endif %}
-
-
-            {% if store_url %}
-
-                <a
-                    class="back-link"
-                    href="{{ store_url }}"
-                >
-                    <span>←</span>
-                    <span>Back to creator store</span>
-                </a>
-
-            {% else %}
-
-                <a
-                    class="back-link"
-                    href="/merch"
-                >
-                    <span>←</span>
-                    <span>Browse merchandise</span>
-                </a>
-
-            {% endif %}
-
-        </section>
-
-    </div>
-
-
-    <script>
-        (function () {
-
-            const quantity =
-                document.getElementById("quantity");
-
-            const total =
-                document.getElementById("total");
-
-            const buyButton =
-                document.getElementById("buy-button");
-
-            const form =
-                document.getElementById("merch-checkout-form");
-
-            const unitPrice =
-                Number({{ product.price|float }});
-
-
-            function updateTotal() {
-
-                if (!quantity || !total) {
-                    return;
-                }
-
-                let value =
-                    parseInt(
-                        quantity.value || "1",
-                        10
-                    );
-
-                if (!Number.isFinite(value)) {
-                    value = 1;
-                }
-
-                if (value < 1) {
-                    value = 1;
-                }
-
-                if (value > 20) {
-                    value = 20;
-                }
-
-                quantity.value = value;
-
-                total.textContent =
-                    "KSh " +
-                    (unitPrice * value).toFixed(2);
-            }
-
-
-            if (quantity) {
-                quantity.addEventListener(
-                    "input",
-                    updateTotal
-                );
-
-                quantity.addEventListener(
-                    "change",
-                    updateTotal
-                );
-            }
-
-
-            if (form && buyButton) {
-
-                form.addEventListener(
-                    "submit",
-                    function () {
-
-                        buyButton.disabled = true;
-
-                        buyButton.style.opacity = "0.65";
-
-                        buyButton.style.cursor =
-                            "wait";
-
-                        buyButton.innerHTML =
-                            '<span class="mpesa-icon">M</span>' +
-                            '<span>Starting M-Pesa payment...</span>';
-                    }
-                );
-            }
-
-
-            updateTotal();
-
-        })();
-
-
-        function handleProductImageError(image) {
-
-            if (!image) {
-                return;
-            }
-
-            const fallback =
-                document.getElementById(
-                    "product-image-fallback"
-                );
-
-            if (fallback) {
-                fallback.style.display = "flex";
-            }
-
-            image.style.display = "none";
-        }
-    </script>
-
-
-{% else %}
-
-    <div class="market-header">
-
-        <div class="eyebrow">
-            BeatHub
-        </div>
-
-        <h1>
-            {{ title or 'BeatHub Merch' }}
-        </h1>
-
-        {% if creator %}
-
-            <p>
-                Official merchandise from
-                <strong>
-                    {{ creator.stage_name }}
-                </strong>.
-            </p>
-
-        {% else %}
-
-            <p>
-                Discover merchandise from BeatHub creators.
-            </p>
-
-        {% endif %}
-
-    </div>
-
-
-    <div class="grid">
-
-        {% for product in products %}
-
-            <article class="card">
-
-                <a href="/merch/{{ product.slug }}">
-
-                    <div class="image-box">
-
-                        {% if product.image_url %}
-
-                            <img
-                                src="{{ product.image_url }}"
-                                alt="{{ product.name }}"
-                                loading="lazy"
-                                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-                            >
-
-                            <div
-                                class="fallback"
-                                style="display:none"
-                            >
-                                🛍️
-                            </div>
-
-                        {% else %}
-
-                            <div class="fallback">
-                                🛍️
-                            </div>
-
-                        {% endif %}
-
-                    </div>
-
-                </a>
-
-
-                <div class="body">
-
-                    {% if product.creator_name %}
-
-                        <div class="creator">
-                            {{ product.creator_name }}
-                        </div>
-
-                    {% endif %}
-
-
-                    <h2>
-                        {{ product.name }}
-                    </h2>
-
-
-                    <p>
-                        {{ product.description or 'No description added yet.' }}
-                    </p>
-
-
-                    <div class="price">
-                        <span class="price-currency">KSh</span>
-                        {{ '%.2f'|format(product.price|float) }}
-                    </div>
-
-
-                    <a
-                        class="btn"
-                        href="/merch/{{ product.slug }}"
-                    >
-                        View Merchandise
-                    </a>
-
-                </div>
-
-            </article>
-
-        {% else %}
-
-            <div class="notice">
-                No merchandise is available yet.
-            </div>
-
-        {% endfor %}
-
-    </div>
-
-{% endif %}
-
-</main>
-
-
-<footer>
-    © {{ current_year }} BeatHub. All rights reserved.
-</footer>
-
-</body>
-</html>
+                "price": price_value,
+                "image_path": image_path,
+            },
+        )
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        raise
+
+    return RedirectResponse(
+        url=(
+            "/dashboard/merch"
+            "?success="
+            "Merchandise%20added%20successfully."
+        ),
+        status_code=303,
+    )
+
+
+@router.get(
+    "/media/merch/{filename:path}",
+    name="merch_local_media",
+)
+def merch_local_media(
+    filename: str,
+):
+    clean = (
+        filename or ""
+    ).replace(
+        "\\",
+        "/",
+    ).lstrip("/")
+
+    if (
+        not clean
+        or ".." in Path(clean).parts
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found.",
+        )
+
+    media_root = _local_media_root().resolve()
+
+    file_path = (
+        media_root
+        / "merch"
+        / clean
+    ).resolve()
+
+    try:
+        file_path.relative_to(
+            media_root
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found.",
+        )
+
+    if (
+        not file_path.exists()
+        or not file_path.is_file()
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found.",
+        )
+
+    extension = file_path.suffix.lower()
+
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_types.get(
+            extension,
+            "application/octet-stream",
+        ),
+    )
+
+
+@router.get(
+    "/merch"
+)
+def merch_marketplace(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+    ensure_merch_table(db)
+
+    products = _all_public_rows(
+        request,
+        db,
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "merchandise_public.html",
+        _ctx(
+            request,
+            current_user,
+            products=products,
+            title="BeatHub Merch",
+            creator=None,
+            store_url=None,
+            product_detail=False,
+        ),
+    )
+
+
+@router.get(
+    "/store/{slug}/merch"
+)
+def creator_merch_store(
+    request: Request,
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+    profile = (
+        db.query(Profile)
+        .filter(
+            Profile.slug == slug
+        )
+        .first()
+    )
+
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Creator store not found.",
+        )
+
+    ensure_merch_table(db)
+
+    products = _rows_for_creator(
+        request,
+        db,
+        str(profile.id),
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "merchandise_public.html",
+        _ctx(
+            request,
+            current_user,
+            products=products,
+            title=(
+                f"{profile.stage_name} — Merch"
+            ),
+            creator=profile,
+            store_url=(
+                f"/store/{profile.slug}"
+            ),
+            product_detail=False,
+        ),
+    )
+
+
+@router.get(
+    "/merch/{slug}"
+)
+def merch_product(
+    request: Request,
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+    ensure_merch_table(db)
+
+    row = db.execute(
+        text(
+            f"""
+            SELECT
+                id,
+                creator_profile_id,
+                name,
+                slug,
+                description,
+                price,
+                image_path,
+                created_at
+            FROM {MERCH_TABLE}
+            WHERE slug = :slug
+            LIMIT 1
+            """
+        ),
+        {
+            "slug": slug,
+        },
+    ).mappings().first()
+
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Merchandise item not found.",
+        )
+
+    item = dict(row)
+
+    image_path = item.get(
+        "image_path"
+    )
+
+    if (
+        image_path
+        and not _is_r2_path(image_path)
+    ):
+        migrated_path = (
+            _migrate_local_image_to_r2(
+                db,
+                str(item["id"]),
+                image_path,
+            )
+        )
+
+        if migrated_path:
+            image_path = migrated_path
+            item["image_path"] = migrated_path
+
+    item["image_url"] = _image_url(
+        request,
+        image_path,
+    )
+
+    profile = (
+        db.query(Profile)
+        .filter(
+            Profile.id
+            == str(
+                item[
+                    "creator_profile_id"
+                ]
+            )
+        )
+        .first()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "merchandise_public.html",
+        _ctx(
+            request,
+            current_user,
+            products=[item],
+            product=item,
+            title=item["name"],
+            creator=profile,
+            store_url=(
+                f"/store/{profile.slug}"
+                if profile
+                else None
+            ),
+            product_detail=True,
+        ),
+    )
