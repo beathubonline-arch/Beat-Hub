@@ -1,4 +1,3 @@
-```python
 from __future__ import annotations
 
 from datetime import datetime
@@ -797,4 +796,3 @@ def healthz_compat():
     return {
         "status": "ok"
     }
-```
