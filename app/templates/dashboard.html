@@ -8,12 +8,8 @@
     .creator-dashboard {
         max-width: 1400px;
         margin: 0 auto;
-        padding: 10px 0 60px;
+        padding: 10px 0 50px;
     }
-
-    /* =========================================================
-       HERO
-       ========================================================= */
 
     .dashboard-hero {
         position: relative;
@@ -27,16 +23,8 @@
         border: 1px solid #27272a;
         border-radius: 22px;
         background:
-            radial-gradient(
-                circle at 85% 15%,
-                rgba(234, 179, 8, .10),
-                transparent 30%
-            ),
-            linear-gradient(
-                135deg,
-                #18181b 0%,
-                #0f0f11 100%
-            );
+            radial-gradient(circle at 85% 15%, rgba(255,255,255,.08), transparent 30%),
+            linear-gradient(135deg, #18181b 0%, #0f0f11 100%);
     }
 
     .dashboard-hero::after {
@@ -47,7 +35,7 @@
         right: -80px;
         bottom: -130px;
         border-radius: 50%;
-        border: 1px solid rgba(234, 179, 8, .10);
+        border: 1px solid rgba(255,255,255,.08);
         pointer-events: none;
     }
 
@@ -58,11 +46,11 @@
 
     .hero-eyebrow {
         margin: 0 0 8px;
-        color: #eab308;
-        font-size: 12px;
-        font-weight: 800;
+        color: #a1a1aa;
+        font-size: 13px;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .14em;
+        letter-spacing: .12em;
     }
 
     .dashboard-hero h1 {
@@ -70,7 +58,6 @@
         font-size: clamp(28px, 4vw, 46px);
         line-height: 1.05;
         letter-spacing: -.04em;
-        color: #fff;
     }
 
     .dashboard-hero p {
@@ -92,10 +79,6 @@
         text-decoration: none;
     }
 
-    /* =========================================================
-       SECTIONS
-       ========================================================= */
-
     .dashboard-section {
         margin-bottom: 28px;
     }
@@ -110,7 +93,6 @@
 
     .section-heading h2 {
         margin: 0;
-        color: #fff;
         font-size: 20px;
     }
 
@@ -128,12 +110,8 @@
     }
 
     .section-link:hover {
-        color: #eab308;
+        color: #fff;
     }
-
-    /* =========================================================
-       STATS
-       ========================================================= */
 
     .stats-grid {
         display: grid;
@@ -159,7 +137,7 @@
         right: -35px;
         top: -35px;
         border-radius: 50%;
-        border: 1px solid rgba(234, 179, 8, .08);
+        border: 1px solid rgba(255,255,255,.06);
     }
 
     .stat-label {
@@ -174,7 +152,6 @@
         position: relative;
         z-index: 1;
         margin-top: 15px;
-        color: #fff;
         font-size: 30px;
         font-weight: 800;
         letter-spacing: -.03em;
@@ -189,28 +166,13 @@
     }
 
     .stat-card.balance {
-        border-color: #4a3b08;
-        background:
-            radial-gradient(
-                circle at 100% 0%,
-                rgba(234, 179, 8, .10),
-                transparent 40%
-            ),
-            linear-gradient(
-                145deg,
-                #18181b,
-                #101012
-            );
+        border-color: #3f3f46;
+        background: linear-gradient(145deg, #18181b, #101012);
     }
 
     .stat-card.balance .stat-value {
-        color: #eab308;
         font-size: 34px;
     }
-
-    /* =========================================================
-       QUICK ACTIONS
-       ========================================================= */
 
     .quick-actions {
         display: grid;
@@ -255,7 +217,6 @@
 
     .action-card strong {
         display: block;
-        color: #fff;
         font-size: 14px;
     }
 
@@ -266,15 +227,9 @@
         font-size: 12px;
     }
 
-    /* =========================================================
-       TWO COLUMN
-       ========================================================= */
-
     .dashboard-columns {
         display: grid;
-        grid-template-columns:
-            minmax(0, 1.55fr)
-            minmax(320px, .85fr);
+        grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr);
         gap: 20px;
         align-items: start;
     }
@@ -297,7 +252,6 @@
 
     .panel-header h2 {
         margin: 0;
-        color: #fff;
         font-size: 17px;
     }
 
@@ -311,201 +265,62 @@
         padding: 22px;
     }
 
-    /* =========================================================
-       PUBLIC STORE
-       ========================================================= */
-
     .store-card {
         position: relative;
-        padding: 25px;
-        border: 1px solid #3f3208;
-        border-radius: 20px;
+        padding: 24px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
         background:
-            radial-gradient(
-                circle at 100% 0%,
-                rgba(234, 179, 8, .13),
-                transparent 38%
-            ),
-            linear-gradient(
-                145deg,
-                #17140b,
-                #111113
-            );
+            radial-gradient(circle at 100% 0%, rgba(255,255,255,.06), transparent 35%),
+            #111113;
         overflow: hidden;
     }
 
-    .store-card::before {
-        content: "";
-        position: absolute;
-        width: 150px;
-        height: 150px;
-        right: -80px;
-        bottom: -80px;
-        border-radius: 50%;
-        border: 1px solid rgba(234, 179, 8, .08);
-        pointer-events: none;
-    }
-
-    .store-eyebrow {
-        margin-bottom: 7px;
-        color: #eab308;
-        font-size: 10px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: .14em;
-    }
-
     .store-card h2 {
-        position: relative;
-        z-index: 1;
         margin: 0 0 8px;
-        color: #fff;
-        font-size: 21px;
+        font-size: 20px;
     }
 
     .store-card p {
-        position: relative;
-        z-index: 1;
         margin: 0;
         color: #a1a1aa;
-        line-height: 1.6;
+        line-height: 1.5;
         font-size: 13px;
     }
 
-    .store-link-label {
-        position: relative;
-        z-index: 1;
-        margin-top: 20px;
-        color: #a1a1aa;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-    }
-
     .store-url-box {
-        position: relative;
-        z-index: 1;
         display: flex;
-        gap: 9px;
-        margin-top: 8px;
+        gap: 8px;
+        margin-top: 18px;
     }
-
-    /*
-       IMPORTANT:
-       This is an actual INPUT instead of a truncated DIV.
-       The complete URL is stored in its value and can be
-       selected/copied directly.
-    */
 
     .store-url {
         flex: 1;
         min-width: 0;
-        width: 100%;
-        height: 46px;
-        box-sizing: border-box;
-        padding: 0 13px;
-        border: 1px solid #55450c;
+        padding: 12px 13px;
+        border: 1px solid #3f3f46;
         border-radius: 10px;
-        outline: none;
-        background: #08070a;
-        color: #f4f4f5;
-        font-family: monospace;
+        background: #09090b;
+        color: #d4d4d8;
         font-size: 12px;
-    }
-
-    .store-url:focus {
-        border-color: #eab308;
-        box-shadow: 0 0 0 2px rgba(234, 179, 8, .10);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .copy-store {
-        flex: 0 0 auto;
-        min-width: 105px;
-        min-height: 46px;
-        border: 1px solid #eab308;
+        border: 1px solid #3f3f46;
         border-radius: 10px;
-        padding: 0 15px;
-        background: #eab308;
-        color: #09090b;
-        font-weight: 800;
+        padding: 0 14px;
+        background: #27272a;
+        color: #fff;
+        font-weight: 700;
         cursor: pointer;
-        transition:
-            background .18s ease,
-            transform .18s ease;
     }
 
     .copy-store:hover {
-        background: #facc15;
-        transform: translateY(-1px);
+        background: #3f3f46;
     }
-
-    .copy-store:active {
-        transform: translateY(0);
-    }
-
-    .store-actions {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 9px;
-        margin-top: 12px;
-    }
-
-    .store-action {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 38px;
-        padding: 0 13px;
-        border: 1px solid #3f3f46;
-        border-radius: 9px;
-        color: #d4d4d8;
-        text-decoration: none;
-        font-size: 12px;
-        font-weight: 700;
-        background: #111113;
-        cursor: pointer;
-    }
-
-    .store-action:hover {
-        background: #27272a;
-        color: #fff;
-    }
-
-    .store-action.primary {
-        border-color: #eab308;
-        background: #eab308;
-        color: #09090b;
-    }
-
-    .store-action.primary:hover {
-        background: #facc15;
-    }
-
-    .store-copy-message {
-        position: relative;
-        z-index: 1;
-        min-height: 18px;
-        margin-top: 9px;
-        color: #34d399;
-        font-size: 12px;
-        font-weight: 700;
-    }
-
-    .store-share-note {
-        position: relative;
-        z-index: 1;
-        margin-top: 10px;
-        color: #71717a;
-        font-size: 11px;
-        line-height: 1.5;
-    }
-
-    /* =========================================================
-       EARNINGS
-       ========================================================= */
 
     .earnings-card {
         padding: 24px;
@@ -523,13 +338,11 @@
 
     .earnings-top h2 {
         margin: 0;
-        color: #fff;
         font-size: 17px;
     }
 
     .earnings-balance {
         margin-top: 12px;
-        color: #eab308;
         font-size: 38px;
         font-weight: 850;
         letter-spacing: -.04em;
@@ -582,13 +395,8 @@
     .earning-item strong {
         display: block;
         margin-top: 5px;
-        color: #fff;
         font-size: 15px;
     }
-
-    /* =========================================================
-       RECENT SALES
-       ========================================================= */
 
     .recent-table-wrap {
         overflow-x: auto;
@@ -646,10 +454,6 @@
         font-weight: 800;
     }
 
-    /* =========================================================
-       EMPTY STATES
-       ========================================================= */
-
     .empty-state {
         padding: 35px 20px;
         text-align: center;
@@ -661,10 +465,6 @@
         margin-bottom: 6px;
         color: #d4d4d8;
     }
-
-    /* =========================================================
-       CONTENT OVERVIEW
-       ========================================================= */
 
     .content-overview {
         display: grid;
@@ -688,13 +488,11 @@
 
     .content-card h3 {
         margin: 0;
-        color: #fff;
         font-size: 15px;
     }
 
     .content-number {
         margin-top: 12px;
-        color: #eab308;
         font-size: 30px;
         font-weight: 800;
     }
@@ -713,14 +511,6 @@
         font-size: 12px;
         font-weight: 700;
     }
-
-    .content-card a:hover {
-        color: #eab308;
-    }
-
-    /* =========================================================
-       SOCIAL LINKS
-       ========================================================= */
 
     .social-links {
         display: flex;
@@ -745,10 +535,6 @@
         background: #27272a;
         color: #fff;
     }
-
-    /* =========================================================
-       WITHDRAWALS
-       ========================================================= */
 
     .withdrawals-panel {
         margin-top: 20px;
@@ -813,10 +599,6 @@
         color: #fecaca;
     }
 
-    /* =========================================================
-       RESPONSIVE
-       ========================================================= */
-
     @media (max-width: 1100px) {
         .stats-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -869,15 +651,7 @@
         }
 
         .copy-store {
-            width: 100%;
-        }
-
-        .store-actions {
-            flex-direction: column;
-        }
-
-        .store-action {
-            width: 100%;
+            min-height: 42px;
         }
 
         .withdrawal-row {
@@ -885,7 +659,6 @@
         }
     }
 </style>
-
 
 <div class="creator-dashboard">
 
@@ -902,31 +675,23 @@
             </div>
 
             <h1>
-                Welcome back{% if profile and profile.stage_name %},
-                {{ profile.stage_name }}{% elif current_user and current_user.name %},
-                {{ current_user.name }}{% endif %}
+                Welcome back{% if current_user and current_user.name %}, {{ current_user.name }}{% endif %}
             </h1>
 
             <p>
-                Manage your beats, tracks, albums, sales and creator
-                earnings from one professional studio.
+                Manage your beats, tracks, albums, sales and creator earnings
+                from one place.
             </p>
 
         </div>
 
         <div class="hero-actions">
 
-            <a
-                href="/dashboard/upload"
-                class="btn btn-primary"
-            >
+            <a href="/dashboard/upload" class="btn btn-primary">
                 + Upload Beat / Track
             </a>
 
-            <a
-                href="/dashboard/albums/new"
-                class="btn btn-outline"
-            >
+            <a href="/dashboard/albums/new" class="btn btn-outline">
                 + Create Album
             </a>
 
@@ -945,14 +710,10 @@
 
             <div>
                 <h2>Performance</h2>
-
-                <p>
-                    Your creator activity and earnings at a glance.
-                </p>
+                <p>Your creator activity and earnings at a glance.</p>
             </div>
 
         </div>
-
 
         <div class="stats-grid">
 
@@ -1038,56 +799,50 @@
 
             <div>
                 <h2>Creator Tools</h2>
-
-                <p>
-                    Everything you need to manage your BeatHub profile.
-                </p>
+                <p>Everything you need to manage your BeatHub profile.</p>
             </div>
 
         </div>
 
-
         <div class="quick-actions">
 
-            <a
-                href="/dashboard/upload"
-                class="action-card"
-            >
+            <a href="/dashboard/upload" class="action-card">
 
                 <div class="action-icon">
                     🎵
                 </div>
 
                 <div>
-                    <strong>
-                        Upload Beat / Track
-                    </strong>
-
-                    <span>
-                        Add new music to your catalog
-                    </span>
+                    <strong>Upload Beat / Track</strong>
+                    <span>Add new music to your catalog</span>
                 </div>
 
             </a>
 
 
-            <a
-                href="/dashboard/albums/new"
-                class="action-card"
-            >
+            <a href="/dashboard/albums/new" class="action-card">
 
                 <div class="action-icon">
                     💿
                 </div>
 
                 <div>
-                    <strong>
-                        Create Album
-                    </strong>
+                    <strong>Create Album</strong>
+                    <span>Package tracks into an album</span>
+                </div>
 
-                    <span>
-                        Package tracks into an album
-                    </span>
+            </a>
+
+
+            <a href="/dashboard/merch" class="action-card">
+
+                <div class="action-icon">
+                    👕
+                </div>
+
+                <div>
+                    <strong>Manage Merchandise</strong>
+                    <span>Add products to your creator brand</span>
                 </div>
 
             </a>
@@ -1095,48 +850,30 @@
 
             {% if store_url %}
 
-            <a
-                href="{{ store_url }}"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="action-card"
-            >
+            <a href="{{ store_url }}" target="_blank" class="action-card">
 
                 <div class="action-icon">
                     🛍️
                 </div>
 
                 <div>
-                    <strong>
-                        View Public Store
-                    </strong>
-
-                    <span>
-                        See what your customers see
-                    </span>
+                    <strong>View Public Store</strong>
+                    <span>See what your customers see</span>
                 </div>
 
             </a>
 
             {% else %}
 
-            <a
-                href="/dashboard"
-                class="action-card"
-            >
+            <a href="/dashboard" class="action-card">
 
                 <div class="action-icon">
                     🛍️
                 </div>
 
                 <div>
-                    <strong>
-                        Your Public Store
-                    </strong>
-
-                    <span>
-                        Store link will appear here
-                    </span>
+                    <strong>Your Public Store</strong>
+                    <span>Store link will appear here</span>
                 </div>
 
             </a>
@@ -1144,23 +881,15 @@
             {% endif %}
 
 
-            <a
-                href="/dashboard/withdraw"
-                class="action-card"
-            >
+            <a href="/dashboard/withdraw" class="action-card">
 
                 <div class="action-icon">
                     💰
                 </div>
 
                 <div>
-                    <strong>
-                        Withdraw Earnings
-                    </strong>
-
-                    <span>
-                        Request an M-Pesa payout
-                    </span>
+                    <strong>Withdraw Earnings</strong>
+                    <span>Request an M-Pesa payout</span>
                 </div>
 
             </a>
@@ -1177,26 +906,17 @@
     <div class="dashboard-columns">
 
 
-        <!-- ================================================= -->
-        <!-- LEFT COLUMN -->
-        <!-- ================================================= -->
-
+        <!-- LEFT -->
         <div>
 
-
-            <!-- ============================================= -->
-            <!-- EARNINGS -->
-            <!-- ============================================= -->
-
+            <!-- Earnings -->
             <div class="earnings-card">
 
                 <div class="earnings-top">
 
                     <div>
 
-                        <h2>
-                            Earnings Overview
-                        </h2>
+                        <h2>Earnings Overview</h2>
 
                         <div class="earnings-balance">
                             KSh {{ "%.2f"|format(available_balance|float) }}
@@ -1208,11 +928,7 @@
 
                     </div>
 
-
-                    <a
-                        href="/dashboard/withdraw"
-                        class="withdraw-btn"
-                    >
+                    <a href="/dashboard/withdraw" class="withdraw-btn">
                         Withdraw
                     </a>
 
@@ -1222,54 +938,31 @@
                 <div class="earnings-breakdown">
 
                     <div class="earning-item">
-
-                        <span>
-                            Gross Revenue
-                        </span>
-
+                        <span>Gross Revenue</span>
                         <strong>
                             KSh {{ "%.2f"|format(gross_revenue|float) }}
                         </strong>
-
                     </div>
 
-
                     <div class="earning-item">
-
-                        <span>
-                            Platform Commission
-                        </span>
-
+                        <span>Platform Commission</span>
                         <strong>
                             KSh {{ "%.2f"|format(platform_commission|float) }}
                         </strong>
-
                     </div>
 
-
                     <div class="earning-item">
-
-                        <span>
-                            Net Earnings
-                        </span>
-
+                        <span>Net Earnings</span>
                         <strong>
                             KSh {{ "%.2f"|format(net_earnings|float) }}
                         </strong>
-
                     </div>
 
-
                     <div class="earning-item">
-
-                        <span>
-                            Pending Withdrawal
-                        </span>
-
+                        <span>Pending Withdrawal</span>
                         <strong>
                             KSh {{ "%.2f"|format(pending_withdrawal|float) }}
                         </strong>
-
                     </div>
 
                 </div>
@@ -1277,31 +970,17 @@
             </div>
 
 
-            <!-- ============================================= -->
-            <!-- RECENT SALES -->
-            <!-- ============================================= -->
-
-            <div
-                class="panel"
-                style="margin-top:20px;"
-            >
+            <!-- Recent Sales -->
+            <div class="panel" style="margin-top:20px;">
 
                 <div class="panel-header">
 
                     <div>
-
-                        <h2>
-                            Recent Sales
-                        </h2>
-
-                        <p>
-                            Your latest completed orders.
-                        </p>
-
+                        <h2>Recent Sales</h2>
+                        <p>Your latest completed orders.</p>
                     </div>
 
                 </div>
-
 
                 {% if recent_orders %}
 
@@ -1312,31 +991,14 @@
                         <thead>
 
                             <tr>
-
-                                <th>
-                                    Track
-                                </th>
-
-                                <th>
-                                    Amount
-                                </th>
-
-                                <th>
-                                    Commission
-                                </th>
-
-                                <th>
-                                    Net
-                                </th>
-
-                                <th>
-                                    Status
-                                </th>
-
+                                <th>Track</th>
+                                <th>Amount</th>
+                                <th>Commission</th>
+                                <th>Net</th>
+                                <th>Status</th>
                             </tr>
 
                         </thead>
-
 
                         <tbody>
 
@@ -1349,56 +1011,41 @@
                                     <div class="order-title">
 
                                         {% if order.track %}
-
                                             {{ order.track.title }}
-
                                         {% else %}
-
                                             Beat purchase
-
                                         {% endif %}
 
                                     </div>
 
-
                                     <div class="order-date">
 
                                         {% if order.completed_at %}
-
                                             {{ order.completed_at.strftime("%d %b %Y %H:%M") }}
-
                                         {% elif order.created_at %}
-
                                             {{ order.created_at.strftime("%d %b %Y %H:%M") }}
-
                                         {% endif %}
 
                                     </div>
 
                                 </td>
-
 
                                 <td>
                                     KSh {{ "%.2f"|format(order.gross_amount|float) }}
                                 </td>
 
-
                                 <td>
                                     KSh {{ "%.2f"|format(order.commission_amount|float) }}
                                 </td>
-
 
                                 <td>
                                     KSh {{ "%.2f"|format(order.net_amount|float) }}
                                 </td>
 
-
                                 <td>
-
                                     <span class="status-badge">
                                         Completed
                                     </span>
-
                                 </td>
 
                             </tr>
@@ -1415,12 +1062,10 @@
 
                 <div class="empty-state">
 
-                    <strong>
-                        No completed sales yet
-                    </strong>
+                    <strong>No completed sales yet</strong>
 
-                    Your completed purchases will appear here once
-                    customers buy your music.
+                    Your completed purchases will appear here once customers
+                    buy your music.
 
                 </div>
 
@@ -1429,31 +1074,17 @@
             </div>
 
 
-            <!-- ============================================= -->
-            <!-- WITHDRAWAL HISTORY -->
-            <!-- ============================================= -->
-
+            <!-- Withdrawal History -->
             <div class="panel withdrawals-panel">
 
                 <div class="panel-header">
 
                     <div>
-
-                        <h2>
-                            Withdrawal History
-                        </h2>
-
-                        <p>
-                            Track your M-Pesa payout requests.
-                        </p>
-
+                        <h2>Withdrawal History</h2>
+                        <p>Track your M-Pesa payout requests.</p>
                     </div>
 
-
-                    <a
-                        href="/dashboard/withdraw"
-                        class="section-link"
-                    >
+                    <a href="/dashboard/withdraw" class="section-link">
                         Manage →
                     </a>
 
@@ -1467,7 +1098,6 @@
                     <div class="withdrawal-row">
 
                         <div>
-
                             <div class="withdrawal-label">
                                 Amount
                             </div>
@@ -1475,12 +1105,9 @@
                             <div class="withdrawal-value">
                                 KSh {{ "%.2f"|format(withdrawal.amount|float) }}
                             </div>
-
                         </div>
 
-
                         <div>
-
                             <div class="withdrawal-label">
                                 M-Pesa
                             </div>
@@ -1488,12 +1115,9 @@
                             <div class="withdrawal-value">
                                 {{ withdrawal.phone_number }}
                             </div>
-
                         </div>
 
-
                         <div>
-
                             <div class="withdrawal-label">
                                 Date
                             </div>
@@ -1501,25 +1125,17 @@
                             <div class="withdrawal-value">
 
                                 {% if withdrawal.created_at %}
-
                                     {{ withdrawal.created_at.strftime("%d %b %Y") }}
-
                                 {% else %}
-
                                     —
-
                                 {% endif %}
 
                             </div>
-
                         </div>
-
 
                         <div>
 
-                            {% set withdrawal_status =
-                                withdrawal.status|string|lower
-                            %}
+                            {% set withdrawal_status = withdrawal.status|string|lower %}
 
                             <span class="badge {{ withdrawal_status }}">
                                 {{ withdrawal.status }}
@@ -1535,9 +1151,7 @@
 
                     <div class="empty-state">
 
-                        <strong>
-                            No withdrawal requests
-                        </strong>
+                        <strong>No withdrawal requests</strong>
 
                         When you request a payout, its status will appear here.
 
@@ -1550,177 +1164,96 @@
         </div>
 
 
-        <!-- ================================================= -->
-        <!-- RIGHT COLUMN -->
-        <!-- ================================================= -->
-
+        <!-- RIGHT -->
         <div>
 
-
-            <!-- ============================================= -->
-            <!-- PUBLIC STORE -->
-            <!-- ============================================= -->
-
+            <!-- Public Store -->
             <div class="store-card">
 
-                <div class="store-eyebrow">
-                    Your BeatHub Store
-                </div>
-
-                <h2>
-                    Share your music with the world
-                </h2>
+                <h2>Your Public Store</h2>
 
                 <p>
-                    This is your permanent public BeatHub store link.
-                    Copy the complete link and share it with your fans,
-                    artists, clients and followers.
+                    Share your BeatHub store with artists, customers and
+                    your audience so they can discover and purchase your music.
                 </p>
-
 
                 {% if store_url %}
 
-                    <div class="store-link-label">
-                        Your shareable store link
-                    </div>
-
-
-                    <div class="store-url-box">
-
-                        <input
-                            type="text"
-                            id="creatorStoreUrl"
-                            class="store-url"
-                            value="{{ store_url }}"
-                            readonly
-                            aria-label="Your complete BeatHub store link"
-                            onclick="selectStoreUrl()"
-                        >
-
-
-                        <button
-                            type="button"
-                            class="copy-store"
-                            id="copyStoreButton"
-                            onclick="copyStoreUrl()"
-                        >
-                            Copy Link
-                        </button>
-
-                    </div>
-
+                <div class="store-url-box">
 
                     <div
-                        id="storeCopyMessage"
-                        class="store-copy-message"
-                        aria-live="polite"
-                    ></div>
+                        class="store-url"
+                        id="creatorStoreUrl"
+                    >{{ store_url }}</div>
 
+                    <button
+                        type="button"
+                        class="copy-store"
+                        onclick="copyStoreUrl()"
+                    >
+                        Copy
+                    </button>
 
-                    <div class="store-actions">
+                </div>
 
-                        <a
-                            href="{{ store_url }}"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="store-action primary"
-                        >
-                            Open My Store ↗
-                        </a>
+                <div class="social-links">
 
-
-                        <button
-                            type="button"
-                            class="store-action"
-                            onclick="shareStoreUrl()"
-                        >
-                            Share Store
-                        </button>
-
-                    </div>
-
-
-                    <div class="store-share-note">
-                        Copy this full URL and paste it anywhere you want
-                        your audience to find your BeatHub music.
-                    </div>
-
+                    <a
+                        href="{{ store_url }}"
+                        target="_blank"
+                        class="social-link"
+                    >
+                        Open Store ↗
+                    </a>
 
                     {% if youtube_url %}
 
-                    <div class="social-links">
-
-                        <a
-                            href="{{ youtube_url }}"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="social-link"
-                        >
-                            YouTube ↗
-                        </a>
-
-                    </div>
+                    <a
+                        href="{{ youtube_url }}"
+                        target="_blank"
+                        class="social-link"
+                    >
+                        YouTube ↗
+                    </a>
 
                     {% endif %}
-
 
                     {% if discord_url %}
 
-                    <div class="social-links">
-
-                        <a
-                            href="{{ discord_url }}"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="social-link"
-                        >
-                            Discord ↗
-                        </a>
-
-                    </div>
+                    <a
+                        href="{{ discord_url }}"
+                        target="_blank"
+                        class="social-link"
+                    >
+                        Discord ↗
+                    </a>
 
                     {% endif %}
 
+                </div>
 
                 {% else %}
 
-                    <div
-                        class="empty-state"
-                        style="padding:25px 0 5px;"
-                    >
-                        Your public store link is not available yet.
-                    </div>
+                <div class="empty-state" style="padding:25px 0 5px;">
+                    Your public store link is not available yet.
+                </div>
 
                 {% endif %}
 
             </div>
 
 
-            <!-- ============================================= -->
-            <!-- CATALOG -->
-            <!-- ============================================= -->
-
-            <div
-                class="dashboard-section"
-                style="margin-top:20px;"
-            >
+            <!-- Catalog -->
+            <div class="dashboard-section" style="margin-top:20px;">
 
                 <div class="section-heading">
 
                     <div>
-
-                        <h2>
-                            Your Catalog
-                        </h2>
-
-                        <p>
-                            Your published BeatHub content.
-                        </p>
-
+                        <h2>Your Catalog</h2>
+                        <p>Your published BeatHub content.</p>
                     </div>
 
                 </div>
-
 
                 <div class="content-overview">
 
@@ -1728,26 +1261,19 @@
 
                         <div class="content-card-top">
 
-                            <h3>
-                                Beats / Tracks
-                            </h3>
+                            <h3>Beats / Tracks</h3>
 
-                            <span>
-                                🎵
-                            </span>
+                            <span>🎵</span>
 
                         </div>
-
 
                         <div class="content-number">
                             {{ track_count|default(0) }}
                         </div>
 
-
                         <p>
                             Tracks in your catalog
                         </p>
-
 
                         <a href="/dashboard/upload">
                             Add another track →
@@ -1760,26 +1286,19 @@
 
                         <div class="content-card-top">
 
-                            <h3>
-                                Albums
-                            </h3>
+                            <h3>Albums</h3>
 
-                            <span>
-                                💿
-                            </span>
+                            <span>💿</span>
 
                         </div>
-
 
                         <div class="content-number">
                             {{ album_count|default(0) }}
                         </div>
 
-
                         <p>
                             Albums you've created
                         </p>
-
 
                         <a href="/dashboard/albums/new">
                             Create an album →
@@ -1792,89 +1311,46 @@
             </div>
 
 
-            <!-- ============================================= -->
-            <!-- REVENUE SUMMARY -->
-            <!-- ============================================= -->
-
+            <!-- Revenue Summary -->
             <div class="panel">
 
                 <div class="panel-header">
 
                     <div>
-
-                        <h2>
-                            Revenue Summary
-                        </h2>
-
-                        <p>
-                            How your sales are performing.
-                        </p>
-
+                        <h2>Revenue Summary</h2>
+                        <p>How your sales are performing.</p>
                     </div>
 
                 </div>
 
-
                 <div class="panel-body">
 
-                    <div
-                        class="earning-item"
-                        style="margin-bottom:10px;"
-                    >
-
-                        <span>
-                            Total Sales
-                        </span>
-
+                    <div class="earning-item" style="margin-bottom:10px;">
+                        <span>Total Sales</span>
                         <strong>
                             {{ total_sales|default(0) }}
                         </strong>
-
                     </div>
 
-
-                    <div
-                        class="earning-item"
-                        style="margin-bottom:10px;"
-                    >
-
-                        <span>
-                            Gross Revenue
-                        </span>
-
+                    <div class="earning-item" style="margin-bottom:10px;">
+                        <span>Gross Revenue</span>
                         <strong>
                             KSh {{ "%.2f"|format(gross_revenue|float) }}
                         </strong>
-
                     </div>
 
-
-                    <div
-                        class="earning-item"
-                        style="margin-bottom:10px;"
-                    >
-
-                        <span>
-                            Platform Commission
-                        </span>
-
+                    <div class="earning-item" style="margin-bottom:10px;">
+                        <span>Platform Commission</span>
                         <strong>
                             KSh {{ "%.2f"|format(platform_commission|float) }}
                         </strong>
-
                     </div>
 
-
                     <div class="earning-item">
-
-                        <span>
-                            Your Net Earnings
-                        </span>
-
+                        <span>Your Net Earnings</span>
                         <strong>
                             KSh {{ "%.2f"|format(net_earnings|float) }}
                         </strong>
-
                     </div>
 
                 </div>
@@ -1889,204 +1365,41 @@
 
 
 <script>
-/* ============================================================
-   SELECT COMPLETE STORE URL
-   ============================================================ */
-
-function selectStoreUrl() {
-    const input =
-        document.getElementById("creatorStoreUrl");
-
-    if (!input) {
-        return;
-    }
-
-    input.focus();
-    input.select();
-
-    try {
-        input.setSelectionRange(
-            0,
-            input.value.length
-        );
-    } catch (error) {
-        /* Older browsers may not support this. */
-    }
-}
-
-
-/* ============================================================
-   COPY COMPLETE STORE URL
-   ============================================================ */
-
 function copyStoreUrl() {
+    const element = document.getElementById("creatorStoreUrl");
 
-    const input =
-        document.getElementById("creatorStoreUrl");
-
-    const button =
-        document.getElementById("copyStoreButton");
-
-    const message =
-        document.getElementById("storeCopyMessage");
-
-    if (!input) {
+    if (!element) {
         return;
     }
 
-    const fullUrl =
-        input.value.trim();
+    const path = element.textContent.trim();
 
-    if (!fullUrl) {
-        return;
-    }
+    const fullUrl = path.startsWith("http")
+        ? path
+        : window.location.origin + path;
 
+    navigator.clipboard.writeText(fullUrl)
+        .then(function () {
+            const button = document.querySelector(".copy-store");
 
-    function showSuccess() {
+            if (!button) {
+                return;
+            }
 
-        if (message) {
-            message.textContent =
-                "✓ Store link copied. You can now share it anywhere.";
-        }
+            const original = button.textContent;
 
-        if (button) {
-
-            const originalText =
-                button.textContent;
-
-            button.textContent =
-                "Copied ✓";
+            button.textContent = "Copied!";
 
             setTimeout(function () {
-
-                button.textContent =
-                    originalText;
-
-            }, 2000);
-        }
-    }
-
-
-    function showFailure() {
-
-        selectStoreUrl();
-
-        if (message) {
-            message.textContent =
-                "Select the link above and copy it.";
-        }
-
-        window.prompt(
-            "Copy your complete BeatHub store link:",
-            fullUrl
-        );
-    }
-
-
-    /*
-       Modern secure clipboard API.
-    */
-
-    if (
-        navigator.clipboard &&
-        window.isSecureContext
-    ) {
-
-        navigator.clipboard
-            .writeText(fullUrl)
-            .then(function () {
-                showSuccess();
-            })
-            .catch(function () {
-                fallbackCopy();
-            });
-
-        return;
-    }
-
-
-    /*
-       Fallback for browsers where Clipboard API
-       is unavailable.
-    */
-
-    fallbackCopy();
-
-
-    function fallbackCopy() {
-
-        selectStoreUrl();
-
-        let copied = false;
-
-        try {
-            copied =
-                document.execCommand("copy");
-        } catch (error) {
-            copied = false;
-        }
-
-        if (copied) {
-            showSuccess();
-        } else {
-            showFailure();
-        }
-    }
-}
-
-
-/* ============================================================
-   SHARE STORE
-   ============================================================ */
-
-function shareStoreUrl() {
-
-    const input =
-        document.getElementById("creatorStoreUrl");
-
-    if (!input) {
-        return;
-    }
-
-    const fullUrl =
-        input.value.trim();
-
-    if (!fullUrl) {
-        return;
-    }
-
-
-    /*
-       Use the native phone/browser share sheet
-       where supported.
-    */
-
-    if (
-        navigator.share
-    ) {
-
-        navigator.share({
-            title: "My BeatHub Store",
-            text: "Check out my music on BeatHub:",
-            url: fullUrl
+                button.textContent = original;
+            }, 1800);
         })
         .catch(function () {
-            /*
-               User may simply cancel the share sheet.
-               Do nothing in that case.
-            */
+            window.prompt(
+                "Copy your BeatHub store URL:",
+                fullUrl
+            );
         });
-
-        return;
-    }
-
-
-    /*
-       Desktop fallback:
-       copy the complete URL.
-    */
-
-    copyStoreUrl();
 }
 </script>
 
