@@ -12,37 +12,34 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import Base, engine, get_db
-
 from app.routers import (
     admin,
     auth,
     checkout,
     dashboard,
-    merchandise,
     mpesa_callback,
     music,
     pages,
 )
-
 from app.services.search import run_search
-
 from app.utils.deps import (
     get_optional_user,
     require_creator,
     require_admin,
 )
 
+try:
+    from app.routers import merchandise
+except ImportError:
+    merchandise = None
 
-# ============================================================
-# LOGGING
-# ============================================================
 
 logger = logging.getLogger("beathub")
 
 
-# ============================================================
+# ======================================================================
 # PATHS
-# ============================================================
+# ======================================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
@@ -50,10 +47,13 @@ APP_DIR = BASE_DIR / "app"
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
+TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
-# ============================================================
+
+# ======================================================================
 # APPLICATION
-# ============================================================
+# ======================================================================
 
 app = FastAPI(
     title=getattr(
@@ -62,187 +62,186 @@ app = FastAPI(
         "BeatHub",
     ),
     description=(
-        "BeatHub — music, beats, sessions and creator merchandise."
+        "BeatHub — beats, music, sessions, producer stores "
+        "and creator merchandise."
     ),
+    version="1.0.0",
 )
 
 
-# ============================================================
+# ======================================================================
 # SESSION SECURITY
-# ============================================================
-#
-# Keep the existing authentication/session architecture.
-#
-# SESSION_SECRET:
-#   Configure this in Render environment variables.
-#
-# SESSION_HTTPS_ONLY:
-#   Set to true in production on HTTPS.
-#
-# SESSION_MAX_AGE:
-#   Defaults to 30 days.
-#
-# ============================================================
+# ======================================================================
 
-session_secret = (
-    os.getenv(
+def _session_secret() -> str:
+    value = os.getenv("SESSION_SECRET")
+
+    if value and value.strip():
+        return value.strip()
+
+    value = getattr(
+        settings,
         "SESSION_SECRET",
-        "",
-    ).strip()
-)
+        None,
+    )
 
-if not session_secret:
+    if value and str(value).strip():
+        return str(value).strip()
+
     logger.warning(
         "SESSION_SECRET is not configured. "
-        "Set SESSION_SECRET in the deployment environment."
+        "Using a temporary development secret."
     )
 
-session_https_only = (
-    os.getenv(
-        "SESSION_HTTPS_ONLY",
-        "true",
-    )
-    .strip()
-    .lower()
-    == "true"
-)
+    return "beathub-development-session-secret-change-me"
 
-try:
-    session_max_age = int(
-        os.getenv(
+
+def _session_max_age() -> int:
+    raw = (
+        os.getenv("SESSION_MAX_AGE")
+        or getattr(
+            settings,
             "SESSION_MAX_AGE",
-            str(60 * 60 * 24 * 30),
+            None,
+        )
+        or 60 * 60 * 24 * 30
+    )
+
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 60 * 60 * 24 * 30
+
+    return max(
+        300,
+        min(
+            value,
+            60 * 60 * 24 * 365,
+        ),
+    )
+
+
+def _session_https_only() -> bool:
+    raw = (
+        os.getenv("SESSION_HTTPS_ONLY")
+        or getattr(
+            settings,
+            "SESSION_HTTPS_ONLY",
+            None,
         )
     )
-except (
-    TypeError,
-    ValueError,
-):
-    session_max_age = 60 * 60 * 24 * 30
+
+    if raw is None:
+        return True
+
+    return str(raw).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=(
-        session_secret
-        or "CHANGE_THIS_SESSION_SECRET_IN_RENDER"
-    ),
+    secret_key=_session_secret(),
+    session_cookie="beathub_session",
+    max_age=_session_max_age(),
     same_site="lax",
-    https_only=session_https_only,
-    max_age=session_max_age,
+    https_only=_session_https_only(),
 )
 
 
-# ============================================================
-# STATIC FILES
-# ============================================================
-
-if STATIC_DIR.exists():
-    app.mount(
-        "/static",
-        StaticFiles(
-            directory=str(STATIC_DIR),
-        ),
-        name="static",
-    )
-
-
-# ============================================================
+# ======================================================================
 # TEMPLATES
-# ============================================================
+# ======================================================================
 
 templates = Jinja2Templates(
-    directory=str(TEMPLATES_DIR),
+    directory=str(TEMPLATES_DIR)
 )
 
 
-# ============================================================
+# ======================================================================
+# STATIC FILES
+# ======================================================================
+
+app.mount(
+    "/static",
+    StaticFiles(
+        directory=str(STATIC_DIR),
+    ),
+    name="static",
+)
+
+
+# ======================================================================
 # DATABASE
-# ============================================================
-#
-# Keep the existing SQLAlchemy model initialization.
-#
-# The merchandise feature creates its own additive table when
-# the merchandise routes are first used. This avoids changing
-# the existing music/order schema.
-#
-# ============================================================
+# ======================================================================
 
-Base.metadata.create_all(
-    bind=engine,
-)
+try:
+    Base.metadata.create_all(
+        bind=engine,
+    )
+except Exception:
+    logger.exception(
+        "Database table initialization failed."
+    )
+    raise
 
 
-# ============================================================
+# ======================================================================
 # ROUTERS
-# ============================================================
+# ======================================================================
 
-# Authentication
 app.include_router(
     auth.router,
 )
 
-# Public pages/home/search
 app.include_router(
     pages.router,
 )
 
-# Beats, tracks, albums, profiles and downloads
 app.include_router(
     music.router,
 )
 
-# Beat/session checkout
 app.include_router(
     checkout.router,
 )
 
-# M-Pesa callback processing
 app.include_router(
     mpesa_callback.router,
 )
 
-# Producer dashboard
 app.include_router(
     dashboard.router,
 )
 
-# Creator merchandise
-app.include_router(
-    merchandise.router,
-)
-
-# Administration
 app.include_router(
     admin.router,
 )
 
+if merchandise is not None:
+    app.include_router(
+        merchandise.router,
+    )
 
-# ============================================================
+
+# ======================================================================
 # PUBLIC SEARCH COMPATIBILITY ROUTES
-# ============================================================
+# ======================================================================
 
 @app.get(
     "/beats",
     include_in_schema=False,
 )
-def beats_compat(
+def beats_compatibility(
     request: Request,
     current_user=Depends(
         get_optional_user,
     ),
-    db=Depends(
-        get_db,
-    ),
+    db=Depends(get_db),
 ):
-    """
-    Legacy /beats compatibility route.
-
-    If the music router already owns /beats, FastAPI will use
-    the first registered matching route. This remains here for
-    compatibility with older deployments/templates.
-    """
-
     found = run_search(
         db,
         "beats",
@@ -273,19 +272,13 @@ def beats_compat(
     "/sessions",
     include_in_schema=False,
 )
-def sessions_compat(
+def sessions_compatibility(
     request: Request,
     current_user=Depends(
         get_optional_user,
     ),
-    db=Depends(
-        get_db,
-    ),
+    db=Depends(get_db),
 ):
-    """
-    Legacy /sessions compatibility route.
-    """
-
     found = run_search(
         db,
         "sessions",
@@ -316,19 +309,13 @@ def sessions_compat(
     "/hot-picks",
     include_in_schema=False,
 )
-def hot_picks_compat(
+def hot_picks_compatibility(
     request: Request,
     current_user=Depends(
         get_optional_user,
     ),
-    db=Depends(
-        get_db,
-    ),
+    db=Depends(get_db),
 ):
-    """
-    Legacy /hot-picks compatibility route.
-    """
-
     found = run_search(
         db,
         "hot",
@@ -355,9 +342,9 @@ def hot_picks_compat(
     )
 
 
-# ============================================================
+# ======================================================================
 # DASHBOARD COMPATIBILITY
-# ============================================================
+# ======================================================================
 
 @app.get(
     "/artist/dashboard",
@@ -380,117 +367,28 @@ def hot_picks_compat(
     include_in_schema=False,
 )
 def dashboard_alias(
-    user=Depends(
-        require_creator,
-    ),
+    user=Depends(require_creator),
 ):
-    """
-    Keep all older dashboard URLs working.
-    """
-
     return RedirectResponse(
         url="/dashboard",
         status_code=303,
     )
 
 
-# ============================================================
-# MERCHANDISE COMPATIBILITY ROUTES
-# ============================================================
-#
-# These aliases make the merchandise area easier to reach from
-# older/newer templates without changing the main merchandise
-# router.
-#
-# Primary merchandise routes remain:
-#
-#   /merch
-#   /merch/{slug}
-#   /dashboard/merch
-#   /dashboard/merch/new
-#   /store/{slug}/merch
-#
-# ============================================================
-
-@app.get(
-    "/merchandise",
-    include_in_schema=False,
-)
-def merchandise_alias():
-    return RedirectResponse(
-        url="/merch",
-        status_code=303,
-    )
-
-
-@app.get(
-    "/shop",
-    include_in_schema=False,
-)
-def shop_alias():
-    return RedirectResponse(
-        url="/merch",
-        status_code=303,
-    )
-
-
-@app.get(
-    "/dashboard/merchandise",
-    include_in_schema=False,
-)
-def dashboard_merchandise_alias(
-    user=Depends(
-        require_creator,
-    ),
-):
-    return RedirectResponse(
-        url="/dashboard/merch",
-        status_code=303,
-    )
-
-
-@app.get(
-    "/dashboard/shop",
-    include_in_schema=False,
-)
-def dashboard_shop_alias(
-    user=Depends(
-        require_creator,
-    ),
-):
-    return RedirectResponse(
-        url="/dashboard/merch",
-        status_code=303,
-    )
-
-
-# ============================================================
+# ======================================================================
 # WITHDRAWAL COMPATIBILITY
-# ============================================================
+# ======================================================================
 
 @app.get(
     "/creator/withdraw",
     include_in_schema=False,
 )
-def creator_withdraw_alias(
-    user=Depends(
-        require_creator,
-    ),
-):
-    return RedirectResponse(
-        url="/dashboard/withdraw",
-        status_code=303,
-    )
-
-
 @app.get(
     "/producer/withdraw",
     include_in_schema=False,
 )
-def producer_withdraw_alias(
-    user=Depends(
-        require_creator,
-    ),
+def creator_withdraw_alias(
+    user=Depends(require_creator),
 ):
     return RedirectResponse(
         url="/dashboard/withdraw",
@@ -503,9 +401,7 @@ def producer_withdraw_alias(
     include_in_schema=False,
 )
 def admin_withdraw_alias(
-    user=Depends(
-        require_admin,
-    ),
+    user=Depends(require_admin),
 ):
     return RedirectResponse(
         url="/admin/withdraw",
@@ -513,84 +409,84 @@ def admin_withdraw_alias(
     )
 
 
-# ============================================================
+# ======================================================================
 # HEALTH CHECK
-# ============================================================
+# ======================================================================
 
 @app.api_route(
     "/healthz",
-    methods=[
-        "GET",
-        "HEAD",
-    ],
+    methods=["GET", "HEAD"],
 )
 def healthz():
-    """
-    Render health check.
+    app_name = getattr(
+        settings,
+        "APP_NAME",
+        "BeatHub",
+    )
 
-    Does not perform database writes.
-    """
+    app_env = getattr(
+        settings,
+        "APP_ENV",
+        "production",
+    )
+
+    media_storage = getattr(
+        settings,
+        "MEDIA_STORAGE",
+        "local",
+    )
+
+    r2_enabled = getattr(
+        settings,
+        "r2_enabled",
+        False,
+    )
+
+    bucket_name = getattr(
+        settings,
+        "R2_BUCKET_NAME",
+        None,
+    )
+
+    endpoint_url = getattr(
+        settings,
+        "r2_endpoint_url",
+        None,
+    )
 
     return {
         "status": "ok",
-        "app": getattr(
-            settings,
-            "APP_NAME",
-            "BeatHub",
-        ),
-        "env": getattr(
-            settings,
-            "APP_ENV",
-            "production",
-        ),
-        "storage": getattr(
-            settings,
-            "MEDIA_STORAGE",
-            "unknown",
-        ),
-        "r2_enabled": getattr(
-            settings,
-            "r2_enabled",
-            False,
-        ),
+        "app": app_name,
+        "env": app_env,
+        "storage": media_storage,
+        "r2_enabled": bool(r2_enabled),
         "r2_bucket_configured": bool(
-            getattr(
-                settings,
-                "R2_BUCKET_NAME",
-                None,
-            ),
+            bucket_name,
         ),
         "r2_endpoint_configured": bool(
-            getattr(
-                settings,
-                "r2_endpoint_url",
-                None,
-            ),
+            endpoint_url,
         ),
     }
 
 
-@app.api_route(
-    "/health",
-    methods=[
-        "GET",
-        "HEAD",
-    ],
+# ======================================================================
+# ROOT SAFETY ROUTE
+# ======================================================================
+
+@app.get(
+    "/favicon.ico",
     include_in_schema=False,
 )
-def health_compat():
-    """
-    Additional compatibility health endpoint.
-    """
-
-    return {
-        "status": "ok",
-    }
+def favicon_compatibility():
+    return RedirectResponse(
+        url="/static/favicon.ico",
+        status_code=307,
+    )
 
 
-# ============================================================
+# ======================================================================
 # ERROR HELPERS
-# ============================================================
+# ======================================================================
 
 def _error_context(
     request: Request,
@@ -609,9 +505,17 @@ def _error_context(
     return context
 
 
-# ============================================================
-# HTTP EXCEPTIONS
-# ============================================================
+def _template_exists(
+    template_name: str,
+) -> bool:
+    return (
+        TEMPLATES_DIR / template_name
+    ).is_file()
+
+
+# ======================================================================
+# HTTP ERRORS
+# ======================================================================
 
 @app.exception_handler(
     StarletteHTTPException,
@@ -620,26 +524,6 @@ async def http_exception_handler(
     request: Request,
     exc: StarletteHTTPException,
 ):
-    """
-    Central HTTP error handling.
-
-    404 -> custom 404 page
-    401 -> login
-    403 -> custom forbidden page
-    other -> custom 500/error page
-    """
-
-    if exc.status_code == 404:
-        return templates.TemplateResponse(
-            request,
-            "errors/404.html",
-            _error_context(
-                request,
-                detail=exc.detail,
-            ),
-            status_code=404,
-        )
-
     if exc.status_code == 401:
         return RedirectResponse(
             url=(
@@ -650,30 +534,65 @@ async def http_exception_handler(
         )
 
     if exc.status_code == 403:
+        template = "errors/403.html"
+
+        if _template_exists(template):
+            return templates.TemplateResponse(
+                request,
+                template,
+                _error_context(
+                    request,
+                    detail=exc.detail,
+                ),
+                status_code=403,
+            )
+
+        return RedirectResponse(
+            url="/login?error=Access%20denied.",
+            status_code=303,
+        )
+
+    if exc.status_code == 404:
+        template = "errors/404.html"
+
+        if _template_exists(template):
+            return templates.TemplateResponse(
+                request,
+                template,
+                _error_context(
+                    request,
+                    detail=exc.detail,
+                ),
+                status_code=404,
+            )
+
+        return RedirectResponse(
+            url="/",
+            status_code=303,
+        )
+
+    template = "errors/500.html"
+
+    if _template_exists(template):
         return templates.TemplateResponse(
             request,
-            "errors/403.html",
+            template,
             _error_context(
                 request,
                 detail=exc.detail,
             ),
-            status_code=403,
+            status_code=exc.status_code,
         )
 
-    return templates.TemplateResponse(
-        request,
-        "errors/500.html",
-        _error_context(
-            request,
-            detail=exc.detail,
-        ),
-        status_code=exc.status_code,
-    )
+    return {
+        "error": exc.detail,
+        "status_code": exc.status_code,
+    }
 
 
-# ============================================================
+# ======================================================================
 # VALIDATION ERRORS
-# ============================================================
+# ======================================================================
 
 @app.exception_handler(
     RequestValidationError,
@@ -682,24 +601,36 @@ async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ):
-    """
-    Handle invalid form/query/path parameters cleanly.
-    """
-
-    return templates.TemplateResponse(
-        request,
-        "errors/400.html",
-        _error_context(
-            request,
-            errors=exc.errors(),
-        ),
-        status_code=422,
+    logger.warning(
+        "Validation error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc.errors(),
     )
 
+    template = "errors/400.html"
 
-# ============================================================
+    if _template_exists(template):
+        return templates.TemplateResponse(
+            request,
+            template,
+            _error_context(
+                request,
+                errors=exc.errors(),
+                detail="Please check the information you entered.",
+            ),
+            status_code=422,
+        )
+
+    return {
+        "error": "Validation error",
+        "details": exc.errors(),
+    }
+
+
+# ======================================================================
 # UNHANDLED ERRORS
-# ============================================================
+# ======================================================================
 
 @app.exception_handler(
     Exception,
@@ -708,24 +639,61 @@ async def unhandled_exception_handler(
     request: Request,
     exc: Exception,
 ):
-    """
-    Last-resort application error handler.
-
-    Full exception is logged server-side.
-    Sensitive exception details are not exposed to visitors.
-    """
-
     logger.exception(
-        "Unhandled BeatHub error: %s",
-        exc,
+        "Unhandled BeatHub error on %s %s",
+        request.method,
+        request.url.path,
     )
 
-    return templates.TemplateResponse(
-        request,
-        "errors/500.html",
-        _error_context(
+    template = "errors/500.html"
+
+    if _template_exists(template):
+        return templates.TemplateResponse(
             request,
-            detail=None,
+            template,
+            _error_context(
+                request,
+                detail=None,
+            ),
+            status_code=500,
+        )
+
+    return {
+        "error": "Internal server error",
+        "status_code": 500,
+    }
+
+
+# ======================================================================
+# STARTUP
+# ======================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info(
+        "BeatHub application started."
+    )
+
+    logger.info(
+        "Storage backend: %s",
+        getattr(
+            settings,
+            "MEDIA_STORAGE",
+            "local",
         ),
-        status_code=500,
+    )
+
+    logger.info(
+        "Platform commission configured at application level."
+    )
+
+
+# ======================================================================
+# SHUTDOWN
+# ======================================================================
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info(
+        "BeatHub application shutting down."
     )
