@@ -1,8 +1,30 @@
-import os
+"""
+BeatHub music and marketplace routes.
+
+Public:
+    /beats
+    /hot-picks
+    /sessions
+    /track/{slug}
+    /album/{slug}
+    /profile/{slug}
+
+Protected:
+    /download/{track_ref}
+    /download/track/{track_ref}
+
+Purchased audio can be stored:
+    - locally
+    - r2://bucket/key
+    - s3://bucket/key
+
+R2/S3 objects are returned through a short-lived signed URL.
+"""
+
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -13,13 +35,20 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.music import Album, Track
-from app.models.order import License, Order, OrderStatus
+from app.models.order import (
+    ExclusiveOwnershipLock,
+    License,
+    Order,
+    OrderStatus,
+)
 from app.models.profile import Profile
 from app.models.user import User
 from app.utils.deps import get_optional_user, require_user
 
 
-router = APIRouter(tags=["music"])
+router = APIRouter(
+    tags=["music"],
+)
 
 templates = Jinja2Templates(
     directory="app/templates"
@@ -27,7 +56,7 @@ templates = Jinja2Templates(
 
 
 # ======================================================================
-# CONTEXT
+# SHARED TEMPLATE CONTEXT
 # ======================================================================
 
 def ctx(
@@ -47,7 +76,7 @@ def ctx(
 
 
 # ======================================================================
-# SEARCH HELPERS
+# HELPERS
 # ======================================================================
 
 def clean_search(
@@ -65,6 +94,276 @@ def track_is_visible(
         track
         and track.is_published
     )
+
+
+def is_exclusive_track(
+    track: Track,
+) -> bool:
+    sales_model = getattr(
+        track,
+        "sales_model",
+        None,
+    )
+
+    value = getattr(
+        sales_model,
+        "value",
+        sales_model,
+    )
+
+    return (
+        str(value or "")
+        .strip()
+        .lower()
+        == "exclusive"
+    )
+
+
+def track_is_available(
+    track: Track,
+) -> bool:
+    """
+    Buyer-facing availability.
+
+    NON-EXCLUSIVE:
+        published = available
+
+    EXCLUSIVE:
+        published + not sold = available
+    """
+
+    if not track:
+        return False
+
+    if not bool(
+        getattr(
+            track,
+            "is_published",
+            False,
+        )
+    ):
+        return False
+
+    if is_exclusive_track(track):
+        return not bool(
+            getattr(
+                track,
+                "is_sold",
+                False,
+            )
+        )
+
+    return True
+
+
+def get_r2_setting(
+    *names,
+):
+    """
+    Safely obtain an R2 setting from BeatHub settings.
+
+    Supports multiple naming conventions so this does not break
+    an existing deployment merely because the settings object uses
+    slightly different names.
+    """
+
+    for name in names:
+
+        value = getattr(
+            settings,
+            name,
+            None,
+        )
+
+        if value is not None:
+            value = str(
+                value
+            ).strip()
+
+            if value:
+                return value
+
+    return None
+
+
+def parse_r2_reference(
+    value: str,
+):
+    """
+    Parse:
+
+        r2://bucket/key/file.mp3
+
+    or:
+
+        s3://bucket/key/file.mp3
+
+    Returns:
+
+        bucket, key
+
+    """
+
+    value = (
+        value or ""
+    ).strip()
+
+    if value.startswith(
+        "r2://"
+    ):
+        remainder = value[5:]
+
+    elif value.startswith(
+        "s3://"
+    ):
+        remainder = value[5:]
+
+    else:
+        return None, None
+
+    remainder = remainder.lstrip("/")
+
+    if "/" not in remainder:
+        return (
+            remainder,
+            "",
+        )
+
+    bucket, key = remainder.split(
+        "/",
+        1,
+    )
+
+    return (
+        bucket,
+        key,
+    )
+
+
+def create_r2_download_url(
+    stored_reference: str,
+    expires: int = 900,
+) -> Optional[str]:
+    """
+    Create a temporary signed URL for an R2 object.
+
+    Preferred implementation:
+        boto3 / botocore
+
+    This uses the standard S3-compatible R2 API.
+
+    Environment/settings supported:
+
+        R2_ENDPOINT
+        R2_ENDPOINT_URL
+        CLOUDFLARE_R2_ENDPOINT
+
+        R2_ACCESS_KEY_ID
+        AWS_ACCESS_KEY_ID
+
+        R2_SECRET_ACCESS_KEY
+        AWS_SECRET_ACCESS_KEY
+
+        R2_BUCKET
+        R2_BUCKET_NAME
+        AWS_S3_BUCKET
+
+    The database value itself may also contain the bucket.
+    """
+
+    bucket_from_path, object_key = (
+        parse_r2_reference(
+            stored_reference
+        )
+    )
+
+    if not object_key:
+        return None
+
+    bucket = (
+        bucket_from_path
+        or get_r2_setting(
+            "R2_BUCKET",
+            "R2_BUCKET_NAME",
+            "AWS_S3_BUCKET",
+        )
+    )
+
+    endpoint = get_r2_setting(
+        "R2_ENDPOINT",
+        "R2_ENDPOINT_URL",
+        "CLOUDFLARE_R2_ENDPOINT",
+    )
+
+    access_key = get_r2_setting(
+        "R2_ACCESS_KEY_ID",
+        "AWS_ACCESS_KEY_ID",
+    )
+
+    secret_key = get_r2_setting(
+        "R2_SECRET_ACCESS_KEY",
+        "AWS_SECRET_ACCESS_KEY",
+    )
+
+    if not bucket:
+        raise RuntimeError(
+            "R2 bucket is not configured."
+        )
+
+    if not endpoint:
+        raise RuntimeError(
+            "R2 endpoint is not configured."
+        )
+
+    if not access_key:
+        raise RuntimeError(
+            "R2 access key is not configured."
+        )
+
+    if not secret_key:
+        raise RuntimeError(
+            "R2 secret access key is not configured."
+        )
+
+    try:
+        import boto3
+        from botocore.client import Config
+
+    except ImportError as exc:
+        raise RuntimeError(
+            "boto3 is required for R2 downloads. "
+            "Add boto3 to requirements.txt."
+        ) from exc
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="auto",
+        config=Config(
+            signature_version="s3v4"
+        ),
+    )
+
+    filename = Path(
+        object_key
+    ).name
+
+    response = client.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": bucket,
+            "Key": object_key,
+            "ResponseContentDisposition": (
+                f'attachment; filename="{filename}"'
+            ),
+        },
+        ExpiresIn=expires,
+        HttpMethod="GET",
+    )
+
+    return response
 
 
 # ======================================================================
@@ -339,6 +638,13 @@ def track_detail(
             is not None
         )
 
+    available = (
+        track_is_available(
+            track
+        )
+        or purchased
+    )
+
     return templates.TemplateResponse(
         request,
         "track_detail.html",
@@ -347,6 +653,7 @@ def track_detail(
             current_user,
             track=track,
             purchased=purchased,
+            available=available,
         ),
     )
 
@@ -442,286 +749,6 @@ def profile_detail(
 
 
 # ======================================================================
-# R2 HELPERS
-# ======================================================================
-
-def get_setting_or_env(
-    name: str,
-    default=None,
-):
-    """
-    Reads a setting from app.config.settings first,
-    then falls back to the environment.
-    """
-
-    value = getattr(
-        settings,
-        name,
-        None,
-    )
-
-    if value is not None:
-        return value
-
-    return os.getenv(
-        name,
-        default,
-    )
-
-
-def parse_r2_reference(
-    stored_value: str,
-):
-    """
-    Supports:
-
-        r2://bucket/key.mp3
-        s3://bucket/key.mp3
-
-    Returns:
-
-        bucket, key
-    """
-
-    value = (
-        stored_value or ""
-    ).strip()
-
-    parsed = urlparse(
-        value
-    )
-
-    if parsed.scheme not in {
-        "r2",
-        "s3",
-    }:
-        return None, None
-
-    bucket = (
-        parsed.netloc or ""
-    ).strip()
-
-    key = (
-        parsed.path or ""
-    ).lstrip("/")
-
-    if not bucket or not key:
-        return None, None
-
-    return bucket, key
-
-
-def is_r2_reference(
-    stored_value: str,
-) -> bool:
-
-    value = (
-        stored_value or ""
-    ).strip().lower()
-
-    return (
-        value.startswith(
-            "r2://"
-        )
-        or value.startswith(
-            "s3://"
-        )
-    )
-
-
-def get_r2_bucket_from_settings():
-    return (
-        get_setting_or_env(
-            "R2_BUCKET_NAME"
-        )
-        or get_setting_or_env(
-            "R2_BUCKET"
-        )
-        or get_setting_or_env(
-            "R2_BUCKET_NAME"
-        )
-        or "beathub-r2"
-    )
-
-
-def get_r2_endpoint():
-    """
-    Cloudflare R2 S3 endpoint.
-
-    Preferred Render variable:
-
-        R2_ENDPOINT
-
-    Example shape:
-
-        https://<account-id>.r2.cloudflarestorage.com
-    """
-
-    endpoint = (
-        get_setting_or_env(
-            "R2_ENDPOINT"
-        )
-        or get_setting_or_env(
-            "S3_ENDPOINT_URL"
-        )
-    )
-
-    if endpoint:
-        return str(
-            endpoint
-        ).rstrip("/")
-
-    account_id = (
-        get_setting_or_env(
-            "R2_ACCOUNT_ID"
-        )
-    )
-
-    if account_id:
-        return (
-            "https://"
-            f"{account_id}"
-            ".r2.cloudflarestorage.com"
-        )
-
-    return None
-
-
-def create_r2_presigned_url(
-    stored_value: str,
-    expires_seconds: int = 300,
-):
-    """
-    Creates a short-lived private download URL.
-
-    Uses boto3 only when an R2 object is actually being downloaded,
-    so local-media functionality is unaffected.
-    """
-
-    bucket, key = parse_r2_reference(
-        stored_value
-    )
-
-    if not bucket or not key:
-        bucket = get_r2_bucket_from_settings()
-
-        key = (
-            stored_value or ""
-        ).strip().lstrip("/")
-
-    endpoint = get_r2_endpoint()
-
-    access_key = (
-        get_setting_or_env(
-            "R2_ACCESS_KEY_ID"
-        )
-        or get_setting_or_env(
-            "AWS_ACCESS_KEY_ID"
-        )
-    )
-
-    secret_key = (
-        get_setting_or_env(
-            "R2_SECRET_ACCESS_KEY"
-        )
-        or get_setting_or_env(
-            "AWS_SECRET_ACCESS_KEY"
-        )
-    )
-
-    if not endpoint:
-        raise RuntimeError(
-            "R2_ENDPOINT is not configured."
-        )
-
-    if not access_key:
-        raise RuntimeError(
-            "R2_ACCESS_KEY_ID is not configured."
-        )
-
-    if not secret_key:
-        raise RuntimeError(
-            "R2_SECRET_ACCESS_KEY is not configured."
-        )
-
-    try:
-
-        import boto3
-
-    except ImportError:
-
-        raise RuntimeError(
-            "boto3 is required for R2 downloads. "
-            "Add boto3 to requirements.txt and redeploy."
-        )
-
-    client = boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name="auto",
-    )
-
-    response = client.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": bucket,
-            "Key": key,
-        },
-        ExpiresIn=expires_seconds,
-    )
-
-    return response
-
-
-# ======================================================================
-# SAFE DOWNLOAD NAME
-# ======================================================================
-
-def safe_download_name(
-    track: Track,
-    extension: str = ".mp3",
-):
-    title = (
-        getattr(
-            track,
-            "title",
-            None,
-        )
-        or "BeatHub-Track"
-    )
-
-    safe_title = "".join(
-        character
-        for character in title
-        if character.isalnum()
-        or character in (
-            " ",
-            "-",
-            "_",
-        )
-    ).strip()
-
-    if not safe_title:
-        safe_title = "BeatHub-Track"
-
-    extension = (
-        extension or ".mp3"
-    ).strip()
-
-    if not extension.startswith("."):
-        extension = (
-            "." + extension
-        )
-
-    return (
-        f"{safe_title}"
-        f"{extension.lower()}"
-    )
-
-
-# ======================================================================
 # PURCHASE DOWNLOAD
 # ======================================================================
 
@@ -730,7 +757,9 @@ def safe_download_name(
 def download_track(
     track_ref: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(
+        require_user
+    ),
 ):
     """
     Secure purchased-track download.
@@ -739,18 +768,16 @@ def download_track(
 
         /download/track/{track_id}
         /download/{track_id}
+
         /download/track/{slug}
         /download/{slug}
 
-    The buyer MUST have a completed License.
-
-    R2 files are returned through a short-lived presigned URL.
-    Local files continue using FileResponse.
+    Ownership is checked BEFORE any storage URL is generated.
     """
 
-    # --------------------------------------------------------------
-    # FIND BY ID
-    # --------------------------------------------------------------
+    # ==================================================================
+    # FIND TRACK BY ID
+    # ==================================================================
 
     track = (
         db.query(Track)
@@ -760,9 +787,9 @@ def download_track(
         .first()
     )
 
-    # --------------------------------------------------------------
-    # FALLBACK TO SLUG
-    # --------------------------------------------------------------
+    # ==================================================================
+    # FALL BACK TO SLUG
+    # ==================================================================
 
     if not track:
 
@@ -780,9 +807,9 @@ def download_track(
             detail="Track not found.",
         )
 
-    # --------------------------------------------------------------
-    # VERIFY PURCHASE
-    # --------------------------------------------------------------
+    # ==================================================================
+    # VERIFY OWNERSHIP
+    # ==================================================================
 
     license_record = (
         db.query(License)
@@ -805,105 +832,89 @@ def download_track(
     if not license_record:
         raise HTTPException(
             status_code=403,
-            detail=(
-                "You do not own this track."
-            ),
+            detail="You do not own this track.",
         )
 
-    # --------------------------------------------------------------
-    # AUDIO PATH
-    # --------------------------------------------------------------
+    # ==================================================================
+    # AUDIO REFERENCE
+    # ==================================================================
 
-    stored_value = (
-        getattr(
-            track,
-            "audio_file_path",
-            None,
-        )
+    stored_text = str(
+        track.audio_file_path
         or ""
     ).strip()
 
-    if not stored_value:
+    if not stored_text:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Audio file is not available."
-            ),
+            detail="Audio file is not available.",
         )
 
-    # ==============================================================
-    # R2 / CLOUD STORAGE
-    # ==============================================================
+    # ==================================================================
+    # R2 / S3
+    # ==================================================================
 
-    if is_r2_reference(
-        stored_value
+    if (
+        stored_text.startswith(
+            "r2://"
+        )
+        or stored_text.startswith(
+            "s3://"
+        )
     ):
 
         try:
 
-            extension = (
-                Path(
-                    urlparse(
-                        stored_value
-                    ).path
-                ).suffix
-                or ".mp3"
-            )
-
-            download_url = (
-                create_r2_presigned_url(
-                    stored_value,
-                    expires_seconds=300,
+            signed_url = (
+                create_r2_download_url(
+                    stored_text,
+                    expires=900,
                 )
             )
 
         except Exception as exc:
 
-            print(
-                "[BeatHub] R2 download error:",
-                repr(exc),
-            )
-
+            # Do not expose credentials or internal storage details.
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "The purchased beat is stored "
-                    "in cloud storage, but BeatHub "
-                    "could not create the download link."
+                    "The purchased audio is stored in cloud storage, "
+                    "but the download service could not create a "
+                    "secure download link."
+                ),
+            ) from exc
+
+        if not signed_url:
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "The purchased audio file "
+                    "could not be located."
                 ),
             )
 
-        # ----------------------------------------------------------
-        # Browser follows the secure temporary R2 URL.
-        # ----------------------------------------------------------
-
         return RedirectResponse(
-            url=download_url,
+            url=signed_url,
             status_code=307,
-            headers={
-                "Cache-Control": (
-                    "private, no-store"
-                ),
-            },
         )
 
-    # ==============================================================
-    # LOCAL FILE STORAGE
-    # ==============================================================
+    # ==================================================================
+    # LOCAL STORAGE COMPATIBILITY
+    # ==================================================================
 
     stored_path = Path(
-        stored_value
+        stored_text
     )
 
-    media_root_value = (
-        get_setting_or_env(
-            "MEDIA_ROOT",
-            "media",
-        )
+    media_root_value = getattr(
+        settings,
+        "MEDIA_ROOT",
+        "media",
     )
 
     media_root = Path(
-        str(media_root_value)
+        media_root_value
     )
 
     if not media_root.is_absolute():
@@ -914,12 +925,13 @@ def download_track(
         )
 
     media_root = (
-        media_root.resolve()
+        media_root
+        .resolve()
     )
 
-    # --------------------------------------------------------------
-    # FIRST TRY EXACT DATABASE PATH
-    # --------------------------------------------------------------
+    # ==================================================================
+    # EXACT PATH
+    # ==================================================================
 
     if stored_path.is_absolute():
 
@@ -934,9 +946,9 @@ def download_track(
             / stored_path
         ).resolve()
 
-    # --------------------------------------------------------------
+    # ==================================================================
     # COMPATIBILITY PATHS
-    # --------------------------------------------------------------
+    # ==================================================================
 
     if (
         not audio_path.exists()
@@ -948,14 +960,17 @@ def download_track(
         )
 
         candidates = [
-            media_root / stored_path,
-            media_root / "audio" / filename,
-            (
-                Path.cwd()
-                / "media"
-                / "audio"
-                / filename
-            ),
+            media_root
+            / stored_path,
+
+            media_root
+            / "audio"
+            / filename,
+
+            Path.cwd()
+            / "media"
+            / "audio"
+            / filename,
         ]
 
         found = None
@@ -963,7 +978,8 @@ def download_track(
         for candidate in candidates:
 
             candidate = (
-                candidate.resolve()
+                candidate
+                .resolve()
             )
 
             try:
@@ -973,7 +989,6 @@ def download_track(
                 )
 
             except ValueError:
-
                 continue
 
             if (
@@ -996,9 +1011,9 @@ def download_track(
 
         audio_path = found
 
-    # --------------------------------------------------------------
-    # SECURITY: NEVER SERVE OUTSIDE MEDIA_ROOT
-    # --------------------------------------------------------------
+    # ==================================================================
+    # SECURITY
+    # ==================================================================
 
     try:
 
@@ -1010,34 +1025,56 @@ def download_track(
 
         raise HTTPException(
             status_code=403,
-            detail=(
-                "Invalid audio file location."
-            ),
+            detail="Invalid audio file location.",
         )
 
     if not audio_path.is_file():
 
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Audio file is unavailable."
-            ),
+            detail="Audio file is unavailable.",
         )
 
-    # --------------------------------------------------------------
-    # DOWNLOAD NAME
-    # --------------------------------------------------------------
+    # ==================================================================
+    # SAFE DOWNLOAD NAME
+    # ==================================================================
 
-    download_name = (
-        safe_download_name(
-            track,
-            audio_path.suffix,
-        )
+    title = (
+        track.title
+        or "BeatHub-Track"
     )
 
-    # --------------------------------------------------------------
+    safe_title = "".join(
+        character
+        for character in title
+        if (
+            character.isalnum()
+            or character in (
+                " ",
+                "-",
+                "_",
+            )
+        )
+    ).strip()
+
+    if not safe_title:
+        safe_title = (
+            "BeatHub-Track"
+        )
+
+    extension = (
+        audio_path.suffix.lower()
+    )
+
+    download_name = (
+        f"{safe_title}{extension}"
+        if extension
+        else safe_title
+    )
+
+    # ==================================================================
     # LOCAL DOWNLOAD
-    # --------------------------------------------------------------
+    # ==================================================================
 
     return FileResponse(
         path=str(
@@ -1049,8 +1086,7 @@ def download_track(
         ),
         headers={
             "Content-Disposition": (
-                f'attachment; '
-                f'filename="{download_name}"'
+                f'attachment; filename="{download_name}"'
             ),
             "Cache-Control": (
                 "private, no-store"
