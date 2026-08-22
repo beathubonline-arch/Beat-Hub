@@ -1,176 +1,876 @@
 {% extends "base.html" %}
 
-{% block title %}Order {{ order.order_number }} — BeatHub{% endblock %}
+{% block title %}
+  Payment Status | BeatHub
+{% endblock %}
 
 {% block content %}
 
 <div class="form-page">
 
-  <div class="form-card" id="status-card">
+  <div
+    class="form-card"
+    style="
+      max-width:620px;
+      text-align:center;
+    "
+  >
 
-    <h2>Order {{ order.order_number }}</h2>
+    <!-- ============================================================
+         BRAND
+    ============================================================ -->
 
-    {% if order.status.value == "pending" %}
-
-      <p class="subtitle">
-        Check your phone and enter your M-Pesa PIN to complete payment.
-      </p>
-
-    {% elif order.status.value == "completed" %}
-
-      <p class="subtitle">
-        Payment confirmed successfully.
-      </p>
-
-    {% else %}
-
-      <p class="subtitle">
-        Your order has been processed.
-      </p>
-
-    {% endif %}
+    <div class="brand">
+      BEAT<span class="hub">HUB</span>
+    </div>
 
 
-    <div class="stat-card" style="margin-top:10px;">
+    <!-- ============================================================
+         PAGE TITLE
+    ============================================================ -->
 
-      <div class="label">
-        Status
-      </div>
+    <h2 id="status-title">
+      Checking your payment
+    </h2>
+
+    <p
+      id="status-subtitle"
+      class="subtitle"
+    >
+      We're waiting for M-Pesa to confirm your payment.
+    </p>
+
+
+    <!-- ============================================================
+         STATUS ICON
+    ============================================================ -->
+
+    <div
+      id="status-icon"
+      style="
+        width:78px;
+        height:78px;
+        margin:25px auto 20px;
+        border-radius:50%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:34px;
+        font-weight:800;
+        background:rgba(212,175,55,.10);
+        border:2px solid rgba(212,175,55,.35);
+      "
+    >
+      ⏳
+    </div>
+
+
+    <!-- ============================================================
+         ORDER INFORMATION
+    ============================================================ -->
+
+    <div
+      style="
+        margin:20px 0;
+        padding:18px;
+        border-radius:12px;
+        background:rgba(255,255,255,.03);
+        border:1px solid rgba(255,255,255,.08);
+        text-align:left;
+      "
+    >
 
       <div
-        class="value"
-        id="status-value"
-        style="text-transform:uppercase;"
+        style="
+          display:flex;
+          justify-content:space-between;
+          gap:20px;
+          padding:8px 0;
+        "
       >
-        {{ order.status.value }}
+        <span class="sub">
+          Order
+        </span>
+
+        <strong>
+          {{ order.order_number }}
+        </strong>
+      </div>
+
+
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          gap:20px;
+          padding:8px 0;
+        "
+      >
+        <span class="sub">
+          Amount
+        </span>
+
+        <strong>
+          KSh {{ order.gross_amount }}
+        </strong>
+      </div>
+
+
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          gap:20px;
+          padding:8px 0;
+        "
+      >
+        <span class="sub">
+          Status
+        </span>
+
+        <strong id="order-status">
+          {{ order.status.value|replace('_', ' ')|title }}
+        </strong>
       </div>
 
     </div>
 
 
-    <p
-      class="sub"
-      style="margin-top:20px;"
-      id="status-message"
+    <!-- ============================================================
+         WAITING MESSAGE
+    ============================================================ -->
+
+    <div
+      id="waiting-box"
+      style="
+        margin:20px 0;
+        padding:16px;
+        border-radius:12px;
+        background:rgba(212,175,55,.07);
+        border:1px solid rgba(212,175,55,.20);
+      "
     >
-
-      {% if order.status.value == "pending" %}
-
-        Waiting for M-Pesa payment confirmation...
-
-      {% elif order.status.value == "completed" %}
-
-        Payment confirmed! Your purchase is ready to download.
-
-      {% elif order.status.value == "failed" %}
-
-        Payment was not completed. You can try again.
-
-      {% elif order.status.value == "rejected" %}
-
-        This item was sold to another buyer moments before your
-        payment confirmed. Contact support for a refund.
-
-      {% endif %}
-
-    </p>
-
-
-    {% if order.status.value == "completed" and order.track %}
 
       <div
         style="
-          margin-top:24px;
-          padding:20px;
-          border-radius:12px;
-          background:rgba(255,255,255,0.04);
+          font-weight:700;
+          margin-bottom:7px;
         "
       >
-
-        <h3 style="margin-top:0;">
-          {{ order.track.title }}
-        </h3>
-
-        <p class="sub">
-          Your payment has been confirmed and ownership has been granted.
-        </p>
-
-        <div
-          style="
-            display:flex;
-            gap:10px;
-            flex-wrap:wrap;
-            margin-top:16px;
-          "
-        >
-
-          <a
-            href="/download/track/{{ order.track.id }}"
-            class="btn btn-primary"
-          >
-            Download Beat
-          </a>
-
-          <a
-            href="/track/{{ order.track.slug }}"
-            class="btn btn-outline"
-          >
-            View Track
-          </a>
-
-        </div>
-
+        Check your phone
       </div>
 
-    {% endif %}
+      <p
+        class="sub"
+        style="
+          margin:0;
+          line-height:1.55;
+          font-size:14px;
+        "
+      >
+        If you haven't already, enter your M-Pesa PIN on the
+        payment prompt sent to your phone.
+      </p>
+
+      <p
+        id="poll-message"
+        class="sub"
+        style="
+          margin:10px 0 0;
+          font-size:12px;
+        "
+      >
+        Waiting for payment confirmation...
+      </p>
+
+    </div>
+
+
+    <!-- ============================================================
+         SUCCESS BOX
+    ============================================================ -->
+
+    <div
+      id="success-box"
+      style="
+        display:none;
+        margin:20px 0;
+        padding:18px;
+        border-radius:12px;
+        background:rgba(46,204,113,.08);
+        border:1px solid rgba(46,204,113,.25);
+      "
+    >
+
+      <div
+        style="
+          font-size:18px;
+          font-weight:800;
+          margin-bottom:7px;
+        "
+      >
+        Payment confirmed 🎉
+      </div>
+
+      <p
+        class="sub"
+        style="
+          margin:0;
+          line-height:1.55;
+          font-size:14px;
+        "
+      >
+        Your purchase is complete. Your BeatHub license has been
+        created and the track is now available in your purchases.
+      </p>
+
+    </div>
+
+
+    <!-- ============================================================
+         ERROR BOX
+    ============================================================ -->
+
+    <div
+      id="error-box"
+      style="
+        display:none;
+        margin:20px 0;
+        padding:18px;
+        border-radius:12px;
+        background:rgba(231,76,60,.08);
+        border:1px solid rgba(231,76,60,.25);
+      "
+    >
+
+      <div
+        id="error-title"
+        style="
+          font-size:18px;
+          font-weight:800;
+          margin-bottom:7px;
+        "
+      >
+        Payment not completed
+      </div>
+
+      <p
+        id="error-message"
+        class="sub"
+        style="
+          margin:0;
+          line-height:1.55;
+          font-size:14px;
+        "
+      >
+        Your payment was not completed.
+      </p>
+
+    </div>
+
+
+    <!-- ============================================================
+         ACTION BUTTONS
+    ============================================================ -->
+
+    <div
+      id="action-buttons"
+      style="
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+        margin-top:22px;
+      "
+    >
+
+      <!-- SUCCESS DOWNLOAD -->
+      <a
+        id="download-button"
+        href="#"
+        class="btn btn-primary btn-block"
+        style="display:none;"
+      >
+        Download Purchased Track
+      </a>
+
+
+      <!-- VIEW TRACK -->
+      <a
+        id="track-button"
+        href="#"
+        class="btn btn-secondary btn-block"
+        style="display:none;"
+      >
+        View Track
+      </a>
+
+
+      <!-- RETRY -->
+      <a
+        id="retry-button"
+        href="#"
+        class="btn btn-primary btn-block"
+        style="display:none;"
+      >
+        Try Payment Again
+      </a>
+
+
+      <!-- BROWSE -->
+      <a
+        href="/beats"
+        class="btn btn-secondary btn-block"
+      >
+        Browse More Beats
+      </a>
+
+    </div>
+
+
+    <!-- ============================================================
+         SMALL ORDER REFERENCE
+    ============================================================ -->
+
+    <p
+      class="sub"
+      style="
+        margin-top:22px;
+        font-size:12px;
+        opacity:.75;
+      "
+    >
+      Order reference:
+      {{ order.order_number }}
+    </p>
 
   </div>
 
 </div>
 
 
+<!-- ================================================================
+     PAYMENT STATUS SCRIPT
+================================================================ -->
+
 <script>
+(function () {
 
-const orderId = "{{ order.id }}";
-const currentStatus = "{{ order.status.value }}";
+  "use strict";
 
-if (currentStatus === "pending") {
 
-  const poll = setInterval(async () => {
+  /* ==============================================================
+     CONFIG
+  ============================================================== */
 
-    try {
+  const orderId = {{ order.id|tojson }};
 
-      const res = await fetch(
-        `/api/orders/${orderId}/status`,
-        {
-          credentials: "same-origin"
-        }
-      );
+  const initialStatus =
+    {{ order.status.value|tojson }};
 
-      if (!res.ok) {
-        return;
-      }
 
-      const data = await res.json();
+  /* ==============================================================
+     ELEMENTS
+  ============================================================== */
 
-      if (data.status !== "pending") {
+  const title =
+    document.getElementById("status-title");
 
-        clearInterval(poll);
+  const subtitle =
+    document.getElementById("status-subtitle");
 
-        window.location.reload();
+  const icon =
+    document.getElementById("status-icon");
 
-      }
+  const orderStatus =
+    document.getElementById("order-status");
 
-    } catch (e) {
+  const waitingBox =
+    document.getElementById("waiting-box");
 
-      // Continue polling silently.
+  const pollMessage =
+    document.getElementById("poll-message");
+
+  const successBox =
+    document.getElementById("success-box");
+
+  const errorBox =
+    document.getElementById("error-box");
+
+  const errorTitle =
+    document.getElementById("error-title");
+
+  const errorMessage =
+    document.getElementById("error-message");
+
+  const downloadButton =
+    document.getElementById("download-button");
+
+  const trackButton =
+    document.getElementById("track-button");
+
+  const retryButton =
+    document.getElementById("retry-button");
+
+
+  /* ==============================================================
+     TRACK SLUG
+  ============================================================== */
+
+  const trackSlug =
+    {{ (order.track.slug if order.track else '')|tojson }};
+
+
+  /* ==============================================================
+     HELPER: HIDE ALL STATE BOXES
+  ============================================================== */
+
+  function resetState() {
+
+    waitingBox.style.display = "none";
+    successBox.style.display = "none";
+    errorBox.style.display = "none";
+
+    downloadButton.style.display = "none";
+    trackButton.style.display = "none";
+    retryButton.style.display = "none";
+
+  }
+
+
+  /* ==============================================================
+     PENDING
+  ============================================================== */
+
+  function showPending() {
+
+    resetState();
+
+    title.textContent =
+      "Waiting for payment";
+
+    subtitle.textContent =
+      "We're waiting for M-Pesa to confirm your payment.";
+
+    icon.textContent =
+      "⏳";
+
+    orderStatus.textContent =
+      "Pending";
+
+    waitingBox.style.display =
+      "block";
+
+    pollMessage.textContent =
+      "Waiting for payment confirmation...";
+
+  }
+
+
+  /* ==============================================================
+     COMPLETED
+  ============================================================== */
+
+  function showCompleted(trackSlug) {
+
+    resetState();
+
+    title.textContent =
+      "Purchase complete";
+
+    subtitle.textContent =
+      "Your payment has been confirmed successfully.";
+
+    icon.textContent =
+      "✓";
+
+    orderStatus.textContent =
+      "Completed";
+
+    successBox.style.display =
+      "block";
+
+
+    /* ------------------------------------------------------------
+       VIEW TRACK
+    ------------------------------------------------------------ */
+
+    if (trackSlug) {
+
+      trackButton.href =
+        "/track/" +
+        encodeURIComponent(trackSlug);
+
+      trackButton.style.display =
+        "block";
+
+
+      /* ----------------------------------------------------------
+         DOWNLOAD
+      ---------------------------------------------------------- */
+
+      downloadButton.href =
+        "/download/track/" +
+        encodeURIComponent(trackSlug);
+
+      downloadButton.style.display =
+        "block";
 
     }
 
-  }, 3000);
+  }
 
-}
 
+  /* ==============================================================
+     FAILED
+  ============================================================== */
+
+  function showFailed() {
+
+    resetState();
+
+    title.textContent =
+      "Payment not completed";
+
+    subtitle.textContent =
+      "The M-Pesa payment was not completed.";
+
+    icon.textContent =
+      "×";
+
+    orderStatus.textContent =
+      "Failed";
+
+    errorTitle.textContent =
+      "Payment failed";
+
+    errorMessage.textContent =
+      "The payment was cancelled, declined, or timed out. " +
+      "No purchase access was granted.";
+
+    errorBox.style.display =
+      "block";
+
+
+    if (trackSlug) {
+
+      retryButton.href =
+        "/checkout/track/" +
+        encodeURIComponent(trackSlug);
+
+      retryButton.style.display =
+        "block";
+
+    }
+
+  }
+
+
+  /* ==============================================================
+     REJECTED
+  ============================================================== */
+
+  function showRejected() {
+
+    resetState();
+
+    title.textContent =
+      "Purchase could not be completed";
+
+    subtitle.textContent =
+      "Your payment was received, but the item could not be assigned to your account.";
+
+    icon.textContent =
+      "!";
+
+    orderStatus.textContent =
+      "Rejected";
+
+    errorTitle.textContent =
+      "Purchase rejected";
+
+    errorMessage.textContent =
+      "This can happen when an exclusive track was purchased " +
+      "by another buyer at the same time. Please contact BeatHub " +
+      "support regarding the payment.";
+
+    errorBox.style.display =
+      "block";
+
+  }
+
+
+  /* ==============================================================
+     UNKNOWN
+  ============================================================== */
+
+  function showUnknown() {
+
+    resetState();
+
+    title.textContent =
+      "Checking payment";
+
+    subtitle.textContent =
+      "Your order is being processed.";
+
+    icon.textContent =
+      "⏳";
+
+    orderStatus.textContent =
+      "Processing";
+
+    waitingBox.style.display =
+      "block";
+
+    pollMessage.textContent =
+      "We're checking the latest payment status...";
+
+  }
+
+
+  /* ==============================================================
+     APPLY STATUS
+  ============================================================== */
+
+  function applyStatus(data) {
+
+    if (!data) {
+      return;
+    }
+
+    const status =
+      String(data.status || "")
+        .toLowerCase()
+        .trim();
+
+    const slug =
+      data.track_slug || trackSlug;
+
+
+    if (status === "completed") {
+
+      showCompleted(slug);
+
+      return true;
+
+    }
+
+
+    if (status === "failed") {
+
+      showFailed();
+
+      return true;
+
+    }
+
+
+    if (status === "rejected") {
+
+      showRejected();
+
+      return true;
+
+    }
+
+
+    if (status === "pending") {
+
+      showPending();
+
+      return false;
+
+    }
+
+
+    showUnknown();
+
+    return false;
+
+  }
+
+
+  /* ==============================================================
+     POLLING
+  ============================================================== */
+
+  let stopped =
+    false;
+
+  let attempts =
+    0;
+
+  const maxAttempts =
+    60;
+
+  const pollInterval =
+    3000;
+
+
+  async function checkStatus() {
+
+    if (stopped) {
+      return;
+    }
+
+    attempts += 1;
+
+
+    try {
+
+      const response =
+        await fetch(
+          "/api/orders/" +
+          encodeURIComponent(orderId) +
+          "/status",
+          {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: {
+              "Accept": "application/json"
+            }
+          }
+        );
+
+
+      /* ----------------------------------------------------------
+         AUTH / ORDER NOT FOUND
+      ---------------------------------------------------------- */
+
+      if (response.status === 401 ||
+          response.status === 403 ||
+          response.status === 404) {
+
+        pollMessage.textContent =
+          "We could not retrieve the latest order status. " +
+          "Please refresh the page.";
+
+        return;
+
+      }
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          "Status request failed."
+        );
+
+      }
+
+
+      const data =
+        await response.json();
+
+
+      const finished =
+        applyStatus(data);
+
+
+      if (finished) {
+
+        stopped = true;
+
+        return;
+
+      }
+
+
+      /* ----------------------------------------------------------
+         TIMEOUT
+      ---------------------------------------------------------- */
+
+      if (attempts >= maxAttempts) {
+
+        pollMessage.textContent =
+          "We're still waiting for M-Pesa confirmation. " +
+          "You can refresh this page to check again.";
+
+        return;
+
+      }
+
+
+      setTimeout(
+        checkStatus,
+        pollInterval
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "BeatHub payment status error:",
+        error
+      );
+
+
+      pollMessage.textContent =
+        "Connection interrupted while checking payment. " +
+        "Trying again...";
+
+
+      if (attempts < maxAttempts) {
+
+        setTimeout(
+          checkStatus,
+          pollInterval
+        );
+
+      } else {
+
+        pollMessage.textContent =
+          "We could not automatically confirm the payment. " +
+          "Please refresh this page.";
+
+      }
+
+    }
+
+  }
+
+
+  /* ==============================================================
+     INITIAL STATE
+  ============================================================== */
+
+  if (initialStatus === "completed") {
+
+    showCompleted(trackSlug);
+
+    stopped = true;
+
+  }
+
+  else if (initialStatus === "failed") {
+
+    showFailed();
+
+    stopped = true;
+
+  }
+
+  else if (initialStatus === "rejected") {
+
+    showRejected();
+
+    stopped = true;
+
+  }
+
+  else {
+
+    showPending();
+
+    setTimeout(
+      checkStatus,
+      1000
+    );
+
+  }
+
+})();
 </script>
 
 {% endblock %}
