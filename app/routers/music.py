@@ -39,30 +39,33 @@ value = None
 return default
 ```
 
-def _track_is_public(
-track: Track,
-) -> bool:
-for field in (
+def _track_is_public(track: Track) -> bool:
+for field_name in (
 "is_published",
 "published",
 "is_public",
 "active",
 ):
-if hasattr(track, field):
+if hasattr(track, field_name):
 try:
-if getattr(track, field, None) is False:
-return False
-except Exception:
-pass
+value = getattr(
+track,
+field_name,
+None,
+)
 
 ```
+            if value is False:
+                return False
+
+        except Exception:
+            pass
+
 return True
 ```
 
-def _track_price(
-track: Track,
-) -> float:
-raw = _model_value(
+def _track_price(track: Track) -> float:
+value = _model_value(
 track,
 "price",
 "amount",
@@ -73,11 +76,8 @@ default=0,
 
 ```
 try:
-    return float(raw or 0)
-except (
-    TypeError,
-    ValueError,
-):
+    return float(value or 0)
+except (TypeError, ValueError):
     return 0.0
 ```
 
@@ -98,7 +98,10 @@ default=None,
 )
 
 ```
-return str(value) if value else None
+if not value:
+    return None
+
+return str(value)
 ```
 
 def _track_audio(
@@ -117,12 +120,13 @@ default=None,
 )
 
 ```
-return str(value) if value else None
+if not value:
+    return None
+
+return str(value)
 ```
 
-def _producer_name(
-track: Track,
-) -> str:
+def _producer_name(track: Track) -> str:
 producer = _model_value(
 track,
 "producer",
@@ -147,7 +151,7 @@ if producer is not None:
     if name:
         return str(name)
 
-direct = _model_value(
+direct_name = _model_value(
     track,
     "producer_name",
     "creator_name",
@@ -156,16 +160,13 @@ direct = _model_value(
     default=None,
 )
 
-return (
-    str(direct)
-    if direct
-    else "BeatHub Creator"
-)
+if direct_name:
+    return str(direct_name)
+
+return "BeatHub Creator"
 ```
 
-def _track_url(
-track: Track,
-) -> str:
+def _track_url(track: Track) -> str:
 slug = _model_value(
 track,
 "slug",
@@ -188,48 +189,6 @@ if track_id is not None:
 return "#"
 ```
 
-def _track_text(
-track: Track,
-) -> str:
-values = (
-_model_value(
-track,
-"title",
-"name",
-default="",
-),
-_model_value(
-track,
-"genre",
-"category",
-default="",
-),
-_model_value(
-track,
-"mood",
-default="",
-),
-_model_value(
-track,
-"description",
-"short_description",
-default="",
-),
-_model_value(
-track,
-"tags",
-default="",
-),
-)
-
-```
-return " ".join(
-    str(value)
-    for value in values
-    if value
-)
-```
-
 def _query_catalog(
 db: Session,
 search: str,
@@ -243,7 +202,6 @@ query = db.query(Track)
 ```
 if search:
     like = f"%{search}%"
-
     conditions = []
 
     for field_name in (
@@ -324,6 +282,8 @@ if max_price is not None:
             field <= max_price
         )
 
+publication_field = None
+
 for field_name in (
     "is_published",
     "published",
@@ -337,10 +297,15 @@ for field_name in (
     )
 
     if field is not None:
-        query = query.filter(
-            field.is_(True)
-        )
+        publication_field = field
         break
+
+if publication_field is not None:
+    query = query.filter(
+        publication_field.is_(True)
+    )
+
+ordering_field = None
 
 for field_name in (
     "created_at",
@@ -354,10 +319,13 @@ for field_name in (
     )
 
     if field is not None:
-        query = query.order_by(
-            field.desc()
-        )
+        ordering_field = field
         break
+
+if ordering_field is not None:
+    query = query.order_by(
+        ordering_field.desc()
+    )
 
 return query.all()
 ```
@@ -400,9 +368,7 @@ le=48,
 current_user=Depends(
 get_optional_user
 ),
-db: Session = Depends(
-get_db
-),
+db: Session = Depends(get_db),
 ):
 search = q.strip()
 genre = genre.strip()
@@ -444,8 +410,9 @@ if page > total_pages:
     page = total_pages
 
 start = (
-    page - 1
-) * per_page
+    (page - 1)
+    * per_page
+)
 
 end = start + per_page
 
