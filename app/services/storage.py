@@ -1,23 +1,38 @@
+```python
 """
 BeatHub storage abstraction.
 
-Supports:
-- Local MEDIA_ROOT storage
-- Cloudflare R2 storage references stored as:
-    r2://bucket/key
-- R2 presigned URLs for browser access
-- Local /media/... URLs for legacy local files
-- Existing callers using save_upload()
-- Existing callers using r2_presigned_url()
-- Existing callers using r2_url()
+Production behaviour:
+    - Cloudflare R2 is preferred when correctly configured.
+    - Local MEDIA_ROOT storage is used automatically when R2 is not configured.
+    - Existing callers using save_upload() continue to work.
+    - Existing callers using save_upload_to_r2() continue to work.
+    - Existing callers using r2_presigned_url() continue to work.
+    - Existing callers using r2_url() continue to work.
+    - Existing callers using media_url() continue to work.
 
-No database migration is required.
+Supported database references:
+
+    R2:
+        r2://bucket/folder/file.ext
+
+    Local:
+        folder/file.ext
+        media/folder/file.ext
+        /media/folder/file.ext
+
+The merchandise system uses:
+
+    save_upload(file, "merch", ALLOWED_IMAGE_EXT)
+
+and therefore automatically follows the same storage architecture
+as beats, covers and album artwork.
 """
 
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 from fastapi import UploadFile
 
@@ -28,14 +43,14 @@ from app.config import settings
 # FILE TYPES
 # ======================================================================
 
-ALLOWED_AUDIO_EXT = {
+ALLOWED_AUDIO_EXT: Set[str] = {
     ".mp3",
     ".wav",
     ".m4a",
     ".flac",
 }
 
-ALLOWED_IMAGE_EXT = {
+ALLOWED_IMAGE_EXT: Set[str] = {
     ".jpg",
     ".jpeg",
     ".png",
@@ -44,10 +59,32 @@ ALLOWED_IMAGE_EXT = {
 
 
 # ======================================================================
+# DEFAULTS
+# ======================================================================
+
+DEFAULT_MAX_UPLOAD_MB = 50
+
+# Local storage fallback.
+
+# This does NOT require MEDIA_ROOT to exist in app.config.Settings.
+#
+# Priority:
+#   1. settings.MEDIA_ROOT
+#   2. MEDIA_ROOT environment variable
+#   3. <project>/media
+#
+# On Render, R2 should normally be configured, so this local fallback
+# is primarily useful for development and emergency compatibility.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MEDIA_ROOT = PROJECT_ROOT / "media"
+
+
+# ======================================================================
 # ERRORS
 # ======================================================================
 
 class UploadValidationError(Exception):
+    """Raised when an uploaded file fails validation."""
     pass
 
 
@@ -58,45 +95,123 @@ class UploadValidationError(Exception):
 def _env(*names: str) -> Optional[str]:
     """
     Return the first non-empty environment variable.
-
-    Supports multiple naming conventions so existing Render
-    environment variables continue working.
     """
+
     for name in names:
         value = os.getenv(name)
 
-        if value is not None and str(value).strip():
-            return str(value).strip()
+        if value is not None:
+            value = str(value).strip()
+
+            if value:
+                return value
 
     return None
 
 
 def _setting(*names: str) -> Optional[str]:
     """
-    Return the first available setting attribute.
+    Return the first non-empty application setting.
+
+    getattr() is intentionally used so this module remains compatible
+    with Settings classes that do not define every optional storage field.
     """
+
     for name in names:
         try:
             value = getattr(settings, name, None)
         except Exception:
             value = None
 
-        if value is not None and str(value).strip():
-            return str(value).strip()
+        if value is not None:
+            value = str(value).strip()
+
+            if value:
+                return value
 
     return None
 
 
 def _config(*names: str) -> Optional[str]:
     """
-    Check both application settings and environment variables.
+    Check application settings first and environment variables second.
     """
+
     value = _setting(*names)
 
     if value:
         return value
 
     return _env(*names)
+
+
+# ======================================================================
+# MEDIA ROOT
+# ======================================================================
+
+def _media_root() -> Path:
+    """
+    Resolve local media storage without requiring MEDIA_ROOT in Settings.
+
+    Priority:
+        settings.MEDIA_ROOT
+        MEDIA_ROOT environment variable
+        project/media
+    """
+
+    configured = _config(
+        "MEDIA_ROOT",
+        "MEDIA_DIRECTORY",
+        "MEDIA_DIR",
+    )
+
+    if configured:
+        root = Path(configured).expanduser()
+
+        if not root.is_absolute():
+            root = PROJECT_ROOT / root
+
+        return root.resolve()
+
+    return DEFAULT_MEDIA_ROOT.resolve()
+
+
+# ======================================================================
+# MAX UPLOAD SIZE
+# ======================================================================
+
+def _max_upload_mb() -> int:
+    """
+    Read the upload-size setting safely.
+
+    Compatible with:
+        settings.MAX_UPLOAD_MB
+        MAX_UPLOAD_MB environment variable
+
+    Falls back to 50 MB.
+    """
+
+    raw = _config(
+        "MAX_UPLOAD_MB",
+        "MAX_UPLOAD_SIZE_MB",
+    )
+
+    if raw is None:
+        return DEFAULT_MAX_UPLOAD_MB
+
+    try:
+        value = int(float(raw))
+    except (ValueError, TypeError):
+        return DEFAULT_MAX_UPLOAD_MB
+
+    if value <= 0:
+        return DEFAULT_MAX_UPLOAD_MB
+
+    return value
+
+
+def _max_upload_bytes() -> int:
+    return _max_upload_mb() * 1024 * 1024
 
 
 # ======================================================================
@@ -131,15 +246,24 @@ def _r2_bucket() -> Optional[str]:
     return _config(
         "R2_BUCKET_NAME",
         "R2_BUCKET",
-        "R2_BUCKET_NAME",
         "AWS_S3_BUCKET",
     )
 
 
 def _r2_endpoint() -> Optional[str]:
+    """
+    Resolve the Cloudflare R2 S3-compatible endpoint.
+
+    If R2_ENDPOINT_URL/R2_ENDPOINT is supplied, use it.
+
+    Otherwise construct:
+
+        https://ACCOUNT_ID.r2.cloudflarestorage.com
+    """
+
     endpoint = _config(
-        "R2_ENDPOINT",
         "R2_ENDPOINT_URL",
+        "R2_ENDPOINT",
         "AWS_ENDPOINT_URL",
     )
 
@@ -157,6 +281,10 @@ def _r2_endpoint() -> Optional[str]:
 
 
 def _r2_is_configured() -> bool:
+    """
+    Return True only when all required R2 credentials are available.
+    """
+
     return bool(
         _r2_endpoint()
         and _r2_access_key()
@@ -165,12 +293,99 @@ def _r2_is_configured() -> bool:
     )
 
 
+# Public compatibility helper.
+
+def r2_enabled() -> bool:
+    """
+    Return whether R2 storage is currently usable.
+    """
+
+    return _r2_is_configured()
+
+
 # ======================================================================
 # EXTENSION
 # ======================================================================
 
 def _ext(filename: str) -> str:
-    return os.path.splitext(filename or "")[1].lower()
+    """
+    Return a lowercase file extension.
+    """
+
+    return os.path.splitext(
+        filename or ""
+    )[1].lower()
+
+
+# ======================================================================
+# FILE VALIDATION
+# ======================================================================
+
+def _validate_upload(
+    file: UploadFile,
+    allowed_extensions: Set[str],
+) -> str:
+    """
+    Validate filename and extension.
+    """
+
+    if not file:
+        raise UploadValidationError(
+            "No file was uploaded."
+        )
+
+    if not file.filename:
+        raise UploadValidationError(
+            "No file was uploaded."
+        )
+
+    extension = _ext(file.filename)
+
+    if extension not in allowed_extensions:
+        allowed = ", ".join(
+            sorted(allowed_extensions)
+        )
+
+        raise UploadValidationError(
+            f"Unsupported file type '{extension}'. "
+            f"Allowed: {allowed}"
+        )
+
+    return extension
+
+
+async def _read_upload(
+    file: UploadFile,
+    allowed_extensions: Set[str],
+) -> tuple[bytes, str]:
+    """
+    Validate and read an uploaded file.
+
+    Returns:
+        (contents, extension)
+    """
+
+    extension = _validate_upload(
+        file,
+        allowed_extensions,
+    )
+
+    contents = await file.read()
+
+    if not contents:
+        raise UploadValidationError(
+            "The uploaded file is empty."
+        )
+
+    max_bytes = _max_upload_bytes()
+
+    if len(contents) > max_bytes:
+        raise UploadValidationError(
+            f"File exceeds the "
+            f"{_max_upload_mb()}MB upload limit."
+        )
+
+    return contents, extension
 
 
 # ======================================================================
@@ -179,7 +394,7 @@ def _ext(filename: str) -> str:
 
 def _r2_client():
     """
-    Lazily create the R2 S3-compatible client.
+    Lazily create the Cloudflare R2 S3-compatible boto3 client.
 
     boto3 is imported only when R2 functionality is actually used.
     """
@@ -226,14 +441,13 @@ def _r2_client():
 
 def _parse_r2_path(path: str):
     """
-    Converts:
+    Convert:
 
         r2://beathub-r2/covers/file.png
 
     into:
 
-        bucket = beathub-r2
-        key    = covers/file.png
+        ("beathub-r2", "covers/file.png")
     """
 
     if not path:
@@ -263,13 +477,14 @@ def r2_presigned_url(
     expires: int = 3600,
 ) -> Optional[str]:
     """
-    Convert an R2 database path into a temporary browser-accessible URL.
+    Convert an R2 object reference into a temporary browser URL.
 
-    Example:
+    Supports:
 
-        r2://beathub-r2/covers/photo.png
-
-    becomes a signed HTTPS URL.
+        r2://bucket/key
+        https://...
+        http://...
+        local media paths
     """
 
     if not path:
@@ -281,10 +496,15 @@ def r2_presigned_url(
         return None
 
     # --------------------------------------------------------------
-    # Already an HTTP(S) URL
+    # Already a web URL
     # --------------------------------------------------------------
 
-    if value.startswith("https://") or value.startswith("http://"):
+    if value.startswith(
+        (
+            "https://",
+            "http://",
+        )
+    ):
         return value
 
     # --------------------------------------------------------------
@@ -306,19 +526,21 @@ def r2_presigned_url(
         try:
             client = _r2_client()
 
+            safe_expires = max(
+                1,
+                min(
+                    int(expires),
+                    604800,
+                ),
+            )
+
             return client.generate_presigned_url(
                 "get_object",
                 Params={
                     "Bucket": bucket,
                     "Key": key,
                 },
-                ExpiresIn=max(
-                    1,
-                    min(
-                        int(expires),
-                        604800,
-                    ),
-                ),
+                ExpiresIn=safe_expires,
             )
 
         except Exception:
@@ -326,15 +548,33 @@ def r2_presigned_url(
 
     # --------------------------------------------------------------
     # Local file
-    #
-    # Database may contain:
-    #
-    # media/covers/file.jpg
-    # covers/file.jpg
-    # /media/covers/file.jpg
     # --------------------------------------------------------------
 
-    clean = value.replace("\\", "/").lstrip("/")
+    return _local_media_url(value)
+
+
+# ======================================================================
+# LOCAL MEDIA URL
+# ======================================================================
+
+def _local_media_url(
+    path: Optional[str],
+) -> Optional[str]:
+    """
+    Convert a local database path into a browser URL.
+    """
+
+    if not path:
+        return None
+
+    clean = (
+        str(path)
+        .replace("\\", "/")
+        .lstrip("/")
+    )
+
+    if not clean:
+        return None
 
     if clean.startswith("media/"):
         return "/" + clean
@@ -354,12 +594,7 @@ def r2_url(
     expires: int = 3600,
 ) -> Optional[str]:
     """
-    Backwards-compatible alias.
-
-    Existing code can continue calling:
-
-        r2_url(path)
-
+    Backwards-compatible URL helper.
     """
 
     return r2_presigned_url(
@@ -377,11 +612,12 @@ def media_url(
     expires: int = 3600,
 ) -> Optional[str]:
     """
-    Return a browser-accessible URL for either:
+    Return a browser-accessible URL for:
 
-    - R2 object
-    - HTTPS URL
-    - local media file
+        - R2 object
+        - HTTPS URL
+        - HTTP URL
+        - local media path
     """
 
     if not path:
@@ -392,9 +628,11 @@ def media_url(
     if not value:
         return None
 
-    if (
-        value.startswith("http://")
-        or value.startswith("https://")
+    if value.startswith(
+        (
+            "https://",
+            "http://",
+        )
     ):
         return value
 
@@ -404,50 +642,35 @@ def media_url(
             expires=expires,
         )
 
-    clean = value.replace("\\", "/").lstrip("/")
-
-    if clean.startswith("media/"):
-        return "/" + clean
-
-    return "/media/" + clean
+    return _local_media_url(value)
 
 
 # ======================================================================
-# R2 UPLOAD
+# SAVE TO R2
 # ======================================================================
 
 async def save_upload_to_r2(
     file: UploadFile,
     subfolder: str,
-    allowed_extensions: set[str],
+    allowed_extensions: Set[str],
 ) -> str:
+    """
+    Upload directly to Cloudflare R2.
 
-    if not file or not file.filename:
-        raise UploadValidationError(
-            "No file was uploaded."
+    Returns:
+
+        r2://bucket/subfolder/random.ext
+    """
+
+    if not _r2_is_configured():
+        raise RuntimeError(
+            "R2 storage is not fully configured."
         )
 
-    ext = _ext(file.filename)
-
-    if ext not in allowed_extensions:
-        raise UploadValidationError(
-            f"Unsupported file type '{ext}'. "
-            f"Allowed: {', '.join(sorted(allowed_extensions))}"
-        )
-
-    contents = await file.read()
-
-    max_bytes = (
-        int(settings.MAX_UPLOAD_MB)
-        * 1024
-        * 1024
+    contents, extension = await _read_upload(
+        file,
+        allowed_extensions,
     )
-
-    if len(contents) > max_bytes:
-        raise UploadValidationError(
-            f"File exceeds the "
-            f"{settings.MAX_UPLOAD_MB}MB upload limit."
-        )
 
     bucket = _r2_bucket()
 
@@ -456,12 +679,25 @@ async def save_upload_to_r2(
             "R2 bucket is not configured."
         )
 
-    key = (
-        f"{subfolder.strip('/')}/"
-        f"{uuid.uuid4().hex}{ext}"
+    clean_subfolder = (
+        str(subfolder or "")
+        .replace("\\", "/")
+        .strip("/")
     )
 
-    content_type = file.content_type or "application/octet-stream"
+    if not clean_subfolder:
+        clean_subfolder = "uploads"
+
+    key = (
+        f"{clean_subfolder}/"
+        f"{uuid.uuid4().hex}"
+        f"{extension}"
+    )
+
+    content_type = (
+        file.content_type
+        or "application/octet-stream"
+    )
 
     try:
         client = _r2_client()
@@ -482,57 +718,54 @@ async def save_upload_to_r2(
 
 
 # ======================================================================
-# LOCAL UPLOAD
+# SAVE LOCALLY
 # ======================================================================
 
-async def save_upload(
+async def save_upload_local(
     file: UploadFile,
     subfolder: str,
-    allowed_extensions: set[str],
+    allowed_extensions: Set[str],
 ) -> str:
     """
-    Save upload locally.
+    Save an upload to local media storage.
 
-    Existing local-storage behavior is preserved.
+    Returns:
 
-    If you want to use R2 uploads, call save_upload_to_r2().
+        subfolder/random.ext
     """
 
-    if not file or not file.filename:
-        raise UploadValidationError(
-            "No file was uploaded."
-        )
-
-    ext = _ext(file.filename)
-
-    if ext not in allowed_extensions:
-        raise UploadValidationError(
-            f"Unsupported file type '{ext}'. "
-            f"Allowed: {', '.join(sorted(allowed_extensions))}"
-        )
-
-    contents = await file.read()
-
-    max_bytes = (
-        int(settings.MAX_UPLOAD_MB)
-        * 1024
-        * 1024
+    contents, extension = await _read_upload(
+        file,
+        allowed_extensions,
     )
 
-    if len(contents) > max_bytes:
-        raise UploadValidationError(
-            f"File exceeds the "
-            f"{settings.MAX_UPLOAD_MB}MB upload limit."
-        )
-
-    media_root = Path(
-        settings.MEDIA_ROOT
+    clean_subfolder = (
+        str(subfolder or "")
+        .replace("\\", "/")
+        .strip("/")
     )
+
+    if not clean_subfolder:
+        clean_subfolder = "uploads"
+
+    media_root = _media_root()
 
     folder = (
-        media_root
-        / subfolder
-    )
+        media_root / clean_subfolder
+    ).resolve()
+
+    # --------------------------------------------------------------
+    # Prevent path traversal.
+    # --------------------------------------------------------------
+
+    try:
+        folder.relative_to(
+            media_root
+        )
+    except ValueError as exc:
+        raise UploadValidationError(
+            "Invalid upload directory."
+        ) from exc
 
     folder.mkdir(
         parents=True,
@@ -540,12 +773,22 @@ async def save_upload(
     )
 
     unique_name = (
-        f"{uuid.uuid4().hex}{ext}"
+        f"{uuid.uuid4().hex}"
+        f"{extension}"
     )
 
     full_path = (
         folder / unique_name
-    )
+    ).resolve()
+
+    try:
+        full_path.relative_to(
+            media_root
+        )
+    except ValueError as exc:
+        raise UploadValidationError(
+            "Invalid upload path."
+        ) from exc
 
     with open(
         full_path,
@@ -554,8 +797,82 @@ async def save_upload(
         output.write(contents)
 
     return (
-        f"{subfolder.strip('/')}/"
+        f"{clean_subfolder}/"
         f"{unique_name}"
+    )
+
+
+# ======================================================================
+# MAIN UPLOAD FUNCTION
+# ======================================================================
+
+async def save_upload(
+    file: UploadFile,
+    subfolder: str,
+    allowed_extensions: Set[str],
+) -> str:
+    """
+    Main storage function used by BeatHub.
+
+    Behaviour:
+
+        R2 configured
+            -> upload to R2
+
+        R2 not configured
+            -> save locally
+
+    This means existing routes do not need to know whether production
+    storage is local or Cloudflare R2.
+
+    Merchandise therefore works with:
+
+        save_upload(
+            image,
+            "merch",
+            ALLOWED_IMAGE_EXT,
+        )
+
+    and automatically uses R2 in production when configured.
+    """
+
+    if not file or not file.filename:
+        raise UploadValidationError(
+            "No file was uploaded."
+        )
+
+    # --------------------------------------------------------------
+    # Production / configured R2
+    # --------------------------------------------------------------
+
+    if _r2_is_configured():
+
+        try:
+            return await save_upload_to_r2(
+                file,
+                subfolder,
+                allowed_extensions,
+            )
+
+        except UploadValidationError:
+            raise
+
+        except Exception as exc:
+            # Do NOT silently switch to local storage after a real
+            # R2 failure in production. That could make a product
+            # appear saved while the permanent object is missing.
+            raise RuntimeError(
+                f"Cloud storage upload failed: {exc}"
+            ) from exc
+
+    # --------------------------------------------------------------
+    # Local development fallback
+    # --------------------------------------------------------------
+
+    return await save_upload_local(
+        file,
+        subfolder,
+        allowed_extensions,
     )
 
 
@@ -563,11 +880,17 @@ async def save_upload(
 # STORAGE EXISTENCE CHECK
 # ======================================================================
 
-def storage_exists(path: Optional[str]) -> bool:
+def storage_exists(
+    path: Optional[str],
+) -> bool:
     """
     Check whether a stored object exists.
 
-    Supports both R2 and local files.
+    Supports both:
+
+        r2://bucket/key
+
+    and local media paths.
     """
 
     if not path:
@@ -575,11 +898,16 @@ def storage_exists(path: Optional[str]) -> bool:
 
     value = str(path).strip()
 
+    if not value:
+        return False
+
     # --------------------------------------------------------------
     # R2
     # --------------------------------------------------------------
 
-    bucket, key = _parse_r2_path(value)
+    bucket, key = _parse_r2_path(
+        value
+    )
 
     if bucket is not None:
 
@@ -600,24 +928,42 @@ def storage_exists(path: Optional[str]) -> bool:
             return False
 
     # --------------------------------------------------------------
+    # Remote HTTP URL
+    # --------------------------------------------------------------
+
+    if value.startswith(
+        (
+            "http://",
+            "https://",
+        )
+    ):
+        # We cannot reliably determine existence of an arbitrary
+        # external URL without performing a network request.
+        return True
+
+    # --------------------------------------------------------------
     # Local
     # --------------------------------------------------------------
 
-    clean = value.replace("\\", "/").lstrip("/")
-
-    media_root = Path(
-        settings.MEDIA_ROOT
-    ).resolve()
+    clean = (
+        value
+        .replace("\\", "/")
+        .lstrip("/")
+    )
 
     if clean.startswith("media/"):
         clean = clean[6:]
+
+    media_root = _media_root().resolve()
 
     candidate = (
         media_root / clean
     ).resolve()
 
     try:
-        candidate.relative_to(media_root)
+        candidate.relative_to(
+            media_root
+        )
     except ValueError:
         return False
 
@@ -634,6 +980,9 @@ def storage_exists(path: Optional[str]) -> bool:
 def delete_r2_object(
     path: Optional[str],
 ) -> bool:
+    """
+    Delete an R2 object from an r2:// reference.
+    """
 
     if not path:
         return False
@@ -666,37 +1015,78 @@ def delete_r2_object(
 def delete_local_object(
     path: Optional[str],
 ) -> bool:
+    """
+    Safely delete a local media file.
+
+    Path traversal outside MEDIA_ROOT is rejected.
+    """
 
     if not path:
         return False
 
-    value = str(path).replace(
-        "\\",
-        "/",
-    ).lstrip("/")
+    value = (
+        str(path)
+        .replace("\\", "/")
+        .lstrip("/")
+    )
 
     if value.startswith("media/"):
         value = value[6:]
 
-    media_root = Path(
-        settings.MEDIA_ROOT
-    ).resolve()
+    if not value:
+        return False
+
+    media_root = _media_root().resolve()
 
     target = (
         media_root / value
     ).resolve()
 
     try:
-        target.relative_to(media_root)
+        target.relative_to(
+            media_root
+        )
     except ValueError:
         return False
 
     try:
-        if target.exists() and target.is_file():
+        if (
+            target.exists()
+            and target.is_file()
+        ):
             target.unlink()
             return True
 
     except Exception:
-        pass
+        return False
 
     return False
+
+
+# ======================================================================
+# DELETE ANY STORED OBJECT
+# ======================================================================
+
+def delete_storage_object(
+    path: Optional[str],
+) -> bool:
+    """
+    Delete either an R2 object or a local file.
+
+    Useful for future merchandise product deletion.
+    """
+
+    if not path:
+        return False
+
+    value = str(path).strip()
+
+    if value.startswith("r2://"):
+        return delete_r2_object(
+            value
+        )
+
+    return delete_local_object(
+        value
+    )
+```
