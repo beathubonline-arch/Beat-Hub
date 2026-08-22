@@ -1,53 +1,200 @@
+"""
+BeatHub payment models.
+
+Stores M-Pesa payment transactions associated with BeatHub orders.
+
+IMPORTANT:
+- PaymentTransaction represents the payment attempt.
+- Order represents the purchase.
+- License represents ownership.
+- A payment must NOT grant ownership until the M-Pesa callback
+  confirms a successful payment.
+"""
+
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import (
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Numeric,
+    String,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
-class PaymentStatus(str, enum.Enum):
-    PENDING = "pending"
-    SUCCESS = "success"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+# ======================================================================
+# PAYMENT STATUS
+# ======================================================================
 
+class PaymentStatus(str, enum.Enum):
+    """
+    State of an individual payment transaction.
+    """
+
+    PENDING = "pending"
+
+    COMPLETED = "completed"
+
+    FAILED = "failed"
+
+
+# ======================================================================
+# PAYMENT TRANSACTION
+# ======================================================================
 
 class PaymentTransaction(Base):
     """
-    Tracks the lifecycle of a single M-Pesa STK Push request tied to an order.
-    CheckoutRequestID is the idempotency key used to safely process
-    duplicate/retried Daraja callbacks without double-processing.
+    One M-Pesa payment attempt for one BeatHub order.
+
+    The CheckoutRequestID is the primary correlation identifier
+    returned by Safaricom's STK Push API.
+
+    Ownership must NEVER be granted merely because this row exists.
+
+    Ownership is granted only when:
+        PaymentStatus.COMPLETED
+        AND
+        OrderStatus.COMPLETED
     """
 
     __tablename__ = "payment_transactions"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_id: Mapped[str] = mapped_column(String(36), ForeignKey("orders.id"), unique=True, nullable=False)
+    # ------------------------------------------------------------------
+    # PRIMARY KEY
+    # ------------------------------------------------------------------
 
-    merchant_request_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    checkout_request_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
 
-    phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
-    amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
+    # ------------------------------------------------------------------
+    # ORDER
+    # ------------------------------------------------------------------
 
-    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, index=True)
+    order_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "orders.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
 
-    mpesa_receipt_number: Mapped[str | None] = mapped_column(String(60), nullable=True)
-    result_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    result_desc: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # ------------------------------------------------------------------
+    # SAFARICOM IDENTIFIERS
+    # ------------------------------------------------------------------
 
-    raw_callback_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    merchant_request_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
 
-    # Guards against the same Daraja callback being processed twice.
-    callback_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    checkout_request_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    mpesa_receipt_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
 
-    order = relationship("Order", back_populates="payment_transaction")
+    # ------------------------------------------------------------------
+    # PAYMENT DETAILS
+    # ------------------------------------------------------------------
+
+    phone_number: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+
+    # ------------------------------------------------------------------
+    # STATUS
+    # ------------------------------------------------------------------
+
+    status: Mapped[PaymentStatus] = mapped_column(
+        SAEnum(
+            PaymentStatus,
+            name="paymentstatus",
+            native_enum=False,
+        ),
+        default=PaymentStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+
+    # ------------------------------------------------------------------
+    # SAFARICOM RESULT INFORMATION
+    # ------------------------------------------------------------------
+
+    result_code: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+
+    result_description: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    # ------------------------------------------------------------------
+    # TIMESTAMPS
+    # ------------------------------------------------------------------
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    # ------------------------------------------------------------------
+    # RELATIONSHIP
+    # ------------------------------------------------------------------
+
+    order = relationship(
+        "Order",
+        back_populates="payment_transaction",
+    )
+
+    # ------------------------------------------------------------------
+    # REPRESENTATION
+    # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        return f"<PaymentTransaction {self.checkout_request_id} {self.status}>"
+        return (
+            "<PaymentTransaction "
+            f"{self.checkout_request_id} "
+            f"{self.status}>"
+        )
+    
