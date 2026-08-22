@@ -1,778 +1,809 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="theme-color" content="#080808">
-    <title>Beats · BeatHub</title>
-    <meta name="description" content="Discover and license beats from BeatHub creators.">
-
-    <style>
-        :root {
-            --bg: #080808;
-            --surface: #111111;
-            --surface-2: #171717;
-            --line: rgba(255,255,255,.09);
-            --text: #f5f5f5;
-            --muted: #9b9b9b;
-            --accent: #d9ff3f;
-            --accent-dark: #b7d900;
-            --danger: #ff5b6e;
-            --radius: 20px;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            margin: 0;
-            background:
-                radial-gradient(circle at 50% -10%, rgba(217,255,63,.10), transparent 34rem),
-                var(--bg);
-            color: var(--text);
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            min-height: 100vh;
-        }
-
-        a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        button,
-        input,
-        select {
-            font: inherit;
-        }
-
-        .nav {
-            position: sticky;
-            top: 0;
-            z-index: 50;
-            backdrop-filter: blur(18px);
-            background: rgba(8,8,8,.86);
-            border-bottom: 1px solid var(--line);
-        }
-
-        .nav-inner {
-            width: min(1180px, calc(100% - 32px));
-            margin: auto;
-            min-height: 72px;
-            display: flex;
-            align-items: center;
-            gap: 26px;
-        }
-
-        .brand {
-            font-size: 1.25rem;
-            font-weight: 950;
-            letter-spacing: -.06em;
-            white-space: nowrap;
-        }
-
-        .brand span {
-            color: var(--accent);
-        }
-
-        .nav-links {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-            margin-left: auto;
-            flex-wrap: wrap;
-        }
-
-        .nav-links a {
-            color: #c8c8c8;
-            font-size: .92rem;
-            font-weight: 700;
-        }
-
-        .nav-links a:hover,
-        .nav-links a.active {
-            color: var(--accent);
-        }
-
-        .page {
-            width: min(1180px, calc(100% - 32px));
-            margin: auto;
-            padding: 58px 0 80px;
-        }
-
-        .hero {
-            display: grid;
-            grid-template-columns: 1.25fr .75fr;
-            gap: 30px;
-            align-items: end;
-            margin-bottom: 34px;
-        }
-
-        .eyebrow {
-            color: var(--accent);
-            font-size: .76rem;
-            font-weight: 900;
-            letter-spacing: .16em;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
-
-        h1 {
-            margin: 0;
-            font-size: clamp(2.4rem, 6vw, 4.8rem);
-            line-height: .92;
-            letter-spacing: -.065em;
-        }
-
-        .hero p {
-            color: var(--muted);
-            max-width: 620px;
-            margin: 18px 0 0;
-            line-height: 1.65;
-        }
-
-        .count {
-            justify-self: end;
-            text-align: right;
-            color: var(--muted);
-            font-size: .9rem;
-        }
-
-        .count strong {
-            display: block;
-            color: var(--text);
-            font-size: 2rem;
-            line-height: 1;
-            margin-bottom: 5px;
-        }
-
-        .filters {
-            background: rgba(17,17,17,.88);
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            padding: 16px;
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
-            gap: 10px;
-            margin-bottom: 30px;
-        }
-
-        .field {
-            min-width: 0;
-        }
-
-        .field input,
-        .field select {
-            width: 100%;
-            height: 48px;
-            border: 1px solid var(--line);
-            background: #0c0c0c;
-            color: var(--text);
-            border-radius: 13px;
-            padding: 0 14px;
-            outline: none;
-        }
-
-        .field input:focus,
-        .field select:focus {
-            border-color: rgba(217,255,63,.65);
-            box-shadow: 0 0 0 3px rgba(217,255,63,.08);
-        }
-
-        .btn {
-            height: 48px;
-            border: 0;
-            border-radius: 13px;
-            padding: 0 18px;
-            cursor: pointer;
-            font-weight: 900;
-            white-space: nowrap;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: #090909;
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-dark);
-        }
-
-        .btn-dark {
-            background: #202020;
-            color: var(--text);
-            border: 1px solid var(--line);
-        }
-
-        .catalog-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 20px;
-            color: var(--muted);
-            font-size: .86rem;
-            margin: 0 2px 16px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 18px;
-        }
-
-        .card {
-            overflow: hidden;
-            background: linear-gradient(180deg, #151515, #0f0f0f);
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(217,255,63,.25);
-            box-shadow: 0 18px 45px rgba(0,0,0,.28);
-        }
-
-        .cover {
-            position: relative;
-            aspect-ratio: 1 / 1;
-            overflow: hidden;
-            background:
-                linear-gradient(135deg, rgba(217,255,63,.25), transparent 45%),
-                #202020;
-        }
-
-        .cover img {
-            width: 100%;
-            height: 100%;
-            display: block;
-            object-fit: cover;
-        }
-
-        .cover-placeholder {
-            width: 100%;
-            height: 100%;
-            display: grid;
-            place-items: center;
-            font-size: 3.2rem;
-            font-weight: 950;
-            color: rgba(255,255,255,.15);
-        }
-
-        .play {
-            position: absolute;
-            left: 12px;
-            bottom: 12px;
-            width: 46px;
-            height: 46px;
-            border: 0;
-            border-radius: 50%;
-            background: var(--accent);
-            color: #080808;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 950;
-            box-shadow: 0 8px 22px rgba(0,0,0,.3);
-        }
-
-        .play:hover {
-            transform: scale(1.05);
-        }
-
-        .price-badge {
-            position: absolute;
-            right: 12px;
-            top: 12px;
-            background: rgba(0,0,0,.75);
-            border: 1px solid rgba(255,255,255,.12);
-            color: white;
-            border-radius: 999px;
-            padding: 7px 10px;
-            font-size: .78rem;
-            font-weight: 900;
-            backdrop-filter: blur(8px);
-        }
-
-        .body {
-            padding: 15px;
-        }
-
-        .title {
-            font-weight: 900;
-            font-size: 1rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .producer {
-            margin-top: 5px;
-            color: var(--muted);
-            font-size: .8rem;
-        }
-
-        .tags {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            margin-top: 12px;
-            min-height: 25px;
-        }
-
-        .tag {
-            border: 1px solid var(--line);
-            background: #0b0b0b;
-            border-radius: 999px;
-            padding: 5px 8px;
-            color: #bcbcbc;
-            font-size: .68rem;
-            font-weight: 800;
-        }
-
-        .actions {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 8px;
-            margin-top: 15px;
-        }
-
-        .buy {
-            display: grid;
-            place-items: center;
-            min-height: 42px;
-            background: var(--accent);
-            color: #080808;
-            border-radius: 12px;
-            font-weight: 950;
-            font-size: .82rem;
-        }
-
-        .details {
-            display: grid;
-            place-items: center;
-            width: 42px;
-            min-height: 42px;
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            color: #ddd;
-            background: #191919;
-        }
-
-        .empty {
-            border: 1px dashed rgba(255,255,255,.16);
-            border-radius: var(--radius);
-            padding: 70px 25px;
-            text-align: center;
-            color: var(--muted);
-            background: rgba(17,17,17,.55);
-        }
-
-        .empty strong {
-            display: block;
-            color: var(--text);
-            font-size: 1.35rem;
-            margin-bottom: 8px;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            margin-top: 34px;
-        }
-
-        .page-link {
-            min-width: 42px;
-            height: 42px;
-            padding: 0 13px;
-            display: grid;
-            place-items: center;
-            border: 1px solid var(--line);
-            background: #121212;
-            border-radius: 11px;
-            color: #ddd;
-            font-weight: 850;
-        }
-
-        .page-link.current {
-            background: var(--accent);
-            color: #080808;
-            border-color: var(--accent);
-        }
-
-        footer {
-            border-top: 1px solid var(--line);
-            color: #777;
-            text-align: center;
-            padding: 30px 16px;
-            font-size: .82rem;
-        }
-
-        @media (max-width: 1000px) {
-            .grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-
-            .filters {
-                grid-template-columns: 2fr 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .nav-inner {
-                min-height: auto;
-                padding: 16px 0;
-                align-items: flex-start;
-                flex-direction: column;
-                gap: 12px;
-            }
-
-            .nav-links {
-                margin-left: 0;
-                width: 100%;
-                overflow-x: auto;
-                flex-wrap: nowrap;
-                padding-bottom: 2px;
-            }
-
-            .hero {
-                grid-template-columns: 1fr;
-            }
-
-            .count {
-                justify-self: start;
-                text-align: left;
-            }
-
-            .filters {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .field:first-child {
-                grid-column: 1 / -1;
-            }
-
-            .grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 500px) {
-            .page {
-                width: min(100% - 20px, 1180px);
-                padding-top: 35px;
-            }
-
-            .filters {
-                grid-template-columns: 1fr;
-            }
-
-            .field:first-child {
-                grid-column: auto;
-            }
-
-            .grid {
-                grid-template-columns: 1fr;
-            }
-
-            .card {
-                border-radius: 17px;
-            }
-        }
-    </style>
-</head>
-
-<body>
-<nav class="nav">
-    <div class="nav-inner">
-        <a class="brand" href="/">BEAT<span>HUB</span></a>
-
-        <div class="nav-links">
-            <a class="active" href="/beats">Beats</a>
-            <a href="/sessions">Sessions</a>
-            <a href="/hot-picks">Hot Picks</a>
-            <a href="/merch">Merch</a>
-
-            {% if current_user %}
-                <a href="/dashboard">Dashboard</a>
-                <a href="/logout">Logout</a>
-            {% else %}
-                <a href="/login">Login</a>
-                <a href="/signup">Sign Up</a>
-            {% endif %}
-        </div>
+{% extends "base.html" %}
+
+{% block title %}Beats — BeatHub{% endblock %}
+
+{% block extra_head %}
+<style>
+  :root {
+    --bh-bg: #070707;
+    --bh-panel: #101010;
+    --bh-panel-2: #151515;
+    --bh-line: rgba(255,255,255,.09);
+    --bh-text: #f7f7f7;
+    --bh-muted: #a4a4a4;
+    --bh-accent: #ff7a00;
+    --bh-accent-2: #ff9d45;
+    --bh-green: #39d98a;
+    --bh-shadow: 0 24px 70px rgba(0,0,0,.38);
+  }
+
+  .beats-page {
+    margin: -8px -4px 0;
+    padding-bottom: 48px;
+  }
+
+  .beats-hero {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--bh-line);
+    border-radius: 28px;
+    padding: 42px 34px 34px;
+    background:
+      radial-gradient(circle at 85% 20%, rgba(255,122,0,.23), transparent 32%),
+      radial-gradient(circle at 12% 100%, rgba(255,255,255,.07), transparent 34%),
+      linear-gradient(135deg, #171717 0%, #0a0a0a 58%, #101010 100%);
+    box-shadow: var(--bh-shadow);
+  }
+
+  .beats-hero:after {
+    content: "";
+    position: absolute;
+    width: 320px;
+    height: 320px;
+    right: -120px;
+    bottom: -190px;
+    border-radius: 50%;
+    background: rgba(255,122,0,.12);
+    filter: blur(10px);
+  }
+
+  .hero-kicker {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 11px;
+    border: 1px solid rgba(255,122,0,.32);
+    border-radius: 999px;
+    color: var(--bh-accent-2);
+    background: rgba(255,122,0,.08);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+  }
+
+  .beats-hero h1 {
+    position: relative;
+    z-index: 1;
+    margin: 14px 0 8px;
+    font-size: clamp(36px, 6vw, 68px);
+    line-height: .98;
+    letter-spacing: -.045em;
+    color: #fff;
+  }
+
+  .beats-hero h1 span {
+    color: var(--bh-accent);
+  }
+
+  .beats-hero p {
+    position: relative;
+    z-index: 1;
+    max-width: 680px;
+    margin: 0;
+    color: #bdbdbd;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .beats-hero-stats {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .hero-stat {
+    padding: 10px 13px;
+    border: 1px solid var(--bh-line);
+    border-radius: 13px;
+    background: rgba(255,255,255,.045);
+    color: #ddd;
+    font-size: 12px;
+  }
+
+  .hero-stat strong {
+    color: #fff;
+    margin-right: 4px;
+  }
+
+  .beats-toolbar {
+    margin: 18px 0 22px;
+    padding: 14px;
+    border: 1px solid var(--bh-line);
+    border-radius: 20px;
+    background: rgba(16,16,16,.94);
+    box-shadow: 0 12px 36px rgba(0,0,0,.2);
+  }
+
+  .beats-search {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .beats-search input,
+  .beats-search select {
+    width: 100%;
+    min-height: 46px;
+    box-sizing: border-box;
+    border: 1px solid var(--bh-line);
+    border-radius: 12px;
+    outline: none;
+    background: #0a0a0a;
+    color: #fff;
+    padding: 0 14px;
+  }
+
+  .beats-search input:focus,
+  .beats-search select:focus {
+    border-color: rgba(255,122,0,.7);
+    box-shadow: 0 0 0 3px rgba(255,122,0,.09);
+  }
+
+  .beats-search button,
+  .clear-btn {
+    min-height: 46px;
+    border-radius: 12px;
+    padding: 0 18px;
+    font-weight: 800;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .beats-search button {
+    border: 1px solid var(--bh-accent);
+    background: var(--bh-accent);
+    color: #111;
+  }
+
+  .clear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--bh-line);
+    background: #111;
+    color: #ddd;
+  }
+
+  .genre-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 12px 2px 2px;
+    scrollbar-width: thin;
+  }
+
+  .genre-chip {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border: 1px solid var(--bh-line);
+    border-radius: 999px;
+    color: #bbb;
+    text-decoration: none;
+    font-size: 12px;
+    background: #0d0d0d;
+    transition: .18s ease;
+  }
+
+  .genre-chip:hover,
+  .genre-chip.active {
+    color: #fff;
+    border-color: rgba(255,122,0,.55);
+    background: rgba(255,122,0,.1);
+  }
+
+  .beats-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 16px;
+    margin: 30px 2px 16px;
+  }
+
+  .beats-section-head h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 25px;
+    letter-spacing: -.025em;
+  }
+
+  .beats-section-head p {
+    margin: 5px 0 0;
+    color: var(--bh-muted);
+    font-size: 13px;
+  }
+
+  .beats-count {
+    color: #aaa;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .beat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 17px;
+  }
+
+  .beat-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--bh-line);
+    border-radius: 19px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.01)),
+      var(--bh-panel);
+    box-shadow: 0 12px 34px rgba(0,0,0,.22);
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  }
+
+  .beat-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(255,122,0,.36);
+    box-shadow: 0 24px 50px rgba(0,0,0,.38);
+  }
+
+  .beat-art {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 25% 20%, rgba(255,122,0,.36), transparent 30%),
+      linear-gradient(135deg, #242424, #090909);
+  }
+
+  .beat-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform .35s ease;
+  }
+
+  .beat-card:hover .beat-art img {
+    transform: scale(1.045);
+  }
+
+  .art-fallback {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: rgba(255,255,255,.16);
+    font-size: 54px;
+    font-weight: 900;
+    letter-spacing: -.08em;
+  }
+
+  .beat-badge {
+    position: absolute;
+    top: 11px;
+    left: 11px;
+    padding: 6px 9px;
+    border-radius: 999px;
+    background: rgba(0,0,0,.66);
+    border: 1px solid rgba(255,255,255,.12);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .preview-btn {
+    position: absolute;
+    right: 11px;
+    bottom: 11px;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 50%;
+    background: rgba(0,0,0,.72);
+    color: #fff;
+    cursor: pointer;
+    font-size: 17px;
+    backdrop-filter: blur(10px);
+  }
+
+  .preview-btn:hover {
+    background: var(--bh-accent);
+    color: #111;
+  }
+
+  .beat-body {
+    padding: 15px;
+  }
+
+  .beat-title-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .beat-title {
+    margin: 0;
+    color: #fff;
+    font-size: 16px;
+    line-height: 1.25;
+    letter-spacing: -.015em;
+  }
+
+  .beat-producer {
+    margin: 5px 0 0;
+    color: #929292;
+    font-size: 12px;
+  }
+
+  .beat-price {
+    color: var(--bh-accent-2);
+    font-size: 16px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .beat-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 13px 0;
+  }
+
+  .meta-pill {
+    padding: 5px 7px;
+    border: 1px solid var(--bh-line);
+    border-radius: 7px;
+    color: #aaa;
+    background: #0c0c0c;
+    font-size: 10px;
+  }
+
+  .beat-actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .view-beat,
+  .mini-preview {
+    min-height: 40px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 850;
+    cursor: pointer;
+  }
+
+  .view-beat {
+    background: #fff;
+    color: #111;
+  }
+
+  .view-beat:hover {
+    background: var(--bh-accent);
+  }
+
+  .mini-preview {
+    width: 42px;
+    border: 1px solid var(--bh-line);
+    background: #111;
+    color: #fff;
+  }
+
+  .empty-beats {
+    grid-column: 1 / -1;
+    padding: 58px 20px;
+    text-align: center;
+    border: 1px dashed rgba(255,255,255,.15);
+    border-radius: 20px;
+    background: #0d0d0d;
+  }
+
+  .empty-beats .icon {
+    font-size: 34px;
+    margin-bottom: 8px;
+  }
+
+  .empty-beats h3 {
+    margin: 0 0 7px;
+    color: #fff;
+  }
+
+  .empty-beats p {
+    margin: 0;
+    color: #999;
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 30px;
+  }
+
+  .page-link {
+    min-width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--bh-line);
+    border-radius: 10px;
+    background: #111;
+    color: #ddd;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .page-link:hover,
+  .page-link.current {
+    border-color: var(--bh-accent);
+    background: var(--bh-accent);
+    color: #111;
+  }
+
+  .now-playing {
+    position: fixed;
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    gap: 13px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 16px;
+    background: rgba(13,13,13,.93);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    backdrop-filter: blur(18px);
+  }
+
+  .now-playing.visible {
+    display: flex;
+  }
+
+  .np-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .np-title {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .np-sub {
+    color: #8f8f8f;
+    font-size: 10px;
+    margin-top: 2px;
+  }
+
+  .np-stop {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--bh-line);
+    border-radius: 50%;
+    background: #111;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  @media (max-width: 1050px) {
+    .beat-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .beats-search {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .beats-page {
+      margin: -4px 0 0;
+    }
+
+    .beats-hero {
+      padding: 30px 22px 25px;
+      border-radius: 22px;
+    }
+
+    .beat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .beats-search {
+      grid-template-columns: 1fr;
+    }
+
+    .beats-section-head {
+      align-items: start;
+      flex-direction: column;
+    }
+  }
+
+  @media (max-width: 500px) {
+    .beat-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .beat-art {
+      aspect-ratio: 16 / 11;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="beats-page">
+
+  <section class="beats-hero">
+    <div class="hero-kicker">BeatHub Marketplace</div>
+    <h1>Find your <span>next sound.</span></h1>
+    <p>
+      Browse fresh beats from BeatHub creators, preview them instantly,
+      compare styles and prices, then open the beat page when you're ready
+      to license it.
+    </p>
+
+    <div class="beats-hero-stats">
+      <div class="hero-stat"><strong>{{ total }}</strong> beats available</div>
+      <div class="hero-stat"><strong>24/7</strong> discovery</div>
+      <div class="hero-stat"><strong>Preview</strong> before you buy</div>
     </div>
-</nav>
+  </section>
 
-<main class="page">
-    <section class="hero">
-        <div>
-            <div class="eyebrow">Beat marketplace</div>
-            <h1>Find your sound.</h1>
-            <p>
-                Browse BeatHub beats, preview them instantly, and choose the
-                sound that fits your next record.
-            </p>
-        </div>
+  <section class="beats-toolbar" aria-label="Beat filters">
+    <form class="beats-search" method="get" action="/beats">
+      <input
+        type="search"
+        name="q"
+        value="{{ q or '' }}"
+        placeholder="Search beats, genres, moods..."
+        autocomplete="off"
+      >
 
-        <div class="count">
-            <strong>{{ total }}</strong>
-            {% if total == 1 %}beat available{% else %}beats available{% endif %}
-        </div>
-    </section>
+      <select name="genre" aria-label="Genre">
+        <option value="">All genres</option>
+        {% for item in genres %}
+          <option value="{{ item }}" {% if genre == item %}selected{% endif %}>
+            {{ item }}
+          </option>
+        {% endfor %}
+      </select>
 
-    <form class="filters" method="get" action="/beats">
-        <div class="field">
-            <input
-                type="search"
-                name="q"
-                value="{{ q or '' }}"
-                placeholder="Search beats, genres, moods..."
-                autocomplete="off"
-            >
-        </div>
+      <select name="mood" aria-label="Mood">
+        <option value="">All moods</option>
+        {% for item in moods %}
+          <option value="{{ item }}" {% if mood == item %}selected{% endif %}>
+            {{ item }}
+          </option>
+        {% endfor %}
+      </select>
 
-        <div class="field">
-            <select name="genre">
-                <option value="">All genres</option>
-                {% for item in genres %}
-                    <option value="{{ item }}" {% if genre == item %}selected{% endif %}>
-                        {{ item }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="field">
-            <select name="mood">
-                <option value="">All moods</option>
-                {% for item in moods %}
-                    <option value="{{ item }}" {% if mood == item %}selected{% endif %}>
-                        {{ item }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="field">
-            <input
-                type="number"
-                name="min_price"
-                min="0"
-                step="1"
-                value="{{ '' if min_price is none else min_price }}"
-                placeholder="Min KSh"
-            >
-        </div>
-
-        <div class="field">
-            <input
-                type="number"
-                name="max_price"
-                min="0"
-                step="1"
-                value="{{ '' if max_price is none else max_price }}"
-                placeholder="Max KSh"
-            >
-        </div>
-
-        <button class="btn btn-primary" type="submit">
-            Search
-        </button>
+      <button type="submit">Search Beats</button>
     </form>
 
-    <div class="catalog-meta">
-        <span>
-            {% if total %}
-                Showing {{ catalog_start }}–{{ catalog_end }} of {{ total }}
-            {% else %}
-                No beats found
-            {% endif %}
-        </span>
-
-        {% if q or genre or mood or min_price is not none or max_price is not none %}
-            <a class="btn-dark" style="padding:8px 12px;border-radius:9px;" href="/beats">
-                Clear filters
-            </a>
-        {% endif %}
-    </div>
-
-    {% if catalog %}
-        <section class="grid">
-            {% for item in catalog %}
-                <article class="card">
-                    <a href="{{ item.url }}" class="cover">
-                        {% if item.artwork_url %}
-                            <img
-                                src="{{ item.artwork_url }}"
-                                alt="{{ item.title }}"
-                                loading="lazy"
-                            >
-                        {% else %}
-                            <div class="cover-placeholder">♪</div>
-                        {% endif %}
-
-                        <span class="price-badge">
-                            KSh {{ "%.0f"|format(item.price) }}
-                        </span>
-                    </a>
-
-                    {% if item.audio_url %}
-                        <button
-                            class="play"
-                            type="button"
-                            aria-label="Preview {{ item.title }}"
-                            data-audio="{{ item.audio_url }}"
-                        >▶</button>
-                    {% endif %}
-
-                    <div class="body">
-                        <div class="title">{{ item.title }}</div>
-                        <div class="producer">by {{ item.producer }}</div>
-
-                        <div class="tags">
-                            {% if item.genre %}
-                                <span class="tag">{{ item.genre }}</span>
-                            {% endif %}
-
-                            {% if item.mood %}
-                                <span class="tag">{{ item.mood }}</span>
-                            {% endif %}
-
-                            {% if item.bpm %}
-                                <span class="tag">{{ item.bpm }} BPM</span>
-                            {% endif %}
-
-                            {% if item.key %}
-                                <span class="tag">{{ item.key }}</span>
-                            {% endif %}
-                        </div>
-
-                        <div class="actions">
-                            <a class="buy" href="{{ item.url }}">
-                                View & License
-                            </a>
-
-                            <a
-                                class="details"
-                                href="{{ item.url }}"
-                                aria-label="View {{ item.title }}"
-                            >
-                                ↗
-                            </a>
-                        </div>
-                    </div>
-                </article>
-            {% endfor %}
-        </section>
-
-        <div class="pagination">
-            {% if has_previous %}
-                <a
-                    class="page-link"
-                    href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&min_price={{ min_price if min_price is not none else '' }}&max_price={{ max_price if max_price is not none else '' }}&page={{ previous_page }}"
-                >
-                    ‹
-                </a>
-            {% endif %}
-
-            {% for number in range(1, total_pages + 1) %}
-                {% if number <= 3 or number > total_pages - 2 or (number >= page - 1 and number <= page + 1) %}
-                    <a
-                        class="page-link {% if number == page %}current{% endif %}"
-                        href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&min_price={{ min_price if min_price is not none else '' }}&max_price={{ max_price if max_price is not none else '' }}&page={{ number }}"
-                    >
-                        {{ number }}
-                    </a>
-                {% endif %}
-            {% endfor %}
-
-            {% if has_next %}
-                <a
-                    class="page-link"
-                    href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&min_price={{ min_price if min_price is not none else '' }}&max_price={{ max_price if max_price is not none else '' }}&page={{ next_page }}"
-                >
-                    ›
-                </a>
-            {% endif %}
-        </div>
-    {% else %}
-        <div class="empty">
-            <strong>No beats found.</strong>
-            Try another search or clear the filters and browse the full catalog.
-        </div>
+    {% if q or genre or mood %}
+      <div style="margin-top:10px;">
+        <a class="clear-btn" href="/beats">Clear filters</a>
+      </div>
     {% endif %}
-</main>
 
-<footer>
-    © {{ current_year }} BeatHub. All rights reserved.
-</footer>
+    {% if genres %}
+      <div class="genre-strip">
+        <a class="genre-chip {% if not genre %}active{% endif %}" href="/beats">All</a>
+        {% for item in genres %}
+          <a
+            class="genre-chip {% if genre == item %}active{% endif %}"
+            href="/beats?genre={{ item|urlencode }}"
+          >{{ item }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <div class="beats-section-head">
+    <div>
+      <h2>{% if q or genre or mood %}Matching beats{% else %}Latest beats{% endif %}</h2>
+      <p>
+        {% if q %}
+          Results for “{{ q }}”
+        {% elif genre %}
+          {{ genre }} beats
+        {% elif mood %}
+          {{ mood }} beats
+        {% else %}
+          Fresh sounds from BeatHub creators.
+        {% endif %}
+      </p>
+    </div>
+    <div class="beats-count">
+      Showing {{ catalog_start }}–{{ catalog_end }} of {{ total }}
+    </div>
+  </div>
+
+  <section class="beat-grid">
+    {% if catalog %}
+      {% for item in catalog %}
+        <article class="beat-card">
+          <div class="beat-art">
+            {% if item.artwork_url %}
+              <img
+                src="{{ item.artwork_url }}"
+                alt="{{ item.title }} artwork"
+                loading="lazy"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='grid';"
+              >
+              <div class="art-fallback" style="display:none;">BH</div>
+            {% else %}
+              <div class="art-fallback">BH</div>
+            {% endif %}
+
+            {% if loop.index <= 3 and page == 1 and not q and not genre and not mood %}
+              <div class="beat-badge">Fresh</div>
+            {% endif %}
+
+            {% if item.audio_url %}
+              <button
+                class="preview-btn"
+                type="button"
+                aria-label="Preview {{ item.title }}"
+                data-audio="{{ item.audio_url }}"
+                data-title="{{ item.title }}"
+                data-producer="{{ item.producer }}"
+                onclick="togglePreview(this)"
+              >▶</button>
+            {% endif %}
+          </div>
+
+          <div class="beat-body">
+            <div class="beat-title-row">
+              <div>
+                <h3 class="beat-title">{{ item.title }}</h3>
+                <p class="beat-producer">by {{ item.producer }}</p>
+              </div>
+              <div class="beat-price">KSh {{ "%.0f"|format(item.price) }}</div>
+            </div>
+
+            <div class="beat-meta">
+              {% if item.genre %}<span class="meta-pill">{{ item.genre }}</span>{% endif %}
+              {% if item.mood %}<span class="meta-pill">{{ item.mood }}</span>{% endif %}
+              {% if item.bpm %}<span class="meta-pill">{{ item.bpm }} BPM</span>{% endif %}
+              {% if item.key %}<span class="meta-pill">{{ item.key }}</span>{% endif %}
+            </div>
+
+            <div class="beat-actions">
+              <a class="view-beat" href="{{ item.url }}">View &amp; License</a>
+              {% if item.audio_url %}
+                <button
+                  class="mini-preview"
+                  type="button"
+                  data-audio="{{ item.audio_url }}"
+                  data-title="{{ item.title }}"
+                  data-producer="{{ item.producer }}"
+                  onclick="togglePreview(this)"
+                  aria-label="Preview {{ item.title }}"
+                >▶</button>
+              {% else %}
+                <span></span>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    {% else %}
+      <div class="empty-beats">
+        <div class="icon">♪</div>
+        <h3>No beats found</h3>
+        <p>Try another search, genre or mood. New sounds are added by creators regularly.</p>
+        <div style="margin-top:16px;">
+          <a class="clear-btn" href="/beats">Browse all beats</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if total_pages > 1 %}
+    <nav class="pagination" aria-label="Beat pagination">
+      {% if has_previous %}
+        <a
+          class="page-link"
+          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ previous_page }}"
+        >‹</a>
+      {% endif %}
+
+      {% set start_page = [1, page - 2]|max %}
+      {% set end_page = [total_pages, page + 2]|min %}
+
+      {% for p in range(start_page, end_page + 1) %}
+        <a
+          class="page-link {% if p == page %}current{% endif %}"
+          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ p }}"
+        >{{ p }}</a>
+      {% endfor %}
+
+      {% if has_next %}
+        <a
+          class="page-link"
+          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ next_page }}"
+        >›</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+</div>
+
+<div class="now-playing" id="nowPlaying">
+  <div class="np-copy">
+    <div class="np-title" id="npTitle">BeatHub Preview</div>
+    <div class="np-sub" id="npSub">Now playing</div>
+  </div>
+  <button class="np-stop" type="button" onclick="stopPreview()">■</button>
+  <audio id="previewAudio" controls style="height:34px;max-width:360px;"></audio>
+</div>
 
 <script>
-(function () {
-    let activeAudio = null;
-    let activeButton = null;
+  const previewAudio = document.getElementById("previewAudio");
+  const nowPlaying = document.getElementById("nowPlaying");
+  const npTitle = document.getElementById("npTitle");
+  const npSub = document.getElementById("npSub");
+  let activeButton = null;
 
-    document.querySelectorAll(".play").forEach(function (button) {
-        button.addEventListener("click", function (event) {
-            event.preventDefault();
-            event.stopPropagation();
+  function togglePreview(button) {
+    const url = button.dataset.audio;
+    if (!url) return;
 
-            const source = button.dataset.audio;
-            if (!source) return;
+    if (activeButton === button && !previewAudio.paused) {
+      previewAudio.pause();
+      button.textContent = "▶";
+      return;
+    }
 
-            if (activeAudio && activeAudio.src === new URL(source, window.location.href).href) {
-                if (activeAudio.paused) {
-                    activeAudio.play();
-                    button.textContent = "❚❚";
-                } else {
-                    activeAudio.pause();
-                    button.textContent = "▶";
-                }
-                return;
-            }
-
-            if (activeAudio) {
-                activeAudio.pause();
-            }
-
-            if (activeButton) {
-                activeButton.textContent = "▶";
-            }
-
-            activeAudio = new Audio(source);
-            activeButton = button;
-
-            activeAudio.preload = "none";
-
-            activeAudio.addEventListener("ended", function () {
-                button.textContent = "▶";
-                activeAudio = null;
-                activeButton = null;
-            });
-
-            activeAudio.addEventListener("error", function () {
-                button.textContent = "▶";
-                activeAudio = null;
-                activeButton = null;
-            });
-
-            activeAudio.play()
-                .then(function () {
-                    button.textContent = "❚❚";
-                })
-                .catch(function () {
-                    button.textContent = "▶";
-                });
-        });
+    document.querySelectorAll(".preview-btn, .mini-preview").forEach((el) => {
+      el.textContent = "▶";
     });
-})();
+
+    activeButton = button;
+    previewAudio.src = url;
+    npTitle.textContent = button.dataset.title || "BeatHub Preview";
+    npSub.textContent = "by " + (button.dataset.producer || "BeatHub Creator");
+    nowPlaying.classList.add("visible");
+    previewAudio.play().catch(() => {});
+    button.textContent = "Ⅱ";
+  }
+
+  function stopPreview() {
+    previewAudio.pause();
+    previewAudio.currentTime = 0;
+    previewAudio.removeAttribute("src");
+    previewAudio.load();
+
+    document.querySelectorAll(".preview-btn, .mini-preview").forEach((el) => {
+      el.textContent = "▶";
+    });
+
+    activeButton = null;
+    nowPlaying.classList.remove("visible");
+  }
+
+  previewAudio.addEventListener("ended", () => {
+    if (activeButton) activeButton.textContent = "▶";
+  });
 </script>
-</body>
-</html>
+{% endblock %}
