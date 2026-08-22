@@ -8,10 +8,6 @@ from fastapi import UploadFile
 from app.config import settings
 
 
-# ======================================================================
-# FILE TYPES
-# ======================================================================
-
 ALLOWED_AUDIO_EXT = {
     ".mp3",
     ".wav",
@@ -27,26 +23,8 @@ ALLOWED_IMAGE_EXT = {
 }
 
 
-# ======================================================================
-# ERRORS
-# ======================================================================
-
 class UploadValidationError(Exception):
     pass
-
-
-# ======================================================================
-# CONFIGURATION HELPERS
-# ======================================================================
-
-def _env(*names: str) -> Optional[str]:
-    for name in names:
-        value = os.getenv(name)
-
-        if value is not None and str(value).strip():
-            return str(value).strip()
-
-    return None
 
 
 def _setting(*names: str) -> Optional[str]:
@@ -55,6 +33,16 @@ def _setting(*names: str) -> Optional[str]:
             value = getattr(settings, name, None)
         except Exception:
             value = None
+
+        if value is not None and str(value).strip():
+            return str(value).strip()
+
+    return None
+
+
+def _env(*names: str) -> Optional[str]:
+    for name in names:
+        value = os.getenv(name)
 
         if value is not None and str(value).strip():
             return str(value).strip()
@@ -71,35 +59,24 @@ def _config(*names: str) -> Optional[str]:
     return _env(*names)
 
 
-# ======================================================================
-# MEDIA ROOT
-# ======================================================================
-
 def _media_root() -> Path:
-    """
-    Resolve the local media directory safely.
-
-    Supports:
-        MEDIA_ROOT
-        MEDIA_DIRECTORY
-        UPLOAD_DIR
-
-    If none is configured, BeatHub uses:
-
-        <project>/media
-    """
-
     configured = _config(
         "MEDIA_ROOT",
-        "MEDIA_DIRECTORY",
+        "MEDIA_DIR",
         "UPLOAD_DIR",
     )
 
     if configured:
         root = Path(configured)
     else:
-        root = Path(__file__).resolve().parents[2] / "media"
+        root = Path(
+            os.getenv(
+                "RENDER_DISK_MOUNT_PATH",
+                "media",
+            )
+        )
 
+    root = root.expanduser().resolve()
     root.mkdir(
         parents=True,
         exist_ok=True,
@@ -108,27 +85,121 @@ def _media_root() -> Path:
     return root
 
 
-# ======================================================================
-# MAX UPLOAD SIZE
-# ======================================================================
-
-def _max_upload_mb() -> int:
-    value = _config(
+def _max_upload_bytes() -> int:
+    raw = _config(
         "MAX_UPLOAD_MB",
-        "MAX_FILE_SIZE_MB",
+        "MAX_UPLOAD_SIZE_MB",
     )
 
     try:
-        amount = int(value) if value else 50
-    except (TypeError, ValueError):
-        amount = 50
+        megabytes = float(
+            raw if raw is not None else 50
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        megabytes = 50
 
-    return max(1, amount)
+    megabytes = max(
+        1,
+        min(
+            megabytes,
+            2048,
+        ),
+    )
+
+    return int(
+        megabytes
+        * 1024
+        * 1024
+    )
 
 
-# ======================================================================
-# R2 CONFIGURATION
-# ======================================================================
+def _ext(filename: str) -> str:
+    return Path(
+        filename or ""
+    ).suffix.lower()
+
+
+def _safe_subfolder(
+    subfolder: str,
+) -> str:
+    value = str(
+        subfolder or "uploads"
+    ).replace(
+        "\\",
+        "/",
+    ).strip("/")
+
+    parts = []
+
+    for part in value.split("/"):
+        part = part.strip()
+
+        if not part:
+            continue
+
+        if part in {".", ".."}:
+            continue
+
+        cleaned = "".join(
+            char
+            for char in part
+            if char.isalnum()
+            or char in {
+                "-",
+                "_",
+            }
+        )
+
+        if cleaned:
+            parts.append(cleaned)
+
+    return "/".join(parts) or "uploads"
+
+
+def _validate_upload(
+    file: UploadFile,
+    allowed_extensions: set[str],
+):
+    if not file:
+        raise UploadValidationError(
+            "No file was uploaded."
+        )
+
+    if not file.filename:
+        raise UploadValidationError(
+            "No file was selected."
+        )
+
+    extension = _ext(
+        file.filename
+    )
+
+    if extension not in allowed_extensions:
+        allowed = ", ".join(
+            sorted(
+                allowed_extensions
+            )
+        )
+
+        raise UploadValidationError(
+            f"Unsupported file type '{extension}'. "
+            f"Allowed types: {allowed}"
+        )
+
+    return extension
+
+
+def _safe_object_name(
+    extension: str,
+) -> str:
+    return (
+        f"{uuid.uuid4().hex}"
+        f"{extension}"
+    )
+
 
 def _r2_account_id() -> Optional[str]:
     return _config(
@@ -164,8 +235,8 @@ def _r2_bucket() -> Optional[str]:
 
 def _r2_endpoint() -> Optional[str]:
     endpoint = _config(
-        "R2_ENDPOINT",
         "R2_ENDPOINT_URL",
+        "R2_ENDPOINT",
         "AWS_ENDPOINT_URL",
     )
 
@@ -176,7 +247,9 @@ def _r2_endpoint() -> Optional[str]:
 
     if account_id:
         return (
-            f"https://{account_id}.r2.cloudflarestorage.com"
+            "https://"
+            f"{account_id}"
+            ".r2.cloudflarestorage.com"
         )
 
     return None
@@ -190,75 +263,6 @@ def _r2_is_configured() -> bool:
         and _r2_bucket()
     )
 
-
-# ======================================================================
-# FILE HELPERS
-# ======================================================================
-
-def _ext(filename: str) -> str:
-    return os.path.splitext(
-        filename or ""
-    )[1].lower()
-
-
-def _validate_extension(
-    file: UploadFile,
-    allowed_extensions: set[str],
-) -> str:
-    if not file or not file.filename:
-        raise UploadValidationError(
-            "No file was uploaded."
-        )
-
-    ext = _ext(file.filename)
-
-    if ext not in allowed_extensions:
-        allowed = ", ".join(
-            sorted(allowed_extensions)
-        )
-
-        raise UploadValidationError(
-            f"Unsupported file type '{ext}'. "
-            f"Allowed: {allowed}"
-        )
-
-    return ext
-
-
-async def _read_and_validate_upload(
-    file: UploadFile,
-    allowed_extensions: set[str],
-):
-    ext = _validate_extension(
-        file,
-        allowed_extensions,
-    )
-
-    contents = await file.read()
-
-    max_bytes = (
-        _max_upload_mb()
-        * 1024
-        * 1024
-    )
-
-    if len(contents) > max_bytes:
-        raise UploadValidationError(
-            f"File exceeds the "
-            f"{_max_upload_mb()}MB upload limit."
-        )
-
-    if not contents:
-        raise UploadValidationError(
-            "The uploaded file is empty."
-        )
-
-    return ext, contents
-
-
-# ======================================================================
-# R2 CLIENT
-# ======================================================================
 
 def _r2_client():
     try:
@@ -297,17 +301,19 @@ def _r2_client():
     )
 
 
-# ======================================================================
-# R2 PATH PARSER
-# ======================================================================
-
-def _parse_r2_path(path: str):
+def _parse_r2_path(
+    path: str,
+):
     if not path:
         return None, None
 
-    value = str(path).strip()
+    value = str(
+        path
+    ).strip()
 
-    if not value.lower().startswith("r2://"):
+    if not value.lower().startswith(
+        "r2://"
+    ):
         return None, None
 
     remainder = value[5:]
@@ -323,10 +329,6 @@ def _parse_r2_path(path: str):
     return bucket, key
 
 
-# ======================================================================
-# R2 PRESIGNED URL
-# ======================================================================
-
 def r2_presigned_url(
     path: Optional[str],
     expires: int = 3600,
@@ -334,7 +336,9 @@ def r2_presigned_url(
     if not path:
         return None
 
-    value = str(path).strip()
+    value = str(
+        path
+    ).strip()
 
     if not value:
         return None
@@ -346,8 +350,10 @@ def r2_presigned_url(
     ):
         return value
 
-    bucket_from_path, key = _parse_r2_path(
-        value
+    bucket_from_path, key = (
+        _parse_r2_path(
+            value
+        )
     )
 
     if bucket_from_path is not None:
@@ -359,8 +365,19 @@ def r2_presigned_url(
         if not bucket or not key:
             return None
 
+        if not _r2_is_configured():
+            return None
+
         try:
             client = _r2_client()
+
+            safe_expires = max(
+                1,
+                min(
+                    int(expires),
+                    604800,
+                ),
+            )
 
             return client.generate_presigned_url(
                 "get_object",
@@ -368,35 +385,16 @@ def r2_presigned_url(
                     "Bucket": bucket,
                     "Key": key,
                 },
-                ExpiresIn=max(
-                    1,
-                    min(
-                        int(expires),
-                        604800,
-                    ),
-                ),
+                ExpiresIn=safe_expires,
             )
 
         except Exception:
             return None
 
-    clean = value.replace(
-        "\\",
-        "/",
-    ).lstrip("/")
+    return media_url(
+        value
+    )
 
-    if clean.startswith("media/"):
-        return "/" + clean
-
-    if clean.startswith("static/"):
-        return "/" + clean
-
-    return "/media/" + clean
-
-
-# ======================================================================
-# R2 URL COMPATIBILITY
-# ======================================================================
 
 def r2_url(
     path: Optional[str],
@@ -408,10 +406,6 @@ def r2_url(
     )
 
 
-# ======================================================================
-# GENERIC MEDIA URL
-# ======================================================================
-
 def media_url(
     path: Optional[str],
     expires: int = 3600,
@@ -419,48 +413,74 @@ def media_url(
     if not path:
         return None
 
-    value = str(path).strip()
+    value = str(
+        path
+    ).strip()
 
     if not value:
         return None
 
     if value.startswith(
-        "http://"
-    ) or value.startswith(
         "https://"
+    ) or value.startswith(
+        "http://"
     ):
         return value
 
-    if value.startswith("r2://"):
+    if value.startswith(
+        "r2://"
+    ):
         return r2_presigned_url(
             value,
             expires=expires,
         )
 
-    clean = value.replace(
-        "\\",
-        "/",
-    ).lstrip("/")
+    clean = (
+        value
+        .replace(
+            "\\",
+            "/",
+        )
+        .lstrip("/")
+    )
 
-    if clean.startswith("media/"):
+    if clean.startswith(
+        "media/"
+    ):
+        return "/" + clean
+
+    if clean.startswith(
+        "static/"
+    ):
         return "/" + clean
 
     return "/media/" + clean
 
-
-# ======================================================================
-# R2 UPLOAD
-# ======================================================================
 
 async def save_upload_to_r2(
     file: UploadFile,
     subfolder: str,
     allowed_extensions: set[str],
 ) -> str:
-    ext, contents = await _read_and_validate_upload(
+    extension = _validate_upload(
         file,
         allowed_extensions,
     )
+
+    contents = await file.read()
+
+    if len(contents) > _max_upload_bytes():
+        max_mb = round(
+            _max_upload_bytes()
+            / 1024
+            / 1024,
+            2,
+        )
+
+        raise UploadValidationError(
+            f"File exceeds the "
+            f"{max_mb}MB upload limit."
+        )
 
     bucket = _r2_bucket()
 
@@ -469,15 +489,18 @@ async def save_upload_to_r2(
             "R2 bucket is not configured."
         )
 
-    folder = (
-        str(subfolder or "uploads")
-        .strip("/")
+    if not _r2_is_configured():
+        raise RuntimeError(
+            "R2 storage is not fully configured."
+        )
+
+    folder = _safe_subfolder(
+        subfolder
     )
 
     key = (
         f"{folder}/"
-        f"{uuid.uuid4().hex}"
-        f"{ext}"
+        f"{_safe_object_name(extension)}"
     )
 
     content_type = (
@@ -501,116 +524,100 @@ async def save_upload_to_r2(
         ) from exc
 
     return (
-        f"r2://{bucket}/{key}"
+        f"r2://"
+        f"{bucket}/"
+        f"{key}"
     )
 
-
-# ======================================================================
-# LOCAL UPLOAD
-# ======================================================================
 
 async def save_upload(
     file: UploadFile,
     subfolder: str,
     allowed_extensions: set[str],
 ) -> str:
-    """
-    Save a file locally.
-
-    This remains the compatibility function used by
-    existing BeatHub upload routes.
-
-    Returned database path:
-
-        merch/filename.jpg
-        covers/filename.jpg
-        tracks/filename.mp3
-    """
-
-    ext, contents = await _read_and_validate_upload(
+    extension = _validate_upload(
         file,
         allowed_extensions,
     )
 
-    media_root = _media_root()
+    contents = await file.read()
 
-    folder_name = (
-        str(subfolder or "uploads")
-        .strip("/")
-        .replace("\\", "/")
+    if len(contents) > _max_upload_bytes():
+        max_mb = round(
+            _max_upload_bytes()
+            / 1024
+            / 1024,
+            2,
+        )
+
+        raise UploadValidationError(
+            f"File exceeds the "
+            f"{max_mb}MB upload limit."
+        )
+
+    folder_name = _safe_subfolder(
+        subfolder
     )
 
-    if not folder_name:
-        folder_name = "uploads"
+    media_root = _media_root()
 
     folder = (
         media_root
-        / folder_name
-    )
+        / Path(
+            folder_name
+        )
+    ).resolve()
+
+    try:
+        folder.relative_to(
+            media_root
+        )
+    except ValueError as exc:
+        raise UploadValidationError(
+            "Invalid upload folder."
+        ) from exc
 
     folder.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    unique_name = (
-        f"{uuid.uuid4().hex}"
-        f"{ext}"
+    filename = _safe_object_name(
+        extension
     )
 
     full_path = (
         folder
-        / unique_name
-    )
+        / filename
+    ).resolve()
 
-    with open(
-        full_path,
-        "wb",
-    ) as output:
-        output.write(contents)
+    try:
+        full_path.relative_to(
+            media_root
+        )
+    except ValueError as exc:
+        raise UploadValidationError(
+            "Invalid upload destination."
+        ) from exc
+
+    try:
+        with open(
+            full_path,
+            "wb",
+        ) as output:
+            output.write(
+                contents
+            )
+    except OSError as exc:
+        raise RuntimeError(
+            f"Unable to save uploaded file: {exc}"
+        ) from exc
 
     return (
         f"{folder_name}/"
-        f"{unique_name}"
+        f"{filename}"
     )
 
-
-# ======================================================================
-# SMART UPLOAD
-# ======================================================================
-
-async def save_media_upload(
-    file: UploadFile,
-    subfolder: str,
-    allowed_extensions: set[str],
-) -> str:
-    """
-    Storage-aware upload.
-
-    If R2 is completely configured, upload to R2.
-    Otherwise use local MEDIA_ROOT storage.
-
-    This gives BeatHub a safe fallback instead of failing simply
-    because R2 has not been configured yet.
-    """
-
-    if _r2_is_configured():
-        return await save_upload_to_r2(
-            file,
-            subfolder,
-            allowed_extensions,
-        )
-
-    return await save_upload(
-        file,
-        subfolder,
-        allowed_extensions,
-    )
-
-
-# ======================================================================
-# STORAGE EXISTENCE
-# ======================================================================
 
 def storage_exists(
     path: Optional[str],
@@ -618,7 +625,9 @@ def storage_exists(
     if not path:
         return False
 
-    value = str(path).strip()
+    value = str(
+        path
+    ).strip()
 
     if not value:
         return False
@@ -629,6 +638,9 @@ def storage_exists(
 
     if bucket is not None:
         if not bucket or not key:
+            return False
+
+        if not _r2_is_configured():
             return False
 
         try:
@@ -644,18 +656,25 @@ def storage_exists(
         except Exception:
             return False
 
-    clean = value.replace(
-        "\\",
-        "/",
-    ).lstrip("/")
+    clean = (
+        value
+        .replace(
+            "\\",
+            "/",
+        )
+        .lstrip("/")
+    )
 
-    if clean.startswith("media/"):
+    if clean.startswith(
+        "media/"
+    ):
         clean = clean[6:]
 
-    media_root = _media_root().resolve()
+    media_root = _media_root()
 
     candidate = (
-        media_root / clean
+        media_root
+        / Path(clean)
     ).resolve()
 
     try:
@@ -671,10 +690,6 @@ def storage_exists(
     )
 
 
-# ======================================================================
-# DELETE R2 OBJECT
-# ======================================================================
-
 def delete_r2_object(
     path: Optional[str],
 ) -> bool:
@@ -686,6 +701,9 @@ def delete_r2_object(
     )
 
     if not bucket or not key:
+        return False
+
+    if not _r2_is_configured():
         return False
 
     try:
@@ -702,28 +720,31 @@ def delete_r2_object(
         return False
 
 
-# ======================================================================
-# DELETE LOCAL OBJECT
-# ======================================================================
-
 def delete_local_object(
     path: Optional[str],
 ) -> bool:
     if not path:
         return False
 
-    value = str(path).replace(
-        "\\",
-        "/",
-    ).lstrip("/")
+    value = (
+        str(path)
+        .replace(
+            "\\",
+            "/",
+        )
+        .lstrip("/")
+    )
 
-    if value.startswith("media/"):
+    if value.startswith(
+        "media/"
+    ):
         value = value[6:]
 
-    media_root = _media_root().resolve()
+    media_root = _media_root()
 
     target = (
-        media_root / value
+        media_root
+        / Path(value)
     ).resolve()
 
     try:
@@ -741,7 +762,29 @@ def delete_local_object(
             target.unlink()
             return True
 
-    except Exception:
-        pass
+    except OSError:
+        return False
 
     return False
+
+
+def delete_storage_object(
+    path: Optional[str],
+) -> bool:
+    if not path:
+        return False
+
+    value = str(
+        path
+    ).strip()
+
+    if value.startswith(
+        "r2://"
+    ):
+        return delete_r2_object(
+            value
+        )
+
+    return delete_local_object(
+        value
+    )
