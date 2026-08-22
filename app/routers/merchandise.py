@@ -1,875 +1,191 @@
-from __future__ import annotations
-
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
-from pathlib import Path
-from typing import Optional
-from uuid import uuid4
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
-from app.config import settings
-from app.database import get_db
-from app.models.profile import Profile
-from app.models.user import User
-from app.services.storage import (
-    ALLOWED_IMAGE_EXT,
-    UploadValidationError,
-    _r2_is_configured,
-    _r2_client,
-    _r2_bucket,
-    media_url,
-    r2_presigned_url,
-    save_upload,
-    save_upload_to_r2,
-)
-from app.utils.deps import get_optional_user, require_creator
-
-
-router = APIRouter(tags=["merchandise"])
-
-templates = Jinja2Templates(directory="app/templates")
-
-MERCH_TABLE = "beathub_merchandise"
-
-
-def ensure_merch_table(db: Session) -> None:
-    db.execute(
-        text(
-            f"""
-            CREATE TABLE IF NOT EXISTS {MERCH_TABLE} (
-                id VARCHAR(36) PRIMARY KEY,
-                creator_profile_id VARCHAR(255) NOT NULL,
-                name VARCHAR(160) NOT NULL,
-                slug VARCHAR(220) NOT NULL UNIQUE,
-                description TEXT,
-                price NUMERIC(12, 2) NOT NULL,
-                image_path TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-    )
-
-    db.execute(
-        text(
-            f"""
-            CREATE INDEX IF NOT EXISTS
-            idx_{MERCH_TABLE}_creator
-            ON {MERCH_TABLE}(creator_profile_id)
-            """
-        )
-    )
-
-    db.commit()
-
-
-def _ctx(
-    request: Request,
-    current_user: Optional[User] = None,
-    **extra,
-):
-    context = {
-        "request": request,
-        "current_user": current_user,
-        "user": current_user,
-        "current_year": datetime.utcnow().year,
-        "error": None,
-        "success": None,
-    }
-
-    context.update(extra)
-
-    return context
-
-
-def _slugify(value: str) -> str:
-    value = (value or "").strip().lower()
-
-    chars = []
-    previous_dash = False
-
-    for char in value:
-        if char.isalnum():
-            chars.append(char)
-            previous_dash = False
-        elif not previous_dash:
-            chars.append("-")
-            previous_dash = True
-
-    slug = "".join(chars).strip("-")
-
-    return slug or f"merch-{uuid4().hex[:10]}"
-
-
-def _unique_merch_slug(db: Session, name: str) -> str:
-    base = _slugify(name)[:180]
-    if not base:
-        base = f"merch-{uuid4().hex[:10]}"
-
-    slug = base
-    suffix = 2
-
-    while db.execute(
-        text(
-            f"""
-            SELECT 1
-            FROM {MERCH_TABLE}
-            WHERE slug = :slug
-            LIMIT 1
-            """
-        ),
-        {"slug": slug},
-    ).first():
-        suffix_text = f"-{suffix}"
-        slug = f"{base[:220 - len(suffix_text)]}{suffix_text}"
-        suffix += 1
-
-    return slug
-
-
-def _local_media_root() -> Path:
-    configured = getattr(settings, "MEDIA_ROOT", None)
-
-    if configured:
-        return Path(str(configured)).expanduser().resolve()
-
-    return (
-        Path(__file__)
-        .resolve()
-        .parents[2]
-        / "media"
-    ).resolve()
-
-
-def _clean_media_path(path: str) -> str:
-    value = str(path or "").replace("\\", "/").strip()
-
-    while value.startswith("/"):
-        value = value[1:]
-
-    if value.startswith("media/"):
-        value = value[6:]
-
-    return value
-
-
-def _safe_local_path(stored_path: str) -> Optional[Path]:
-    if not stored_path:
-        return None
-
-    clean = _clean_media_path(stored_path)
-
-    if not clean:
-        return None
-
-    if ".." in Path(clean).parts:
-        return None
-
-    media_root = _local_media_root()
-
-    candidate = (media_root / clean).resolve()
-
-    try:
-        candidate.relative_to(media_root)
-    except ValueError:
-        return None
-
-    return candidate
-
-
-def _local_image_url(path: Optional[str]) -> Optional[str]:
-    if not path:
-        return None
-
-    clean = _clean_media_path(path)
-
-    if not clean:
-        return None
-
-    return f"/media/{clean}"
-
-
-def _is_r2_path(path: Optional[str]) -> bool:
-    if not path:
-        return False
-
-    return str(path).strip().lower().startswith("r2://")
-
-
-def _image_url(
-    request: Request,
-    path: Optional[str],
-) -> Optional[str]:
-    if not path:
-        return None
-
-    value = str(path).strip()
-
-    if not value:
-        return None
-
-    if value.startswith("https://") or value.startswith("http://"):
-        return value
-
-    if _is_r2_path(value):
-        return r2_presigned_url(value, expires=3600)
-
-    local_path = _safe_local_path(value)
-
-    if local_path is not None:
-        try:
-            if local_path.exists() and local_path.is_file():
-                return _local_image_url(value)
-        except OSError:
-            pass
-
-    clean = _clean_media_path(value)
-
-    if clean:
-        return f"/media/{clean}"
-
-    return media_url(value)
-
-
-async def _migrate_local_image_to_r2(
-    db: Session,
-    product_id: str,
-    image_path: Optional[str],
-) -> Optional[str]:
-    if not image_path:
-        return None
-
-    value = str(image_path).strip()
-
-    if not value:
-        return None
-
-    if _is_r2_path(value):
-        return value
-
-    try:
-        if not _r2_is_configured():
-            return value
-    except Exception:
-        return value
-
-    local_path = _safe_local_path(value)
-
-    if local_path is None:
-        return value
-
-    try:
-        if not local_path.exists() or not local_path.is_file():
-            return value
-
-        contents = local_path.read_bytes()
-    except OSError:
-        return value
-
-    if not contents:
-        return value
-
-    extension = local_path.suffix.lower()
-
-    if extension not in ALLOWED_IMAGE_EXT:
-        return value
-
-    content_type_map = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }
-
-    content_type = content_type_map.get(
-        extension,
-        "application/octet-stream",
-    )
-
-    try:
-        bucket = _r2_bucket()
-
-        if not bucket:
-            return value
-
-        key = f"merch/{uuid4().hex}{extension}"
-
-        client = _r2_client()
-
-        client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=contents,
-            ContentType=content_type,
-        )
-
-        r2_path = f"r2://{bucket}/{key}"
-
-        db.execute(
-            text(
-                f"""
-                UPDATE {MERCH_TABLE}
-                SET image_path = :image_path
-                WHERE id = :id
-                """
-            ),
-            {
-                "image_path": r2_path,
-                "id": str(product_id),
-            },
-        )
-
-        db.commit()
-
-        return r2_path
-
-    except Exception:
-        db.rollback()
-        return value
-
-
-def _prepare_product(
-    request: Request,
-    row,
-) -> dict:
-    item = dict(row)
-
-    item["image_url"] = _image_url(
-        request,
-        item.get("image_path"),
-    )
-
-    return item
-
-
-def _rows_for_creator(
-    request: Request,
-    db: Session,
-    profile_id: str,
-):
-    rows = db.execute(
-        text(
-            f"""
-            SELECT
-                id,
-                creator_profile_id,
-                name,
-                slug,
-                description,
-                price,
-                image_path,
-                created_at
-            FROM {MERCH_TABLE}
-            WHERE creator_profile_id = :profile_id
-            ORDER BY created_at DESC
-            """
-        ),
-        {"profile_id": str(profile_id)},
-    ).mappings().all()
-
-    return [
-        _prepare_product(request, row)
-        for row in rows
-    ]
-
-
-def _all_public_rows(
-    request: Request,
-    db: Session,
-):
-    rows = db.execute(
-        text(
-            f"""
-            SELECT
-                id,
-                creator_profile_id,
-                name,
-                slug,
-                description,
-                price,
-                image_path,
-                created_at
-            FROM {MERCH_TABLE}
-            ORDER BY created_at DESC
-            LIMIT 120
-            """
-        )
-    ).mappings().all()
-
-    profile_ids = {
-        str(row["creator_profile_id"])
-        for row in rows
-        if row["creator_profile_id"] is not None
-    }
-
-    profiles = {}
-
-    if profile_ids:
-        profile_rows = (
-            db.query(Profile)
-            .filter(Profile.id.in_(list(profile_ids)))
-            .all()
-        )
-
-        for profile in profile_rows:
-            profiles[str(profile.id)] = profile
-
-    products = []
-
-    for row in rows:
-        item = _prepare_product(request, row)
-
-        owner = profiles.get(
-            str(item.get("creator_profile_id"))
-        )
-
-        item["creator_slug"] = getattr(
-            owner,
-            "slug",
-            None,
-        )
-
-        item["creator_name"] = (
-            getattr(owner, "stage_name", None)
-            or "BeatHub Creator"
-        )
-
-        products.append(item)
-
-    return products
-
-
-@router.get("/dashboard/merch")
-def merch_dashboard(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_creator),
-):
-    profile = getattr(user, "profile", None)
-
-    if profile is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Creator profile missing.",
-        )
-
-    ensure_merch_table(db)
-
-    products = _rows_for_creator(
-        request,
-        db,
-        str(profile.id),
-    )
-
-    return templates.TemplateResponse(
-        request,
-        "merchandise.html",
-        _ctx(
-            request,
-            user,
-            profile=profile,
-            products=products,
-            product_count=len(products),
-        ),
-    )
-
-
-@router.get("/dashboard/merch/new")
-def merch_new_page(
-    request: Request,
-    user: User = Depends(require_creator),
-):
-    return templates.TemplateResponse(
-        request,
-        "merchandise_new.html",
-        _ctx(request, user),
-    )
-
-
-@router.post("/dashboard/merch/new")
-async def merch_create(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_creator),
-    name: str = Form(...),
-    description: str = Form(""),
-    price: str = Form(...),
-    image: UploadFile = File(...),
-):
-    profile = getattr(user, "profile", None)
-
-    if profile is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Creator profile missing.",
-        )
-
-    ensure_merch_table(db)
-
-    name = (name or "").strip()
-    description = (description or "").strip()
-    price_raw = (price or "").strip()
-
-    def error(message: str):
-        return templates.TemplateResponse(
-            request,
-            "merchandise_new.html",
-            _ctx(
-                request,
-                user,
-                error=message,
-                name=name,
-                description=description,
-                price=price_raw,
-            ),
-            status_code=400,
-        )
-
-    if not name:
-        return error("Product name is required.")
-
-    if len(name) > 160:
-        return error(
-            "Product name is too long. Keep it under 160 characters."
-        )
-
-    if len(description) > 4000:
-        return error(
-            "Product description is too long. Keep it under 4,000 characters."
-        )
-
-    try:
-        price_value = Decimal(price_raw)
-    except (InvalidOperation, ValueError, TypeError):
-        return error("Enter a valid product price.")
-
-    if price_value <= Decimal("0"):
-        return error(
-            "Product price must be greater than zero."
-        )
-
-    if image is None or not image.filename:
-        return error("A product image is required.")
-
-    extension = Path(image.filename).suffix.lower()
-
-    if extension not in ALLOWED_IMAGE_EXT:
-        return error(
-            "Unsupported image type. Use JPG, JPEG, PNG or WEBP."
-        )
-
-    try:
-        try:
-            use_r2 = _r2_is_configured()
-        except Exception:
-            use_r2 = False
-
-        if use_r2:
-            image_path = await save_upload_to_r2(
-                image,
-                "merch",
-                ALLOWED_IMAGE_EXT,
-            )
-        else:
-            image_path = await save_upload(
-                image,
-                "merch",
-                ALLOWED_IMAGE_EXT,
-            )
-
-    except UploadValidationError as exc:
-        return error(str(exc))
-
-    except Exception:
-        return error(
-            "Product image upload failed. Please try again."
-        )
-
-    product_id = str(uuid4())
-
-    slug = _unique_merch_slug(
-        db,
-        name,
-    )
-
-    try:
-        db.execute(
-            text(
-                f"""
-                INSERT INTO {MERCH_TABLE} (
-                    id,
-                    creator_profile_id,
-                    name,
-                    slug,
-                    description,
-                    price,
-                    image_path
-                )
-                VALUES (
-                    :id,
-                    :creator_profile_id,
-                    :name,
-                    :slug,
-                    :description,
-                    :price,
-                    :image_path
-                )
-                """
-            ),
-            {
-                "id": product_id,
-                "creator_profile_id": str(profile.id),
-                "name": name,
-                "slug": slug,
-                "description": description or None,
-                "price": price_value,
-                "image_path": image_path,
-            },
-        )
-
-        db.commit()
-
-    except Exception:
-        db.rollback()
-        raise
-
-    return RedirectResponse(
-        url="/dashboard/merch?success=Merchandise%20added%20successfully.",
-        status_code=303,
-    )
-
-
-@router.get("/media/merch/{filename:path}")
-def merch_local_media(
-    filename: str,
-):
-    clean = (filename or "").replace("\\", "/").lstrip("/")
-
-    if not clean:
-        raise HTTPException(
-            status_code=404,
-            detail="Image not found.",
-        )
-
-    if ".." in Path(clean).parts:
-        raise HTTPException(
-            status_code=404,
-            detail="Image not found.",
-        )
-
-    if clean.startswith("media/"):
-        clean = clean[6:]
-
-    if clean.startswith("merch/"):
-        relative = clean
-    else:
-        relative = f"merch/{clean}"
-
-    media_root = _local_media_root()
-
-    file_path = (media_root / relative).resolve()
-
-    try:
-        file_path.relative_to(media_root.resolve())
-    except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail="Image not found.",
-        )
-
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="Image not found.",
-        )
-
-    extension = file_path.suffix.lower()
-
-    content_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }
-
-    return FileResponse(
-        path=str(file_path),
-        media_type=content_types.get(
-            extension,
-            "application/octet-stream",
-        ),
-        headers={
-            "Cache-Control": "public, max-age=31536000, immutable",
-        },
-    )
-
-
-@router.get("/merch")
-def merch_marketplace(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    ensure_merch_table(db)
-
-    products = _all_public_rows(
-        request,
-        db,
-    )
-
-    return templates.TemplateResponse(
-        request,
-        "merchandise_public.html",
-        _ctx(
-            request,
-            current_user,
-            products=products,
-            title="BeatHub Merch",
-            creator=None,
-            store_url=None,
-            product_detail=False,
-        ),
-    )
-
-
-@router.get("/store/{slug}/merch")
-def creator_merch_store(
-    request: Request,
-    slug: str,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    profile = (
-        db.query(Profile)
-        .filter(Profile.slug == slug)
-        .first()
-    )
-
-    if profile is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Creator store not found.",
-        )
-
-    ensure_merch_table(db)
-
-    products = _rows_for_creator(
-        request,
-        db,
-        str(profile.id),
-    )
-
-    return templates.TemplateResponse(
-        request,
-        "merchandise_public.html",
-        _ctx(
-            request,
-            current_user,
-            products=products,
-            title=f"{profile.stage_name} — Merch",
-            creator=profile,
-            store_url=f"/store/{profile.slug}",
-            product_detail=False,
-        ),
-    )
-
-
-@router.get("/merch/{slug}")
-def merch_product(
-    request: Request,
-    slug: str,
-    db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
-):
-    ensure_merch_table(db)
-
-    row = db.execute(
-        text(
-            f"""
-            SELECT
-                id,
-                creator_profile_id,
-                name,
-                slug,
-                description,
-                price,
-                image_path,
-                created_at
-            FROM {MERCH_TABLE}
-            WHERE slug = :slug
-            LIMIT 1
-            """
-        ),
-        {"slug": slug},
-    ).mappings().first()
-
-    if row is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Merchandise item not found.",
-        )
-
-    item = dict(row)
-
-    image_path = item.get("image_path")
-
-    if image_path and not _is_r2_path(image_path):
-        migrated_path = await_migrate_image_safely(
-            db,
-            str(item["id"]),
-            image_path,
-        )
-
-        if migrated_path:
-            image_path = migrated_path
-            item["image_path"] = migrated_path
-
-    item["image_url"] = _image_url(
-        request,
-        image_path,
-    )
-
-    profile = (
-        db.query(Profile)
-        .filter(
-            Profile.id == str(
-                item["creator_profile_id"]
-            )
-        )
-        .first()
-    )
-
-    return templates.TemplateResponse(
-        request,
-        "merchandise_public.html",
-        _ctx(
-            request,
-            current_user,
-            products=[item],
-            title=item["name"],
-            creator=profile,
-            store_url=(
-                f"/store/{profile.slug}"
-                if profile
-                else None
-            ),
-            product_detail=True,
-        ),
-    )
-
-
-async def await_migrate_image_safely(
-    db: Session,
-    product_id: str,
-    image_path: str,
-) -> Optional[str]:
-    return await _migrate_local_image_to_r2(
-        db,
-        product_id,
-        image_path,
-    )
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{{ title or 'BeatHub Merch' }} · BeatHub</title>
+    <meta name="description" content="BeatHub merchandise">
+    <style>
+        :root{color-scheme:dark;--bg:#070709;--panel:#111116;--panel2:#17171d;--text:#f5f5f7;--muted:#a7a7b2;--line:#292932;--accent:#fff;--danger:#ff7b7b;}
+        *{box-sizing:border-box}
+        body{margin:0;background:linear-gradient(180deg,#070709 0%,#0b0b0f 100%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        a{color:inherit;text-decoration:none}
+        .nav{position:sticky;top:0;z-index:20;background:rgba(7,7,9,.9);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+        .nav-inner{max-width:1180px;margin:auto;padding:16px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+        .brand{font-weight:900;letter-spacing:.08em;margin-right:auto}
+        .links{display:flex;gap:16px;flex-wrap:wrap;color:#d0d0d8;font-size:14px}
+        .links a:hover{color:#fff}
+        .wrap{max-width:1180px;margin:auto;padding:38px 22px 70px}
+        .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:#8d8d99;font-weight:800}
+        h1{font-size:clamp(30px,5vw,54px);line-height:1.02;margin:8px 0 12px}
+        h2{margin:0 0 10px;font-size:26px}
+        p{color:var(--muted);line-height:1.65}
+        .notice{padding:13px 15px;border:1px solid #3a3a43;background:#15151a;border-radius:14px;margin:18px 0;color:#d9d9e1}
+        .error{border-color:#633333;background:#241313;color:#ffb5b5}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-top:28px}
+        .card{background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.2)}
+        .image-box{aspect-ratio:1/1;background:linear-gradient(135deg,#18181e,#0d0d11);display:flex;align-items:center;justify-content:center;overflow:hidden}
+        .image-box img{width:100%;height:100%;object-fit:cover;display:block}
+        .fallback{font-size:48px;opacity:.35}
+        .body{padding:19px}
+        .creator{font-size:13px;color:#92929e;margin-bottom:8px}
+        .price{font-size:21px;font-weight:900;margin:14px 0}
+        .btn{display:inline-flex;justify-content:center;align-items:center;min-height:46px;padding:0 18px;border-radius:13px;background:#fff;color:#09090b;font-weight:900;border:0;cursor:pointer}
+        .btn:hover{opacity:.9}
+        .product{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:34px;align-items:start;margin-top:25px}
+        .product-image{border-radius:24px;overflow:hidden;border:1px solid var(--line);background:#111116;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+        .product-image img{width:100%;height:100%;object-fit:cover}
+        .panel{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:25px}
+        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        label{display:block;font-size:13px;font-weight:800;margin:15px 0 7px;color:#dddde5}
+        input,textarea{width:100%;border:1px solid #34343d;background:#0b0b0f;color:#fff;border-radius:12px;padding:13px 14px;font:inherit;outline:none}
+        input:focus,textarea:focus{border-color:#777783}
+        textarea{min-height:100px;resize:vertical}
+        .hint{font-size:12px;color:#81818d;margin-top:7px;line-height:1.5}
+        .summary{display:flex;justify-content:space-between;gap:20px;padding:15px 0;border-top:1px solid var(--line);margin-top:18px;font-weight:800}
+        .delivery{margin-top:18px;padding:15px;border-radius:14px;background:#15151a;border:1px solid var(--line);font-size:13px;color:#bcbcc6;line-height:1.6}
+        footer{max-width:1180px;margin:auto;padding:20px 22px 35px;border-top:1px solid var(--line);color:#777783;font-size:13px}
+        @media(max-width:780px){.product{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}.links{width:100%}.wrap{padding-top:26px}}
+    </style>
+</head>
+<body>
+<header class="nav">
+    <div class="nav-inner">
+        <a class="brand" href="/">BEATHUB</a>
+        <nav class="links">
+            <a href="/beats">Beats</a>
+            <a href="/sessions">Sessions</a>
+            <a href="/hot-picks">Hot Picks</a>
+            <a href="/merch">Merch</a>
+            <a href="/terms">Terms</a>
+            {% if current_user %}
+                <a href="/dashboard">Dashboard</a>
+            {% else %}
+                <a href="/login">Login</a>
+            {% endif %}
+        </nav>
+    </div>
+</header>
+
+<main class="wrap">
+{% if product_detail and products %}
+    {% set product = products[0] %}
+    <div class="eyebrow">BeatHub Merchandise</div>
+    <div class="product">
+        <div class="product-image">
+            {% if product.image_url %}
+                <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="eager" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                <div class="fallback" style="display:none">🛍️</div>
+            {% else %}
+                <div class="fallback">🛍️</div>
+            {% endif %}
+        </div>
+
+        <section class="panel">
+            <div class="creator">Merchandise from <strong>{{ creator.stage_name if creator else 'BeatHub Creator' }}</strong></div>
+            <h1>{{ product.name }}</h1>
+            <p>{{ product.description or 'A physical BeatHub merchandise item.' }}</p>
+            <div class="price">KSh {{ '%.2f'|format(product.price|float) }}</div>
+
+            {% if query_error %}
+                <div class="notice error">{{ query_error }}</div>
+            {% endif %}
+
+            {% if current_user %}
+            <form method="post" action="/merch/{{ product.slug }}/buy">
+                <div class="form-row">
+                    <div>
+                        <label for="quantity">Quantity</label>
+                        <input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required>
+                    </div>
+                    <div>
+                        <label for="phone">M-Pesa phone</label>
+                        <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="0712 345 678" required>
+                    </div>
+                </div>
+
+                <label for="order_note">Order note <span style="color:#777783;font-weight:500">(optional)</span></label>
+                <textarea id="order_note" name="order_note" maxlength="300" placeholder="Size, color, delivery instructions, etc."></textarea>
+                <div class="hint">Example: Size M · Black · Please call before delivery.</div>
+
+                <div class="summary">
+                    <span>Total</span>
+                    <span id="total">KSh {{ '%.2f'|format(product.price|float) }}</span>
+                </div>
+
+                <button class="btn" type="submit" style="width:100%">Buy Merchandise with M-Pesa</button>
+
+                <div class="delivery">
+                    <strong>Physical merchandise</strong><br>
+                    After payment, your order is queued for fulfilment. Delivery time varies depending on your location and the creator's fulfilment process.
+                </div>
+            </form>
+            {% else %}
+                <div class="notice">Please <a href="/login" style="text-decoration:underline">log in</a> to purchase this merchandise.</div>
+            {% endif %}
+
+            {% if store_url %}
+                <p style="margin-bottom:0"><a href="{{ store_url }}" style="text-decoration:underline">← Back to creator store</a></p>
+            {% else %}
+                <p style="margin-bottom:0"><a href="/merch" style="text-decoration:underline">← Browse merchandise</a></p>
+            {% endif %}
+        </section>
+    </div>
+
+    <script>
+        (function(){
+            const q=document.getElementById('quantity');
+            const total=document.getElementById('total');
+            const unit={{ product.price|float }};
+            if(!q||!total)return;
+            function update(){
+                let n=parseInt(q.value||'1',10);
+                if(!Number.isFinite(n)||n<1)n=1;
+                if(n>20)n=20;
+                q.value=n;
+                total.textContent='KSh '+(unit*n).toFixed(2);
+            }
+            q.addEventListener('input',update);
+            update();
+        })();
+    </script>
+{% else %}
+    <div class="eyebrow">BeatHub</div>
+    <h1>{{ title or 'BeatHub Merch' }}</h1>
+    {% if creator %}
+        <p>Official merchandise from <strong>{{ creator.stage_name }}</strong>.</p>
+    {% else %}
+        <p>Discover merchandise from BeatHub creators.</p>
+    {% endif %}
+
+    <div class="grid">
+    {% for product in products %}
+        <article class="card">
+            <a href="/merch/{{ product.slug }}">
+                <div class="image-box">
+                    {% if product.image_url %}
+                        <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                        <div class="fallback" style="display:none">🛍️</div>
+                    {% else %}
+                        <div class="fallback">🛍️</div>
+                    {% endif %}
+                </div>
+            </a>
+            <div class="body">
+                {% if product.creator_name %}<div class="creator">{{ product.creator_name }}</div>{% endif %}
+                <h2>{{ product.name }}</h2>
+                <p>{{ product.description or 'No description added yet.' }}</p>
+                <div class="price">KSh {{ '%.2f'|format(product.price|float) }}</div>
+                <a class="btn" href="/merch/{{ product.slug }}">View Merchandise</a>
+            </div>
+        </article>
+    {% else %}
+        <div class="notice">No merchandise is available yet.</div>
+    {% endfor %}
+    </div>
+{% endif %}
+</main>
+
+<footer>© {{ current_year }} BeatHub. All rights reserved.</footer>
+</body>
+</html>
