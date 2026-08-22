@@ -23,8 +23,16 @@
         border: 1px solid #27272a;
         border-radius: 22px;
         background:
-            radial-gradient(circle at 85% 15%, rgba(255,255,255,.08), transparent 30%),
-            linear-gradient(135deg, #18181b 0%, #0f0f11 100%);
+            radial-gradient(
+                circle at 85% 15%,
+                rgba(255, 255, 255, .08),
+                transparent 30%
+            ),
+            linear-gradient(
+                135deg,
+                #18181b 0%,
+                #0f0f11 100%
+            );
     }
 
     .dashboard-hero::after {
@@ -35,7 +43,7 @@
         right: -80px;
         bottom: -130px;
         border-radius: 50%;
-        border: 1px solid rgba(255,255,255,.08);
+        border: 1px solid rgba(255, 255, 255, .08);
         pointer-events: none;
     }
 
@@ -137,7 +145,7 @@
         right: -35px;
         top: -35px;
         border-radius: 50%;
-        border: 1px solid rgba(255,255,255,.06);
+        border: 1px solid rgba(255, 255, 255, .06);
     }
 
     .stat-label {
@@ -167,7 +175,11 @@
 
     .stat-card.balance {
         border-color: #3f3f46;
-        background: linear-gradient(145deg, #18181b, #101012);
+        background: linear-gradient(
+            145deg,
+            #18181b,
+            #101012
+        );
     }
 
     .stat-card.balance .stat-value {
@@ -229,7 +241,9 @@
 
     .dashboard-columns {
         display: grid;
-        grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr);
+        grid-template-columns:
+            minmax(0, 1.55fr)
+            minmax(320px, .85fr);
         gap: 20px;
         align-items: start;
     }
@@ -271,7 +285,11 @@
         border: 1px solid #27272a;
         border-radius: 18px;
         background:
-            radial-gradient(circle at 100% 0%, rgba(255,255,255,.06), transparent 35%),
+            radial-gradient(
+                circle at 100% 0%,
+                rgba(255, 255, 255, .06),
+                transparent 35%
+            ),
             #111113;
         overflow: hidden;
     }
@@ -512,6 +530,10 @@
         font-weight: 700;
     }
 
+    .content-card a:hover {
+        color: #fff;
+    }
+
     .social-links {
         display: flex;
         flex-wrap: wrap;
@@ -542,7 +564,11 @@
 
     .withdrawal-row {
         display: grid;
-        grid-template-columns: 1.2fr 1fr 1fr .8fr;
+        grid-template-columns:
+            1.2fr
+            1fr
+            1fr
+            .8fr;
         gap: 15px;
         align-items: center;
         padding: 14px 20px;
@@ -599,13 +625,43 @@
         color: #fecaca;
     }
 
+    /* --------------------------------------------------------
+       SUCCESS / ERROR MESSAGES
+       -------------------------------------------------------- */
+
+    .dashboard-message {
+        margin-bottom: 20px;
+        padding: 13px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .dashboard-message.success {
+        border: 1px solid #166534;
+        background: #052e16;
+        color: #bbf7d0;
+    }
+
+    .dashboard-message.error {
+        border: 1px solid #991b1b;
+        background: #450a0a;
+        color: #fecaca;
+    }
+
     @media (max-width: 1100px) {
         .stats-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(
+                2,
+                minmax(0, 1fr)
+            );
         }
 
         .quick-actions {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(
+                2,
+                minmax(0, 1fr)
+            );
         }
 
         .dashboard-columns {
@@ -655,16 +711,37 @@
         }
 
         .withdrawal-row {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns:
+                repeat(
+                    2,
+                    minmax(0, 1fr)
+                );
         }
     }
 </style>
 
 <div class="creator-dashboard">
 
-    <!-- ===================================================== -->
-    <!-- HERO -->
-    <!-- ===================================================== -->
+    <!-- =====================================================
+         QUERY MESSAGES
+         ===================================================== -->
+
+    {% if success %}
+        <div class="dashboard-message success">
+            {{ success }}
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div class="dashboard-message error">
+            {{ error }}
+        </div>
+    {% endif %}
+
+
+    <!-- =====================================================
+         HERO
+         ===================================================== -->
 
     <section class="dashboard-hero">
 
@@ -675,23 +752,29 @@
             </div>
 
             <h1>
-                Welcome back{% if current_user and current_user.name %}, {{ current_user.name }}{% endif %}
+                Welcome back{% if producer_name %}, {{ producer_name }}{% endif %}
             </h1>
 
             <p>
-                Manage your beats, tracks, albums, sales and creator earnings
-                from one place.
+                Manage your beats, tracks, albums, sales and creator
+                earnings from one place.
             </p>
 
         </div>
 
         <div class="hero-actions">
 
-            <a href="/dashboard/upload" class="btn btn-primary">
+            <a
+                href="/dashboard/upload"
+                class="btn btn-primary"
+            >
                 + Upload Beat / Track
             </a>
 
-            <a href="/dashboard/albums/new" class="btn btn-outline">
+            <a
+                href="/dashboard/albums/new"
+                class="btn btn-outline"
+            >
                 + Create Album
             </a>
 
@@ -700,9 +783,9 @@
     </section>
 
 
-    <!-- ===================================================== -->
-    <!-- EARNINGS / PERFORMANCE -->
-    <!-- ===================================================== -->
+    <!-- =====================================================
+         EARNINGS / PERFORMANCE
+         ===================================================== -->
 
     <section class="dashboard-section">
 
@@ -710,7 +793,10 @@
 
             <div>
                 <h2>Performance</h2>
-                <p>Your creator activity and earnings at a glance.</p>
+
+                <p>
+                    Your creator activity and earnings at a glance.
+                </p>
             </div>
 
         </div>
@@ -789,9 +875,9 @@
     </section>
 
 
-    <!-- ===================================================== -->
-    <!-- QUICK ACTIONS -->
-    <!-- ===================================================== -->
+    <!-- =====================================================
+         QUICK ACTIONS
+         ===================================================== -->
 
     <section class="dashboard-section">
 
@@ -799,14 +885,20 @@
 
             <div>
                 <h2>Creator Tools</h2>
-                <p>Everything you need to manage your BeatHub profile.</p>
+
+                <p>
+                    Everything you need to manage your BeatHub profile.
+                </p>
             </div>
 
         </div>
 
         <div class="quick-actions">
 
-            <a href="/dashboard/upload" class="action-card">
+            <a
+                href="/dashboard/upload"
+                class="action-card"
+            >
 
                 <div class="action-icon">
                     🎵
@@ -814,13 +906,19 @@
 
                 <div>
                     <strong>Upload Beat / Track</strong>
-                    <span>Add new music to your catalog</span>
+
+                    <span>
+                        Add new music to your catalog
+                    </span>
                 </div>
 
             </a>
 
 
-            <a href="/dashboard/albums/new" class="action-card">
+            <a
+                href="/dashboard/albums/new"
+                class="action-card"
+            >
 
                 <div class="action-icon">
                     💿
@@ -828,13 +926,19 @@
 
                 <div>
                     <strong>Create Album</strong>
-                    <span>Package tracks into an album</span>
+
+                    <span>
+                        Package tracks into an album
+                    </span>
                 </div>
 
             </a>
 
 
-            <a href="/dashboard/merch" class="action-card">
+            <a
+                href="/dashboard/merch"
+                class="action-card"
+            >
 
                 <div class="action-icon">
                     👕
@@ -842,7 +946,10 @@
 
                 <div>
                     <strong>Manage Merchandise</strong>
-                    <span>Add products to your creator brand</span>
+
+                    <span>
+                        Add products to your creator brand
+                    </span>
                 </div>
 
             </a>
@@ -850,38 +957,55 @@
 
             {% if store_url %}
 
-            <a href="{{ store_url }}" target="_blank" class="action-card">
+                <a
+                    href="{{ store_url }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="action-card"
+                >
 
-                <div class="action-icon">
-                    🛍️
-                </div>
+                    <div class="action-icon">
+                        🛍️
+                    </div>
 
-                <div>
-                    <strong>View Public Store</strong>
-                    <span>See what your customers see</span>
-                </div>
+                    <div>
+                        <strong>View Public Store</strong>
 
-            </a>
+                        <span>
+                            See what your customers see
+                        </span>
+                    </div>
+
+                </a>
 
             {% else %}
 
-            <a href="/dashboard" class="action-card">
+                <a
+                    href="/dashboard"
+                    class="action-card"
+                >
 
-                <div class="action-icon">
-                    🛍️
-                </div>
+                    <div class="action-icon">
+                        🛍️
+                    </div>
 
-                <div>
-                    <strong>Your Public Store</strong>
-                    <span>Store link will appear here</span>
-                </div>
+                    <div>
+                        <strong>Your Public Store</strong>
 
-            </a>
+                        <span>
+                            Store link will appear here
+                        </span>
+                    </div>
+
+                </a>
 
             {% endif %}
 
 
-            <a href="/dashboard/withdraw" class="action-card">
+            <a
+                href="/dashboard/withdraw"
+                class="action-card"
+            >
 
                 <div class="action-icon">
                     💰
@@ -889,7 +1013,10 @@
 
                 <div>
                     <strong>Withdraw Earnings</strong>
-                    <span>Request an M-Pesa payout</span>
+
+                    <span>
+                        Request an M-Pesa payout
+                    </span>
                 </div>
 
             </a>
@@ -899,24 +1026,30 @@
     </section>
 
 
-    <!-- ===================================================== -->
-    <!-- MAIN TWO-COLUMN AREA -->
-    <!-- ===================================================== -->
+    <!-- =====================================================
+         MAIN TWO-COLUMN AREA
+         ===================================================== -->
 
     <div class="dashboard-columns">
 
 
-        <!-- LEFT -->
+        <!-- =================================================
+             LEFT COLUMN
+             ================================================= -->
+
         <div>
 
             <!-- Earnings -->
+
             <div class="earnings-card">
 
                 <div class="earnings-top">
 
                     <div>
 
-                        <h2>Earnings Overview</h2>
+                        <h2>
+                            Earnings Overview
+                        </h2>
 
                         <div class="earnings-balance">
                             KSh {{ "%.2f"|format(available_balance|float) }}
@@ -928,7 +1061,10 @@
 
                     </div>
 
-                    <a href="/dashboard/withdraw" class="withdraw-btn">
+                    <a
+                        href="/dashboard/withdraw"
+                        class="withdraw-btn"
+                    >
                         Withdraw
                     </a>
 
@@ -938,31 +1074,54 @@
                 <div class="earnings-breakdown">
 
                     <div class="earning-item">
-                        <span>Gross Revenue</span>
+
+                        <span>
+                            Gross Revenue
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(gross_revenue|float) }}
                         </strong>
+
                     </div>
 
+
                     <div class="earning-item">
-                        <span>Platform Commission</span>
+
+                        <span>
+                            Platform Commission
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(platform_commission|float) }}
                         </strong>
+
                     </div>
 
+
                     <div class="earning-item">
-                        <span>Net Earnings</span>
+
+                        <span>
+                            Net Earnings
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(net_earnings|float) }}
                         </strong>
+
                     </div>
 
+
                     <div class="earning-item">
-                        <span>Pending Withdrawal</span>
+
+                        <span>
+                            Pending Withdrawal
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(pending_withdrawal|float) }}
                         </strong>
+
                     </div>
 
                 </div>
@@ -971,103 +1130,125 @@
 
 
             <!-- Recent Sales -->
-            <div class="panel" style="margin-top:20px;">
+
+            <div
+                class="panel"
+                style="margin-top:20px;"
+            >
 
                 <div class="panel-header">
 
                     <div>
-                        <h2>Recent Sales</h2>
-                        <p>Your latest completed orders.</p>
+
+                        <h2>
+                            Recent Sales
+                        </h2>
+
+                        <p>
+                            Your latest completed orders.
+                        </p>
+
                     </div>
 
                 </div>
 
+
                 {% if recent_orders %}
 
-                <div class="recent-table-wrap">
+                    <div class="recent-table-wrap">
 
-                    <table class="recent-table">
+                        <table class="recent-table">
 
-                        <thead>
+                            <thead>
 
-                            <tr>
-                                <th>Track</th>
-                                <th>Amount</th>
-                                <th>Commission</th>
-                                <th>Net</th>
-                                <th>Status</th>
-                            </tr>
+                                <tr>
+                                    <th>Track</th>
+                                    <th>Amount</th>
+                                    <th>Commission</th>
+                                    <th>Net</th>
+                                    <th>Status</th>
+                                </tr>
 
-                        </thead>
+                            </thead>
 
-                        <tbody>
+                            <tbody>
 
-                        {% for order in recent_orders %}
+                                {% for order in recent_orders %}
 
-                            <tr>
+                                    <tr>
 
-                                <td>
+                                        <td>
 
-                                    <div class="order-title">
+                                            <div class="order-title">
 
-                                        {% if order.track %}
-                                            {{ order.track.title }}
-                                        {% else %}
-                                            Beat purchase
-                                        {% endif %}
+                                                {% if order.track %}
+                                                    {{ order.track.title }}
+                                                {% else %}
+                                                    Beat purchase
+                                                {% endif %}
 
-                                    </div>
+                                            </div>
 
-                                    <div class="order-date">
+                                            <div class="order-date">
 
-                                        {% if order.completed_at %}
-                                            {{ order.completed_at.strftime("%d %b %Y %H:%M") }}
-                                        {% elif order.created_at %}
-                                            {{ order.created_at.strftime("%d %b %Y %H:%M") }}
-                                        {% endif %}
+                                                {% if order.completed_at %}
+                                                    {{ order.completed_at.strftime("%d %b %Y %H:%M") }}
 
-                                    </div>
+                                                {% elif order.created_at %}
+                                                    {{ order.created_at.strftime("%d %b %Y %H:%M") }}
 
-                                </td>
+                                                {% endif %}
 
-                                <td>
-                                    KSh {{ "%.2f"|format(order.gross_amount|float) }}
-                                </td>
+                                            </div>
 
-                                <td>
-                                    KSh {{ "%.2f"|format(order.commission_amount|float) }}
-                                </td>
+                                        </td>
 
-                                <td>
-                                    KSh {{ "%.2f"|format(order.net_amount|float) }}
-                                </td>
 
-                                <td>
-                                    <span class="status-badge">
-                                        Completed
-                                    </span>
-                                </td>
+                                        <td>
+                                            KSh {{ "%.2f"|format(order.gross_amount|float) }}
+                                        </td>
 
-                            </tr>
 
-                        {% endfor %}
+                                        <td>
+                                            KSh {{ "%.2f"|format(order.commission_amount|float) }}
+                                        </td>
 
-                        </tbody>
 
-                    </table>
+                                        <td>
+                                            KSh {{ "%.2f"|format(order.net_amount|float) }}
+                                        </td>
 
-                </div>
+
+                                        <td>
+
+                                            <span class="status-badge">
+                                                Completed
+                                            </span>
+
+                                        </td>
+
+                                    </tr>
+
+                                {% endfor %}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
 
                 {% else %}
 
-                <div class="empty-state">
+                    <div class="empty-state">
 
-                    <strong>No completed sales yet</strong>
+                        <strong>
+                            No completed sales yet
+                        </strong>
 
-                    Your completed purchases will appear here once customers
-                    buy your music.
+                        Your completed purchases will appear here once
+                        customers buy your music.
 
-                </div>
+                    </div>
 
                 {% endif %}
 
@@ -1075,16 +1256,27 @@
 
 
             <!-- Withdrawal History -->
+
             <div class="panel withdrawals-panel">
 
                 <div class="panel-header">
 
                     <div>
-                        <h2>Withdrawal History</h2>
-                        <p>Track your M-Pesa payout requests.</p>
+
+                        <h2>
+                            Withdrawal History
+                        </h2>
+
+                        <p>
+                            Track your M-Pesa payout requests.
+                        </p>
+
                     </div>
 
-                    <a href="/dashboard/withdraw" class="section-link">
+                    <a
+                        href="/dashboard/withdraw"
+                        class="section-link"
+                    >
                         Manage →
                     </a>
 
@@ -1095,55 +1287,68 @@
 
                     {% for withdrawal in withdrawal_requests[:5] %}
 
-                    <div class="withdrawal-row">
+                        <div class="withdrawal-row">
 
-                        <div>
-                            <div class="withdrawal-label">
-                                Amount
+                            <div>
+
+                                <div class="withdrawal-label">
+                                    Amount
+                                </div>
+
+                                <div class="withdrawal-value">
+                                    KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+                                </div>
+
                             </div>
 
-                            <div class="withdrawal-value">
-                                KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+
+                            <div>
+
+                                <div class="withdrawal-label">
+                                    M-Pesa
+                                </div>
+
+                                <div class="withdrawal-value">
+                                    {{ withdrawal.phone_number }}
+                                </div>
+
                             </div>
+
+
+                            <div>
+
+                                <div class="withdrawal-label">
+                                    Date
+                                </div>
+
+                                <div class="withdrawal-value">
+
+                                    {% if withdrawal.created_at %}
+                                        {{ withdrawal.created_at.strftime("%d %b %Y") }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+
+                                </div>
+
+                            </div>
+
+
+                            <div>
+
+                                {% set withdrawal_status =
+                                    withdrawal.status|string|lower
+                                %}
+
+                                <span
+                                    class="badge {{ withdrawal_status }}"
+                                >
+                                    {{ withdrawal.status }}
+                                </span>
+
+                            </div>
+
                         </div>
-
-                        <div>
-                            <div class="withdrawal-label">
-                                M-Pesa
-                            </div>
-
-                            <div class="withdrawal-value">
-                                {{ withdrawal.phone_number }}
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="withdrawal-label">
-                                Date
-                            </div>
-
-                            <div class="withdrawal-value">
-
-                                {% if withdrawal.created_at %}
-                                    {{ withdrawal.created_at.strftime("%d %b %Y") }}
-                                {% else %}
-                                    —
-                                {% endif %}
-
-                            </div>
-                        </div>
-
-                        <div>
-
-                            {% set withdrawal_status = withdrawal.status|string|lower %}
-
-                            <span class="badge {{ withdrawal_status }}">
-                                {{ withdrawal.status }}
-                            </span>
-
-                        </div>
-
-                    </div>
 
                     {% endfor %}
 
@@ -1151,7 +1356,9 @@
 
                     <div class="empty-state">
 
-                        <strong>No withdrawal requests</strong>
+                        <strong>
+                            No withdrawal requests
+                        </strong>
 
                         When you request a payout, its status will appear here.
 
@@ -1164,79 +1371,96 @@
         </div>
 
 
-        <!-- RIGHT -->
+        <!-- =================================================
+             RIGHT COLUMN
+             ================================================= -->
+
         <div>
 
             <!-- Public Store -->
+
             <div class="store-card">
 
-                <h2>Your Public Store</h2>
+                <h2>
+                    Your Public Store
+                </h2>
 
                 <p>
                     Share your BeatHub store with artists, customers and
                     your audience so they can discover and purchase your music.
                 </p>
 
+
                 {% if store_url %}
 
-                <div class="store-url-box">
+                    <div class="store-url-box">
 
-                    <div
-                        class="store-url"
-                        id="creatorStoreUrl"
-                    >{{ store_url }}</div>
+                        <div
+                            class="store-url"
+                            id="creatorStoreUrl"
+                        >{{ store_url }}</div>
 
-                    <button
-                        type="button"
-                        class="copy-store"
-                        onclick="copyStoreUrl()"
-                    >
-                        Copy
-                    </button>
 
-                </div>
+                        <button
+                            type="button"
+                            class="copy-store"
+                            onclick="copyStoreUrl()"
+                        >
+                            Copy
+                        </button>
 
-                <div class="social-links">
+                    </div>
 
-                    <a
-                        href="{{ store_url }}"
-                        target="_blank"
-                        class="social-link"
-                    >
-                        Open Store ↗
-                    </a>
 
-                    {% if youtube_url %}
+                    <div class="social-links">
 
-                    <a
-                        href="{{ youtube_url }}"
-                        target="_blank"
-                        class="social-link"
-                    >
-                        YouTube ↗
-                    </a>
+                        <a
+                            href="{{ store_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="social-link"
+                        >
+                            Open Store ↗
+                        </a>
 
-                    {% endif %}
 
-                    {% if discord_url %}
+                        {% if youtube_url %}
 
-                    <a
-                        href="{{ discord_url }}"
-                        target="_blank"
-                        class="social-link"
-                    >
-                        Discord ↗
-                    </a>
+                            <a
+                                href="{{ youtube_url }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="social-link"
+                            >
+                                YouTube ↗
+                            </a>
 
-                    {% endif %}
+                        {% endif %}
 
-                </div>
+
+                        {% if discord_url %}
+
+                            <a
+                                href="{{ discord_url }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="social-link"
+                            >
+                                Discord ↗
+                            </a>
+
+                        {% endif %}
+
+                    </div>
 
                 {% else %}
 
-                <div class="empty-state" style="padding:25px 0 5px;">
-                    Your public store link is not available yet.
-                </div>
+                    <div
+                        class="empty-state"
+                        style="padding:25px 0 5px;"
+                    >
+                        Your public store link is not available yet.
+                    </div>
 
                 {% endif %}
 
@@ -1244,16 +1468,28 @@
 
 
             <!-- Catalog -->
-            <div class="dashboard-section" style="margin-top:20px;">
+
+            <div
+                class="dashboard-section"
+                style="margin-top:20px;"
+            >
 
                 <div class="section-heading">
 
                     <div>
-                        <h2>Your Catalog</h2>
-                        <p>Your published BeatHub content.</p>
+
+                        <h2>
+                            Your Catalog
+                        </h2>
+
+                        <p>
+                            Your published BeatHub content.
+                        </p>
+
                     </div>
 
                 </div>
+
 
                 <div class="content-overview">
 
@@ -1261,19 +1497,26 @@
 
                         <div class="content-card-top">
 
-                            <h3>Beats / Tracks</h3>
+                            <h3>
+                                Beats / Tracks
+                            </h3>
 
-                            <span>🎵</span>
+                            <span>
+                                🎵
+                            </span>
 
                         </div>
+
 
                         <div class="content-number">
                             {{ track_count|default(0) }}
                         </div>
 
+
                         <p>
                             Tracks in your catalog
                         </p>
+
 
                         <a href="/dashboard/upload">
                             Add another track →
@@ -1286,19 +1529,26 @@
 
                         <div class="content-card-top">
 
-                            <h3>Albums</h3>
+                            <h3>
+                                Albums
+                            </h3>
 
-                            <span>💿</span>
+                            <span>
+                                💿
+                            </span>
 
                         </div>
+
 
                         <div class="content-number">
                             {{ album_count|default(0) }}
                         </div>
 
+
                         <p>
                             Albums you've created
                         </p>
+
 
                         <a href="/dashboard/albums/new">
                             Create an album →
@@ -1312,45 +1562,86 @@
 
 
             <!-- Revenue Summary -->
+
             <div class="panel">
 
                 <div class="panel-header">
 
                     <div>
-                        <h2>Revenue Summary</h2>
-                        <p>How your sales are performing.</p>
+
+                        <h2>
+                            Revenue Summary
+                        </h2>
+
+                        <p>
+                            How your sales are performing.
+                        </p>
+
                     </div>
 
                 </div>
 
+
                 <div class="panel-body">
 
-                    <div class="earning-item" style="margin-bottom:10px;">
-                        <span>Total Sales</span>
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Total Sales
+                        </span>
+
                         <strong>
                             {{ total_sales|default(0) }}
                         </strong>
+
                     </div>
 
-                    <div class="earning-item" style="margin-bottom:10px;">
-                        <span>Gross Revenue</span>
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Gross Revenue
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(gross_revenue|float) }}
                         </strong>
+
                     </div>
 
-                    <div class="earning-item" style="margin-bottom:10px;">
-                        <span>Platform Commission</span>
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Platform Commission
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(platform_commission|float) }}
                         </strong>
+
                     </div>
 
+
                     <div class="earning-item">
-                        <span>Your Net Earnings</span>
+
+                        <span>
+                            Your Net Earnings
+                        </span>
+
                         <strong>
                             KSh {{ "%.2f"|format(net_earnings|float) }}
                         </strong>
+
                     </div>
 
                 </div>
@@ -1366,7 +1657,9 @@
 
 <script>
 function copyStoreUrl() {
-    const element = document.getElementById("creatorStoreUrl");
+    const element = document.getElementById(
+        "creatorStoreUrl"
+    );
 
     if (!element) {
         return;
@@ -1378,28 +1671,49 @@ function copyStoreUrl() {
         ? path
         : window.location.origin + path;
 
-    navigator.clipboard.writeText(fullUrl)
-        .then(function () {
-            const button = document.querySelector(".copy-store");
+    if (
+        navigator.clipboard &&
+        navigator.clipboard.writeText
+    ) {
+        navigator.clipboard.writeText(fullUrl)
+            .then(function () {
 
-            if (!button) {
-                return;
-            }
+                const button =
+                    document.querySelector(
+                        ".copy-store"
+                    );
 
-            const original = button.textContent;
+                if (!button) {
+                    return;
+                }
 
-            button.textContent = "Copied!";
+                const original =
+                    button.textContent;
 
-            setTimeout(function () {
-                button.textContent = original;
-            }, 1800);
-        })
-        .catch(function () {
-            window.prompt(
-                "Copy your BeatHub store URL:",
-                fullUrl
-            );
-        });
+                button.textContent =
+                    "Copied!";
+
+                setTimeout(
+                    function () {
+                        button.textContent =
+                            original;
+                    },
+                    1800
+                );
+            })
+            .catch(function () {
+                window.prompt(
+                    "Copy your BeatHub store URL:",
+                    fullUrl
+                );
+            });
+
+    } else {
+        window.prompt(
+            "Copy your BeatHub store URL:",
+            fullUrl
+        );
+    }
 }
 </script>
 
