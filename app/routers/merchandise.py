@@ -1,4 +1,3 @@
-```python
 """
 BeatHub merchandise routes.
 
@@ -1310,4 +1309,3 @@ def merch_product(
             product_detail=True,
         ),
     )
-```
