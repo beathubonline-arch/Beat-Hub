@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}My Purchases — BeatHub{% endblock %}
+
+{% block content %}
+
+<div class="form-page">
+
+  <div
+    class="form-card"
+    style="
+      width:100%;
+      max-width:1100px;
+    "
+  >
+
+    <!-- ============================================================
+         HEADER
+    ============================================================ -->
+
+    <div
+      style="
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:20px;
+        flex-wrap:wrap;
+        margin-bottom:24px;
+      "
+    >
+
+      <div>
+
+        <div class="brand">
+          BEAT<span class="hub">HUB</span>
+        </div>
+
+        <h2 style="margin-bottom:7px;">
+          My Purchases
+        </h2>
+
+        <p
+          class="subtitle"
+          style="margin-bottom:0;"
+        >
+          Your purchased beats and tracks are stored here.
+          Download anything you've successfully purchased.
+        </p>
+
+      </div>
+
+      <div>
+
+        <a
+          href="/beats"
+          class="btn btn-primary"
+        >
+          Find More Beats
+        </a>
+
+      </div>
+
+    </div>
+
+
+    <!-- ============================================================
+         SUCCESS
+    ============================================================ -->
+
+    {% if request.query_params.get("success") %}
+
+      <div class="alert alert-success">
+
+        {{ request.query_params.get("success") }}
+
+      </div>
+
+    {% endif %}
+
+
+    <!-- ============================================================
+         ERROR
+    ============================================================ -->
+
+    {% if request.query_params.get("error") %}
+
+      <div class="alert alert-error">
+
+        {{ request.query_params.get("error") }}
+
+      </div>
+
+    {% endif %}
+
+
+    <!-- ============================================================
+         PURCHASES
+    ============================================================ -->
+
+    {% if purchases %}
+
+      <div
+        style="
+          display:grid;
+          grid-template-columns:
+            repeat(auto-fit,minmax(280px,1fr));
+          gap:18px;
+        "
+      >
+
+        {% for purchase in purchases %}
+
+          {% set order = purchase.order %}
+          {% set track = purchase.track %}
+
+          <article
+            style="
+              border:1px solid rgba(212,175,55,.18);
+              border-radius:16px;
+              overflow:hidden;
+              background:rgba(255,255,255,.025);
+            "
+          >
+
+            <!-- ======================================================
+                 COVER
+            ====================================================== -->
+
+            <div
+              style="
+                aspect-ratio:1/1;
+                background:rgba(0,0,0,.20);
+                overflow:hidden;
+              "
+            >
+
+              {% if track and track.cover_art_url %}
+
+                <img
+                  src="{{ track.cover_art_url }}"
+                  alt="{{ track.title }}"
+                  style="
+                    width:100%;
+                    height:100%;
+                    object-fit:cover;
+                    display:block;
+                  "
+                  loading="lazy"
+                >
+
+              {% else %}
+
+                <div
+                  style="
+                    width:100%;
+                    height:100%;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    font-size:48px;
+                    opacity:.35;
+                  "
+                >
+                  🎵
+                </div>
+
+              {% endif %}
+
+            </div>
+
+
+            <!-- ======================================================
+                 INFORMATION
+            ====================================================== -->
+
+            <div
+              style="
+                padding:18px;
+              "
+            >
+
+              {% if track %}
+
+                <div
+                  class="eyebrow"
+                  style="margin-bottom:6px;"
+                >
+                  PURCHASED TRACK
+                </div>
+
+                <h3
+                  style="
+                    margin:0 0 7px;
+                    font-size:20px;
+                  "
+                >
+                  {{ track.title }}
+                </h3>
+
+                {% if track.creator_profile %}
+
+                  <p
+                    class="sub"
+                    style="margin:0 0 12px;"
+                  >
+                    By
+                    {{ track.creator_profile.stage_name }}
+                  </p>
+
+                {% endif %}
+
+              {% endif %}
+
+
+              <!-- ====================================================
+                   ORDER INFORMATION
+              ==================================================== -->
+
+              <div
+                style="
+                  display:grid;
+                  gap:7px;
+                  margin-bottom:16px;
+                  font-size:13px;
+                "
+              >
+
+                <div
+                  style="
+                    display:flex;
+                    justify-content:space-between;
+                    gap:10px;
+                  "
+                >
+                  <span class="sub">
+                    Order
+                  </span>
+
+                  <strong>
+                    {{ order.order_number }}
+                  </strong>
+                </div>
+
+
+                <div
+                  style="
+                    display:flex;
+                    justify-content:space-between;
+                    gap:10px;
+                  "
+                >
+                  <span class="sub">
+                    Amount
+                  </span>
+
+                  <strong>
+                    KSh {{ order.gross_amount }}
+                  </strong>
+                </div>
+
+
+                <div
+                  style="
+                    display:flex;
+                    justify-content:space-between;
+                    gap:10px;
+                  "
+                >
+                  <span class="sub">
+                    Status
+                  </span>
+
+                  <strong>
+                    Completed
+                  </strong>
+                </div>
+
+              </div>
+
+
+              <!-- ====================================================
+                   DOWNLOAD
+              ==================================================== -->
+
+              {% if track %}
+
+                <a
+                  href="/download/track/{{ track.id }}"
+                  class="btn btn-primary btn-block"
+                  download
+                >
+                  Download Track
+                </a>
+
+                <a
+                  href="/track/{{ track.slug }}"
+                  class="btn btn-secondary btn-block"
+                  style="margin-top:8px;"
+                >
+                  View Track
+                </a>
+
+              {% else %}
+
+                <div
+                  class="alert alert-error"
+                  style="margin:0;"
+                >
+                  The purchased track is no longer available.
+                  Contact BeatHub support.
+                </div>
+
+              {% endif %}
+
+            </div>
+
+          </article>
+
+        {% endfor %}
+
+      </div>
+
+    {% else %}
+
+      <!-- ==========================================================
+           EMPTY STATE
+      ========================================================== -->
+
+      <div
+        style="
+          text-align:center;
+          padding:55px 20px;
+          border:1px dashed rgba(212,175,55,.25);
+          border-radius:16px;
+        "
+      >
+
+        <div
+          style="
+            font-size:48px;
+            margin-bottom:15px;
+          "
+        >
+          🎧
+        </div>
+
+        <h3>
+          No purchases yet
+        </h3>
+
+        <p
+          class="sub"
+          style="
+            max-width:500px;
+            margin:8px auto 20px;
+          "
+        >
+          Find a beat you love, complete your M-Pesa payment,
+          and it will automatically appear here with your
+          download access.
+        </p>
+
+        <a
+          href="/beats"
+          class="btn btn-primary"
+        >
+          Browse Beats
+        </a>
+
+      </div>
+
+    {% endif %}
+
+  </div>
+
+</div>
+
+{% endblock %}
