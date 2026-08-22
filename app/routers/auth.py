@@ -8,6 +8,11 @@ Shared authentication for:
 
 Public signup can NEVER create an administrator account.
 
+Post-login destinations:
+    Admin      -> /admin
+    Creator    -> /dashboard
+    Buyer      -> /account
+
 Admin credentials:
     ADMIN_USERNAME
     ADMIN_PASSWORD
@@ -68,9 +73,18 @@ def dashboard_url_for_user(user: User) -> str:
 
     Admin      -> /admin
     Creator    -> /dashboard
-    Buyer      -> /beats
+    Buyer      -> /account
 
-    Buyers/artists should immediately see the marketplace.
+    Buyers/artists receive a dedicated account landing page.
+    From there they can easily access:
+        - Browse Beats
+        - Dashboard
+        - Purchases
+        - Other buyer features
+
+    IMPORTANT:
+    This does NOT remove or change /beats.
+    It only changes the first destination after authentication.
     """
 
     role = get_role_name(user)
@@ -81,7 +95,7 @@ def dashboard_url_for_user(user: User) -> str:
     if role == "creator":
         return "/dashboard"
 
-    return "/beats"
+    return "/account"
 
 
 def base_context(
@@ -95,8 +109,8 @@ def base_context(
     IMPORTANT:
     Do not use request.form inside Jinja templates.
 
-    Starlette's request.form is a method. Values that need to
-    survive a failed form submission are explicitly passed here.
+    Values that need to survive a failed form submission
+    are explicitly passed here.
     """
 
     context = {
@@ -202,7 +216,9 @@ def signup_submit(
         /dashboard
 
     Buyer / artist:
-        /beats
+        /account
+
+    Public signup can NEVER create an administrator account.
     """
 
     # --------------------------------------------------------------
