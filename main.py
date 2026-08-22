@@ -1,13 +1,10 @@
-# BeatHub `main.py` — dashboard route fix
-
-```python
 import logging
 import os
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -27,9 +24,8 @@ from app.routers import (
 from app.services.search import run_search
 from app.utils.deps import (
     get_optional_user,
-    require_creator,
     require_admin,
-    get_role_name,
+    require_creator,
 )
 
 try:
@@ -40,16 +36,13 @@ except ImportError:
 
 logger = logging.getLogger("beathub")
 
-
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
-
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
 TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
-
 
 app = FastAPI(
     title=getattr(settings, "APP_NAME", "BeatHub"),
@@ -92,10 +85,7 @@ def _session_max_age() -> int:
     except (TypeError, ValueError):
         value = 60 * 60 * 24 * 30
 
-    return max(
-        300,
-        min(value, 60 * 60 * 24 * 365),
-    )
+    return max(300, min(value, 60 * 60 * 24 * 365))
 
 
 def _session_https_only() -> bool:
@@ -124,265 +114,124 @@ app.add_middleware(
     https_only=_session_https_only(),
 )
 
-
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
 
-
 app.mount(
     "/static",
-    StaticFiles(
-        directory=str(STATIC_DIR),
-    ),
+    StaticFiles(directory=str(STATIC_DIR)),
     name="static",
 )
 
-
 try:
-    Base.metadata.create_all(
-        bind=engine,
-    )
+    Base.metadata.create_all(bind=engine)
 except Exception:
-    logger.exception(
-        "Database table initialization failed."
-    )
+    logger.exception("Database table initialization failed.")
     raise
 
-
-# ============================================================
-# PUBLIC ROUTERS
-# ============================================================
 
 app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
 app.include_router(mpesa_callback.router)
-
-
-# ============================================================
-# UNIVERSAL DASHBOARD ENTRY
-#
-# /dashboard is now a smart entry point:
-#
-# Creator / Producer -> real creator dashboard
-# Buyer / Artist     -> /beats
-# Admin              -> /admin
-# Logged out         -> /login
-#
-# This prevents buyers/artists from receiving the old 403 when
-# they click a generic Dashboard link.
-# ============================================================
-
-@app.get(
-    "/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/dashboard/",
-    include_in_schema=False,
-)
-def universal_dashboard(
-    request: Request,
-    db=Depends(get_db),
-    current_user=Depends(get_optional_user),
-):
-    if current_user is None:
-        return RedirectResponse(
-            url="/login?error=Please%20log%20in%20to%20continue.",
-            status_code=303,
-        )
-
-    role = get_role_name(current_user)
-
-    if role == "admin":
-        return RedirectResponse(
-            url="/admin",
-            status_code=303,
-        )
-
-    if role in {
-        "creator",
-        "producer",
-    }:
-        return dashboard.dashboard_home(
-            request=request,
-            db=db,
-            user=current_user,
-            page=1,
-            q="",
-        )
-
-    return RedirectResponse(
-        url="/beats",
-        status_code=303,
-    )
-
-
-# ============================================================
-# CREATOR DASHBOARD ROUTER
-#
-# The existing creator dashboard routes remain protected.
-# ============================================================
-
-app.include_router(
-    dashboard.router,
-)
-
-
-# ============================================================
-# ADMIN
-# ============================================================
-
-app.include_router(
-    admin.router,
-)
-
-
-# ============================================================
-# MERCHANDISE
-# ============================================================
+app.include_router(dashboard.router)
+app.include_router(admin.router)
 
 if merchandise is not None:
-    app.include_router(
-        merchandise.router,
-    )
+    app.include_router(merchandise.router)
 
 
-# ============================================================
-# PUBLIC SEARCH COMPATIBILITY ROUTES
-# ============================================================
+def _template_context(
+    request: Request,
+    current_user=None,
+    **extra,
+):
+    context = {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": 2026,
+    }
+    context.update(extra)
+    return context
 
-@app.get(
-    "/beats",
-    include_in_schema=False,
-)
+
+def _template_exists(template_name: str) -> bool:
+    return (
+        TEMPLATES_DIR / template_name
+    ).is_file()
+
+
+@app.get("/beats", include_in_schema=False)
 def beats_compatibility(
     request: Request,
     current_user=Depends(get_optional_user),
     db=Depends(get_db),
 ):
-    found = run_search(
-        db,
-        "beats",
-    )
+    found = run_search(db, "beats")
 
     return templates.TemplateResponse(
         request,
         "home.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "query": "beats",
-            "results": found.get(
-                "results",
-                {},
-            ),
-            "total_results": found.get(
-                "total",
-                0,
-            ),
-        },
+        _template_context(
+            request,
+            current_user,
+            query="beats",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
+        ),
     )
 
 
-@app.get(
-    "/sessions",
-    include_in_schema=False,
-)
+@app.get("/sessions", include_in_schema=False)
 def sessions_compatibility(
     request: Request,
     current_user=Depends(get_optional_user),
     db=Depends(get_db),
 ):
-    found = run_search(
-        db,
-        "sessions",
-    )
+    found = run_search(db, "sessions")
 
     return templates.TemplateResponse(
         request,
         "home.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "query": "sessions",
-            "results": found.get(
-                "results",
-                {},
-            ),
-            "total_results": found.get(
-                "total",
-                0,
-            ),
-        },
+        _template_context(
+            request,
+            current_user,
+            query="sessions",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
+        ),
     )
 
 
-@app.get(
-    "/hot-picks",
-    include_in_schema=False,
-)
+@app.get("/hot-picks", include_in_schema=False)
 def hot_picks_compatibility(
     request: Request,
     current_user=Depends(get_optional_user),
     db=Depends(get_db),
 ):
-    found = run_search(
-        db,
-        "hot",
-    )
+    found = run_search(db, "hot")
 
     return templates.TemplateResponse(
         request,
         "home.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "query": "hot",
-            "results": found.get(
-                "results",
-                {},
-            ),
-            "total_results": found.get(
-                "total",
-                0,
-            ),
-        },
+        _template_context(
+            request,
+            current_user,
+            query="hot",
+            results=found.get("results", {}),
+            total_results=found.get("total", 0),
+        ),
     )
 
 
-# ============================================================
-# DASHBOARD COMPATIBILITY
-# ============================================================
-
-@app.get(
-    "/artist/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/creator/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/producer/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/dashboard/home",
-    include_in_schema=False,
-)
-@app.get(
-    "/dashboard/index",
-    include_in_schema=False,
-)
+@app.get("/artist/dashboard", include_in_schema=False)
+@app.get("/creator/dashboard", include_in_schema=False)
+@app.get("/producer/dashboard", include_in_schema=False)
+@app.get("/dashboard/home", include_in_schema=False)
+@app.get("/dashboard/index", include_in_schema=False)
 def dashboard_alias(
     user=Depends(require_creator),
 ):
@@ -392,18 +241,8 @@ def dashboard_alias(
     )
 
 
-# ============================================================
-# WITHDRAWAL COMPATIBILITY
-# ============================================================
-
-@app.get(
-    "/creator/withdraw",
-    include_in_schema=False,
-)
-@app.get(
-    "/producer/withdraw",
-    include_in_schema=False,
-)
+@app.get("/creator/withdraw", include_in_schema=False)
+@app.get("/producer/withdraw", include_in_schema=False)
 def creator_withdraw_alias(
     user=Depends(require_creator),
 ):
@@ -413,10 +252,7 @@ def creator_withdraw_alias(
     )
 
 
-@app.get(
-    "/admin/withdrawal",
-    include_in_schema=False,
-)
+@app.get("/admin/withdrawal", include_in_schema=False)
 def admin_withdraw_alias(
     user=Depends(require_admin),
 ):
@@ -425,10 +261,6 @@ def admin_withdraw_alias(
         status_code=303,
     )
 
-
-# ============================================================
-# HEALTH CHECK
-# ============================================================
 
 @app.api_route(
     "/healthz",
@@ -477,18 +309,10 @@ def healthz():
         "env": app_env,
         "storage": media_storage,
         "r2_enabled": bool(r2_enabled),
-        "r2_bucket_configured": bool(
-            bucket_name,
-        ),
-        "r2_endpoint_configured": bool(
-            endpoint_url,
-        ),
+        "r2_bucket_configured": bool(bucket_name),
+        "r2_endpoint_configured": bool(endpoint_url),
     }
 
-
-# ============================================================
-# FAVICON
-# ============================================================
 
 @app.get(
     "/favicon.ico",
@@ -498,51 +322,16 @@ def favicon_compatibility():
     favicon = STATIC_DIR / "favicon.ico"
 
     if favicon.is_file():
-        from fastapi.responses import FileResponse
-
         return FileResponse(
-            str(favicon),
+            path=str(favicon),
             media_type="image/x-icon",
         )
 
     return RedirectResponse(
-        url="/",
+        url="/static/favicon.ico",
         status_code=307,
     )
 
-
-# ============================================================
-# ERROR HELPERS
-# ============================================================
-
-def _error_context(
-    request: Request,
-    current_user=None,
-    **extra,
-):
-    context = {
-        "request": request,
-        "current_user": current_user,
-        "user": current_user,
-        "current_year": 2026,
-    }
-
-    context.update(extra)
-
-    return context
-
-
-def _template_exists(
-    template_name: str,
-) -> bool:
-    return (
-        TEMPLATES_DIR / template_name
-    ).is_file()
-
-
-# ============================================================
-# HTTP ERRORS
-# ============================================================
 
 @app.exception_handler(
     StarletteHTTPException,
@@ -567,7 +356,7 @@ async def http_exception_handler(
             return templates.TemplateResponse(
                 request,
                 template,
-                _error_context(
+                _template_context(
                     request,
                     detail=exc.detail,
                 ),
@@ -586,7 +375,7 @@ async def http_exception_handler(
             return templates.TemplateResponse(
                 request,
                 template,
-                _error_context(
+                _template_context(
                     request,
                     detail=exc.detail,
                 ),
@@ -604,7 +393,7 @@ async def http_exception_handler(
         return templates.TemplateResponse(
             request,
             template,
-            _error_context(
+            _template_context(
                 request,
                 detail=exc.detail,
             ),
@@ -616,10 +405,6 @@ async def http_exception_handler(
         "status_code": exc.status_code,
     }
 
-
-# ============================================================
-# VALIDATION ERRORS
-# ============================================================
 
 @app.exception_handler(
     RequestValidationError,
@@ -641,7 +426,7 @@ async def validation_exception_handler(
         return templates.TemplateResponse(
             request,
             template,
-            _error_context(
+            _template_context(
                 request,
                 errors=exc.errors(),
                 detail=(
@@ -658,13 +443,7 @@ async def validation_exception_handler(
     }
 
 
-# ============================================================
-# UNHANDLED ERRORS
-# ============================================================
-
-@app.exception_handler(
-    Exception,
-)
+@app.exception_handler(Exception)
 async def unhandled_exception_handler(
     request: Request,
     exc: Exception,
@@ -681,7 +460,7 @@ async def unhandled_exception_handler(
         return templates.TemplateResponse(
             request,
             template,
-            _error_context(
+            _template_context(
                 request,
                 detail=None,
             ),
@@ -694,15 +473,9 @@ async def unhandled_exception_handler(
     }
 
 
-# ============================================================
-# STARTUP
-# ============================================================
-
 @app.on_event("startup")
 async def startup_event():
-    logger.info(
-        "BeatHub application started."
-    )
+    logger.info("BeatHub application started.")
 
     logger.info(
         "Storage backend: %s",
@@ -718,24 +491,8 @@ async def startup_event():
     )
 
 
-# ============================================================
-# SHUTDOWN
-# ============================================================
-
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info(
         "BeatHub application shutting down."
     )
-```
-
-**Important:** there is one existing issue in the current `dashboard.py`: it also declares `/dashboard` and `/dashboard/` with `require_creator`. The new universal route is intentionally registered **before** `dashboard.router`, so FastAPI reaches the universal entry point first.
-
-Result:
-
-* Creator/producer → `/dashboard` → actual dashboard.
-* Buyer/artist → `/dashboard` → `/beats`, no 403.
-* Admin → `/dashboard` → `/admin`.
-* Logged out → `/dashboard` → `/login`.
-* Existing creator dashboard functionality remains intact.
-* Your actual dashboard route already exists at `/dashboard`; the recurring 403 was authorization, not a missing route.
