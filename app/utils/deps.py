@@ -1,5 +1,4 @@
-deps.py
-
+from __future__ import annotations
 
 """
 BeatHub authentication dependencies.
@@ -25,7 +24,6 @@ This version:
   M-Pesa, earnings, or other application behaviour
 """
 
-from __future__ import annotations
 
 from typing import Optional
 
