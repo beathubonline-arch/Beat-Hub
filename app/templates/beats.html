@@ -1,809 +1,806 @@
-{% extends "base.html" %}
-
-{% block title %}Beats — BeatHub{% endblock %}
-
-{% block extra_head %}
-<style>
-  :root {
-    --bh-bg: #070707;
-    --bh-panel: #101010;
-    --bh-panel-2: #151515;
-    --bh-line: rgba(255,255,255,.09);
-    --bh-text: #f7f7f7;
-    --bh-muted: #a4a4a4;
-    --bh-accent: #ff7a00;
-    --bh-accent-2: #ff9d45;
-    --bh-green: #39d98a;
-    --bh-shadow: 0 24px 70px rgba(0,0,0,.38);
-  }
-
-  .beats-page {
-    margin: -8px -4px 0;
-    padding-bottom: 48px;
-  }
-
-  .beats-hero {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid var(--bh-line);
-    border-radius: 28px;
-    padding: 42px 34px 34px;
-    background:
-      radial-gradient(circle at 85% 20%, rgba(255,122,0,.23), transparent 32%),
-      radial-gradient(circle at 12% 100%, rgba(255,255,255,.07), transparent 34%),
-      linear-gradient(135deg, #171717 0%, #0a0a0a 58%, #101010 100%);
-    box-shadow: var(--bh-shadow);
-  }
-
-  .beats-hero:after {
-    content: "";
-    position: absolute;
-    width: 320px;
-    height: 320px;
-    right: -120px;
-    bottom: -190px;
-    border-radius: 50%;
-    background: rgba(255,122,0,.12);
-    filter: blur(10px);
-  }
-
-  .hero-kicker {
-    position: relative;
-    z-index: 1;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 11px;
-    border: 1px solid rgba(255,122,0,.32);
-    border-radius: 999px;
-    color: var(--bh-accent-2);
-    background: rgba(255,122,0,.08);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .13em;
-    text-transform: uppercase;
-  }
-
-  .beats-hero h1 {
-    position: relative;
-    z-index: 1;
-    margin: 14px 0 8px;
-    font-size: clamp(36px, 6vw, 68px);
-    line-height: .98;
-    letter-spacing: -.045em;
-    color: #fff;
-  }
-
-  .beats-hero h1 span {
-    color: var(--bh-accent);
-  }
-
-  .beats-hero p {
-    position: relative;
-    z-index: 1;
-    max-width: 680px;
-    margin: 0;
-    color: #bdbdbd;
-    font-size: 15px;
-    line-height: 1.7;
-  }
-
-  .beats-hero-stats {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 24px;
-  }
-
-  .hero-stat {
-    padding: 10px 13px;
-    border: 1px solid var(--bh-line);
-    border-radius: 13px;
-    background: rgba(255,255,255,.045);
-    color: #ddd;
-    font-size: 12px;
-  }
-
-  .hero-stat strong {
-    color: #fff;
-    margin-right: 4px;
-  }
-
-  .beats-toolbar {
-    margin: 18px 0 22px;
-    padding: 14px;
-    border: 1px solid var(--bh-line);
-    border-radius: 20px;
-    background: rgba(16,16,16,.94);
-    box-shadow: 0 12px 36px rgba(0,0,0,.2);
-  }
-
-  .beats-search {
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) auto auto auto;
-    gap: 10px;
-    align-items: center;
-  }
-
-  .beats-search input,
-  .beats-search select {
-    width: 100%;
-    min-height: 46px;
-    box-sizing: border-box;
-    border: 1px solid var(--bh-line);
-    border-radius: 12px;
-    outline: none;
-    background: #0a0a0a;
-    color: #fff;
-    padding: 0 14px;
-  }
-
-  .beats-search input:focus,
-  .beats-search select:focus {
-    border-color: rgba(255,122,0,.7);
-    box-shadow: 0 0 0 3px rgba(255,122,0,.09);
-  }
-
-  .beats-search button,
-  .clear-btn {
-    min-height: 46px;
-    border-radius: 12px;
-    padding: 0 18px;
-    font-weight: 800;
-    text-decoration: none;
-    cursor: pointer;
-  }
-
-  .beats-search button {
-    border: 1px solid var(--bh-accent);
-    background: var(--bh-accent);
-    color: #111;
-  }
-
-  .clear-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--bh-line);
-    background: #111;
-    color: #ddd;
-  }
-
-  .genre-strip {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 12px 2px 2px;
-    scrollbar-width: thin;
-  }
-
-  .genre-chip {
-    flex: 0 0 auto;
-    padding: 8px 12px;
-    border: 1px solid var(--bh-line);
-    border-radius: 999px;
-    color: #bbb;
-    text-decoration: none;
-    font-size: 12px;
-    background: #0d0d0d;
-    transition: .18s ease;
-  }
-
-  .genre-chip:hover,
-  .genre-chip.active {
-    color: #fff;
-    border-color: rgba(255,122,0,.55);
-    background: rgba(255,122,0,.1);
-  }
-
-  .beats-section-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: end;
-    gap: 16px;
-    margin: 30px 2px 16px;
-  }
-
-  .beats-section-head h2 {
-    margin: 0;
-    color: #fff;
-    font-size: 25px;
-    letter-spacing: -.025em;
-  }
-
-  .beats-section-head p {
-    margin: 5px 0 0;
-    color: var(--bh-muted);
-    font-size: 13px;
-  }
-
-  .beats-count {
-    color: #aaa;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-
-  .beat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 17px;
-  }
-
-  .beat-card {
-    min-width: 0;
-    overflow: hidden;
-    border: 1px solid var(--bh-line);
-    border-radius: 19px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.01)),
-      var(--bh-panel);
-    box-shadow: 0 12px 34px rgba(0,0,0,.22);
-    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
-  }
-
-  .beat-card:hover {
-    transform: translateY(-5px);
-    border-color: rgba(255,122,0,.36);
-    box-shadow: 0 24px 50px rgba(0,0,0,.38);
-  }
-
-  .beat-art {
-    position: relative;
-    aspect-ratio: 1 / 1;
-    overflow: hidden;
-    background:
-      radial-gradient(circle at 25% 20%, rgba(255,122,0,.36), transparent 30%),
-      linear-gradient(135deg, #242424, #090909);
-  }
-
-  .beat-art img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    transition: transform .35s ease;
-  }
-
-  .beat-card:hover .beat-art img {
-    transform: scale(1.045);
-  }
-
-  .art-fallback {
-    width: 100%;
-    height: 100%;
-    display: grid;
-    place-items: center;
-    color: rgba(255,255,255,.16);
-    font-size: 54px;
-    font-weight: 900;
-    letter-spacing: -.08em;
-  }
-
-  .beat-badge {
-    position: absolute;
-    top: 11px;
-    left: 11px;
-    padding: 6px 9px;
-    border-radius: 999px;
-    background: rgba(0,0,0,.66);
-    border: 1px solid rgba(255,255,255,.12);
-    backdrop-filter: blur(10px);
-    color: #fff;
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-  }
-
-  .preview-btn {
-    position: absolute;
-    right: 11px;
-    bottom: 11px;
-    width: 44px;
-    height: 44px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(255,255,255,.18);
-    border-radius: 50%;
-    background: rgba(0,0,0,.72);
-    color: #fff;
-    cursor: pointer;
-    font-size: 17px;
-    backdrop-filter: blur(10px);
-  }
-
-  .preview-btn:hover {
-    background: var(--bh-accent);
-    color: #111;
-  }
-
-  .beat-body {
-    padding: 15px;
-  }
-
-  .beat-title-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: start;
-  }
-
-  .beat-title {
-    margin: 0;
-    color: #fff;
-    font-size: 16px;
-    line-height: 1.25;
-    letter-spacing: -.015em;
-  }
-
-  .beat-producer {
-    margin: 5px 0 0;
-    color: #929292;
-    font-size: 12px;
-  }
-
-  .beat-price {
-    color: var(--bh-accent-2);
-    font-size: 16px;
-    font-weight: 900;
-    white-space: nowrap;
-  }
-
-  .beat-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin: 13px 0;
-  }
-
-  .meta-pill {
-    padding: 5px 7px;
-    border: 1px solid var(--bh-line);
-    border-radius: 7px;
-    color: #aaa;
-    background: #0c0c0c;
-    font-size: 10px;
-  }
-
-  .beat-actions {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-  }
-
-  .view-beat,
-  .mini-preview {
-    min-height: 40px;
-    border-radius: 10px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 850;
-    cursor: pointer;
-  }
-
-  .view-beat {
-    background: #fff;
-    color: #111;
-  }
-
-  .view-beat:hover {
-    background: var(--bh-accent);
-  }
-
-  .mini-preview {
-    width: 42px;
-    border: 1px solid var(--bh-line);
-    background: #111;
-    color: #fff;
-  }
-
-  .empty-beats {
-    grid-column: 1 / -1;
-    padding: 58px 20px;
-    text-align: center;
-    border: 1px dashed rgba(255,255,255,.15);
-    border-radius: 20px;
-    background: #0d0d0d;
-  }
-
-  .empty-beats .icon {
-    font-size: 34px;
-    margin-bottom: 8px;
-  }
-
-  .empty-beats h3 {
-    margin: 0 0 7px;
-    color: #fff;
-  }
-
-  .empty-beats p {
-    margin: 0;
-    color: #999;
-  }
-
-  .pagination {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 30px;
-  }
-
-  .page-link {
-    min-width: 42px;
-    height: 42px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--bh-line);
-    border-radius: 10px;
-    background: #111;
-    color: #ddd;
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 800;
-  }
-
-  .page-link:hover,
-  .page-link.current {
-    border-color: var(--bh-accent);
-    background: var(--bh-accent);
-    color: #111;
-  }
-
-  .now-playing {
-    position: fixed;
-    left: 18px;
-    right: 18px;
-    bottom: 18px;
-    z-index: 1000;
-    display: none;
-    align-items: center;
-    gap: 13px;
-    padding: 12px 14px;
-    border: 1px solid rgba(255,255,255,.12);
-    border-radius: 16px;
-    background: rgba(13,13,13,.93);
-    box-shadow: 0 20px 60px rgba(0,0,0,.5);
-    backdrop-filter: blur(18px);
-  }
-
-  .now-playing.visible {
-    display: flex;
-  }
-
-  .np-copy {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .np-title {
-    color: #fff;
-    font-size: 12px;
-    font-weight: 850;
-  }
-
-  .np-sub {
-    color: #8f8f8f;
-    font-size: 10px;
-    margin-top: 2px;
-  }
-
-  .np-stop {
-    width: 36px;
-    height: 36px;
-    border: 1px solid var(--bh-line);
-    border-radius: 50%;
-    background: #111;
-    color: #fff;
-    cursor: pointer;
-  }
-
-  @media (max-width: 1050px) {
-    .beat-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .beats-search {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-
-  @media (max-width: 760px) {
-    .beats-page {
-      margin: -4px 0 0;
-    }
-
-    .beats-hero {
-      padding: 30px 22px 25px;
-      border-radius: 22px;
-    }
-
-    .beat-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .beats-search {
-      grid-template-columns: 1fr;
-    }
-
-    .beats-section-head {
-      align-items: start;
-      flex-direction: column;
-    }
-  }
-
-  @media (max-width: 500px) {
-    .beat-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .beat-art {
-      aspect-ratio: 16 / 11;
-    }
-  }
-</style>
-{% endblock %}
-
-{% block content %}
-<div class="beats-page">
-
-  <section class="beats-hero">
-    <div class="hero-kicker">BeatHub Marketplace</div>
-    <h1>Find your <span>next sound.</span></h1>
-    <p>
-      Browse fresh beats from BeatHub creators, preview them instantly,
-      compare styles and prices, then open the beat page when you're ready
-      to license it.
-    </p>
-
-    <div class="beats-hero-stats">
-      <div class="hero-stat"><strong>{{ total }}</strong> beats available</div>
-      <div class="hero-stat"><strong>24/7</strong> discovery</div>
-      <div class="hero-stat"><strong>Preview</strong> before you buy</div>
-    </div>
-  </section>
-
-  <section class="beats-toolbar" aria-label="Beat filters">
-    <form class="beats-search" method="get" action="/beats">
-      <input
-        type="search"
-        name="q"
-        value="{{ q or '' }}"
-        placeholder="Search beats, genres, moods..."
-        autocomplete="off"
-      >
-
-      <select name="genre" aria-label="Genre">
-        <option value="">All genres</option>
-        {% for item in genres %}
-          <option value="{{ item }}" {% if genre == item %}selected{% endif %}>
-            {{ item }}
-          </option>
-        {% endfor %}
-      </select>
-
-      <select name="mood" aria-label="Mood">
-        <option value="">All moods</option>
-        {% for item in moods %}
-          <option value="{{ item }}" {% if mood == item %}selected{% endif %}>
-            {{ item }}
-          </option>
-        {% endfor %}
-      </select>
-
-      <button type="submit">Search Beats</button>
-    </form>
-
-    {% if q or genre or mood %}
-      <div style="margin-top:10px;">
-        <a class="clear-btn" href="/beats">Clear filters</a>
-      </div>
-    {% endif %}
-
-    {% if genres %}
-      <div class="genre-strip">
-        <a class="genre-chip {% if not genre %}active{% endif %}" href="/beats">All</a>
-        {% for item in genres %}
-          <a
-            class="genre-chip {% if genre == item %}active{% endif %}"
-            href="/beats?genre={{ item|urlencode }}"
-          >{{ item }}</a>
-        {% endfor %}
-      </div>
-    {% endif %}
-  </section>
-
-  <div class="beats-section-head">
-    <div>
-      <h2>{% if q or genre or mood %}Matching beats{% else %}Latest beats{% endif %}</h2>
-      <p>
-        {% if q %}
-          Results for “{{ q }}”
-        {% elif genre %}
-          {{ genre }} beats
-        {% elif mood %}
-          {{ mood }} beats
-        {% else %}
-          Fresh sounds from BeatHub creators.
-        {% endif %}
-      </p>
-    </div>
-    <div class="beats-count">
-      Showing {{ catalog_start }}–{{ catalog_end }} of {{ total }}
-    </div>
-  </div>
-
-  <section class="beat-grid">
-    {% if catalog %}
-      {% for item in catalog %}
-        <article class="beat-card">
-          <div class="beat-art">
-            {% if item.artwork_url %}
-              <img
-                src="{{ item.artwork_url }}"
-                alt="{{ item.title }} artwork"
-                loading="lazy"
-                onerror="this.style.display='none';this.nextElementSibling.style.display='grid';"
-              >
-              <div class="art-fallback" style="display:none;">BH</div>
-            {% else %}
-              <div class="art-fallback">BH</div>
-            {% endif %}
-
-            {% if loop.index <= 3 and page == 1 and not q and not genre and not mood %}
-              <div class="beat-badge">Fresh</div>
-            {% endif %}
-
-            {% if item.audio_url %}
-              <button
-                class="preview-btn"
-                type="button"
-                aria-label="Preview {{ item.title }}"
-                data-audio="{{ item.audio_url }}"
-                data-title="{{ item.title }}"
-                data-producer="{{ item.producer }}"
-                onclick="togglePreview(this)"
-              >▶</button>
-            {% endif %}
-          </div>
-
-          <div class="beat-body">
-            <div class="beat-title-row">
-              <div>
-                <h3 class="beat-title">{{ item.title }}</h3>
-                <p class="beat-producer">by {{ item.producer }}</p>
-              </div>
-              <div class="beat-price">KSh {{ "%.0f"|format(item.price) }}</div>
-            </div>
-
-            <div class="beat-meta">
-              {% if item.genre %}<span class="meta-pill">{{ item.genre }}</span>{% endif %}
-              {% if item.mood %}<span class="meta-pill">{{ item.mood }}</span>{% endif %}
-              {% if item.bpm %}<span class="meta-pill">{{ item.bpm }} BPM</span>{% endif %}
-              {% if item.key %}<span class="meta-pill">{{ item.key }}</span>{% endif %}
-            </div>
-
-            <div class="beat-actions">
-              <a class="view-beat" href="{{ item.url }}">View &amp; License</a>
-              {% if item.audio_url %}
-                <button
-                  class="mini-preview"
-                  type="button"
-                  data-audio="{{ item.audio_url }}"
-                  data-title="{{ item.title }}"
-                  data-producer="{{ item.producer }}"
-                  onclick="togglePreview(this)"
-                  aria-label="Preview {{ item.title }}"
-                >▶</button>
-              {% else %}
-                <span></span>
-              {% endif %}
-            </div>
-          </div>
-        </article>
-      {% endfor %}
-    {% else %}
-      <div class="empty-beats">
-        <div class="icon">♪</div>
-        <h3>No beats found</h3>
-        <p>Try another search, genre or mood. New sounds are added by creators regularly.</p>
-        <div style="margin-top:16px;">
-          <a class="clear-btn" href="/beats">Browse all beats</a>
-        </div>
-      </div>
-    {% endif %}
-  </section>
-
-  {% if total_pages > 1 %}
-    <nav class="pagination" aria-label="Beat pagination">
-      {% if has_previous %}
-        <a
-          class="page-link"
-          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ previous_page }}"
-        >‹</a>
-      {% endif %}
-
-      {% set start_page = [1, page - 2]|max %}
-      {% set end_page = [total_pages, page + 2]|min %}
-
-      {% for p in range(start_page, end_page + 1) %}
-        <a
-          class="page-link {% if p == page %}current{% endif %}"
-          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ p }}"
-        >{{ p }}</a>
-      {% endfor %}
-
-      {% if has_next %}
-        <a
-          class="page-link"
-          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ next_page }}"
-        >›</a>
-      {% endif %}
-    </nav>
-  {% endif %}
-</div>
-
-<div class="now-playing" id="nowPlaying">
-  <div class="np-copy">
-    <div class="np-title" id="npTitle">BeatHub Preview</div>
-    <div class="np-sub" id="npSub">Now playing</div>
-  </div>
-  <button class="np-stop" type="button" onclick="stopPreview()">■</button>
-  <audio id="previewAudio" controls style="height:34px;max-width:360px;"></audio>
-</div>
-
-<script>
-  const previewAudio = document.getElementById("previewAudio");
-  const nowPlaying = document.getElementById("nowPlaying");
-  const npTitle = document.getElementById("npTitle");
-  const npSub = document.getElementById("npSub");
-  let activeButton = null;
-
-  function togglePreview(button) {
-    const url = button.dataset.audio;
-    if (!url) return;
-
-    if (activeButton === button && !previewAudio.paused) {
-      previewAudio.pause();
-      button.textContent = "▶";
-      return;
-    }
-
-    document.querySelectorAll(".preview-btn, .mini-preview").forEach((el) => {
-      el.textContent = "▶";
-    });
-
-    activeButton = button;
-    previewAudio.src = url;
-    npTitle.textContent = button.dataset.title || "BeatHub Preview";
-    npSub.textContent = "by " + (button.dataset.producer || "BeatHub Creator");
-    nowPlaying.classList.add("visible");
-    previewAudio.play().catch(() => {});
-    button.textContent = "Ⅱ";
-  }
-
-  function stopPreview() {
-    previewAudio.pause();
-    previewAudio.currentTime = 0;
-    previewAudio.removeAttribute("src");
-    previewAudio.load();
-
-    document.querySelectorAll(".preview-btn, .mini-preview").forEach((el) => {
-      el.textContent = "▶";
-    });
-
-    activeButton = null;
-    nowPlaying.classList.remove("visible");
-  }
-
-  previewAudio.addEventListener("ended", () => {
-    if (activeButton) activeButton.textContent = "▶";
-  });
-</script>
-{% endblock %}
+import logging
+import os
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.sessions import SessionMiddleware
+
+from app.config import settings
+from app.database import Base, engine, get_db
+from app.routers import (
+admin,
+auth,
+checkout,
+dashboard,
+merchandise,
+mpesa_callback,
+music,
+pages,
+)
+from app.services.search import run_search
+from app.utils.deps import (
+get_optional_user,
+require_admin,
+require_creator,
+)
+
+logger = logging.getLogger("beathub")
+
+# ======================================================================
+
+# PATHS
+
+# ======================================================================
+
+BASE_DIR = Path(**file**).resolve().parent
+APP_DIR = BASE_DIR / "app"
+
+TEMPLATES_DIR = APP_DIR / "templates"
+STATIC_DIR = APP_DIR / "static"
+
+TEMPLATES_DIR.mkdir(
+parents=True,
+exist_ok=True,
+)
+
+STATIC_DIR.mkdir(
+parents=True,
+exist_ok=True,
+)
+
+# ======================================================================
+
+# APPLICATION
+
+# ======================================================================
+
+app = FastAPI(
+title=getattr(
+settings,
+"APP_NAME",
+"BeatHub",
+),
+description=(
+"BeatHub — beats, music, sessions, producer stores "
+"and creator merchandise."
+),
+version="1.0.0",
+)
+
+# ======================================================================
+
+# SESSION SECURITY
+
+# ======================================================================
+
+def _session_secret() -> str:
+value = os.getenv(
+"SESSION_SECRET"
+)
+
+```
+if value and value.strip():
+    return value.strip()
+
+value = getattr(
+    settings,
+    "SESSION_SECRET",
+    None,
+)
+
+if value and str(value).strip():
+    return str(value).strip()
+
+logger.warning(
+    "SESSION_SECRET is not configured. "
+    "Using a temporary development secret."
+)
+
+return (
+    "beathub-development-session-secret-change-me"
+)
+```
+
+def _session_max_age() -> int:
+raw = (
+os.getenv("SESSION_MAX_AGE")
+or getattr(
+settings,
+"SESSION_MAX_AGE",
+None,
+)
+or 60 * 60 * 24 * 30
+)
+
+```
+try:
+    value = int(raw)
+except (
+    TypeError,
+    ValueError,
+):
+    value = 60 * 60 * 24 * 30
+
+return max(
+    300,
+    min(
+        value,
+        60 * 60 * 24 * 365,
+    ),
+)
+```
+
+def _session_https_only() -> bool:
+raw = (
+os.getenv("SESSION_HTTPS_ONLY")
+or getattr(
+settings,
+"SESSION_HTTPS_ONLY",
+None,
+)
+)
+
+```
+if raw is None:
+    return True
+
+return str(raw).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+```
+
+app.add_middleware(
+SessionMiddleware,
+secret_key=_session_secret(),
+session_cookie="beathub_session",
+max_age=_session_max_age(),
+same_site="lax",
+https_only=_session_https_only(),
+)
+
+# ======================================================================
+
+# TEMPLATES
+
+# ======================================================================
+
+templates = Jinja2Templates(
+directory=str(
+TEMPLATES_DIR
+)
+)
+
+# ======================================================================
+
+# STATIC FILES
+
+# ======================================================================
+
+app.mount(
+"/static",
+StaticFiles(
+directory=str(
+STATIC_DIR
+),
+),
+name="static",
+)
+
+# ======================================================================
+
+# DATABASE
+
+# ======================================================================
+
+try:
+Base.metadata.create_all(
+bind=engine,
+)
+except Exception:
+logger.exception(
+"Database table initialization failed."
+)
+raise
+
+# ======================================================================
+
+# ROUTERS
+
+#
+
+# IMPORTANT:
+
+#
+
+# music.router MUST be included BEFORE pages.router.
+
+#
+
+# pages.py contains legacy compatibility routes for /beats,
+
+/hot-picks, /sessions and /profile/{slug}. If pages is registered
+
+# first, FastAPI reaches the legacy route instead of the new
+
+# marketplace route.
+
+#
+
+# Keeping music first makes /beats resolve to the dedicated,
+
+# polished Beats marketplace.
+
+# ======================================================================
+
+app.include_router(
+auth.router,
+)
+
+app.include_router(
+music.router,
+)
+
+app.include_router(
+pages.router,
+)
+
+app.include_router(
+checkout.router,
+)
+
+app.include_router(
+mpesa_callback.router,
+)
+
+app.include_router(
+dashboard.router,
+)
+
+app.include_router(
+admin.router,
+)
+
+app.include_router(
+merchandise.router,
+)
+
+# ======================================================================
+
+# PUBLIC SEARCH COMPATIBILITY ROUTES
+
+# ======================================================================
+
+@app.get(
+"/beats",
+include_in_schema=False,
+)
+def beats_compatibility(
+request: Request,
+current_user=Depends(
+get_optional_user
+),
+db=Depends(get_db),
+):
+"""
+Legacy fallback.
+
+```
+Normally music.router handles /beats first.
+This remains only as compatibility protection.
+"""
+
+found = run_search(
+    db,
+    "beats",
+)
+
+return templates.TemplateResponse(
+    request,
+    "home.html",
+    {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": 2026,
+        "query": "beats",
+        "results": found.get(
+            "results",
+            {},
+        ),
+        "total_results": found.get(
+            "total",
+            0,
+        ),
+    },
+)
+```
+
+@app.get(
+"/sessions",
+include_in_schema=False,
+)
+def sessions_compatibility(
+request: Request,
+current_user=Depends(
+get_optional_user
+),
+db=Depends(get_db),
+):
+found = run_search(
+db,
+"sessions",
+)
+
+```
+return templates.TemplateResponse(
+    request,
+    "home.html",
+    {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": 2026,
+        "query": "sessions",
+        "results": found.get(
+            "results",
+            {},
+        ),
+        "total_results": found.get(
+            "total",
+            0,
+        ),
+    },
+)
+```
+
+@app.get(
+"/hot-picks",
+include_in_schema=False,
+)
+def hot_picks_compatibility(
+request: Request,
+current_user=Depends(
+get_optional_user
+),
+db=Depends(get_db),
+):
+found = run_search(
+db,
+"hot",
+)
+
+```
+return templates.TemplateResponse(
+    request,
+    "home.html",
+    {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": 2026,
+        "query": "hot",
+        "results": found.get(
+            "results",
+            {},
+        ),
+        "total_results": found.get(
+            "total",
+            0,
+        ),
+    },
+)
+```
+
+# ======================================================================
+
+# DASHBOARD COMPATIBILITY
+
+# ======================================================================
+
+@app.get(
+"/artist/dashboard",
+include_in_schema=False,
+)
+@app.get(
+"/creator/dashboard",
+include_in_schema=False,
+)
+@app.get(
+"/producer/dashboard",
+include_in_schema=False,
+)
+@app.get(
+"/dashboard/home",
+include_in_schema=False,
+)
+@app.get(
+"/dashboard/index",
+include_in_schema=False,
+)
+def dashboard_alias(
+user=Depends(
+require_creator
+),
+):
+return RedirectResponse(
+url="/dashboard",
+status_code=303,
+)
+
+# ======================================================================
+
+# WITHDRAWAL COMPATIBILITY
+
+# ======================================================================
+
+@app.get(
+"/creator/withdraw",
+include_in_schema=False,
+)
+@app.get(
+"/producer/withdraw",
+include_in_schema=False,
+)
+def creator_withdraw_alias(
+user=Depends(
+require_creator
+),
+):
+return RedirectResponse(
+url="/dashboard/withdraw",
+status_code=303,
+)
+
+@app.get(
+"/admin/withdrawal",
+include_in_schema=False,
+)
+def admin_withdraw_alias(
+user=Depends(
+require_admin
+),
+):
+return RedirectResponse(
+url="/admin/withdraw",
+status_code=303,
+)
+
+# ======================================================================
+
+# HEALTH CHECK
+
+# ======================================================================
+
+@app.api_route(
+"/healthz",
+methods=[
+"GET",
+"HEAD",
+],
+)
+def healthz():
+app_name = getattr(
+settings,
+"APP_NAME",
+"BeatHub",
+)
+
+```
+app_env = getattr(
+    settings,
+    "APP_ENV",
+    "production",
+)
+
+media_storage = getattr(
+    settings,
+    "MEDIA_STORAGE",
+    "local",
+)
+
+r2_enabled = getattr(
+    settings,
+    "r2_enabled",
+    False,
+)
+
+bucket_name = getattr(
+    settings,
+    "R2_BUCKET_NAME",
+    None,
+)
+
+endpoint_url = getattr(
+    settings,
+    "r2_endpoint_url",
+    None,
+)
+
+return {
+    "status": "ok",
+    "app": app_name,
+    "env": app_env,
+    "storage": media_storage,
+    "r2_enabled": bool(
+        r2_enabled
+    ),
+    "r2_bucket_configured": bool(
+        bucket_name
+    ),
+    "r2_endpoint_configured": bool(
+        endpoint_url
+    ),
+}
+```
+
+# ======================================================================
+
+# FAVICON
+
+# ======================================================================
+
+@app.get(
+"/favicon.ico",
+include_in_schema=False,
+)
+def favicon_compatibility():
+return RedirectResponse(
+url="/static/favicon.ico",
+status_code=307,
+)
+
+# ======================================================================
+
+# ERROR HELPERS
+
+# ======================================================================
+
+def _error_context(
+request: Request,
+current_user=None,
+**extra,
+):
+context = {
+"request": request,
+"current_user": current_user,
+"user": current_user,
+"current_year": 2026,
+}
+
+```
+context.update(extra)
+
+return context
+```
+
+def _template_exists(
+template_name: str,
+) -> bool:
+return (
+TEMPLATES_DIR
+/ template_name
+).is_file()
+
+# ======================================================================
+
+# HTTP ERRORS
+
+# ======================================================================
+
+@app.exception_handler(
+StarletteHTTPException,
+)
+async def http_exception_handler(
+request: Request,
+exc: StarletteHTTPException,
+):
+if exc.status_code == 401:
+return RedirectResponse(
+url=(
+"/login?"
+"error=Please%20log%20in%20to%20continue."
+),
+status_code=303,
+)
+
+```
+if exc.status_code == 403:
+    template = "errors/403.html"
+
+    if _template_exists(
+        template
+    ):
+        return templates.TemplateResponse(
+            request,
+            template,
+            _error_context(
+                request,
+                detail=exc.detail,
+            ),
+            status_code=403,
+        )
+
+    return RedirectResponse(
+        url="/login?error=Access%20denied.",
+        status_code=303,
+    )
+
+if exc.status_code == 404:
+    template = "errors/404.html"
+
+    if _template_exists(
+        template
+    ):
+        return templates.TemplateResponse(
+            request,
+            template,
+            _error_context(
+                request,
+                detail=exc.detail,
+            ),
+            status_code=404,
+        )
+
+    return RedirectResponse(
+        url="/",
+        status_code=303,
+    )
+
+template = "errors/500.html"
+
+if _template_exists(
+    template
+):
+    return templates.TemplateResponse(
+        request,
+        template,
+        _error_context(
+            request,
+            detail=exc.detail,
+        ),
+        status_code=exc.status_code,
+    )
+
+return {
+    "error": exc.detail,
+    "status_code": exc.status_code,
+}
+```
+
+# ======================================================================
+
+# VALIDATION ERRORS
+
+# ======================================================================
+
+@app.exception_handler(
+RequestValidationError,
+)
+async def validation_exception_handler(
+request: Request,
+exc: RequestValidationError,
+):
+logger.warning(
+"Validation error on %s %s: %s",
+request.method,
+request.url.path,
+exc.errors(),
+)
+
+```
+template = "errors/400.html"
+
+if _template_exists(
+    template
+):
+    return templates.TemplateResponse(
+        request,
+        template,
+        _error_context(
+            request,
+            errors=exc.errors(),
+            detail=(
+                "Please check the information "
+                "you entered."
+            ),
+        ),
+        status_code=422,
+    )
+
+return {
+    "error": "Validation error",
+    "details": exc.errors(),
+}
+```
+
+# ======================================================================
+
+# UNHANDLED ERRORS
+
+# ======================================================================
+
+@app.exception_handler(
+Exception,
+)
+async def unhandled_exception_handler(
+request: Request,
+exc: Exception,
+):
+logger.exception(
+"Unhandled BeatHub error on %s %s",
+request.method,
+request.url.path,
+)
+
+```
+template = "errors/500.html"
+
+if _template_exists(
+    template
+):
+    return templates.TemplateResponse(
+        request,
+        template,
+        _error_context(
+            request,
+            detail=None,
+        ),
+        status_code=500,
+    )
+
+return {
+    "error": "Internal server error",
+    "status_code": 500,
+}
+```
+
+# ======================================================================
+
+# STARTUP
+
+# ======================================================================
+
+@app.on_event(
+"startup"
+)
+async def startup_event():
+logger.info(
+"BeatHub application started."
+)
+
+```
+logger.info(
+    "Storage backend: %s",
+    getattr(
+        settings,
+        "MEDIA_STORAGE",
+        "local",
+    ),
+)
+
+logger.info(
+    "Platform commission configured at application level."
+)
+```
+
+# ======================================================================
+
+# SHUTDOWN
+
+# ======================================================================
+
+@app.on_event(
+"shutdown"
+)
+async def shutdown_event():
+logger.info(
+"BeatHub application shutting down."
+)
