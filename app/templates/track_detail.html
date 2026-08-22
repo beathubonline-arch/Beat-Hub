@@ -1,292 +1,395 @@
 {% extends "base.html" %}
 
-{% block title %}{{ track.title }} - BeatHub{% endblock %}
+{% block title %}
+    {{ track.title }} — BeatHub
+{% endblock %}
 
 {% block content %}
 
-<section
-  style="
-    padding:40px 0;
-    max-width:700px;
-    margin:0 auto;
-  "
->
+<style>
+    .track-page {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 55px 24px 80px;
+    }
 
-  <!-- COVER ART -->
+    .track-kicker {
+        font-size: 13px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #aaa0b8;
+        margin-bottom: 14px;
+    }
 
-  {% if cover_art_url %}
+    .track-title {
+        font-size: clamp(38px, 6vw, 64px);
+        line-height: 1;
+        margin: 0 0 18px;
+        color: #fff;
+        font-weight: 800;
+    }
 
-    <div
-      style="
-        width:100%;
-        max-width:600px;
-        aspect-ratio:1/1;
-        margin:0 auto 24px;
-        overflow:hidden;
-        border-radius:14px;
-        background:#111;
-      "
-    >
+    .track-creator {
+        font-size: 16px;
+        margin-bottom: 28px;
+        color: #aaa0b8;
+    }
 
-      <img
-        src="{{ cover_art_url }}"
-        alt="{{ track.title }}"
-        style="
-          width:100%;
-          height:100%;
-          object-fit:cover;
-          display:block;
-        "
-        onerror="this.parentElement.style.display='none';"
-      >
+    .track-creator a {
+        color: #00e6a7;
+        text-decoration: none;
+        font-weight: 700;
+    }
+
+    .track-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: rgba(0, 230, 167, 0.10);
+        color: #00e6a7;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 30px;
+    }
+
+    .track-cover {
+        width: 100%;
+        max-width: 560px;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        display: block;
+        border-radius: 18px;
+        margin-bottom: 32px;
+        border: 1px solid #2b2334;
+        background: #120d18;
+    }
+
+    .track-card {
+        border: 1px solid #2b2334;
+        background: #130d19;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .track-card-label {
+        color: #aaa0b8;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+
+    .track-price {
+        color: #ffb900;
+        font-size: 30px;
+        font-weight: 800;
+    }
+
+    .track-description {
+        color: #d0c8d7;
+        line-height: 1.7;
+        margin-top: 28px;
+        white-space: pre-line;
+    }
+
+    .track-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 24px;
+    }
+
+    .track-button {
+        width: 100%;
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: 15px;
+        box-sizing: border-box;
+    }
+
+    .track-button-primary {
+        background: #ffb900;
+        color: #111;
+    }
+
+    .track-button-primary:hover {
+        background: #ffc72c;
+    }
+
+    .track-button-secondary {
+        background: transparent;
+        border-color: #352a40;
+        color: #fff;
+    }
+
+    .track-button-secondary:hover {
+        background: #1a1221;
+    }
+
+    .track-button-disabled {
+        background: #302b34;
+        color: #6e6872;
+        cursor: not-allowed;
+    }
+
+    .track-status {
+        margin-top: 12px;
+        padding: 13px 15px;
+        border-radius: 9px;
+        background: rgba(255, 185, 0, 0.08);
+        border: 1px solid rgba(255, 185, 0, 0.16);
+        color: #d7cddc;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .track-status.success {
+        background: rgba(0, 230, 167, 0.08);
+        border-color: rgba(0, 230, 167, 0.16);
+        color: #00e6a7;
+    }
+
+    .back-link {
+        margin-top: 28px;
+    }
+
+    .back-link a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        border: 1px solid #30263a;
+        border-radius: 9px;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 700;
+    }
+
+    .back-link a:hover {
+        background: #15101b;
+    }
+
+    .preview-player {
+        width: 100%;
+        margin-top: 20px;
+    }
+
+    @media (max-width: 600px) {
+
+        .track-page {
+            padding: 35px 18px 60px;
+        }
+
+        .track-title {
+            font-size: 42px;
+        }
+
+        .track-card {
+            padding: 20px;
+        }
+    }
+</style>
+
+
+<div class="track-page">
+
+    <div class="track-kicker">
+        Beat
+    </div>
+
+    <h1 class="track-title">
+        {{ track.title }}
+    </h1>
+
+    {% if track.creator_profile %}
+
+        <div class="track-creator">
+            By
+
+            {% if track.creator_profile.slug %}
+
+                <a href="/profile/{{ track.creator_profile.slug }}">
+                    {{ track.creator_profile.display_name
+                        or track.creator_profile.stage_name
+                        or track.creator_profile.user.username
+                        or "Producer" }}
+                </a>
+
+            {% else %}
+
+                <span>
+                    {{ track.creator_profile.display_name
+                        or track.creator_profile.stage_name
+                        or "Producer" }}
+                </span>
+
+            {% endif %}
+        </div>
+
+    {% endif %}
+
+
+    <div class="track-badge">
+
+        {% if track.sales_model.value == "exclusive" %}
+            Exclusive License
+        {% else %}
+            Non-Exclusive License
+        {% endif %}
 
     </div>
 
-  {% endif %}
 
+    {% if track.cover_art_url %}
 
-  <div class="eyebrow">
-
-    {{ track.genre or 'BEAT' }}
-
-    {% if track.bpm %}
-      &middot; {{ track.bpm }} BPM
-    {% endif %}
-
-  </div>
-
-
-  <h1
-    style="
-      font-size:36px;
-      margin:6px 0;
-    "
-  >
-    {{ track.title }}
-  </h1>
-
-
-  <p class="sub">
-
-    By
-
-    <a
-      href="/profile/{{ track.creator_profile.slug }}"
-      style="color:var(--teal);"
-    >
-      {{ track.creator_profile.stage_name }}
-    </a>
-
-  </p>
-
-
-  <!-- SALES MODEL -->
-
-  <div style="margin:18px 0;">
-
-    {% if track.sales_model.value == 'exclusive' %}
-
-      {% if track.is_sold %}
-
-        <span class="badge badge-sold">
-          SOLD - EXCLUSIVELY OWNED
-        </span>
-
-      {% else %}
-
-        <span class="badge badge-exclusive">
-          EXCLUSIVE - ONE-TIME PURCHASE
-        </span>
-
-      {% endif %}
-
-    {% else %}
-
-      <span class="badge badge-nonexclusive">
-        NON-EXCLUSIVE LICENSE
-      </span>
-
-    {% endif %}
-
-  </div>
-
-
-  <!-- DESCRIPTION -->
-
-  {% if track.description %}
-
-    <p
-      class="sub"
-      style="
-        color:var(--text-muted);
-        line-height:1.6;
-      "
-    >
-      {{ track.description }}
-    </p>
-
-  {% endif %}
-
-
-  <!-- AUDIO PREVIEW -->
-
-  {% if track.preview_file_path and not purchased %}
-
-    <div
-      class="form-card"
-      style="
-        margin-top:24px;
-        padding:20px;
-      "
-    >
-
-      <div class="eyebrow">
-        PREVIEW
-      </div>
-
-      <h2
-        style="
-          margin:5px 0 8px;
-          font-size:22px;
-        "
-      >
-        Listen before you buy
-      </h2>
-
-      <p class="sub"
-         style="
-           margin-bottom:14px;
-           line-height:1.5;
-         ">
-        Sample 30 seconds of this track before purchasing.
-      </p>
-
-      <audio
-        controls
-        preload="none"
-        style="
-          width:100%;
-          height:46px;
-        "
-      >
-        <source
-          src="/preview/track/{{ track.id }}"
-          type="audio/mpeg"
+        <img
+            src="{{ track.cover_art_url }}"
+            alt="{{ track.title }} cover"
+            class="track-cover"
+            loading="lazy"
         >
 
-        Your browser does not support audio playback.
-      </audio>
+    {% endif %}
+
+
+    {% if track.preview_file_path %}
+
+        <div class="track-card">
+
+            <div class="track-card-label">
+                Preview
+            </div>
+
+            <audio
+                class="preview-player"
+                controls
+                preload="metadata"
+                src="{{ track.preview_file_path }}"
+            ></audio>
+
+        </div>
+
+    {% endif %}
+
+
+    <div class="track-card">
+
+        <div class="track-card-label">
+            Price
+        </div>
+
+        <div class="track-price">
+            KSh {{ "%.2f"|format(track.price|float) }}
+        </div>
+
+
+        {% if track.description %}
+
+            <div class="track-description">
+                {{ track.description }}
+            </div>
+
+        {% endif %}
+
+
+        <div class="track-actions">
+
+            {% if purchased %}
+
+                <div class="track-status success">
+                    ✓ You already own this track.
+                </div>
+
+                <a
+                    class="track-button track-button-primary"
+                    href="/download/track/{{ track.id }}"
+                >
+                    Download Track
+                </a>
+
+                <a
+                    class="track-button track-button-secondary"
+                    href="/purchases"
+                >
+                    View My Purchases
+                </a>
+
+
+            {% elif is_owner %}
+
+                <div class="track-status">
+                    This is your own track. You cannot purchase it.
+                </div>
+
+
+            {% elif available %}
+
+                {% if current_user %}
+
+                    <a
+                        class="track-button track-button-primary"
+                        href="/checkout/track/{{ track.slug }}"
+                    >
+                        Buy This Track
+                    </a>
+
+                {% else %}
+
+                    <a
+                        class="track-button track-button-primary"
+                        href="/login?next=/track/{{ track.slug }}"
+                    >
+                        Login to Buy
+                    </a>
+
+                {% endif %}
+
+
+            {% else %}
+
+                <div class="track-button track-button-disabled">
+                    Unavailable
+                </div>
+
+                <div class="track-status">
+                    {{ availability_reason }}
+                </div>
+
+            {% endif %}
+
+        </div>
 
     </div>
 
-  {% endif %}
 
+    <div class="back-link">
 
-  <!-- PRICE -->
+        {% if track.creator_profile and track.creator_profile.slug %}
 
-  <div
-    class="stat-card"
-    style="
-      margin-top:20px;
-      max-width:320px;
-    "
-  >
+            <a href="/store/{{ track.creator_profile.slug }}">
+                Back to Store
+            </a>
 
-    <div class="label">
-      Price
-    </div>
+        {% else %}
 
-    <div class="value gold">
-      KSh {{ '%.2f'|format(track.price) }}
-    </div>
+            <a href="/beats">
+                Back to Beats
+            </a>
 
-  </div>
-
-
-  <!-- PURCHASED -->
-
-  {% if purchased %}
-
-    <div
-      class="form-card"
-      style="
-        margin-top:24px;
-        padding:22px;
-      "
-    >
-
-      <div class="eyebrow">
-        PURCHASE COMPLETE
-      </div>
-
-
-      <h2 style="margin:5px 0 8px;">
-        You own this beat
-      </h2>
-
-
-      <p class="sub">
-        Your payment has been confirmed.
-        Your purchased master audio is ready to download.
-      </p>
-
-
-      <a
-        href="/download/track/{{ track.id }}"
-        class="btn btn-primary btn-block"
-        style="margin-top:18px;"
-      >
-        Download Beat
-      </a>
+        {% endif %}
 
     </div>
 
-
-  <!-- NOT PURCHASED -->
-
-  {% elif track.is_available %}
-
-    <a
-      href="/checkout/track/{{ track.slug }}"
-      class="btn btn-primary btn-block"
-      style="margin-top:24px;"
-    >
-      Buy Now
-    </a>
-
-
-  {% else %}
-
-    <button
-      class="btn disabled"
-      disabled
-      style="margin-top:24px;"
-    >
-
-      {% if track.sales_model.value == 'exclusive' %}
-        Sold - Unavailable
-      {% else %}
-        Unavailable
-      {% endif %}
-
-    </button>
-
-  {% endif %}
-
-
-  <!-- BACK TO STORE -->
-
-  <div style="margin-top:22px;">
-
-    <a
-      href="/profile/{{ track.creator_profile.slug }}"
-      class="btn btn-outline btn-block"
-    >
-      Back to Store
-    </a>
-
-  </div>
-
-</section>
+</div>
 
 {% endblock %}
