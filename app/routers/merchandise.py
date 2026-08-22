@@ -1,27 +1,31 @@
+```python
 """
 BeatHub merchandise routes.
 
-First merchandise release:
-- Creator uploads a product image/logo.
-- Creator sets product name, description and price.
-- Every product belongs to the creator profile that uploaded it.
-- Products are immediately visible.
-- No sizes, colours, stock, shipping, checkout or M-Pesa flow is added here.
+Production-ready merchandise implementation.
 
-Storage:
-- Uses the existing BeatHub storage service.
-- Supports local MEDIA_ROOT files.
-- Supports Cloudflare R2 objects.
-- Local files are served securely through /media/{path}.
-- Existing database image_path values are preserved.
+Features:
+- Creator merchandise dashboard
+- Merchandise creation
+- Public merchandise marketplace
+- Creator merchandise store
+- Individual merchandise pages
+- Local media compatibility
+- Cloudflare R2 compatibility
+- Automatic migration of existing local merchandise images to R2
+- Safe image URL generation
+- Existing merchandise database compatibility
+
+Existing Track, Album, Order, M-Pesa and withdrawal behaviour is untouched.
 """
 
+from __future__ import annotations
+
+import os
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from mimetypes import guess_type
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import (
@@ -45,16 +49,23 @@ from app.models.user import User
 from app.services.storage import (
     ALLOWED_IMAGE_EXT,
     UploadValidationError,
+    _r2_is_configured,
+    _r2_client,
+    _r2_bucket,
+    _parse_r2_path,
     media_url,
+    r2_presigned_url,
     save_upload,
+    save_upload_to_r2,
     storage_exists,
 )
-from app.utils.deps import get_optional_user, require_creator
-
-
-router = APIRouter(
-    tags=["merchandise"]
+from app.utils.deps import (
+    get_optional_user,
+    require_creator,
 )
+
+
+router = APIRouter(tags=["merchandise"])
 
 templates = Jinja2Templates(
     directory="app/templates"
@@ -67,14 +78,11 @@ MERCH_TABLE = "beathub_merchandise"
 # DATABASE COMPATIBILITY
 # ======================================================================
 
-def ensure_merch_table(
-    db: Session,
-) -> None:
+def ensure_merch_table(db: Session) -> None:
     """
     Create the additive merchandise table when required.
 
-    This remains compatible with the existing SQLite/PostgreSQL
-    architecture and does not alter Track, Album or Order tables.
+    Compatible with SQLite and PostgreSQL.
     """
 
     db.execute(
@@ -108,12 +116,12 @@ def ensure_merch_table(
 
 
 # ======================================================================
-# TEMPLATE CONTEXT
+# SHARED TEMPLATE CONTEXT
 # ======================================================================
 
 def _ctx(
     request: Request,
-    current_user=None,
+    current_user: Optional[User] = None,
     **extra,
 ):
     context = {
@@ -134,9 +142,7 @@ def _ctx(
 # SLUG HELPERS
 # ======================================================================
 
-def _slugify(
-    value: str,
-) -> str:
+def _slugify(value: str) -> str:
     value = (
         value or ""
     ).strip().lower()
@@ -183,7 +189,7 @@ def _unique_merch_slug(
             """
         ),
         {
-            "slug": slug
+            "slug": slug,
         },
     ).first():
 
@@ -200,95 +206,69 @@ def _unique_merch_slug(
 
 
 # ======================================================================
-# MEDIA PATH HELPERS
+# STORAGE HELPERS
 # ======================================================================
 
-def _normalise_media_path(
-    path: Optional[str],
-) -> Optional[str]:
+def _local_media_root() -> Path:
     """
-    Normalise a stored local media path.
-
-    Supported stored values:
-
-        merch/file.png
-        /merch/file.png
-        media/merch/file.png
-        /media/merch/file.png
-
-    Returned value:
-
-        merch/file.png
+    Return the configured local media root.
     """
 
-    if not path:
+    return Path(
+        str(
+            getattr(
+                settings,
+                "MEDIA_ROOT",
+                "media",
+            )
+        )
+    ).resolve()
+
+
+def _safe_local_path(
+    stored_path: str,
+) -> Optional[Path]:
+    """
+    Convert a stored local path into a safe filesystem path.
+
+    Prevents directory traversal.
+    """
+
+    if not stored_path:
         return None
 
-    value = str(path).strip()
-
-    if not value:
-        return None
-
-    value = value.replace(
-        "\\",
-        "/",
+    value = (
+        str(stored_path)
+        .replace("\\", "/")
+        .lstrip("/")
     )
-
-    value = value.lstrip("/")
 
     if value.startswith("media/"):
         value = value[6:]
 
-    return value
+    if value.startswith("static/"):
+        static_root = Path(
+            "static"
+        ).resolve()
 
+        candidate = (
+            Path(value)
+            .resolve()
+        )
 
-def _local_media_file(
-    path: Optional[str],
-) -> Optional[Path]:
-    """
-    Resolve a local media path safely inside MEDIA_ROOT.
+        try:
+            candidate.relative_to(
+                static_root
+            )
+        except ValueError:
+            return None
 
-    Returns None for:
-    - R2 objects
-    - HTTP URLs
-    - invalid paths
-    - paths escaping MEDIA_ROOT
-    - missing files
-    """
+        return candidate
 
-    if not path:
-        return None
-
-    value = str(path).strip()
-
-    if not value:
-        return None
-
-    if value.startswith(
-        "r2://"
-    ):
-        return None
-
-    if value.startswith(
-        "http://"
-    ) or value.startswith(
-        "https://"
-    ):
-        return None
-
-    clean = _normalise_media_path(
-        value
-    )
-
-    if not clean:
-        return None
-
-    media_root = Path(
-        settings.MEDIA_ROOT
-    ).resolve()
+    media_root = _local_media_root()
 
     candidate = (
-        media_root / clean
+        media_root / value
     ).resolve()
 
     try:
@@ -298,127 +278,84 @@ def _local_media_file(
     except ValueError:
         return None
 
-    if not candidate.exists():
-        return None
-
-    if not candidate.is_file():
-        return None
-
     return candidate
 
 
-# ======================================================================
-# PUBLIC MEDIA FILE ROUTE
-# ======================================================================
-
-@router.get(
-    "/media/{file_path:path}",
-    name="serve_media",
-)
-def serve_media(
-    file_path: str,
-):
+def _local_image_url(
+    request: Request,
+    path: Optional[str],
+) -> Optional[str]:
     """
-    Serve local BeatHub media files.
-
-    This is intentionally protected against path traversal.
-
-    Examples:
-
-        /media/merch/product.png
-        /media/covers/cover.jpg
-        /media/artwork/album.jpg
-        /media/audio/beat.mp3
+    Return a browser URL for a local merchandise image.
     """
 
-    if not file_path:
-        raise HTTPException(
-            status_code=404,
-            detail="Media file not found.",
-        )
+    if not path:
+        return None
 
     clean = (
-        file_path
+        str(path)
         .replace("\\", "/")
         .lstrip("/")
     )
 
-    if clean.startswith(
-        "media/"
-    ):
-        clean = clean[6:]
+    if clean.startswith("media/"):
+        return f"/{clean}"
 
-    media_root = Path(
-        settings.MEDIA_ROOT
-    ).resolve()
+    if clean.startswith("static/"):
+        return f"/{clean}"
 
-    target = (
-        media_root / clean
-    ).resolve()
+    return f"/media/{clean}"
 
-    try:
-        target.relative_to(
-            media_root
-        )
-    except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail="Media file not found.",
-        )
 
-    if not target.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Media file not found.",
-        )
+def _is_r2_path(
+    path: Optional[str],
+) -> bool:
+    if not path:
+        return False
 
-    if not target.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="Media file not found.",
-        )
-
-    content_type = (
-        guess_type(
-            target.name
-        )[0]
-        or "application/octet-stream"
-    )
-
-    return FileResponse(
-        path=str(target),
-        media_type=content_type,
-        filename=target.name,
-        headers={
-            "Cache-Control": (
-                "public, "
-                "max-age=86400"
-            )
-        },
+    return str(
+        path
+    ).strip().lower().startswith(
+        "r2://"
     )
 
 
-# ======================================================================
-# IMAGE URL
-# ======================================================================
-
-def _image_url(
+def _r2_image_url(
     path: Optional[str],
 ) -> Optional[str]:
     """
-    Convert a stored image path into a browser-accessible URL.
+    Generate a presigned R2 URL.
 
-    R2:
-        r2://bucket/merch/file.png
-        -> signed R2 URL
+    Returns None rather than breaking a page if R2
+    is temporarily unavailable.
+    """
 
-    HTTPS:
+    if not path:
+        return None
+
+    try:
+        return r2_presigned_url(
+            path,
+            expires=3600,
+        )
+    except Exception:
+        return None
+
+
+def _image_url(
+    request: Request,
+    path: Optional[str],
+) -> Optional[str]:
+    """
+    Resolve any stored merchandise image into a browser URL.
+
+    Supported values:
+
+        r2://bucket/key
         https://...
-        -> unchanged
-
-    Local:
-        merch/file.png
-        -> /media/merch/file.png
+        media/merch/file.jpg
+        merch/file.jpg
+        /media/merch/file.jpg
     """
 
     if not path:
@@ -429,25 +366,218 @@ def _image_url(
     if not value:
         return None
 
-    try:
-        url = media_url(
-            value,
-            expires=86400,
-        )
-    except Exception:
-        url = None
+    # --------------------------------------------------------------
+    # Existing external URL
+    # --------------------------------------------------------------
 
-    if url:
+    if (
+        value.startswith("https://")
+        or value.startswith("http://")
+    ):
+        return value
+
+    # --------------------------------------------------------------
+    # R2 object
+    # --------------------------------------------------------------
+
+    if _is_r2_path(value):
+
+        url = _r2_image_url(
+            value
+        )
+
         return url
 
-    return None
+    # --------------------------------------------------------------
+    # Local media
+    # --------------------------------------------------------------
+
+    local_path = _safe_local_path(
+        value
+    )
+
+    if local_path is not None:
+
+        try:
+            if (
+                local_path.exists()
+                and local_path.is_file()
+            ):
+                return _local_image_url(
+                    request,
+                    value,
+                )
+        except Exception:
+            pass
+
+    # --------------------------------------------------------------
+    # Compatibility fallback
+    # --------------------------------------------------------------
+
+    return media_url(
+        value
+    )
 
 
 # ======================================================================
-# CREATOR MERCHANDISE ROWS
+# R2 MIGRATION
+# ======================================================================
+
+async def _migrate_local_image_to_r2(
+    db: Session,
+    product_id: str,
+    image_path: Optional[str],
+) -> Optional[str]:
+    """
+    Migrate an existing local merchandise image into R2.
+
+    This allows products created before the R2 merchandise
+    implementation to become persistent without requiring
+    the creator to upload the same image again.
+
+    If R2 is not configured, the original local path is preserved.
+    """
+
+    if not image_path:
+        return None
+
+    value = str(
+        image_path
+    ).strip()
+
+    if not value:
+        return None
+
+    # Already R2.
+    if _is_r2_path(value):
+        return value
+
+    # R2 unavailable.
+    try:
+        if not _r2_is_configured():
+            return value
+    except Exception:
+        return value
+
+    local_path = _safe_local_path(
+        value
+    )
+
+    if local_path is None:
+        return value
+
+    try:
+        if (
+            not local_path.exists()
+            or not local_path.is_file()
+        ):
+            return value
+    except Exception:
+        return value
+
+    # --------------------------------------------------------------
+    # Read file.
+    # --------------------------------------------------------------
+
+    try:
+        contents = (
+            local_path.read_bytes()
+        )
+    except Exception:
+        return value
+
+    if not contents:
+        return value
+
+    # --------------------------------------------------------------
+    # Determine extension/content type.
+    # --------------------------------------------------------------
+
+    extension = (
+        local_path.suffix
+        .lower()
+    )
+
+    if extension not in ALLOWED_IMAGE_EXT:
+        return value
+
+    content_type_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+
+    content_type = (
+        content_type_map.get(
+            extension,
+            "application/octet-stream",
+        )
+    )
+
+    # --------------------------------------------------------------
+    # Upload directly to R2.
+    # --------------------------------------------------------------
+
+    try:
+
+        bucket = _r2_bucket()
+
+        if not bucket:
+            return value
+
+        key = (
+            f"merch/"
+            f"{uuid4().hex}"
+            f"{extension}"
+        )
+
+        client = _r2_client()
+
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=contents,
+            ContentType=content_type,
+        )
+
+        r2_path = (
+            f"r2://{bucket}/{key}"
+        )
+
+        # ----------------------------------------------------------
+        # Update database.
+        # ----------------------------------------------------------
+
+        db.execute(
+            text(
+                f"""
+                UPDATE {MERCH_TABLE}
+                SET image_path = :image_path
+                WHERE id = :id
+                """
+            ),
+            {
+                "image_path": r2_path,
+                "id": str(product_id),
+            },
+        )
+
+        db.commit()
+
+        return r2_path
+
+    except Exception:
+        db.rollback()
+        return value
+
+
+# ======================================================================
+# PRODUCT ROW HELPERS
 # ======================================================================
 
 def _rows_for_creator(
+    request: Request,
     db: Session,
     profile_id: str,
 ):
@@ -481,39 +611,108 @@ def _rows_for_creator(
 
         item = dict(row)
 
-        image_path = item.get(
-            "image_path"
-        )
-
         item["image_url"] = _image_url(
-            image_path
+            request,
+            item.get("image_path"),
         )
 
-        item["image_exists"] = (
-            storage_exists(
-                image_path
-            )
-        )
-
-        products.append(
-            item
-        )
+        products.append(item)
 
     return products
 
 
-def _public_rows(
+def _all_public_rows(
+    request: Request,
     db: Session,
-    profile_id: str,
 ):
-    return _rows_for_creator(
-        db,
-        profile_id,
-    )
+    rows = db.execute(
+        text(
+            f"""
+            SELECT
+                id,
+                creator_profile_id,
+                name,
+                slug,
+                description,
+                price,
+                image_path,
+                created_at
+            FROM {MERCH_TABLE}
+            ORDER BY created_at DESC
+            LIMIT 120
+            """
+        )
+    ).mappings().all()
+
+    profile_ids = {
+        str(
+            row["creator_profile_id"]
+        )
+        for row in rows
+    }
+
+    profiles = {}
+
+    if profile_ids:
+
+        profile_rows = (
+            db.query(Profile)
+            .filter(
+                Profile.id.in_(
+                    list(profile_ids)
+                )
+            )
+            .all()
+        )
+
+        for profile in profile_rows:
+            profiles[
+                str(profile.id)
+            ] = profile
+
+    products = []
+
+    for row in rows:
+
+        item = dict(row)
+
+        owner = profiles.get(
+            str(
+                item.get(
+                    "creator_profile_id"
+                )
+            )
+        )
+
+        item["creator_slug"] = (
+            getattr(
+                owner,
+                "slug",
+                None,
+            )
+        )
+
+        item["creator_name"] = (
+            getattr(
+                owner,
+                "stage_name",
+                None,
+            )
+            or "BeatHub Creator"
+        )
+
+        item["image_url"] = _image_url(
+            request,
+            item.get("image_path"),
+        )
+
+        products.append(item)
+
+    return products
 
 
 # ======================================================================
-# CREATOR MERCH DASHBOARD
+# CREATOR MERCHANDISE DASHBOARD
 # ======================================================================
 
 @router.get(
@@ -541,16 +740,9 @@ def merch_dashboard(
     )
 
     products = _rows_for_creator(
+        request,
         db,
         str(profile.id),
-    )
-
-    success = request.query_params.get(
-        "success"
-    )
-
-    error = request.query_params.get(
-        "error"
     )
 
     return templates.TemplateResponse(
@@ -562,8 +754,6 @@ def merch_dashboard(
             profile=profile,
             products=products,
             product_count=len(products),
-            success=success,
-            error=error,
         ),
     )
 
@@ -633,9 +823,8 @@ async def merch_create(
         price or ""
     ).strip()
 
-    def error(
-        message: str,
-    ):
+    def error(message: str):
+
         return templates.TemplateResponse(
             request,
             "merchandise_new.html",
@@ -650,6 +839,10 @@ async def merch_create(
             status_code=400,
         )
 
+    # --------------------------------------------------------------
+    # Name
+    # --------------------------------------------------------------
+
     if not name:
         return error(
             "Product name is required."
@@ -660,10 +853,18 @@ async def merch_create(
             "Product name is too long. Keep it under 160 characters."
         )
 
+    # --------------------------------------------------------------
+    # Description
+    # --------------------------------------------------------------
+
     if len(description) > 4000:
         return error(
             "Product description is too long. Keep it under 4,000 characters."
         )
+
+    # --------------------------------------------------------------
+    # Price
+    # --------------------------------------------------------------
 
     try:
         price_value = Decimal(
@@ -684,30 +885,81 @@ async def merch_create(
             "Product price must be greater than zero."
         )
 
+    # --------------------------------------------------------------
+    # Image
+    # --------------------------------------------------------------
+
     if (
-        not image
+        image is None
         or not image.filename
     ):
         return error(
             "A product image is required."
         )
 
-    try:
-        image_path = await save_upload(
-            image,
-            "merch",
-            ALLOWED_IMAGE_EXT,
+    # Validate extension before touching storage.
+
+    extension = (
+        Path(
+            image.filename
+        ).suffix.lower()
+    )
+
+    if extension not in ALLOWED_IMAGE_EXT:
+        return error(
+            "Unsupported image type. "
+            "Use JPG, JPEG, PNG or WEBP."
         )
 
+    # --------------------------------------------------------------
+    # Upload.
+    #
+    # Prefer R2 because Render's local filesystem is not
+    # persistent across deployments.
+    # --------------------------------------------------------------
+
+    try:
+
+        try:
+            use_r2 = _r2_is_configured()
+        except Exception:
+            use_r2 = False
+
+        if use_r2:
+
+            image_path = (
+                await save_upload_to_r2(
+                    image,
+                    "merch",
+                    ALLOWED_IMAGE_EXT,
+                )
+            )
+
+        else:
+
+            image_path = (
+                await save_upload(
+                    image,
+                    "merch",
+                    ALLOWED_IMAGE_EXT,
+                )
+            )
+
     except UploadValidationError as exc:
+
         return error(
             str(exc)
         )
 
     except Exception as exc:
+
         return error(
             f"Product image upload failed: {exc}"
         )
+
+    # --------------------------------------------------------------
+    # Product
+    # --------------------------------------------------------------
 
     product_id = str(
         uuid4()
@@ -719,6 +971,7 @@ async def merch_create(
     )
 
     try:
+
         db.execute(
             text(
                 f"""
@@ -761,7 +1014,9 @@ async def merch_create(
         db.commit()
 
     except Exception:
+
         db.rollback()
+
         raise
 
     return RedirectResponse(
@@ -775,7 +1030,80 @@ async def merch_create(
 
 
 # ======================================================================
-# PUBLIC MERCH MARKETPLACE
+# LOCAL MERCHANDISE IMAGE COMPATIBILITY ROUTE
+# ======================================================================
+
+@router.get(
+    "/media/merch/{filename:path}"
+)
+def merch_local_media(
+    filename: str,
+):
+    """
+    Serve legacy local merchandise images.
+
+    This exists for merchandise uploaded before R2 storage
+    was enabled.
+
+    R2-backed images never use this route.
+    """
+
+    clean = (
+        filename or ""
+    ).replace(
+        "\\",
+        "/",
+    ).lstrip("/")
+
+    # Never allow traversal.
+
+    if (
+        not clean
+        or ".." in Path(clean).parts
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found.",
+        )
+
+    media_root = (
+        _local_media_root()
+    )
+
+    file_path = (
+        media_root
+        / "merch"
+        / clean
+    ).resolve()
+
+    try:
+        file_path.relative_to(
+            media_root.resolve()
+        )
+
+    except ValueError:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found.",
+        )
+
+    if (
+        not file_path.exists()
+        or not file_path.is_file()
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Image not found.",
+        )
+
+    return FileResponse(
+        path=str(file_path)
+    )
+
+
+# ======================================================================
+# PUBLIC MERCHANDISE MARKETPLACE
 # ======================================================================
 
 @router.get(
@@ -792,101 +1120,10 @@ def merch_marketplace(
         db
     )
 
-    rows = db.execute(
-        text(
-            f"""
-            SELECT
-                id,
-                creator_profile_id,
-                name,
-                slug,
-                description,
-                price,
-                image_path,
-                created_at
-            FROM {MERCH_TABLE}
-            ORDER BY created_at DESC
-            LIMIT 120
-            """
-        )
-    ).mappings().all()
-
-    profile_ids = {
-        str(
-            row[
-                "creator_profile_id"
-            ]
-        )
-        for row in rows
-    }
-
-    profiles = {}
-
-    if profile_ids:
-
-        for profile in (
-            db.query(Profile)
-            .filter(
-                Profile.id.in_(
-                    list(profile_ids)
-                )
-            )
-            .all()
-        ):
-            profiles[
-                str(profile.id)
-            ] = profile
-
-    products = []
-
-    for row in rows:
-
-        item = dict(row)
-
-        owner = profiles.get(
-            str(
-                item.get(
-                    "creator_profile_id"
-                )
-            )
-        )
-
-        item["creator_slug"] = getattr(
-            owner,
-            "slug",
-            None,
-        )
-
-        item["creator_name"] = (
-            getattr(
-                owner,
-                "stage_name",
-                None,
-            )
-            or getattr(
-                owner,
-                "name",
-                None,
-            )
-        )
-
-        image_path = item.get(
-            "image_path"
-        )
-
-        item["image_url"] = _image_url(
-            image_path
-        )
-
-        item["image_exists"] = (
-            storage_exists(
-                image_path
-            )
-        )
-
-        products.append(
-            item
-        )
+    products = _all_public_rows(
+        request,
+        db,
+    )
 
     return templates.TemplateResponse(
         request,
@@ -898,12 +1135,13 @@ def merch_marketplace(
             title="BeatHub Merch",
             creator=None,
             store_url=None,
+            product_detail=False,
         ),
     )
 
 
 # ======================================================================
-# CREATOR MERCH STORE
+# CREATOR MERCHANDISE STORE
 # ======================================================================
 
 @router.get(
@@ -935,23 +1173,10 @@ def creator_merch_store(
         db
     )
 
-    products = _public_rows(
+    products = _rows_for_creator(
+        request,
         db,
         str(profile.id),
-    )
-
-    creator_name = (
-        getattr(
-            profile,
-            "stage_name",
-            None,
-        )
-        or getattr(
-            profile,
-            "name",
-            None,
-        )
-        or "Creator"
     )
 
     return templates.TemplateResponse(
@@ -962,18 +1187,20 @@ def creator_merch_store(
             current_user,
             products=products,
             title=(
-                f"{creator_name} — Merch"
+                f"{profile.stage_name}"
+                f" — Merch"
             ),
             creator=profile,
             store_url=(
                 f"/store/{profile.slug}"
             ),
+            product_detail=False,
         ),
     )
 
 
 # ======================================================================
-# SINGLE MERCH PRODUCT
+# INDIVIDUAL MERCHANDISE PRODUCT
 # ======================================================================
 
 @router.get(
@@ -1009,7 +1236,7 @@ def merch_product(
             """
         ),
         {
-            "slug": slug
+            "slug": slug,
         },
     ).mappings().first()
 
@@ -1021,18 +1248,36 @@ def merch_product(
 
     item = dict(row)
 
+    # --------------------------------------------------------------
+    # Existing local image migration.
+    #
+    # If R2 is configured and this is an old local image,
+    # move it into R2 automatically.
+    # --------------------------------------------------------------
+
     image_path = item.get(
         "image_path"
     )
 
-    item["image_url"] = _image_url(
+    if image_path and not _is_r2_path(
         image_path
-    )
+    ):
 
-    item["image_exists"] = (
-        storage_exists(
-            image_path
+        migrated_path = (
+            _migrate_local_image_to_r2(
+                db,
+                str(item["id"]),
+                image_path,
+            )
         )
+
+        if migrated_path:
+            image_path = migrated_path
+            item["image_path"] = migrated_path
+
+    item["image_url"] = _image_url(
+        request,
+        image_path,
     )
 
     profile = (
@@ -1048,20 +1293,6 @@ def merch_product(
         .first()
     )
 
-    creator_name = (
-        getattr(
-            profile,
-            "stage_name",
-            None,
-        )
-        or getattr(
-            profile,
-            "name",
-            None,
-        )
-        or "Creator"
-    )
-
     return templates.TemplateResponse(
         request,
         "merchandise_public.html",
@@ -1069,9 +1300,7 @@ def merch_product(
             request,
             current_user,
             products=[item],
-            title=item[
-                "name"
-            ],
+            title=item["name"],
             creator=profile,
             store_url=(
                 f"/store/{profile.slug}"
@@ -1079,6 +1308,6 @@ def merch_product(
                 else None
             ),
             product_detail=True,
-            creator_name=creator_name,
         ),
     )
+```
