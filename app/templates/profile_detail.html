@@ -13,6 +13,12 @@
   .store-bio{max-width:720px;color:#929292;line-height:1.75;margin:0;font-size:14px}
   .store-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
   .store-tag{border:1px solid rgba(212,175,55,.18);background:rgba(212,175,55,.06);color:#d9d9d9;border-radius:999px;padding:7px 11px;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+  .owner-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 26px;padding:15px 17px;border:1px solid rgba(212,175,55,.24);border-radius:16px;background:rgba(212,175,55,.055)}
+  .owner-panel strong{display:block;color:#f0d878;font-size:12px;margin-bottom:3px}
+  .owner-panel span{color:#888;font-size:11px}
+  .owner-actions{display:flex;flex-wrap:wrap;gap:8px}
+  .manage-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(212,175,55,.28);border-radius:9px;padding:9px 12px;color:#f2f2f2;background:rgba(212,175,55,.08);font-size:11px;font-weight:800;text-decoration:none}
+  .manage-btn:hover{background:rgba(212,175,55,.14)}
   .store-section-head{display:flex;align-items:end;justify-content:space-between;gap:16px;margin:30px 0 15px}
   .store-section-head h2{font-size:23px;margin:0}
   .store-section-head p{color:#777;font-size:12px;margin:5px 0 0}
@@ -31,10 +37,15 @@
   .card-producer{color:#777;font-size:12px;margin-bottom:12px}
   .card-meta{display:flex;flex-wrap:wrap;gap:7px;color:#999;font-size:10px;margin-bottom:15px}
   .meta-pill{border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:5px 8px;background:rgba(255,255,255,.02)}
-  .card-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .card-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .card-price{color:#f0d878;font-size:17px;font-weight:800}
+  .card-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
   .view-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(212,175,55,.3);border-radius:9px;padding:9px 12px;color:#f2f2f2;background:rgba(212,175,55,.06);font-size:11px;font-weight:800;text-decoration:none}
   .view-btn:hover{background:rgba(212,175,55,.12)}
+  .delete-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(220,70,70,.32);border-radius:9px;padding:9px 11px;color:#f0b0b0;background:rgba(180,40,40,.07);font-size:11px;font-weight:800;cursor:pointer}
+  .delete-btn:hover{background:rgba(180,40,40,.14)}
+  .delete-btn:disabled{opacity:.45;cursor:not-allowed}
+  .owner-note{color:#777;font-size:10px;line-height:1.5;margin-top:10px}
   .empty-store{padding:35px;text-align:center;border:1px dashed rgba(212,175,55,.18);border-radius:18px;background:rgba(255,255,255,.015);color:#777}
   .album-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
   .album-card{padding:18px;border:1px solid rgba(212,175,55,.14);border-radius:17px;background:#101010}
@@ -45,15 +56,16 @@
   .album-btn{display:inline-flex;margin-top:10px;padding:9px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.09);font-size:11px;font-weight:800;color:#ddd}
   .preview-note{color:#666;font-size:11px;margin-top:14px}
   @media(max-width:900px){.store-grid,.album-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media(max-width:600px){.store-page{padding:22px 0 50px}.store-hero{padding:28px 21px;border-radius:18px}.store-hero h1{letter-spacing:-1.2px}.store-grid,.album-grid{grid-template-columns:1fr}.store-section-head{align-items:flex-start;flex-direction:column}.preview-button{width:46px;height:46px}}
+  @media(max-width:600px){.store-page{padding:22px 0 50px}.store-hero{padding:28px 21px;border-radius:18px}.store-hero h1{letter-spacing:-1.2px}.store-grid,.album-grid{grid-template-columns:1fr}.store-section-head{align-items:flex-start;flex-direction:column}.preview-button{width:46px;height:46px}.owner-panel{align-items:flex-start;flex-direction:column}}
 </style>
 
 <section class="store-page">
   <div class="store-shell">
+    {% set is_owner = current_user and current_user.id == profile.user_id %}
 
     <header class="store-hero">
       <div class="store-eyebrow">
-        BeatHub Creator Store
+        {% if is_owner %}Your BeatHub Creator Store{% else %}BeatHub Creator Store{% endif %}
       </div>
 
       <h1>{{ profile.stage_name }}</h1>
@@ -72,10 +84,29 @@
       </div>
     </header>
 
+    {% if is_owner %}
+      <div class="owner-panel">
+        <div>
+          <strong>OWNER VIEW</strong>
+          <span>You are viewing your own store. Buyers see this page without the management controls.</span>
+        </div>
+        <div class="owner-actions">
+          <a class="manage-btn" href="/dashboard">Open Dashboard</a>
+          <a class="manage-btn" href="/dashboard/upload">Upload Track</a>
+        </div>
+      </div>
+    {% endif %}
+
     <div class="store-section-head">
       <div>
         <h2>Tracks &amp; Mixes</h2>
-        <p>Listen to a preview, then open the track to view the full details and purchase options.</p>
+        <p>
+          {% if is_owner %}
+            Manage the published tracks shown in your public store.
+          {% else %}
+            Listen to a preview, then open the track to view the full details and purchase options.
+          {% endif %}
+        </p>
       </div>
       <p>{{ tracks|length }} track{% if tracks|length != 1 %}s{% endif %}</p>
     </div>
@@ -112,12 +143,29 @@
                 {% if track.sales_model %}
                   <span class="meta-pill">{{ track.sales_model.value|replace('_',' ')|title }}</span>
                 {% endif %}
+                {% if is_owner and track.is_sold %}<span class="meta-pill">Sold / Protected</span>{% endif %}
               </div>
 
               <div class="card-bottom">
                 <div class="card-price">KSh {{ '%.2f'|format(track.price or 0) }}</div>
-                <a class="view-btn" href="/track/{{ track.slug }}">View &amp; Buy</a>
+                <div class="card-actions">
+                  <a class="view-btn" href="/track/{{ track.slug }}">View</a>
+
+                  {% if is_owner %}
+                    {% if track.is_sold %}
+                      <button class="delete-btn" type="button" disabled title="Sold tracks are protected because buyers may still have active rights.">Delete</button>
+                    {% else %}
+                      <form method="post" action="/dashboard/tracks/{{ track.id }}/delete" onsubmit="return confirm('Delete {{ track.title|e }} permanently? This cannot be undone.');">
+                        <button class="delete-btn" type="submit">Delete</button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
               </div>
+
+              {% if is_owner and track.is_sold %}
+                <div class="owner-note">Sold tracks cannot be deleted because existing buyers may still have active rights.</div>
+              {% endif %}
             </div>
           </article>
         {% endfor %}
@@ -126,7 +174,13 @@
     {% else %}
       <div class="empty-store">
         <h3 style="margin-bottom:7px;color:#ddd;">No published tracks yet</h3>
-        <p>This creator has not published music available in the store.</p>
+        <p>
+          {% if is_owner %}
+            Upload a track from your dashboard to make it available in your store.
+          {% else %}
+            This creator has not published music available in the store.
+          {% endif %}
+        </p>
       </div>
     {% endif %}
 
