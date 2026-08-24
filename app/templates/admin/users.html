@@ -1,452 +1,2134 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>BeatHub — Users</title>
 
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
 
     <style>
+
+        /* =========================================================
+           BEATHUB ADMIN USERS
+           Premium black + gold Creator Studio design
+           Visual upgrade only — backend functionality unchanged
+           ========================================================= */
+
         * {
             box-sizing: border-box;
         }
 
+
+        :root {
+
+            --bh-black: #060606;
+            --bh-black-2: #090909;
+            --bh-panel: rgba(16, 16, 16, .88);
+
+            --bh-gold: #f4c842;
+            --bh-gold-light: #ffe58a;
+            --bh-gold-dark: #c99d1c;
+
+            --bh-white: #f7f7f7;
+            --bh-text: #d7d7d7;
+            --bh-muted: #818181;
+            --bh-muted-2: #5d5d5d;
+
+            --bh-border: rgba(255,255,255,.075);
+            --bh-gold-border: rgba(244,200,66,.20);
+
+            --bh-green: #4ade80;
+            --bh-red: #f87171;
+
+        }
+
+
+        html {
+            background: var(--bh-black);
+        }
+
+
         body {
+
             margin: 0;
-            background: #09090b;
-            color: #f4f4f5;
-            font-family: Arial, sans-serif;
+
+            min-height: 100vh;
+
+            background:
+                radial-gradient(
+                    circle at 82% 0%,
+                    rgba(244,200,66,.075),
+                    transparent 31%
+                ),
+                radial-gradient(
+                    circle at 10% 100%,
+                    rgba(244,200,66,.035),
+                    transparent 30%
+                ),
+                #060606;
+
+            color: var(--bh-white);
+
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Arial,
+                sans-serif;
         }
 
-        .topbar {
+
+        /* =========================================================
+           TOP BAR
+           ========================================================= */
+
+        .bh-topbar {
+
+            position: sticky;
+
+            top: 0;
+
+            z-index: 100;
+
             min-height: 72px;
+
             padding: 0 32px;
+
             display: flex;
+
             align-items: center;
+
             justify-content: space-between;
-            background: #111113;
-            border-bottom: 1px solid #27272a;
+
+            background:
+                rgba(7,7,7,.88);
+
+            border-bottom:
+                1px solid rgba(255,255,255,.065);
+
+            backdrop-filter: blur(18px);
+
         }
 
-        .brand {
-            color: #fff;
-            text-decoration: none;
-            font-size: 22px;
-            font-weight: 800;
-        }
 
-        .brand span {
-            color: #a1a1aa;
-        }
+        .bh-brand {
 
-        .topbar-right {
             display: flex;
+
             align-items: center;
-            gap: 14px;
-        }
 
-        .topbar-right span {
-            color: #a1a1aa;
-            font-size: 13px;
-        }
-
-        .logout {
-            padding: 9px 14px;
-            border: 1px solid #3f3f46;
-            border-radius: 8px;
-            background: transparent;
-            color: #fff;
-            cursor: pointer;
-        }
-
-        .layout {
-            display: flex;
-            min-height: calc(100vh - 72px);
-        }
-
-        .sidebar {
-            width: 230px;
-            padding: 24px 16px;
-            background: #111113;
-            border-right: 1px solid #27272a;
-            flex-shrink: 0;
-        }
-
-        .sidebar-label {
-            margin: 0 12px 12px;
-            color: #71717a;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: .08em;
-        }
-
-        .sidebar a {
-            display: block;
-            padding: 11px 12px;
-            margin-bottom: 4px;
-            border-radius: 8px;
-            color: #a1a1aa;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .sidebar a:hover,
-        .sidebar a.active {
-            background: #27272a;
-            color: #fff;
-        }
-
-        .main {
-            flex: 1;
-            min-width: 0;
-            padding: 32px;
-        }
-
-        .heading {
-            margin-bottom: 24px;
-        }
-
-        .heading h1 {
-            margin: 0 0 7px;
-            font-size: 30px;
-        }
-
-        .heading p {
-            margin: 0;
-            color: #a1a1aa;
-        }
-
-        .toolbar {
-            display: flex;
             gap: 10px;
-            margin-bottom: 20px;
-        }
 
-        .search {
-            flex: 1;
-            max-width: 500px;
-            padding: 12px 14px;
-            border: 1px solid #3f3f46;
-            border-radius: 9px;
-            background: #111113;
             color: #fff;
-            outline: none;
+
+            text-decoration: none;
+
+            font-size: 19px;
+
+            font-weight: 950;
+
+            letter-spacing: -.5px;
+
         }
 
-        .search:focus {
-            border-color: #71717a;
-        }
 
-        .button {
-            padding: 12px 18px;
-            border: 0;
+        .bh-brand-mark {
+
+            width: 30px;
+
+            height: 30px;
+
+            display: grid;
+
+            place-items: center;
+
             border-radius: 9px;
-            background: #fff;
-            color: #09090b;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #ffe58a,
+                    #f4c842,
+                    #c99b1c
+                );
+
+            color: #090909;
+
+            font-size: 9px;
+
+            box-shadow:
+                0 7px 20px rgba(244,200,66,.14);
+        }
+
+
+        .bh-brand-beat {
+            color: #fff;
+        }
+
+
+        .bh-brand-hub {
+            color: var(--bh-gold);
+        }
+
+
+        .bh-brand-admin {
+
+            margin-left: 2px;
+
+            color: #5f5f5f;
+
+            font-size: 9px;
+
+            font-weight: 900;
+
+            letter-spacing: 1.2px;
+
+        }
+
+
+        .bh-topbar-right {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 13px;
+
+        }
+
+
+        .bh-user-email {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            padding: 9px 12px;
+
+            border:
+                1px solid rgba(255,255,255,.065);
+
+            border-radius: 9px;
+
+            background:
+                rgba(255,255,255,.018);
+
+            color: #858585;
+
+            font-size: 10px;
+
             font-weight: 700;
+
+        }
+
+
+        .bh-user-dot {
+
+            width: 6px;
+
+            height: 6px;
+
+            border-radius: 50%;
+
+            background: var(--bh-gold);
+
+            box-shadow:
+                0 0 8px rgba(244,200,66,.6);
+
+        }
+
+
+        .bh-logout {
+
+            min-height: 38px;
+
+            padding: 0 14px;
+
+            border:
+                1px solid rgba(255,255,255,.09);
+
+            border-radius: 9px;
+
+            background:
+                rgba(255,255,255,.018);
+
+            color: #bcbcbc;
+
             cursor: pointer;
+
+            font-family: inherit;
+
+            font-size: 10px;
+
+            font-weight: 850;
+
+            transition:
+                background .18s ease,
+                border-color .18s ease,
+                color .18s ease;
+
         }
 
-        .panel {
-            border: 1px solid #27272a;
-            border-radius: 14px;
-            background: #111113;
+
+        .bh-logout:hover {
+
+            border-color:
+                rgba(244,200,66,.22);
+
+            background:
+                rgba(244,200,66,.045);
+
+            color: var(--bh-gold-light);
+
+        }
+
+
+        /* =========================================================
+           LAYOUT
+           ========================================================= */
+
+        .bh-layout {
+
+            display: flex;
+
+            min-height:
+                calc(100vh - 72px);
+
+        }
+
+
+        /* =========================================================
+           SIDEBAR
+           ========================================================= */
+
+        .bh-sidebar {
+
+            width: 236px;
+
+            flex-shrink: 0;
+
+            padding: 25px 15px;
+
+            background:
+                rgba(10,10,10,.82);
+
+            border-right:
+                1px solid rgba(255,255,255,.065);
+
+        }
+
+
+        .bh-sidebar-label {
+
+            margin:
+                0 11px 11px;
+
+            color: #555;
+
+            font-size: 9px;
+
+            font-weight: 900;
+
+            letter-spacing: 1.2px;
+
+            text-transform: uppercase;
+
+        }
+
+
+        .bh-sidebar-link {
+
+            position: relative;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 11px;
+
+            min-height: 43px;
+
+            padding: 0 12px;
+
+            margin-bottom: 5px;
+
+            border:
+                1px solid transparent;
+
+            border-radius: 10px;
+
+            color: #777;
+
+            text-decoration: none;
+
+            font-size: 11px;
+
+            font-weight: 750;
+
+            transition:
+                color .18s ease,
+                background .18s ease,
+                border-color .18s ease,
+                transform .18s ease;
+
+        }
+
+
+        .bh-sidebar-link:hover {
+
+            color: #ddd;
+
+            background:
+                rgba(255,255,255,.025);
+
+        }
+
+
+        .bh-sidebar-link.active {
+
+            color: #090909;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #ffe58a,
+                    #f4c842,
+                    #c99b1c
+                );
+
+            border-color:
+                rgba(255,255,255,.14);
+
+            box-shadow:
+                0 8px 25px rgba(244,200,66,.10);
+
+        }
+
+
+        .bh-sidebar-icon {
+
+            width: 25px;
+
+            height: 25px;
+
+            display: grid;
+
+            place-items: center;
+
+            border-radius: 7px;
+
+            background:
+                rgba(255,255,255,.025);
+
+            font-size: 8px;
+
+            font-weight: 900;
+
+        }
+
+
+        .bh-sidebar-link.active
+        .bh-sidebar-icon {
+
+            background:
+                rgba(0,0,0,.10);
+
+        }
+
+
+        /* =========================================================
+           MAIN
+           ========================================================= */
+
+        .bh-main {
+
+            position: relative;
+
+            flex: 1;
+
+            min-width: 0;
+
+            padding:
+                38px 38px 70px;
+
             overflow: hidden;
+
         }
 
-        .table-wrap {
-            overflow-x: auto;
+
+        .bh-main::before {
+
+            content: "";
+
+            position: absolute;
+
+            width: 500px;
+
+            height: 500px;
+
+            top: -260px;
+
+            right: -180px;
+
+            border-radius: 50%;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(244,200,66,.10),
+                    rgba(244,200,66,.025) 42%,
+                    transparent 72%
+                );
+
+            pointer-events: none;
+
         }
+
+
+        .bh-main::after {
+
+            content: "";
+
+            position: absolute;
+
+            width: 480px;
+
+            height: 480px;
+
+            bottom: -300px;
+
+            left: -220px;
+
+            border-radius: 50%;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(244,200,66,.045),
+                    transparent 70%
+                );
+
+            pointer-events: none;
+
+        }
+
+
+        .bh-content {
+
+            position: relative;
+
+            z-index: 2;
+
+            max-width: 1240px;
+
+            margin: 0 auto;
+
+        }
+
+
+        /* =========================================================
+           PAGE HEADING
+           ========================================================= */
+
+        .bh-heading {
+
+            display: flex;
+
+            align-items: flex-end;
+
+            justify-content: space-between;
+
+            gap: 25px;
+
+            margin-bottom: 26px;
+
+        }
+
+
+        .bh-heading-kicker {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 7px;
+
+            padding: 7px 12px;
+
+            border:
+                1px solid var(--bh-gold-border);
+
+            border-radius: 999px;
+
+            background:
+                rgba(244,200,66,.045);
+
+            color:
+                var(--bh-gold-light);
+
+            font-size: 9px;
+
+            font-weight: 950;
+
+            letter-spacing: 1px;
+
+            text-transform: uppercase;
+
+        }
+
+
+        .bh-heading-dot {
+
+            width: 6px;
+
+            height: 6px;
+
+            border-radius: 50%;
+
+            background:
+                var(--bh-gold);
+
+            box-shadow:
+                0 0 9px rgba(244,200,66,.75);
+
+        }
+
+
+        .bh-heading h1 {
+
+            margin:
+                14px 0 0;
+
+            color: #fff;
+
+            font-size:
+                clamp(40px, 5vw, 56px);
+
+            line-height: .98;
+
+            font-weight: 950;
+
+            letter-spacing: -2.5px;
+
+        }
+
+
+        .bh-heading h1 span {
+
+            color:
+                var(--bh-gold);
+
+        }
+
+
+        .bh-heading p {
+
+            max-width: 620px;
+
+            margin:
+                11px 0 0;
+
+            color:
+                var(--bh-muted);
+
+            font-size: 12px;
+
+            line-height: 1.65;
+
+        }
+
+
+        .bh-page-badge {
+
+            flex-shrink: 0;
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            padding: 10px 13px;
+
+            border:
+                1px solid rgba(244,200,66,.15);
+
+            border-radius: 10px;
+
+            background:
+                rgba(244,200,66,.035);
+
+            color:
+                #bca858;
+
+            font-size: 9px;
+
+            font-weight: 900;
+
+            letter-spacing: .7px;
+
+            text-transform: uppercase;
+
+        }
+
+
+        .bh-page-badge::before {
+
+            content: "◆";
+
+            color:
+                var(--bh-gold);
+
+            font-size: 7px;
+
+        }
+
+
+        /* =========================================================
+           SUCCESS MESSAGE
+           ========================================================= */
+
+        .bh-success {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 11px;
+
+            margin-bottom: 18px;
+
+            padding: 14px 16px;
+
+            border:
+                1px solid rgba(74,222,128,.17);
+
+            border-radius: 12px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(74,222,128,.065),
+                    rgba(255,255,255,.012)
+                );
+
+            color:
+                #9be8b2;
+
+            font-size: 10px;
+
+            line-height: 1.5;
+
+        }
+
+
+        .bh-success-icon {
+
+            display: grid;
+
+            place-items: center;
+
+            width: 25px;
+
+            height: 25px;
+
+            flex-shrink: 0;
+
+            border-radius: 50%;
+
+            background:
+                rgba(74,222,128,.10);
+
+            color:
+                var(--bh-green);
+
+            font-size: 10px;
+
+            font-weight: 900;
+
+        }
+
+
+        /* =========================================================
+           TOOLBAR
+           ========================================================= */
+
+        .bh-toolbar {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            margin-bottom: 18px;
+
+            padding: 8px;
+
+            border:
+                1px solid rgba(255,255,255,.065);
+
+            border-radius: 13px;
+
+            background:
+                rgba(12,12,12,.82);
+
+            box-shadow:
+                0 15px 40px rgba(0,0,0,.18);
+
+            backdrop-filter: blur(15px);
+
+        }
+
+
+        .bh-search-wrapper {
+
+            position: relative;
+
+            flex: 1;
+
+            min-width: 0;
+
+        }
+
+
+        .bh-search-icon {
+
+            position: absolute;
+
+            left: 14px;
+
+            top: 50%;
+
+            transform:
+                translateY(-50%);
+
+            color: #555;
+
+            font-size: 10px;
+
+            pointer-events: none;
+
+        }
+
+
+        .bh-search {
+
+            width: 100%;
+
+            height: 43px;
+
+            padding:
+                0 14px 0 36px;
+
+            border:
+                1px solid rgba(255,255,255,.075);
+
+            border-radius: 9px;
+
+            background:
+                rgba(4,4,4,.70);
+
+            color: #fff;
+
+            outline: none;
+
+            font-family: inherit;
+
+            font-size: 11px;
+
+            transition:
+                border-color .18s ease,
+                box-shadow .18s ease,
+                background .18s ease;
+
+        }
+
+
+        .bh-search::placeholder {
+
+            color: #4e4e4e;
+
+        }
+
+
+        .bh-search:focus {
+
+            border-color:
+                rgba(244,200,66,.35);
+
+            background:
+                rgba(244,200,66,.018);
+
+            box-shadow:
+                0 0 0 3px
+                rgba(244,200,66,.05);
+
+        }
+
+
+        .bh-search-button {
+
+            height: 43px;
+
+            padding: 0 19px;
+
+            border:
+                1px solid rgba(255,255,255,.14);
+
+            border-radius: 9px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #ffe58a,
+                    #f4c842,
+                    #c99b1c
+                );
+
+            color: #090909;
+
+            cursor: pointer;
+
+            font-family: inherit;
+
+            font-size: 10px;
+
+            font-weight: 950;
+
+            letter-spacing: .3px;
+
+            text-transform: uppercase;
+
+            box-shadow:
+                0 8px 20px rgba(244,200,66,.10);
+
+            transition:
+                transform .18s ease,
+                filter .18s ease,
+                box-shadow .18s ease;
+
+        }
+
+
+        .bh-search-button:hover {
+
+            transform:
+                translateY(-1px);
+
+            filter:
+                brightness(1.05);
+
+            box-shadow:
+                0 11px 26px rgba(244,200,66,.16);
+
+        }
+
+
+        /* =========================================================
+           TABLE PANEL
+           ========================================================= */
+
+        .bh-panel {
+
+            overflow: hidden;
+
+            border:
+                1px solid rgba(255,255,255,.075);
+
+            border-radius: 17px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(255,255,255,.028),
+                    rgba(255,255,255,.008)
+                ),
+                rgba(15,15,15,.88);
+
+            box-shadow:
+                0 20px 55px rgba(0,0,0,.25),
+                inset 0 1px 0 rgba(255,255,255,.025);
+
+            backdrop-filter: blur(17px);
+
+        }
+
+
+        .bh-panel-header {
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: space-between;
+
+            gap: 20px;
+
+            padding:
+                18px 21px;
+
+            border-bottom:
+                1px solid rgba(255,255,255,.055);
+
+        }
+
+
+        .bh-panel-title {
+
+            margin: 0;
+
+            color: #fff;
+
+            font-size: 15px;
+
+            font-weight: 900;
+
+            letter-spacing: -.3px;
+
+        }
+
+
+        .bh-panel-subtitle {
+
+            margin: 5px 0 0;
+
+            color: #5f5f5f;
+
+            font-size: 9px;
+
+        }
+
+
+        .bh-panel-count {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 6px;
+
+            padding: 7px 10px;
+
+            border:
+                1px solid rgba(244,200,66,.12);
+
+            border-radius: 999px;
+
+            background:
+                rgba(244,200,66,.035);
+
+            color:
+                #9f8b46;
+
+            font-size: 9px;
+
+            font-weight: 850;
+
+        }
+
+
+        .bh-panel-count::before {
+
+            content: "";
+
+            width: 5px;
+
+            height: 5px;
+
+            border-radius: 50%;
+
+            background:
+                var(--bh-gold);
+
+        }
+
+
+        .bh-table-wrap {
+
+            overflow-x: auto;
+
+        }
+
 
         table {
+
             width: 100%;
+
             border-collapse: collapse;
+
         }
 
-        th,
-        td {
-            padding: 15px 16px;
-            border-bottom: 1px solid #27272a;
-            text-align: left;
-            white-space: nowrap;
-        }
 
         th {
-            color: #71717a;
-            font-size: 11px;
+
+            padding:
+                13px 17px;
+
+            border-bottom:
+                1px solid rgba(255,255,255,.055);
+
+            background:
+                rgba(255,255,255,.015);
+
+            color: #555;
+
+            font-size: 8px;
+
+            font-weight: 950;
+
+            letter-spacing: .9px;
+
+            text-align: left;
+
             text-transform: uppercase;
+
+            white-space: nowrap;
+
         }
+
 
         td {
-            color: #d4d4d8;
-            font-size: 13px;
+
+            padding:
+                15px 17px;
+
+            border-bottom:
+                1px solid rgba(255,255,255,.04);
+
+            color:
+                #a1a1a1;
+
+            font-size: 10px;
+
+            vertical-align: middle;
+
+            white-space: nowrap;
+
         }
 
-        tr:last-child td {
+
+        tbody tr {
+
+            transition:
+                background .16s ease;
+
+        }
+
+
+        tbody tr:hover {
+
+            background:
+                rgba(244,200,66,.022);
+
+        }
+
+
+        tbody tr:last-child td {
+
             border-bottom: 0;
+
         }
 
-        .role {
-            display: inline-block;
-            padding: 5px 8px;
+
+        .bh-email {
+
+            color:
+                #e0e0e0;
+
+            font-weight: 750;
+
+        }
+
+
+        /* =========================================================
+           ROLE BADGE
+           ========================================================= */
+
+        .bh-role {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            padding:
+                5px 9px;
+
+            border:
+                1px solid rgba(244,200,66,.13);
+
             border-radius: 999px;
-            background: #27272a;
-            color: #d4d4d8;
-            font-size: 11px;
+
+            background:
+                rgba(244,200,66,.045);
+
+            color:
+                #c7b66e;
+
+            font-size: 8px;
+
+            font-weight: 900;
+
+            letter-spacing: .6px;
+
             text-transform: uppercase;
+
         }
 
-        .status {
-            color: #86efac;
+
+        /* =========================================================
+           STATUS
+           ========================================================= */
+
+        .bh-status {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 6px;
+
+            padding:
+                5px 9px;
+
+            border-radius: 999px;
+
+            font-size: 8px;
+
+            font-weight: 900;
+
+            letter-spacing: .3px;
+
         }
 
-        .inactive {
-            color: #fca5a5;
+
+        .bh-status::before {
+
+            content: "";
+
+            width: 5px;
+
+            height: 5px;
+
+            border-radius: 50%;
+
         }
 
-        .action-form {
+
+        .bh-status-active {
+
+            border:
+                1px solid rgba(74,222,128,.15);
+
+            background:
+                rgba(74,222,128,.06);
+
+            color:
+                #91e9ab;
+
+        }
+
+
+        .bh-status-active::before {
+
+            background:
+                var(--bh-green);
+
+            box-shadow:
+                0 0 7px rgba(74,222,128,.5);
+
+        }
+
+
+        .bh-status-inactive {
+
+            border:
+                1px solid rgba(248,113,113,.15);
+
+            background:
+                rgba(248,113,113,.055);
+
+            color:
+                #ef9b9b;
+
+        }
+
+
+        .bh-status-inactive::before {
+
+            background:
+                var(--bh-red);
+
+        }
+
+
+        /* =========================================================
+           DATE
+           ========================================================= */
+
+        .bh-date {
+
+            color:
+                #707070;
+
+            font-size: 9px;
+
+        }
+
+
+        /* =========================================================
+           ACTION BUTTON
+           ========================================================= */
+
+        .bh-action-form {
+
             margin: 0;
+
         }
 
-        .action-button {
-            padding: 7px 10px;
-            border: 1px solid #3f3f46;
-            border-radius: 7px;
-            background: transparent;
-            color: #fff;
+
+        .bh-action-button {
+
+            min-height: 31px;
+
+            padding:
+                0 11px;
+
+            border:
+                1px solid rgba(255,255,255,.085);
+
+            border-radius: 8px;
+
+            background:
+                rgba(255,255,255,.018);
+
+            color:
+                #aaa;
+
             cursor: pointer;
-            font-size: 12px;
+
+            font-family: inherit;
+
+            font-size: 9px;
+
+            font-weight: 850;
+
+            transition:
+                background .18s ease,
+                border-color .18s ease,
+                color .18s ease,
+                transform .18s ease;
+
         }
 
-        .action-button:hover {
-            background: #27272a;
+
+        .bh-action-button:hover {
+
+            transform:
+                translateY(-1px);
+
+            border-color:
+                rgba(244,200,66,.25);
+
+            background:
+                rgba(244,200,66,.055);
+
+            color:
+                var(--bh-gold-light);
+
         }
 
-        .empty {
-            padding: 30px;
+
+        /* =========================================================
+           EMPTY STATE
+           ========================================================= */
+
+        .bh-empty {
+
+            padding:
+                55px 25px;
+
             text-align: center;
-            color: #71717a;
+
+            color:
+                #5e5e5e;
+
+            font-size: 10px;
+
         }
 
-        .success {
-            margin-bottom: 20px;
-            padding: 12px 14px;
-            border: 1px solid #166534;
-            border-radius: 9px;
-            background: #14251a;
-            color: #86efac;
+
+        .bh-empty-icon {
+
+            display: grid;
+
+            place-items: center;
+
+            width: 42px;
+
+            height: 42px;
+
+            margin:
+                0 auto 13px;
+
+            border:
+                1px solid rgba(244,200,66,.13);
+
+            border-radius: 12px;
+
+            background:
+                rgba(244,200,66,.035);
+
+            color:
+                var(--bh-gold);
+
+            font-size: 9px;
+
         }
+
+
+        .bh-empty-title {
+
+            margin-bottom: 5px;
+
+            color:
+                #858585;
+
+            font-size: 11px;
+
+            font-weight: 800;
+
+        }
+
+
+        /* =========================================================
+           MOBILE
+           ========================================================= */
+
+        @media (max-width: 850px) {
+
+            .bh-sidebar {
+
+                width: 200px;
+
+            }
+
+            .bh-main {
+
+                padding:
+                    28px 22px 55px;
+
+            }
+
+            .bh-heading h1 {
+
+                font-size: 43px;
+
+            }
+
+        }
+
 
         @media (max-width: 700px) {
-            .layout {
+
+            .bh-topbar {
+
+                padding:
+                    0 16px;
+
+            }
+
+
+            .bh-user-email {
+
+                display: none;
+
+            }
+
+
+            .bh-layout {
+
                 display: block;
+
             }
 
-            .sidebar {
+
+            .bh-sidebar {
+
                 width: 100%;
+
                 display: flex;
+
+                align-items: center;
+
                 gap: 5px;
+
                 overflow-x: auto;
+
+                padding:
+                    8px 10px;
+
                 border-right: 0;
-                border-bottom: 1px solid #27272a;
+
+                border-bottom:
+                    1px solid rgba(255,255,255,.065);
+
             }
 
-            .sidebar-label {
+
+            .bh-sidebar-label {
+
                 display: none;
+
             }
 
-            .sidebar a {
-                white-space: nowrap;
+
+            .bh-sidebar-link {
+
+                flex-shrink: 0;
+
+                min-height: 38px;
+
+                margin: 0;
+
+                padding:
+                    0 11px;
+
             }
 
-            .main {
-                padding: 20px 16px;
-            }
 
-            .topbar {
-                padding: 0 16px;
-            }
+            .bh-sidebar-icon {
 
-            .topbar-right span {
                 display: none;
+
             }
+
+
+            .bh-main {
+
+                padding:
+                    25px 15px 50px;
+
+            }
+
+
+            .bh-heading {
+
+                align-items: flex-start;
+
+                flex-direction: column;
+
+            }
+
+
+            .bh-heading h1 {
+
+                font-size: 40px;
+
+                letter-spacing: -1.8px;
+
+            }
+
+
+            .bh-page-badge {
+
+                display: none;
+
+            }
+
+
+            .bh-toolbar {
+
+                align-items: stretch;
+
+                flex-direction: column;
+
+            }
+
+
+            .bh-search-button {
+
+                width: 100%;
+
+            }
+
+
+            .bh-panel-header {
+
+                align-items: flex-start;
+
+                flex-direction: column;
+
+            }
+
         }
+
+
+        @media (max-width: 430px) {
+
+            .bh-brand {
+
+                font-size: 16px;
+
+            }
+
+
+            .bh-brand-admin {
+
+                display: none;
+
+            }
+
+
+            .bh-heading h1 {
+
+                font-size: 35px;
+
+            }
+
+
+            .bh-heading p {
+
+                font-size: 11px;
+
+            }
+
+        }
+
     </style>
+
 </head>
+
 
 <body>
 
-<header class="topbar">
 
-    <a href="/admin" class="brand">
-        BEAT<span>HUB</span> ADMIN
+<!-- =========================================================
+     TOP BAR
+     ========================================================= -->
+
+<header class="bh-topbar">
+
+
+    <a
+        href="/admin"
+        class="bh-brand"
+    >
+
+        <span class="bh-brand-mark">
+            ◆
+        </span>
+
+        <span class="bh-brand-beat">
+            BEAT
+        </span>
+
+        <span class="bh-brand-hub">
+            HUB
+        </span>
+
+        <span class="bh-brand-admin">
+            ADMIN
+        </span>
+
     </a>
 
-    <div class="topbar-right">
 
-        <span>{{ current_user.email }}</span>
+    <div class="bh-topbar-right">
 
-        <form action="/logout" method="post">
-            <button class="logout" type="submit">
+
+        <span class="bh-user-email">
+
+            <span class="bh-user-dot"></span>
+
+            {{ current_user.email }}
+
+        </span>
+
+
+        <form
+            action="/logout"
+            method="post"
+        >
+
+            <button
+                class="bh-logout"
+                type="submit"
+            >
                 Logout
             </button>
+
         </form>
+
 
     </div>
 
+
 </header>
 
-<div class="layout">
 
-    <aside class="sidebar">
+<!-- =========================================================
+     LAYOUT
+     ========================================================= -->
 
-        <div class="sidebar-label">Management</div>
+<div class="bh-layout">
 
-        <a href="/admin">
+
+    <!-- =====================================================
+         SIDEBAR
+         ===================================================== -->
+
+    <aside class="bh-sidebar">
+
+
+        <div class="bh-sidebar-label">
+            Management
+        </div>
+
+
+        <a
+            href="/admin"
+            class="bh-sidebar-link"
+        >
+
+            <span class="bh-sidebar-icon">
+                ◆
+            </span>
+
             Overview
+
         </a>
 
-        <a href="/admin/users" class="active">
+
+        <a
+            href="/admin/users"
+            class="bh-sidebar-link active"
+        >
+
+            <span class="bh-sidebar-icon">
+                ●
+            </span>
+
             Users
+
         </a>
 
-        <a href="/admin/content">
+
+        <a
+            href="/admin/content"
+            class="bh-sidebar-link"
+        >
+
+            <span class="bh-sidebar-icon">
+                ♪
+            </span>
+
             Content
+
         </a>
 
-        <a href="/admin/sales">
+
+        <a
+            href="/admin/sales"
+            class="bh-sidebar-link"
+        >
+
+            <span class="bh-sidebar-icon">
+                $
+            </span>
+
             Sales
+
         </a>
 
-        <a href="/admin/withdrawals">
+
+        <a
+            href="/admin/withdrawals"
+            class="bh-sidebar-link"
+        >
+
+            <span class="bh-sidebar-icon">
+                ↗
+            </span>
+
             Withdrawals
+
         </a>
+
 
     </aside>
 
-    <main class="main">
 
-        <div class="heading">
-            <h1>Users</h1>
-            <p>Manage BeatHub accounts and account access.</p>
-        </div>
+    <!-- =====================================================
+         MAIN
+         ===================================================== -->
 
-        {% if request.query_params.get('success') %}
-            <div class="success">
-                {{ request.query_params.get('success') }}
+    <main class="bh-main">
+
+
+        <div class="bh-content">
+
+
+            <!-- =================================================
+                 HEADING
+                 ================================================= -->
+
+            <div class="bh-heading">
+
+
+                <div>
+
+                    <div class="bh-heading-kicker">
+
+                        <span class="bh-heading-dot"></span>
+
+                        BeatHub Control Center
+
+                    </div>
+
+
+                    <h1>
+                        Manage <span>Users.</span>
+                    </h1>
+
+
+                    <p>
+                        Manage BeatHub accounts, review account
+                        status and control member access from one
+                        central workspace.
+                    </p>
+
+                </div>
+
+
+                <div class="bh-page-badge">
+                    User Management
+                </div>
+
+
             </div>
-        {% endif %}
 
-        <form method="get" action="/admin/users" class="toolbar">
 
-            <input
-                class="search"
-                type="search"
-                name="q"
-                value="{{ q or '' }}"
-                placeholder="Search by email..."
+            <!-- =================================================
+                 SUCCESS
+                 ================================================= -->
+
+            {% if request.query_params.get('success') %}
+
+                <div class="bh-success">
+
+                    <div class="bh-success-icon">
+                        ✓
+                    </div>
+
+                    <div>
+                        {{ request.query_params.get('success') }}
+                    </div>
+
+                </div>
+
+            {% endif %}
+
+
+            <!-- =================================================
+                 SEARCH
+                 ================================================= -->
+
+            <form
+                method="get"
+                action="/admin/users"
+                class="bh-toolbar"
             >
 
-            <button class="button" type="submit">
-                Search
-            </button>
 
-        </form>
+                <div class="bh-search-wrapper">
 
-        <section class="panel">
+                    <span class="bh-search-icon">
+                        ⌕
+                    </span>
 
-            <div class="table-wrap">
+                    <input
+                        class="bh-search"
+                        type="search"
+                        name="q"
+                        value="{{ q or '' }}"
+                        placeholder="Search by email..."
+                    >
 
-                <table>
+                </div>
 
-                    <thead>
-                        <tr>
-                            <th>Email</th>
-                            <th>Role</th>
-                            <th>Status</th>
-                            <th>Joined</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
 
-                    <tbody>
+                <button
+                    class="bh-search-button"
+                    type="submit"
+                >
+                    Search
+                </button>
 
-                    {% for user in users %}
 
-                        <tr>
+            </form>
 
-                            <td>
-                                {{ user.email }}
-                            </td>
 
-                            <td>
-                                <span class="role">
-                                    {{ user.role.value if user.role.value else user.role }}
-                                </span>
-                            </td>
+            <!-- =================================================
+                 USERS PANEL
+                 ================================================= -->
 
-                            <td>
+            <section class="bh-panel">
 
-                                {% if user.is_active %}
-                                    <span class="status">Active</span>
-                                {% else %}
-                                    <span class="inactive">Inactive</span>
-                                {% endif %}
 
-                            </td>
+                <div class="bh-panel-header">
 
-                            <td>
-                                {{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}
-                            </td>
 
-                            <td>
+                    <div>
 
-                                <form
-                                    class="action-form"
-                                    method="post"
-                                    action="/admin/users/{{ user.id }}/toggle-active"
+                        <h2 class="bh-panel-title">
+                            BeatHub Members
+                        </h2>
+
+                        <p class="bh-panel-subtitle">
+                            Account access and membership overview.
+                        </p>
+
+                    </div>
+
+
+                    <div class="bh-panel-count">
+
+                        User Directory
+
+                    </div>
+
+
+                </div>
+
+
+                <div class="bh-table-wrap">
+
+
+                    <table>
+
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Email
+                                </th>
+
+                                <th>
+                                    Role
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+
+                                <th>
+                                    Joined
+                                </th>
+
+                                <th>
+                                    Action
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+
+                        {% for user in users %}
+
+
+                            <tr>
+
+
+                                <!-- EMAIL -->
+
+                                <td>
+
+                                    <span class="bh-email">
+                                        {{ user.email }}
+                                    </span>
+
+                                </td>
+
+
+                                <!-- ROLE -->
+
+                                <td>
+
+                                    <span class="bh-role">
+
+                                        {{
+                                            user.role.value
+                                            if user.role.value
+                                            else user.role
+                                        }}
+
+                                    </span>
+
+                                </td>
+
+
+                                <!-- STATUS -->
+
+                                <td>
+
+
+                                    {% if user.is_active %}
+
+                                        <span
+                                            class="bh-status
+                                                   bh-status-active"
+                                        >
+
+                                            Active
+
+                                        </span>
+
+
+                                    {% else %}
+
+                                        <span
+                                            class="bh-status
+                                                   bh-status-inactive"
+                                        >
+
+                                            Inactive
+
+                                        </span>
+
+                                    {% endif %}
+
+
+                                </td>
+
+
+                                <!-- JOINED -->
+
+                                <td>
+
+                                    <span class="bh-date">
+
+                                        {{
+                                            user.created_at.strftime(
+                                                '%d %b %Y'
+                                            )
+                                            if user.created_at
+                                            else '—'
+                                        }}
+
+                                    </span>
+
+                                </td>
+
+
+                                <!-- ACTION -->
+
+                                <td>
+
+
+                                    <form
+                                        class="bh-action-form"
+                                        method="post"
+                                        action="/admin/users/{{ user.id }}/toggle-active"
+                                    >
+
+                                        <button
+                                            type="submit"
+                                            class="bh-action-button"
+                                        >
+
+                                            {% if user.is_active %}
+
+                                                Deactivate
+
+                                            {% else %}
+
+                                                Activate
+
+                                            {% endif %}
+
+                                        </button>
+
+                                    </form>
+
+
+                                </td>
+
+
+                            </tr>
+
+
+                        {% else %}
+
+
+                            <tr>
+
+                                <td
+                                    colspan="5"
+                                    class="bh-empty"
                                 >
 
-                                    <button
-                                        type="submit"
-                                        class="action-button"
-                                    >
-                                        {% if user.is_active %}
-                                            Deactivate
-                                        {% else %}
-                                            Activate
-                                        {% endif %}
-                                    </button>
+                                    <div class="bh-empty-icon">
+                                        ◆
+                                    </div>
 
-                                </form>
+                                    <div class="bh-empty-title">
+                                        No users found
+                                    </div>
 
-                            </td>
+                                    <div>
+                                        Try another email search.
+                                    </div>
 
-                        </tr>
+                                </td>
 
-                    {% else %}
+                            </tr>
 
-                        <tr>
-                            <td colspan="5" class="empty">
-                                No users found.
-                            </td>
-                        </tr>
 
-                    {% endfor %}
+                        {% endfor %}
 
-                    </tbody>
 
-                </table>
+                        </tbody>
 
-            </div>
 
-        </section>
+                    </table>
+
+
+                </div>
+
+
+            </section>
+
+
+        </div>
+
 
     </main>
 
+
 </div>
 
+
 </body>
+
 </html>
