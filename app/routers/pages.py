@@ -1,62 +1,66 @@
-from __future__ import annotations
-
-import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
-from app.models.music import Track
+from app.models.music import Album, Track
 from app.models.order import License, Order, OrderStatus
+from app.models.profile import Profile
 from app.models.user import User
+from app.services.search import run_search
 from app.utils.deps import get_optional_user, require_user
 
 
-logger = logging.getLogger("beathub.pages")
-
 router = APIRouter(tags=["pages"])
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(
+    directory="app/templates"
+)
 
 
-# ============================================================
-# GENERAL HELPERS
-# ============================================================
+# ======================================================================
+# COMMON TEMPLATE CONTEXT
+# ======================================================================
 
-def _value(
-    obj: Any,
-    *names: str,
-    default: Any = None,
-) -> Any:
-    for name in names:
-        try:
-            value = getattr(obj, name, None)
-        except Exception:
-            value = None
+def ctx(
+    request: Request,
+    current_user: Optional[User],
+    **extra,
+):
+    context = {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": datetime.utcnow().year,
+    }
 
-        if value is not None:
-            return value
+    context.update(extra)
 
-    return default
+    return context
 
 
-def _safe_local_path(
-    value: Optional[str],
+# ======================================================================
+# LOCAL MEDIA HELPERS
+# ======================================================================
+
+def _local_media_path(
+    stored_path: str,
 ) -> Optional[Path]:
+    value = str(
+        stored_path or ""
+    ).strip()
+
     if not value:
         return None
 
-    raw = str(value).strip()
-
-    if not raw:
-        return None
-
-    if raw.startswith(
+    # Cloud/R2 paths are not served by this local route.
+    if value.startswith(
         (
             "http://",
             "https://",
@@ -66,751 +70,620 @@ def _safe_local_path(
     ):
         return None
 
-    candidates: list[Path] = []
+    stored = Path(value)
 
-    path = Path(raw)
-
-    if path.is_absolute():
-        candidates.append(path)
-
-    clean = raw.lstrip("/")
-
-    candidates.extend(
-        [
-            Path(clean),
-            Path("app") / clean,
-            Path("uploads") / clean,
-            Path("media") / clean,
-            Path("static") / clean,
-        ]
+    media_root_value = (
+        getattr(
+            settings,
+            "MEDIA_ROOT",
+            None,
+        )
+        or "media"
     )
+
+    media_root = Path(
+        media_root_value
+    ).expanduser()
+
+    if not media_root.is_absolute():
+        media_root = (
+            Path.cwd() / media_root
+        )
+
+    media_root = media_root.resolve()
+
+    candidates = []
+
+    if stored.is_absolute():
+
+        candidates.append(
+            stored.resolve()
+        )
+
+    else:
+
+        candidates.append(
+            (
+                Path.cwd() / stored
+            ).resolve()
+        )
+
+        candidates.append(
+            (
+                media_root / stored
+            ).resolve()
+        )
+
+        clean = (
+            str(stored)
+            .replace("\\", "/")
+            .lstrip("/")
+        )
+
+        if clean.startswith("media/"):
+
+            candidates.append(
+                (
+                    media_root
+                    / clean[6:]
+                ).resolve()
+            )
 
     for candidate in candidates:
-        try:
-            resolved = candidate.resolve()
 
-            if resolved.exists() and resolved.is_file():
-                return resolved
-        except Exception:
+        try:
+
+            candidate.relative_to(
+                media_root
+            )
+
+        except ValueError:
+
             continue
 
-    return None
-
-
-def _track_public(track: Track) -> bool:
-    for field_name in (
-        "is_published",
-        "published",
-        "is_public",
-        "active",
-    ):
-        if hasattr(track, field_name):
-            try:
-                if getattr(track, field_name, None) is False:
-                    return False
-            except Exception:
-                pass
-
-    return True
-
-
-def _track_slug(
-    track: Track,
-) -> Optional[str]:
-    value = _value(
-        track,
-        "slug",
-        default=None,
-    )
-
-    return str(value) if value else None
-
-
-def _track_artwork(
-    track: Track,
-) -> Optional[str]:
-    value = _value(
-        track,
-        "cover_art_path",
-        "cover_url",
-        "artwork_url",
-        "image_url",
-        "thumbnail_url",
-        "cover_image",
-        "artwork",
-        "image",
-        default=None,
-    )
-
-    if not value:
-        return None
-
-    value = str(value).strip()
-
-    if not value:
-        return None
-
-    if value.startswith(
-        (
-            "http://",
-            "https://",
-            "data:",
-            "//",
-            "/",
-        )
-    ):
-        return value
-
-    slug = _track_slug(track)
-
-    if slug:
-        return f"/track/{slug}/artwork"
-
-    track_id = _value(
-        track,
-        "id",
-        default=None,
-    )
-
-    if track_id is not None:
-        return f"/track/{track_id}/artwork"
+        if (
+            candidate.exists()
+            and candidate.is_file()
+        ):
+            return candidate
 
     return None
 
 
-def _track_audio(
-    track: Track,
-) -> Optional[str]:
-    value = _value(
-        track,
-        "audio_url",
-        "preview_url",
-        "file_url",
-        "stream_url",
-        "mp3_url",
-        "preview_audio_url",
-        "audio_path",
-        "file_path",
-        default=None,
-    )
-
-    if not value:
-        return None
-
-    value = str(value).strip()
-
-    if not value:
-        return None
-
-    if value.startswith(
-        (
-            "http://",
-            "https://",
-            "//",
-            "/",
-        )
-    ):
-        return value
-
-    slug = _track_slug(track)
-
-    if slug:
-        return f"/track/{slug}/preview"
-
-    track_id = _value(
-        track,
-        "id",
-        default=None,
-    )
-
-    if track_id is not None:
-        return f"/track/{track_id}/preview"
-
-    return None
-
-
-def _producer_name(
-    track: Track,
+def _media_content_type(
+    path: Path,
 ) -> str:
-    producer = _value(
-        track,
-        "producer",
-        "creator",
-        "owner",
-        "user",
-        default=None,
-    )
-
-    if producer is not None:
-        name = _value(
-            producer,
-            "display_name",
-            "stage_name",
-            "artist_name",
-            "username",
-            "name",
-            default=None,
-        )
-
-        if name:
-            return str(name)
-
-    direct = _value(
-        track,
-        "producer_name",
-        "creator_name",
-        "artist_name",
-        "username",
-        default=None,
-    )
-
-    return (
-        str(direct)
-        if direct
-        else "BeatHub Creator"
-    )
-
-
-def _producer_slug(
-    track: Track,
-) -> Optional[str]:
-    producer = _value(
-        track,
-        "producer",
-        "creator",
-        "owner",
-        "user",
-        default=None,
-    )
-
-    if producer is not None:
-        slug = _value(
-            producer,
-            "slug",
-            "store_slug",
-            "username",
-            default=None,
-        )
-
-        if slug:
-            return str(slug)
-
-    slug = _value(
-        track,
-        "producer_slug",
-        "creator_slug",
-        "store_slug",
-        default=None,
-    )
-
-    return str(slug) if slug else None
-
-
-def _track_url(
-    track: Track,
-) -> str:
-    slug = _track_slug(track)
-
-    if slug:
-        return f"/p/{slug}"
-
-    track_id = _value(
-        track,
-        "id",
-        default=None,
-    )
-
-    if track_id is not None:
-        return f"/track/{track_id}"
-
-    return "#"
-
-
-def _track_catalog_item(
-    track: Track,
-) -> dict[str, Any]:
-    raw_price = _value(
-        track,
-        "price",
-        "amount",
-        "non_exclusive_price",
-        "lease_price",
-        default=0,
-    )
-
-    try:
-        price = float(raw_price or 0)
-    except (TypeError, ValueError):
-        price = 0.0
-
-    producer_slug = _producer_slug(track)
 
     return {
-        "track": track,
-        "title": str(
-            _value(
-                track,
-                "title",
-                "name",
-                default="Untitled Beat",
-            )
-        ),
-        "producer": _producer_name(track),
-        "producer_url": (
-            f"/producer/{producer_slug}"
-            if producer_slug
-            else None
-        ),
-        "price": price,
-        "artwork_url": _track_artwork(track),
-        "audio_url": _track_audio(track),
-        "url": _track_url(track),
-        "genre": str(
-            _value(
-                track,
-                "genre",
-                "category",
-                default="",
-            )
-            or ""
-        ),
-        "mood": str(
-            _value(
-                track,
-                "mood",
-                default="",
-            )
-            or ""
-        ),
-        "bpm": str(
-            _value(
-                track,
-                "bpm",
-                "tempo",
-                default="",
-            )
-            or ""
-        ),
-        "key": str(
-            _value(
-                track,
-                "key",
-                "musical_key",
-                default="",
-            )
-            or ""
-        ),
-    }
-
-
-# ============================================================
-# HOME
-# ============================================================
-
-@router.get("/")
-def home(
-    request: Request,
-    current_user=Depends(get_optional_user),
-):
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-        },
-    )
-
-
-# ============================================================
-# HEALTH
-# ============================================================
-
-@router.get("/healthz")
-def healthz():
-    return {
-        "status": "ok",
-        "service": "BeatHub",
-    }
-
-
-# ============================================================
-# TRACK ARTWORK
-# ============================================================
-
-@router.get("/track/{identifier}/artwork")
-def track_artwork(
-    identifier: str,
-    db: Session = Depends(get_db),
-):
-    track = None
-
-    slug_field = getattr(
-        Track,
-        "slug",
-        None,
-    )
-
-    if slug_field is not None:
-        try:
-            track = (
-                db.query(Track)
-                .filter(
-                    slug_field == identifier
-                )
-                .first()
-            )
-        except Exception:
-            track = None
-
-    if track is None:
-        try:
-            track_id = int(identifier)
-        except (
-            TypeError,
-            ValueError,
-        ):
-            track_id = None
-
-        if track_id is not None:
-            id_field = getattr(
-                Track,
-                "id",
-                None,
-            )
-
-            if id_field is not None:
-                try:
-                    track = (
-                        db.query(Track)
-                        .filter(
-                            id_field == track_id
-                        )
-                        .first()
-                    )
-                except Exception:
-                    track = None
-
-    if track is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Track not found",
-        )
-
-    artwork = _value(
-        track,
-        "cover_art_path",
-        "cover_url",
-        "artwork_url",
-        "image_url",
-        "thumbnail_url",
-        "cover_image",
-        "artwork",
-        "image",
-        default=None,
-    )
-
-    if not artwork:
-        raise HTTPException(
-            status_code=404,
-            detail="Artwork not found",
-        )
-
-    artwork = str(artwork)
-
-    local_path = _safe_local_path(
-        artwork
-    )
-
-    if local_path is None:
-        if artwork.startswith(
-            (
-                "http://",
-                "https://",
-                "//",
-            )
-        ):
-            return RedirectResponse(
-                artwork
-            )
-
-        raise HTTPException(
-            status_code=404,
-            detail="Artwork file not available",
-        )
-
-    media_types = {
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".png": "image/png",
         ".webp": "image/webp",
         ".gif": "image/gif",
-        ".avif": "image/avif",
-    }
+        ".svg": "image/svg+xml",
 
-    return FileResponse(
-        local_path,
-        media_type=media_types.get(
-            local_path.suffix.lower(),
-            "application/octet-stream",
-        ),
-        headers={
-            "Cache-Control": (
-                "public, max-age=3600"
-            )
-        },
-    )
-
-
-# ============================================================
-# TRACK PREVIEW
-# ============================================================
-
-@router.get("/track/{identifier}/preview")
-def track_preview(
-    identifier: str,
-    db: Session = Depends(get_db),
-):
-    track = None
-
-    slug_field = getattr(
-        Track,
-        "slug",
-        None,
-    )
-
-    if slug_field is not None:
-        try:
-            track = (
-                db.query(Track)
-                .filter(
-                    slug_field == identifier
-                )
-                .first()
-            )
-        except Exception:
-            track = None
-
-    if track is None:
-        try:
-            track_id = int(identifier)
-        except (
-            TypeError,
-            ValueError,
-        ):
-            track_id = None
-
-        if track_id is not None:
-            id_field = getattr(
-                Track,
-                "id",
-                None,
-            )
-
-            if id_field is not None:
-                try:
-                    track = (
-                        db.query(Track)
-                        .filter(
-                            id_field == track_id
-                        )
-                        .first()
-                    )
-                except Exception:
-                    track = None
-
-    if track is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Track not found",
-        )
-
-    audio = _value(
-        track,
-        "audio_url",
-        "preview_url",
-        "file_url",
-        "stream_url",
-        "mp3_url",
-        "preview_audio_url",
-        "audio_path",
-        "file_path",
-        default=None,
-    )
-
-    if not audio:
-        raise HTTPException(
-            status_code=404,
-            detail="Audio preview not found",
-        )
-
-    audio = str(audio)
-
-    if audio.startswith(
-        (
-            "http://",
-            "https://",
-            "//",
-        )
-    ):
-        return RedirectResponse(audio)
-
-    local_path = _safe_local_path(
-        audio
-    )
-
-    if local_path is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Audio file not available",
-        )
-
-    media_types = {
         ".mp3": "audio/mpeg",
         ".wav": "audio/wav",
         ".m4a": "audio/mp4",
         ".aac": "audio/aac",
         ".ogg": "audio/ogg",
-        ".opus": "audio/opus",
-    }
+        ".flac": "audio/flac",
+    }.get(
+        path.suffix.lower(),
+        "application/octet-stream",
+    )
+
+
+def _serve_local_media(
+    stored_path: str,
+):
+    path = _local_media_path(
+        stored_path
+    )
+
+    if not path:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Media file not found.",
+        )
 
     return FileResponse(
-        local_path,
-        media_type=media_types.get(
-            local_path.suffix.lower(),
-            "application/octet-stream",
+        path=str(path),
+        media_type=_media_content_type(
+            path
         ),
         headers={
-            "Accept-Ranges": "bytes",
-            "Cache-Control": (
-                "public, max-age=3600"
-            ),
+            "Cache-Control":
+                "public, max-age=3600",
         },
     )
 
 
-# ============================================================
+# ======================================================================
+# HOME
+# ======================================================================
+
+@router.get("/")
+def home(
+    request: Request,
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+
+    query = (
+        q or ""
+    ).strip()
+
+    if query:
+
+        found = run_search(
+            db,
+            query,
+        )
+
+        return templates.TemplateResponse(
+            request,
+            "home.html",
+            ctx(
+                request,
+                current_user,
+                query=query,
+                results=found.get(
+                    "results",
+                    {},
+                ),
+                total_results=found.get(
+                    "total",
+                    0,
+                ),
+            ),
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        ctx(
+            request,
+            current_user,
+            query="",
+            results={},
+            total_results=None,
+        ),
+    )
+
+
+# ======================================================================
 # SEARCH
-# ============================================================
+# ======================================================================
 
 @router.get("/search")
 def search(
     request: Request,
-    q: str = Query(
-        default="",
-        max_length=100,
-    ),
-    current_user=Depends(
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
         get_optional_user
     ),
-    db: Session = Depends(get_db),
 ):
-    search_term = q.strip()
 
-    tracks = []
-
-    try:
-        query = db.query(Track)
-
-        if search_term:
-            like = f"%{search_term}%"
-
-            conditions = []
-
-            for field_name in (
-                "title",
-                "name",
-                "genre",
-                "mood",
-                "description",
-                "short_description",
-                "tags",
-                "slug",
-            ):
-                field = getattr(
-                    Track,
-                    field_name,
-                    None,
-                )
-
-                if field is not None:
-                    conditions.append(
-                        field.ilike(like)
-                    )
-
-            if conditions:
-                query = query.filter(
-                    or_(*conditions)
-                )
-
-        tracks = [
-            track
-            for track in query.all()
-            if _track_public(track)
-        ]
-
-    except Exception:
-        logger.exception(
-            "BeatHub search failed"
-        )
-        tracks = []
-
-    catalog = [
-        _track_catalog_item(track)
-        for track in tracks
-    ]
-
-    return templates.TemplateResponse(
-        request,
-        "beats.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "tracks": tracks,
-            "beats": tracks,
-            "catalog": catalog,
-            "total": len(tracks),
-            "total_results": len(tracks),
-            "page": 1,
-            "track_page": 1,
-            "per_page": max(
-                6,
-                min(
-                    48,
-                    len(tracks) or 24,
-                ),
-            ),
-            "track_per_page": 24,
-            "total_pages": 1,
-            "track_total_pages": 1,
-            "genres": [],
-            "moods": [],
-            "query": search_term,
-            "q": search_term,
-            "genre": "",
-            "mood": "",
-            "min_price": None,
-            "max_price": None,
-            "has_previous": False,
-            "has_next": False,
-            "previous_page": 1,
-            "next_page": 1,
-            "catalog_start": (
-                1 if tracks else 0
-            ),
-            "catalog_end": len(tracks),
-            "title": "Search BeatHub",
-        },
+    return home(
+        request=request,
+        q=q,
+        db=db,
+        current_user=current_user,
     )
 
 
-# ============================================================
-# ARTIST / BUYER ACCOUNT
-# ============================================================
+# ======================================================================
+# TERMS
+# ======================================================================
+
+@router.get("/terms")
+def terms(
+    request: Request,
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+
+    return templates.TemplateResponse(
+        request,
+        "terms.html",
+        ctx(
+            request,
+            current_user,
+        ),
+    )
+
+
+# ======================================================================
+# PUBLIC CREATOR STORE
+#
+# PRIMARY:
+#
+#     /store/{slug}
+#
+# EXAMPLE:
+#
+#     /store/mr-mapema
+#
+# COMPATIBILITY:
+#
+#     /creator/{slug}
+#     /profile/{slug}
+#
+# ======================================================================
+
+def _find_public_profile(
+    db: Session,
+    slug: str,
+) -> Optional[Profile]:
+
+    clean_slug = (
+        str(slug or "")
+        .strip()
+        .lower()
+    )
+
+    if not clean_slug:
+        return None
+
+    # --------------------------------------------------------------
+    # Primary lookup: exact public profile slug.
+    # --------------------------------------------------------------
+
+    profile = (
+        db.query(Profile)
+        .filter(
+            Profile.slug == clean_slug
+        )
+        .first()
+    )
+
+    if profile:
+        return profile
+
+    # --------------------------------------------------------------
+    # Compatibility lookup.
+    #
+    # Older accounts/deployments may contain a slug with different
+    # capitalization. This gives existing creator stores a safer
+    # compatibility path without changing their stored slug.
+    # --------------------------------------------------------------
+
+    try:
+
+        profile = (
+            db.query(Profile)
+            .filter(
+                Profile.slug.ilike(
+                    clean_slug
+                )
+            )
+            .first()
+        )
+
+        if profile:
+            return profile
+
+    except Exception:
+        pass
+
+    return None
+
+
+def _public_creator_store(
+    request: Request,
+    slug: str,
+    db: Session,
+    current_user: Optional[User] = None,
+):
+
+    profile = _find_public_profile(
+        db,
+        slug,
+    )
+
+    if not profile:
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Creator store not found."
+            ),
+        )
+
+    # --------------------------------------------------------------
+    # PUBLIC TRACKS
+    # --------------------------------------------------------------
+
+    tracks = list(
+        getattr(
+            profile,
+            "tracks",
+            None,
+        )
+        or []
+    )
+
+    public_tracks = []
+
+    for track in tracks:
+
+        # ----------------------------------------------------------
+        # Only published tracks are public.
+        # ----------------------------------------------------------
+
+        if not getattr(
+            track,
+            "is_published",
+            True,
+        ):
+            continue
+
+        # ----------------------------------------------------------
+        # Exclusive tracks that have already been sold are hidden.
+        # ----------------------------------------------------------
+
+        sales_model = getattr(
+            track,
+            "sales_model",
+            None,
+        )
+
+        sales_model_value = getattr(
+            sales_model,
+            "value",
+            (
+                str(sales_model)
+                if sales_model is not None
+                else ""
+            ),
+        )
+
+        if (
+            str(
+                sales_model_value
+            ).strip().lower()
+            == "exclusive"
+            and getattr(
+                track,
+                "is_sold",
+                False,
+            )
+        ):
+            continue
+
+        # ----------------------------------------------------------
+        # Preserve existing artwork behaviour.
+        #
+        # We first try R2 because current BeatHub storage can use
+        # Cloudflare R2. If that is unavailable, the template can
+        # fall back to its normal artwork handling.
+        # ----------------------------------------------------------
+
+        try:
+
+            cover_path = getattr(
+                track,
+                "cover_art_path",
+                None,
+            )
+
+            if cover_path:
+
+                from app.services.storage import (
+                    r2_presigned_url,
+                )
+
+                track.cover_art_url = (
+                    r2_presigned_url(
+                        cover_path
+                    )
+                )
+
+        except Exception:
+
+            # Do not break the public store just because an artwork
+            # URL cannot be generated.
+            pass
+
+        public_tracks.append(
+            track
+        )
+
+    # --------------------------------------------------------------
+    # PUBLIC ALBUMS
+    # --------------------------------------------------------------
+
+    albums = list(
+        getattr(
+            profile,
+            "albums",
+            None,
+        )
+        or []
+    )
+
+    public_albums = []
+
+    for album in albums:
+
+        if not getattr(
+            album,
+            "is_published",
+            True,
+        ):
+            continue
+
+        try:
+
+            artwork_path = getattr(
+                album,
+                "artwork_path",
+                None,
+            )
+
+            if artwork_path:
+
+                from app.services.storage import (
+                    r2_presigned_url,
+                )
+
+                album.artwork_url = (
+                    r2_presigned_url(
+                        artwork_path
+                    )
+                )
+
+        except Exception:
+
+            pass
+
+        public_albums.append(
+            album
+        )
+
+    # --------------------------------------------------------------
+    # PUBLIC CREATOR
+    #
+    # profile is deliberately passed as creator as well because
+    # existing templates use both names in different places.
+    # --------------------------------------------------------------
+
+    creator = getattr(
+        profile,
+        "user",
+        None,
+    )
+
+    if creator is None:
+        creator = profile
+
+    # --------------------------------------------------------------
+    # CANONICAL STORE URL
+    # --------------------------------------------------------------
+
+    store_url = (
+        str(
+            request.base_url
+        ).rstrip("/")
+        + "/store/"
+        + str(profile.slug)
+    )
+
+    # --------------------------------------------------------------
+    # TEMPLATE
+    # --------------------------------------------------------------
+
+    return templates.TemplateResponse(
+        request,
+        "profile_detail.html",
+        ctx(
+            request,
+            current_user,
+
+            profile=profile,
+            creator=creator,
+
+            tracks=public_tracks,
+            albums=public_albums,
+
+            store_url=store_url,
+            store_path=(
+                "/store/"
+                + str(profile.slug)
+            ),
+
+            profile_slug=str(
+                profile.slug
+            ),
+        ),
+    )
+
+
+# ======================================================================
+# PRIMARY PUBLIC STORE ROUTE
+# ======================================================================
+
+@router.get(
+    "/store/{slug}",
+    name="public_store",
+)
+def public_store(
+    request: Request,
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+
+    return _public_creator_store(
+        request=request,
+        slug=slug,
+        db=db,
+        current_user=current_user,
+    )
+
+
+# ======================================================================
+# CREATOR URL COMPATIBILITY
+# ======================================================================
+
+@router.get(
+    "/creator/{slug}",
+    name="creator_store",
+)
+def creator_store(
+    request: Request,
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+
+    return _public_creator_store(
+        request=request,
+        slug=slug,
+        db=db,
+        current_user=current_user,
+    )
+
+
+# ======================================================================
+# PROFILE URL COMPATIBILITY
+# ======================================================================
+
+@router.get(
+    "/profile/{slug}",
+    name="profile_store",
+)
+def profile_detail_legacy(
+    request: Request,
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(
+        get_optional_user
+    ),
+):
+
+    return _public_creator_store(
+        request=request,
+        slug=slug,
+        db=db,
+        current_user=current_user,
+    )
+
+
+# ======================================================================
+# BUYER ACCOUNT
+# ======================================================================
 
 @router.get("/account")
 def account(
@@ -820,35 +693,29 @@ def account(
         require_user
     ),
 ):
+
     role = getattr(
-        current_user,
-        "role",
-        None,
-    )
-
-    role_value = getattr(
-        role,
+        current_user.role,
         "value",
-        role,
+        current_user.role,
     )
 
-    role_value = str(
-        role_value or ""
+    role = str(
+        role
     ).strip().lower()
 
-    # Producers/creators should remain
-    # on their producer dashboard.
-    if role_value in {
+    if role in {
         "creator",
         "producer",
     }:
+
         return RedirectResponse(
             url="/dashboard",
             status_code=303,
         )
 
-    # Administrators keep their admin area.
-    if role_value == "admin":
+    if role == "admin":
+
         return RedirectResponse(
             url="/admin",
             status_code=303,
@@ -889,40 +756,38 @@ def account(
     )
 
     total_spent = sum(
-        float(
+        (
             order.gross_amount or 0
-        )
-        for order in completed_orders
+            for order
+            in completed_orders
+        ),
+        0,
     )
 
     return templates.TemplateResponse(
         request,
         "account.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "profile": profile,
-            "completed_orders": completed_orders,
-            "pending_orders": pending_orders,
-            "purchase_count": len(
+        ctx(
+            request,
+            current_user,
+            profile=profile,
+            completed_orders=completed_orders,
+            pending_orders=pending_orders,
+            purchase_count=len(
                 completed_orders
             ),
-            "pending_count": len(
-                pending_orders
-            ),
-            "total_spent": total_spent,
-            "current_year": 2026,
-        },
+            total_spent=total_spent,
+        ),
     )
 
 
-# ============================================================
-# PURCHASES
-# ============================================================
+# ======================================================================
+# MY PURCHASES
+# ======================================================================
 
-@router.get("/account/purchases")
-@router.get("/purchases")
+@router.get(
+    "/account/purchases"
+)
 def account_purchases(
     request: Request,
     db: Session = Depends(get_db),
@@ -930,6 +795,7 @@ def account_purchases(
         require_user
     ),
 ):
+
     licenses = (
         db.query(License)
         .filter(
@@ -945,22 +811,21 @@ def account_purchases(
     return templates.TemplateResponse(
         request,
         "account_purchases.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "licenses": licenses,
-            "current_year": 2026,
-        },
+        ctx(
+            request,
+            current_user,
+            licenses=licenses,
+        ),
     )
 
 
-# ============================================================
-# DOWNLOADS
-# ============================================================
+# ======================================================================
+# MY DOWNLOADS
+# ======================================================================
 
-@router.get("/account/downloads")
-@router.get("/downloads")
+@router.get(
+    "/account/downloads"
+)
 def account_downloads(
     request: Request,
     db: Session = Depends(get_db),
@@ -968,6 +833,7 @@ def account_downloads(
         require_user
     ),
 ):
+
     licenses = (
         db.query(License)
         .filter(
@@ -983,19 +849,17 @@ def account_downloads(
     return templates.TemplateResponse(
         request,
         "account_downloads.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "licenses": licenses,
-            "current_year": 2026,
-        },
+        ctx(
+            request,
+            current_user,
+            licenses=licenses,
+        ),
     )
 
 
-# ============================================================
-# SECURE PURCHASE DOWNLOAD
-# ============================================================
+# ======================================================================
+# SECURE TRACK DOWNLOAD
+# ======================================================================
 
 @router.get(
     "/account/download/{track_id}"
@@ -1007,6 +871,7 @@ def download_track(
         require_user
     ),
 ):
+
     license_record = (
         db.query(License)
         .filter(
@@ -1019,11 +884,12 @@ def download_track(
     )
 
     if not license_record:
+
         raise HTTPException(
             status_code=403,
             detail=(
-                "You do not own this "
-                "track."
+                "You do not own "
+                "this track."
             ),
         )
 
@@ -1036,21 +902,20 @@ def download_track(
     )
 
     if not track:
+
         raise HTTPException(
             status_code=404,
             detail="Track not found.",
         )
 
-    stored_path = _value(
+    stored_path = getattr(
         track,
         "audio_file_path",
-        "audio_path",
-        "file_path",
-        "audio_url",
-        default=None,
+        None,
     )
 
     if not stored_path:
+
         raise HTTPException(
             status_code=404,
             detail=(
@@ -1060,25 +925,36 @@ def download_track(
             ),
         )
 
-    stored_path = str(
+    stored_text = str(
         stored_path
-    )
+    ).strip()
 
-    if stored_path.startswith(
+    if stored_text.startswith(
         (
             "http://",
             "https://",
+            "r2://",
+            "s3://",
         )
     ):
-        return RedirectResponse(
-            stored_path
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "This download is stored "
+                "in cloud storage and is "
+                "not available through "
+                "the local download "
+                "endpoint."
+            ),
         )
 
-    file_path = _safe_local_path(
-        stored_path
+    path = _local_media_path(
+        stored_text
     )
 
-    if file_path is None:
+    if not path:
+
         raise HTTPException(
             status_code=404,
             detail=(
@@ -1101,118 +977,213 @@ def download_track(
         character
         if (
             character.isalnum()
-            or character in " ._-"
+            or character
+            in " ._-"
         )
         else "_"
-        for character in str(title)
+        for character
+        in str(title)
     ).strip()
 
-    if not safe_title:
-        safe_title = "BeatHub_Track"
-
-    suffix = (
-        file_path.suffix.lower()
+    filename = (
+        f"{safe_title or 'BeatHub_Track'}"
+        f"{path.suffix.lower() or '.mp3'}"
     )
-
-    allowed_suffixes = {
-        ".mp3",
-        ".wav",
-        ".m4a",
-        ".aac",
-        ".ogg",
-        ".opus",
-        ".flac",
-    }
-
-    if suffix not in allowed_suffixes:
-        suffix = ".mp3"
-
-    media_types = {
-        ".mp3": "audio/mpeg",
-        ".wav": "audio/wav",
-        ".m4a": "audio/mp4",
-        ".aac": "audio/aac",
-        ".ogg": "audio/ogg",
-        ".opus": "audio/opus",
-        ".flac": "audio/flac",
-    }
 
     return FileResponse(
-        path=str(file_path),
-        media_type=media_types.get(
-            suffix,
-            "application/octet-stream",
+        path=str(path),
+        media_type=_media_content_type(
+            path
         ),
-        filename=(
-            f"{safe_title}{suffix}"
+        filename=filename,
+        headers={
+            "Cache-Control":
+                "private, no-store",
+        },
+    )
+
+
+# ======================================================================
+# MY ORDERS
+# ======================================================================
+
+@router.get(
+    "/account/orders"
+)
+def account_orders(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_user
+    ),
+):
+
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.buyer_id
+            == current_user.id
+        )
+        .order_by(
+            Order.created_at.desc()
+        )
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "account_orders.html",
+        ctx(
+            request,
+            current_user,
+            orders=orders,
         ),
     )
 
 
-# ============================================================
-# TERMS
-# ============================================================
+# ======================================================================
+# ACCOUNT SETTINGS
+# ======================================================================
 
-@router.get("/terms")
-def terms_page(
+@router.get(
+    "/account/settings"
+)
+def account_settings(
     request: Request,
-    current_user=Depends(
-        get_optional_user
+    current_user: User = Depends(
+        require_user
     ),
 ):
+
     return templates.TemplateResponse(
         request,
-        "terms.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-        },
+        "account_settings.html",
+        ctx(
+            request,
+            current_user,
+        ),
     )
 
 
-# ============================================================
-# PRIVACY
-# ============================================================
+# ======================================================================
+# LOCAL MEDIA COMPATIBILITY
+#
+# Only files inside MEDIA_ROOT may be served.
+# ======================================================================
 
-@router.get("/privacy")
-def privacy_page(
-    request: Request,
-    current_user=Depends(
-        get_optional_user
-    ),
+@router.get(
+    "/media/{media_path:path}",
+    include_in_schema=False,
+)
+def media_file(
+    media_path: str,
 ):
-    return templates.TemplateResponse(
-        request,
-        "privacy.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-        },
+
+    clean = (
+        str(media_path or "")
+        .replace("\\", "/")
+        .lstrip("/")
+    )
+
+    if (
+        not clean
+        or clean.startswith(
+            (
+                ".",
+                "../",
+                "..\\",
+            )
+        )
+    ):
+
+        raise HTTPException(
+            status_code=404,
+            detail="Media file not found.",
+        )
+
+    return _serve_local_media(
+        f"media/{clean}"
     )
 
 
-# ============================================================
-# CONTACT
-# ============================================================
+# ======================================================================
+# DASHBOARD COMPATIBILITY
+# ======================================================================
 
-@router.get("/contact")
-def contact_page(
-    request: Request,
-    current_user=Depends(
-        get_optional_user
+@router.get(
+    "/artist/dashboard",
+    include_in_schema=False,
+)
+@router.get(
+    "/creator/dashboard",
+    include_in_schema=False,
+)
+@router.get(
+    "/producer/dashboard",
+    include_in_schema=False,
+)
+@router.get(
+    "/dashboard/home",
+    include_in_schema=False,
+)
+@router.get(
+    "/dashboard/index",
+    include_in_schema=False,
+)
+def dashboard_alias(
+    current_user: User = Depends(
+        require_user
     ),
 ):
-    return templates.TemplateResponse(
-        request,
-        "contact.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-        },
+
+    role = getattr(
+        current_user.role,
+        "value",
+        current_user.role,
     )
+
+    role = str(
+        role
+    ).strip().lower()
+
+    if role in {
+        "creator",
+        "producer",
+    }:
+
+        return RedirectResponse(
+            url="/dashboard",
+            status_code=303,
+        )
+
+    if role == "admin":
+
+        return RedirectResponse(
+            url="/admin",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url="/account",
+        status_code=303,
+    )
+
+
+# ======================================================================
+# HEALTH
+# ======================================================================
+
+@router.api_route(
+    "/healthz",
+    methods=[
+        "GET",
+        "HEAD",
+    ],
+    include_in_schema=False,
+)
+def healthz_compat():
+
+    return {
+        "status": "ok",
+    }
+    
