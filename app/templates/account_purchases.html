@@ -4,126 +4,933 @@
 
 {% block content %}
 
-<section style="padding:40px 0;">
-  <div style="max-width:1000px;margin:0 auto;">
+<style>
+  /* ============================================================
+     BEATHUB — PURCHASES / LICENSE LIBRARY
+     Premium black + warm gold design
+     Data structure intentionally preserved:
+       - licenses
+       - license.order
+       - license.order.track
+       - license.order.album
+       - license.track_id
+  ============================================================ */
 
-    <div class="eyebrow">MY PURCHASES</div>
+  .bh-purchases {
+    --gold: #e4bd45;
+    --gold-light: #f4d76b;
+    --gold-soft: rgba(228, 189, 69, .10);
+    --gold-line: rgba(228, 189, 69, .22);
 
-    <h1 style="font-size:32px;margin:6px 0 8px;">
-      Your Purchases
-    </h1>
+    --bg: #080909;
+    --panel: #111210;
+    --panel-2: #151613;
 
-    <p style="color:var(--text-muted);">
-      Beats and licenses you own.
-    </p>
+    --text: #f5f4ee;
+    --muted: #96968f;
+    --muted-2: #686862;
+
+    --line: rgba(255,255,255,.075);
+    --line-hover: rgba(228,189,69,.28);
+
+    width: 100%;
+    min-height: 100%;
+    padding: 52px 20px 85px;
+    position: relative;
+    overflow: hidden;
+
+    background:
+      radial-gradient(
+        circle at 88% 0%,
+        rgba(228,189,69,.085),
+        transparent 32%
+      ),
+      radial-gradient(
+        circle at 0% 60%,
+        rgba(228,189,69,.045),
+        transparent 28%
+      ),
+      linear-gradient(
+        180deg,
+        #080909 0%,
+        #090a09 55%,
+        #070808 100%
+      );
+
+    color: var(--text);
+  }
+
+  .bh-purchases::before {
+    content: "";
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    left: -400px;
+    bottom: -420px;
+    border: 1px solid rgba(228,189,69,.08);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .bh-purchases::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 7%;
+    width: 1px;
+    height: 190px;
+    background: linear-gradient(
+      to bottom,
+      rgba(228,189,69,.25),
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  .bh-purchases-inner {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+  /* ============================================================
+     HEADER
+  ============================================================ */
+
+  .bh-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 30px;
+    margin-bottom: 30px;
+  }
+
+  .bh-brand {
+    margin-bottom: 20px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 950;
+    letter-spacing: .16em;
+    line-height: 1;
+  }
+
+  .bh-brand span {
+    color: var(--gold);
+  }
+
+  .bh-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--gold-light);
+    font-size: 10px;
+    font-weight: 950;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+  }
+
+  .bh-eyebrow::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 13px rgba(228,189,69,.55);
+  }
+
+  .bh-title {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(38px, 5vw, 58px);
+    line-height: .98;
+    font-weight: 950;
+    letter-spacing: -.045em;
+  }
+
+  .bh-title span {
+    color: var(--gold);
+  }
+
+  .bh-subtitle {
+    max-width: 620px;
+    margin: 14px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  /* ============================================================
+     HEADER ACTIONS
+  ============================================================ */
+
+  .bh-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 9px;
+    flex-wrap: wrap;
+  }
+
+  .bh-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 17px;
+    border-radius: 9px;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .02em;
+    transition:
+      transform .18s ease,
+      border-color .18s ease,
+      background .18s ease,
+      box-shadow .18s ease;
+  }
+
+  .bh-btn:hover {
+    transform: translateY(-2px);
+  }
+
+  .bh-btn-primary {
+    color: #11110d;
+    border: 1px solid rgba(244,215,107,.55);
+    background:
+      linear-gradient(
+        135deg,
+        #f8df7d 0%,
+        #d3a82c 100%
+      );
+    box-shadow:
+      0 12px 28px rgba(190,145,20,.12);
+  }
+
+  .bh-btn-primary:hover {
+    color: #11110d;
+    border-color: var(--gold-light);
+    background:
+      linear-gradient(
+        135deg,
+        #ffeb9d 0%,
+        #dfb63e 100%
+      );
+    box-shadow:
+      0 16px 35px rgba(190,145,20,.20);
+  }
+
+  .bh-btn-outline {
+    color: #deded8;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,.025);
+  }
+
+  .bh-btn-outline:hover {
+    color: #fff;
+    border-color: var(--line-hover);
+    background: var(--gold-soft);
+  }
+
+  /* ============================================================
+     LIBRARY SUMMARY
+  ============================================================ */
+
+  .bh-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 22px;
+    padding: 16px 19px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background:
+      linear-gradient(
+        90deg,
+        rgba(228,189,69,.045),
+        rgba(255,255,255,.018)
+      );
+  }
+
+  .bh-summary-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .bh-summary-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--gold-line);
+    border-radius: 9px;
+    background: rgba(228,189,69,.055);
+    color: var(--gold-light);
+    font-size: 17px;
+  }
+
+  .bh-summary-text {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .bh-summary-number {
+    color: #fff;
+    font-weight: 950;
+  }
+
+  .bh-summary-status {
+    color: #65655f;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .10em;
+    text-transform: uppercase;
+  }
+
+  /* ============================================================
+     LICENSE LIST
+  ============================================================ */
+
+  .bh-license-list {
+    display: grid;
+    gap: 16px;
+  }
+
+  .bh-license-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background:
+      linear-gradient(
+        135deg,
+        rgba(19,20,18,.98),
+        rgba(11,12,11,.98)
+      );
+    box-shadow:
+      0 18px 48px rgba(0,0,0,.22);
+    transition:
+      transform .20s ease,
+      border-color .20s ease,
+      box-shadow .20s ease;
+  }
+
+  .bh-license-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--line-hover);
+    box-shadow:
+      0 24px 58px rgba(0,0,0,.36);
+  }
+
+  .bh-license-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background:
+      linear-gradient(
+        180deg,
+        var(--gold),
+        rgba(228,189,69,.10)
+      );
+    opacity: .75;
+  }
+
+  .bh-license-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    padding: 24px 24px 20px 27px;
+  }
+
+  /* ============================================================
+     PURCHASE TITLE
+  ============================================================ */
+
+  .bh-purchase-info {
+    min-width: 0;
+  }
+
+  .bh-label {
+    margin-bottom: 7px;
+    color: var(--gold-light);
+    font-size: 9px;
+    font-weight: 950;
+    letter-spacing: .17em;
+    text-transform: uppercase;
+  }
+
+  .bh-track-name {
+    margin: 0;
+    color: #fff;
+    font-size: 23px;
+    line-height: 1.2;
+    font-weight: 900;
+    letter-spacing: -.02em;
+    word-break: break-word;
+  }
+
+  .bh-license-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 10px;
+    padding: 6px 9px;
+    border: 1px solid rgba(228,189,69,.15);
+    border-radius: 7px;
+    background: rgba(228,189,69,.045);
+    color: #bdbdb6;
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .bh-license-type::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5ee58b;
+    box-shadow: 0 0 9px rgba(94,229,139,.42);
+  }
+
+  /* ============================================================
+     ORDER INFORMATION
+  ============================================================ */
+
+  .bh-order-info {
+    min-width: 230px;
+    text-align: right;
+  }
+
+  .bh-order-number {
+    color: #f0f0ea;
+    font-size: 12px;
+    font-weight: 900;
+    word-break: break-all;
+  }
+
+  .bh-order-amount {
+    margin-top: 6px;
+    color: var(--gold-light);
+    font-size: 18px;
+    font-weight: 950;
+  }
+
+  .bh-order-label {
+    margin-bottom: 5px;
+    color: #65655f;
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+  }
+
+  /* ============================================================
+     CARD FOOTER
+  ============================================================ */
+
+  .bh-license-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 14px 24px 15px 27px;
+    border-top: 1px solid rgba(255,255,255,.055);
+    background: rgba(255,255,255,.012);
+  }
+
+  .bh-owned-text {
+    color: #686862;
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .bh-download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 17px;
+    border-radius: 8px;
+    border: 1px solid rgba(244,215,107,.45);
+    background:
+      linear-gradient(
+        135deg,
+        #f8df7d,
+        #d3a82c
+      );
+    color: #11110d;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 950;
+    letter-spacing: .04em;
+    transition:
+      transform .18s ease,
+      box-shadow .18s ease;
+  }
+
+  .bh-download:hover {
+    transform: translateY(-2px);
+    color: #11110d;
+    box-shadow:
+      0 10px 25px rgba(190,145,20,.18);
+  }
+
+  /* ============================================================
+     ALBUM / GENERIC PURCHASE
+  ============================================================ */
+
+  .bh-kind {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 8px;
+  }
+
+  /* ============================================================
+     EMPTY STATE
+  ============================================================ */
+
+  .bh-empty {
+    padding: 68px 25px;
+    border: 1px solid var(--line);
+    border-radius: 17px;
+    background:
+      radial-gradient(
+        circle at 50% 0%,
+        rgba(228,189,69,.075),
+        transparent 40%
+      ),
+      rgba(255,255,255,.018);
+    text-align: center;
+  }
+
+  .bh-empty-icon {
+    width: 72px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 19px;
+    border: 1px solid var(--gold-line);
+    border-radius: 50%;
+    background: rgba(228,189,69,.045);
+    color: var(--gold-light);
+    font-size: 27px;
+  }
+
+  .bh-empty h2 {
+    margin: 0 0 9px;
+    color: #fff;
+    font-size: 25px;
+    font-weight: 900;
+  }
+
+  .bh-empty p {
+    max-width: 520px;
+    margin: 0 auto 25px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.75;
+  }
+
+  /* ============================================================
+     BOTTOM NAV
+  ============================================================ */
+
+  .bh-bottom-nav {
+    display: flex;
+    justify-content: center;
+    margin-top: 30px;
+  }
+
+  /* ============================================================
+     FOOTER MARK
+  ============================================================ */
+
+  .bh-footer-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 38px;
+    color: #4e4e49;
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .bh-footer-mark::before,
+  .bh-footer-mark::after {
+    content: "";
+    width: 55px;
+    height: 1px;
+    background: rgba(228,189,69,.10);
+  }
+
+  /* ============================================================
+     RESPONSIVE
+  ============================================================ */
+
+  @media (max-width: 760px) {
+
+    .bh-purchases {
+      padding: 38px 14px 65px;
+    }
+
+    .bh-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 23px;
+    }
+
+    .bh-header-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .bh-license-main {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 20px;
+      padding: 21px 19px 18px 22px;
+    }
+
+    .bh-order-info {
+      width: 100%;
+      min-width: 0;
+      text-align: left;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.055);
+    }
+
+    .bh-license-footer {
+      align-items: stretch;
+      flex-direction: column;
+      padding: 14px 19px 16px 22px;
+    }
+
+    .bh-download {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+
+    .bh-title {
+      font-size: 39px;
+    }
+
+    .bh-header-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .bh-btn {
+      width: 100%;
+      padding: 0 9px;
+    }
+
+    .bh-summary-status {
+      display: none;
+    }
+
+    .bh-summary {
+      padding: 14px;
+    }
+
+    .bh-track-name {
+      font-size: 20px;
+    }
+  }
+</style>
+
+
+<section class="bh-purchases">
+
+  <div class="bh-purchases-inner">
+
+    <!-- ========================================================
+         HEADER
+    ========================================================= -->
+
+    <header class="bh-header">
+
+      <div>
+
+        <div class="bh-brand">
+          BEAT<span>HUB</span>
+        </div>
+
+        <div class="bh-eyebrow">
+          My Music Library
+        </div>
+
+        <h1 class="bh-title">
+          Your <span>Purchases.</span>
+        </h1>
+
+        <p class="bh-subtitle">
+          Every confirmed BeatHub purchase and license in one place.
+          Access your music whenever inspiration calls.
+        </p>
+
+      </div>
+
+
+      <div class="bh-header-actions">
+
+        <a
+          href="/beats"
+          class="bh-btn bh-btn-primary"
+        >
+          Browse Beats
+        </a>
+
+        <a
+          href="/dashboard"
+          class="bh-btn bh-btn-outline"
+        >
+          Dashboard
+        </a>
+
+      </div>
+
+    </header>
+
+
+    <!-- ========================================================
+         SUMMARY
+    ========================================================= -->
+
+    <div class="bh-summary">
+
+      <div class="bh-summary-left">
+
+        <div class="bh-summary-icon">
+          ♪
+        </div>
+
+        <div class="bh-summary-text">
+
+          <span class="bh-summary-number">
+            {{ licenses|length }}
+          </span>
+
+          {% if licenses|length == 1 %}
+            purchase
+          {% else %}
+            purchases
+          {% endif %}
+
+          in your library
+
+        </div>
+
+      </div>
+
+      <div class="bh-summary-status">
+        BeatHub Licensed Music
+      </div>
+
+    </div>
+
+
+    <!-- ========================================================
+         PURCHASES
+    ========================================================= -->
 
     {% if licenses %}
 
-      <div style="margin-top:28px;display:grid;gap:16px;">
+      <div class="bh-license-list">
 
         {% for license in licenses %}
 
-          <div class="stat-card">
+          <article class="bh-license-card">
 
-            <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+            <div class="bh-license-main">
 
-              <div>
-                <div class="label">PURCHASED</div>
+              <!-- ==================================================
+                   ITEM INFORMATION
+              ================================================== -->
+
+              <div class="bh-purchase-info">
+
+                <div class="bh-label">
+                  Purchased
+                </div>
+
 
                 {% if license.order and license.order.track %}
 
-                  <h2 style="margin:5px 0;">
+                  <h2 class="bh-track-name">
                     {{ license.order.track.title }}
                   </h2>
 
-                  <p style="color:var(--text-muted);margin:0;">
-                    {{ license.order.sales_model_at_purchase|replace("_", " ")|title }}
-                  </p>
+                  <div class="bh-license-type">
+
+                    {{ license.order.sales_model_at_purchase
+                       |replace("_", " ")
+                       |title }}
+
+                  </div>
+
 
                 {% elif license.order and license.order.album %}
 
-                  <h2 style="margin:5px 0;">
+                  <h2 class="bh-track-name">
                     {{ license.order.album.title }}
                   </h2>
 
-                  <p style="color:var(--text-muted);margin:0;">
+                  <div class="bh-kind">
                     Album
-                  </p>
+                  </div>
+
 
                 {% else %}
 
-                  <h2 style="margin:5px 0;">
+                  <h2 class="bh-track-name">
                     BeatHub Purchase
                   </h2>
+
+                  <div class="bh-kind">
+                    Purchased item
+                  </div>
 
                 {% endif %}
 
               </div>
 
+
+              <!-- ==================================================
+                   ORDER INFORMATION
+              ================================================== -->
+
               {% if license.order %}
 
-                <div style="text-align:right;">
-                  <div class="label">ORDER</div>
+                <div class="bh-order-info">
 
-                  <strong>
-                    {{ license.order.order_number }}
-                  </strong>
-
-                  <div style="color:var(--text-muted);margin-top:5px;">
-                    KSh {{ "{:,.2f}".format(license.order.gross_amount|float) }}
+                  <div class="bh-order-label">
+                    Order
                   </div>
+
+                  <div class="bh-order-number">
+                    {{ license.order.order_number }}
+                  </div>
+
+                  <div class="bh-order-amount">
+                    KSh {{ "{:,.2f}".format(
+                      license.order.gross_amount|float
+                    ) }}
+                  </div>
+
                 </div>
 
               {% endif %}
 
             </div>
 
-            {% if license.track_id %}
 
-              <div style="margin-top:18px;">
-                <a
-                  href="/account/download/{{ license.track_id }}"
-                  class="btn btn-primary"
-                >
-                  📥 Download
-                </a>
+            <!-- ==================================================
+                 CARD FOOTER
+            ================================================== -->
+
+            <div class="bh-license-footer">
+
+              <div class="bh-owned-text">
+                ✓ Licensed to your BeatHub account
               </div>
 
-            {% endif %}
 
-          </div>
+              {% if license.track_id %}
+
+                <a
+                  href="/account/download/{{ license.track_id }}"
+                  class="bh-download"
+                >
+                  ↓&nbsp; Download Beat
+                </a>
+
+              {% endif %}
+
+            </div>
+
+          </article>
 
         {% endfor %}
 
       </div>
 
+
     {% else %}
 
-      <div class="form-card" style="margin-top:28px;padding:30px;text-align:center;">
+      <!-- ========================================================
+           EMPTY LIBRARY
+      ========================================================= -->
 
-        <div style="font-size:40px;">🛒</div>
+      <section class="bh-empty">
 
-        <h2>No purchases yet</h2>
+        <div class="bh-empty-icon">
+          ♪
+        </div>
 
-        <p style="color:var(--text-muted);">
-          Your completed BeatHub purchases will appear here.
+        <h2>
+          Your library is waiting.
+        </h2>
+
+        <p>
+          Your completed BeatHub purchases will appear here
+          automatically. Find a beat you love, choose your license,
+          and start creating.
         </p>
 
-        <a href="/beats" class="btn btn-primary">
-          Browse Beats
+        <a
+          href="/beats"
+          class="bh-btn bh-btn-primary"
+        >
+          Find Your Next Beat
         </a>
 
-      </div>
+      </section>
 
     {% endif %}
 
-    <div style="margin-top:25px;">
-      <a href="/account" class="btn btn-outline">
-        ← Back to My Account
+
+    <!-- ========================================================
+         BOTTOM NAVIGATION
+    ========================================================= -->
+
+    <div class="bh-bottom-nav">
+
+      <a
+        href="/beats"
+        class="bh-btn bh-btn-outline"
+      >
+        ← Continue Browsing Beats
       </a>
+
+    </div>
+
+
+    <div class="bh-footer-mark">
+      Create · Connect · Elevate
     </div>
 
   </div>
+
 </section>
 
 {% endblock %}
