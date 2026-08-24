@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -117,16 +117,10 @@ def _track_audio_storage_path(track: Track) -> Optional[str]:
         "stream_url",
         "mp3_url",
         "preview_audio_url",
-        # Existing uploads may store the original audio under any of
-        # these fields. Keep all compatibility fallbacks so old tracks
-        # remain playable without a database migration.
+        # Current uploads store the original uploaded audio here.
+        # When no separate preview file exists, use the uploaded audio
+        # through the public preview endpoint so existing tracks work.
         "audio_file_path",
-        "audio_path",
-        "file_path",
-        "track_file_path",
-        "original_audio_path",
-        "audio_file_url",
-        "file_url",
         default=None,
     )
     if value is None:
@@ -614,8 +608,126 @@ def _resolve_local_media_path(stored_path: str) -> Optional[Path]:
     return None
 
 
+def _media_content_type(path: str, fallback: str) -> str:
+    suffix = Path(str(path)).suffix.lower()
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".ogg": "audio/ogg",
+        ".flac": "audio/flac",
+    }.get(suffix, fallback)
+
+
+def _r2_media_response(
+    stored_path: str,
+    request: Request,
+    *,
+    fallback_media_type: str,
+):
+    """Serve an R2 object directly through BeatHub.
+
+    This avoids relying on a browser following a presigned redirect and also
+    supports HTTP byte ranges, which is important for HTML5 audio playback.
+    """
+    try:
+        from app.services.storage import _r2_client, _parse_r2_path
+
+        normalized = str(stored_path).strip()
+        if normalized.startswith("s3://"):
+            normalized = "r2://" + normalized[6:]
+
+        bucket, key = _parse_r2_path(normalized)
+        if not bucket or not key:
+            raise RuntimeError("Invalid R2 object path.")
+
+        client = _r2_client()
+        head = client.head_object(Bucket=bucket, Key=key)
+        total_size = int(head.get("ContentLength") or 0)
+        content_type = head.get("ContentType") or _media_content_type(key, fallback_media_type)
+
+        range_header = request.headers.get("range")
+        get_kwargs = {"Bucket": bucket, "Key": key}
+        status_code = 200
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=3600",
+        }
+
+        if range_header and range_header.startswith("bytes=") and total_size > 0:
+            raw_range = range_header[6:].split(",", 1)[0].strip()
+            start_text, _, end_text = raw_range.partition("-")
+
+            try:
+                if start_text:
+                    start = int(start_text)
+                    end = int(end_text) if end_text else total_size - 1
+                else:
+                    suffix_length = int(end_text)
+                    if suffix_length <= 0:
+                        raise ValueError
+                    start = max(0, total_size - suffix_length)
+                    end = total_size - 1
+
+                if start < 0 or start >= total_size or end < start:
+                    raise ValueError
+
+                end = min(end, total_size - 1)
+                get_kwargs["Range"] = f"bytes={start}-{end}"
+                content_length = end - start + 1
+                headers.update({
+                    "Content-Range": f"bytes {start}-{end}/{total_size}",
+                    "Content-Length": str(content_length),
+                })
+                status_code = 206
+            except (TypeError, ValueError):
+                headers["Content-Length"] = str(total_size)
+        else:
+            if total_size:
+                headers["Content-Length"] = str(total_size)
+
+        obj = client.get_object(**get_kwargs)
+        body = obj["Body"]
+
+        def iterator():
+            try:
+                while True:
+                    chunk = body.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                try:
+                    body.close()
+                except Exception:
+                    pass
+
+        return StreamingResponse(
+            iterator(),
+            status_code=status_code,
+            media_type=content_type,
+            headers=headers,
+        )
+
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unable to stream R2 media: %s", stored_path)
+        raise HTTPException(
+            status_code=404,
+            detail="Media file is currently unavailable.",
+        )
+
+
 def _media_response(
     stored_path: str,
+    request: Request,
     *,
     fallback_media_type: str,
 ):
@@ -628,20 +740,10 @@ def _media_response(
         )
 
     if value.startswith(("r2://", "s3://")):
-        try:
-            url = media_url(value)
-        except Exception:
-            url = None
-
-        if not url:
-            raise HTTPException(
-                status_code=404,
-                detail="Media is currently unavailable.",
-            )
-
-        return RedirectResponse(
-            url=url,
-            status_code=307,
+        return _r2_media_response(
+            value,
+            request,
+            fallback_media_type=fallback_media_type,
         )
 
     path = _resolve_local_media_path(value)
@@ -652,30 +754,15 @@ def _media_response(
             detail="Media file is currently unavailable.",
         )
 
-    suffix = path.suffix.lower()
-
-    content_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".mp3": "audio/mpeg",
-        ".wav": "audio/wav",
-        ".m4a": "audio/mp4",
-        ".aac": "audio/aac",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-    }
-
     return FileResponse(
         path=str(path),
-        media_type=content_types.get(
-            suffix,
+        media_type=_media_content_type(
+            str(path),
             fallback_media_type,
         ),
         headers={
             "Cache-Control": "public, max-age=3600",
+            "Accept-Ranges": "bytes",
         },
     )
 
@@ -700,11 +787,68 @@ def _get_track_by_slug(
 
 
 @router.get(
+    "/track/{slug}",
+    name="track_detail",
+)
+def track_detail(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_optional_user),
+):
+    """Public track detail page.
+
+    This route is intentionally public: buyers must be able to inspect a
+    track and preview its audio before purchasing it. Downloading the
+    purchased master remains protected by the existing download routes.
+    """
+    track = _get_track_by_slug(slug, db)
+
+    purchased = False
+    if current_user:
+        try:
+            from app.models.order import License, Order, OrderStatus
+
+            purchased = (
+                db.query(License)
+                .join(Order, License.order_id == Order.id)
+                .filter(
+                    License.buyer_id == current_user.id,
+                    License.track_id == track.id,
+                    Order.status == OrderStatus.COMPLETED,
+                )
+                .first()
+                is not None
+            )
+        except Exception:
+            logger.exception(
+                "Unable to determine purchase status for track %s",
+                slug,
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "track_detail.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "user": current_user,
+            "current_year": 2026,
+            "track": track,
+            "purchased": purchased,
+            "preview_url": f"/track/{slug}/preview",
+            "artwork_url": f"/track/{slug}/artwork",
+        },
+    )
+
+
+@router.get(
     "/track/{slug}/artwork",
     name="track_artwork",
 )
 def track_artwork(
     slug: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     track = _get_track_by_slug(slug, db)
@@ -718,6 +862,7 @@ def track_artwork(
 
     return _media_response(
         stored,
+        request,
         fallback_media_type="image/jpeg",
     )
 
@@ -728,6 +873,7 @@ def track_artwork(
 )
 def track_preview(
     slug: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     track = _get_track_by_slug(slug, db)
@@ -741,6 +887,7 @@ def track_preview(
 
     return _media_response(
         stored,
+        request,
         fallback_media_type="audio/mpeg",
     )
 
