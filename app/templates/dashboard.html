@@ -1,699 +1,1719 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - BeatHub{% endblock %}
+{% block title %}Creator Dashboard — BeatHub{% endblock %}
 
 {% block content %}
 
-<section style="padding:30px 0;">
+<style>
+    .creator-dashboard {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 10px 0 50px;
+    }
 
-  <h1 style="font-size:28px;">
-    Welcome back, {{ profile.stage_name }}
-  </h1>
+    .dashboard-hero {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 30px;
+        padding: 34px;
+        margin-bottom: 28px;
+        border: 1px solid #27272a;
+        border-radius: 22px;
+        background:
+            radial-gradient(
+                circle at 85% 15%,
+                rgba(255, 255, 255, .08),
+                transparent 30%
+            ),
+            linear-gradient(
+                135deg,
+                #18181b 0%,
+                #0f0f11 100%
+            );
+    }
 
-  <!-- PUBLIC STORE -->
+    .dashboard-hero::after {
+        content: "";
+        position: absolute;
+        width: 240px;
+        height: 240px;
+        right: -80px;
+        bottom: -130px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, .08);
+        pointer-events: none;
+    }
 
-  <div class="form-card" style="margin:20px 0 28px; padding:20px;">
+    .hero-content {
+        position: relative;
+        z-index: 1;
+    }
 
-    <div class="eyebrow">
-      YOUR PUBLIC STORE
-    </div>
+    .hero-eyebrow {
+        margin: 0 0 8px;
+        color: #a1a1aa;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .12em;
+    }
 
-    <h2 style="margin:5px 0 8px; font-size:22px;">
-      Share your BeatHub store
-    </h2>
+    .dashboard-hero h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 46px);
+        line-height: 1.05;
+        letter-spacing: -.04em;
+    }
 
-    <p class="sub" style="margin-bottom:14px;">
-      Send this link to artists, buyers, fans or your social media
-      followers. They can browse your music and purchase available tracks.
-    </p>
+    .dashboard-hero p {
+        margin: 12px 0 0;
+        max-width: 650px;
+        color: #a1a1aa;
+        line-height: 1.6;
+    }
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    .hero-actions {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
 
-      <input
-        id="store-link"
-        type="text"
-        value="{{ store_url }}"
-        readonly
-        style="flex:1; min-width:260px;"
-      >
+    .hero-actions a {
+        text-decoration: none;
+    }
 
-      <button
-        type="button"
-        class="btn btn-primary"
-        onclick="copyStoreLink()"
-      >
-        Copy Store Link
-      </button>
+    .dashboard-section {
+        margin-bottom: 28px;
+    }
 
-      <a
-        href="/profile/{{ profile.slug }}"
-        target="_blank"
-        rel="noopener"
-        class="btn btn-outline"
-      >
-        View My Store
-      </a>
+    .section-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 14px;
+    }
 
-    </div>
+    .section-heading h2 {
+        margin: 0;
+        font-size: 20px;
+    }
 
-    <div
-      id="copy-message"
-      class="sub"
-      style="margin-top:8px;"
-    ></div>
+    .section-heading p {
+        margin: 4px 0 0;
+        color: #71717a;
+        font-size: 13px;
+    }
 
-  </div>
+    .section-link {
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+    }
 
+    .section-link:hover {
+        color: #fff;
+    }
 
-  <!-- STATS -->
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+    }
 
-  <div class="dashboard-grid">
+    .stat-card {
+        position: relative;
+        min-height: 150px;
+        padding: 22px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+        overflow: hidden;
+    }
 
-    <div class="stat-card">
-      <div class="label">Total Sales</div>
-      <div class="value">
-        {{ stats.total_sales }}
-      </div>
-    </div>
+    .stat-card::after {
+        content: "";
+        position: absolute;
+        width: 90px;
+        height: 90px;
+        right: -35px;
+        top: -35px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, .06);
+    }
 
-    <div class="stat-card">
-      <div class="label">Net Earnings</div>
-      <div class="value teal">
-        KSh {{ '%.2f'|format(stats.net_earnings) }}
-      </div>
-    </div>
+    .stat-label {
+        position: relative;
+        z-index: 1;
+        color: #a1a1aa;
+        font-size: 13px;
+        font-weight: 600;
+    }
 
-    <div class="stat-card">
-      <div class="label">Available Balance</div>
-      <div class="value gold">
-        KSh {{ '%.2f'|format(stats.available_balance) }}
-      </div>
-    </div>
+    .stat-value {
+        position: relative;
+        z-index: 1;
+        margin-top: 15px;
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -.03em;
+    }
 
-    <div class="stat-card">
-      <div class="label">Pending Withdrawal</div>
-      <div class="value">
-        KSh {{ '%.2f'|format(stats.pending_withdrawal) }}
-      </div>
-    </div>
+    .stat-sub {
+        position: relative;
+        z-index: 1;
+        margin-top: 8px;
+        color: #71717a;
+        font-size: 12px;
+    }
 
-    <div class="stat-card">
-      <div class="label">Tracks</div>
-      <div class="value">
-        {{ track_count }}
-      </div>
-    </div>
+    .stat-card.balance {
+        border-color: #3f3f46;
+        background: linear-gradient(
+            145deg,
+            #18181b,
+            #101012
+        );
+    }
 
-    <div class="stat-card">
-      <div class="label">Albums</div>
-      <div class="value">
-        {{ album_count }}
-      </div>
-    </div>
+    .stat-card.balance .stat-value {
+        font-size: 34px;
+    }
 
-  </div>
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
 
+    .action-card {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        min-height: 88px;
+        padding: 18px;
+        color: inherit;
+        text-decoration: none;
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        background: #111113;
+        transition:
+            transform .18s ease,
+            border-color .18s ease,
+            background .18s ease;
+    }
 
-  <!-- ACTIONS -->
+    .action-card:hover {
+        transform: translateY(-2px);
+        border-color: #52525b;
+        background: #18181b;
+    }
 
-  <div
-    style="
-      display:flex;
-      gap:14px;
-      margin:24px 0;
-      flex-wrap:wrap;
-    "
-  >
+    .action-icon {
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: #27272a;
+        font-size: 20px;
+    }
 
-    <a
-      href="/dashboard/upload"
-      class="btn btn-primary"
-    >
-      Upload Track(s)
-    </a>
+    .action-card strong {
+        display: block;
+        font-size: 14px;
+    }
 
-    <a
-      href="/dashboard/albums/new"
-      class="btn btn-outline"
-    >
-      Create Album
-    </a>
+    .action-card span {
+        display: block;
+        margin-top: 4px;
+        color: #71717a;
+        font-size: 12px;
+    }
 
-  </div>
+    .dashboard-columns {
+        display: grid;
+        grid-template-columns:
+            minmax(0, 1.55fr)
+            minmax(320px, .85fr);
+        gap: 20px;
+        align-items: start;
+    }
 
+    .panel {
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+        overflow: hidden;
+    }
 
-  <!-- SOCIAL -->
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        padding: 20px 22px;
+        border-bottom: 1px solid #27272a;
+    }
 
-  <div class="social-links">
+    .panel-header h2 {
+        margin: 0;
+        font-size: 17px;
+    }
 
-    <a
-      href="{{ youtube_url }}"
-      target="_blank"
-      rel="noopener"
-      class="social-pill youtube"
-    >
-      YouTube Channel
-    </a>
+    .panel-header p {
+        margin: 4px 0 0;
+        color: #71717a;
+        font-size: 12px;
+    }
 
-    {% if discord_url %}
-      <a
-        href="{{ discord_url }}"
-        target="_blank"
-        rel="noopener"
-        class="social-pill discord"
-      >
-        Join our Discord
-      </a>
+    .panel-body {
+        padding: 22px;
+    }
+
+    .store-card {
+        position: relative;
+        padding: 24px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background:
+            radial-gradient(
+                circle at 100% 0%,
+                rgba(255, 255, 255, .06),
+                transparent 35%
+            ),
+            #111113;
+        overflow: hidden;
+    }
+
+    .store-card h2 {
+        margin: 0 0 8px;
+        font-size: 20px;
+    }
+
+    .store-card p {
+        margin: 0;
+        color: #a1a1aa;
+        line-height: 1.5;
+        font-size: 13px;
+    }
+
+    .store-url-box {
+        display: flex;
+        gap: 8px;
+        margin-top: 18px;
+    }
+
+    .store-url {
+        flex: 1;
+        min-width: 0;
+        padding: 12px 13px;
+        border: 1px solid #3f3f46;
+        border-radius: 10px;
+        background: #09090b;
+        color: #d4d4d8;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .copy-store {
+        border: 1px solid #3f3f46;
+        border-radius: 10px;
+        padding: 0 14px;
+        background: #27272a;
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .copy-store:hover {
+        background: #3f3f46;
+    }
+
+    .earnings-card {
+        padding: 24px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+    }
+
+    .earnings-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+    }
+
+    .earnings-top h2 {
+        margin: 0;
+        font-size: 17px;
+    }
+
+    .earnings-balance {
+        margin-top: 12px;
+        font-size: 38px;
+        font-weight: 850;
+        letter-spacing: -.04em;
+    }
+
+    .earnings-label {
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .withdraw-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 15px;
+        border-radius: 10px;
+        background: #fff;
+        color: #09090b;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .withdraw-btn:hover {
+        opacity: .9;
+    }
+
+    .earnings-breakdown {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 22px;
+    }
+
+    .earning-item {
+        padding: 14px;
+        border: 1px solid #27272a;
+        border-radius: 12px;
+        background: #09090b;
+    }
+
+    .earning-item span {
+        display: block;
+        color: #71717a;
+        font-size: 11px;
+    }
+
+    .earning-item strong {
+        display: block;
+        margin-top: 5px;
+        font-size: 15px;
+    }
+
+    .recent-table-wrap {
+        overflow-x: auto;
+    }
+
+    .recent-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .recent-table th,
+    .recent-table td {
+        padding: 14px 18px;
+        text-align: left;
+        border-bottom: 1px solid #27272a;
+        white-space: nowrap;
+    }
+
+    .recent-table th {
+        color: #71717a;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .recent-table td {
+        color: #d4d4d8;
+        font-size: 13px;
+    }
+
+    .recent-table tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .order-title {
+        color: #fff;
+        font-weight: 700;
+    }
+
+    .order-date {
+        margin-top: 3px;
+        color: #71717a;
+        font-size: 11px;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: #14532d;
+        color: #bbf7d0;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .empty-state {
+        padding: 35px 20px;
+        text-align: center;
+        color: #71717a;
+    }
+
+    .empty-state strong {
+        display: block;
+        margin-bottom: 6px;
+        color: #d4d4d8;
+    }
+
+    .content-overview {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .content-card {
+        padding: 20px;
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        background: #111113;
+    }
+
+    .content-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .content-card h3 {
+        margin: 0;
+        font-size: 15px;
+    }
+
+    .content-number {
+        margin-top: 12px;
+        font-size: 30px;
+        font-weight: 800;
+    }
+
+    .content-card p {
+        margin: 4px 0 0;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .content-card a {
+        display: inline-block;
+        margin-top: 16px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .content-card a:hover {
+        color: #fff;
+    }
+
+    .social-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 18px;
+    }
+
+    .social-link {
+        display: inline-flex;
+        align-items: center;
+        padding: 9px 12px;
+        border: 1px solid #3f3f46;
+        border-radius: 9px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .social-link:hover {
+        background: #27272a;
+        color: #fff;
+    }
+
+    .withdrawals-panel {
+        margin-top: 20px;
+    }
+
+    .withdrawal-row {
+        display: grid;
+        grid-template-columns:
+            1.2fr
+            1fr
+            1fr
+            .8fr;
+        gap: 15px;
+        align-items: center;
+        padding: 14px 20px;
+        border-bottom: 1px solid #27272a;
+    }
+
+    .withdrawal-row:last-child {
+        border-bottom: 0;
+    }
+
+    .withdrawal-label {
+        color: #71717a;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .withdrawal-value {
+        margin-top: 4px;
+        color: #e4e4e7;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .badge {
+        display: inline-flex;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: #27272a;
+        color: #d4d4d8;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .badge.pending {
+        background: #713f12;
+        color: #fde68a;
+    }
+
+    .badge.approved,
+    .badge.processing {
+        background: #1e3a5f;
+        color: #bfdbfe;
+    }
+
+    .badge.paid {
+        background: #14532d;
+        color: #bbf7d0;
+    }
+
+    .badge.rejected {
+        background: #7f1d1d;
+        color: #fecaca;
+    }
+
+    /* --------------------------------------------------------
+       SUCCESS / ERROR MESSAGES
+       -------------------------------------------------------- */
+
+    .dashboard-message {
+        margin-bottom: 20px;
+        padding: 13px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .dashboard-message.success {
+        border: 1px solid #166534;
+        background: #052e16;
+        color: #bbf7d0;
+    }
+
+    .dashboard-message.error {
+        border: 1px solid #991b1b;
+        background: #450a0a;
+        color: #fecaca;
+    }
+
+    @media (max-width: 1100px) {
+        .stats-grid {
+            grid-template-columns: repeat(
+                2,
+                minmax(0, 1fr)
+            );
+        }
+
+        .quick-actions {
+            grid-template-columns: repeat(
+                2,
+                minmax(0, 1fr)
+            );
+        }
+
+        .dashboard-columns {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .creator-dashboard {
+            padding-top: 0;
+        }
+
+        .dashboard-hero {
+            padding: 24px;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .hero-actions {
+            width: 100%;
+        }
+
+        .hero-actions a {
+            flex: 1;
+        }
+
+        .stats-grid,
+        .quick-actions,
+        .content-overview {
+            grid-template-columns: 1fr;
+        }
+
+        .earnings-top {
+            flex-direction: column;
+        }
+
+        .withdraw-btn {
+            width: 100%;
+        }
+
+        .store-url-box {
+            flex-direction: column;
+        }
+
+        .copy-store {
+            min-height: 42px;
+        }
+
+        .withdrawal-row {
+            grid-template-columns:
+                repeat(
+                    2,
+                    minmax(0, 1fr)
+                );
+        }
+    }
+</style>
+
+<div class="creator-dashboard">
+
+    <!-- =====================================================
+         QUERY MESSAGES
+         ===================================================== -->
+
+    {% if success %}
+        <div class="dashboard-message success">
+            {{ success }}
+        </div>
     {% endif %}
 
-  </div>
+    {% if error %}
+        <div class="dashboard-message error">
+            {{ error }}
+        </div>
+    {% endif %}
 
 
-  <!-- TRACK LIBRARY -->
+    <!-- =====================================================
+         HERO
+         ===================================================== -->
 
-  <div style="margin-top:45px;">
+    <section class="dashboard-hero">
 
-    <div
-      style="
-        display:flex;
-        justify-content:space-between;
-        align-items:end;
-        gap:15px;
-        flex-wrap:wrap;
-        margin-bottom:18px;
-      "
-    >
+        <div class="hero-content">
 
-      <div>
+            <div class="hero-eyebrow">
+                BeatHub Creator Studio
+            </div>
 
-        <h2 style="font-size:22px; margin:0;">
-          My Tracks
-        </h2>
+            <h1>
+                Welcome back{% if producer_name %}, {{ producer_name }}{% endif %}
+            </h1>
 
-        <p class="sub" style="margin:5px 0 0;">
+            <p>
+                Manage your beats, tracks, albums, sales and creator
+                earnings from one place.
+            </p>
 
-          {{ track_total }}
-          track{{ '' if track_total == 1 else 's' }}
+        </div>
 
-          {% if track_search %}
-            matching "{{ track_search }}"
-          {% endif %}
+        <div class="hero-actions">
 
-        </p>
+            <a
+                href="/dashboard/upload"
+                class="btn btn-primary"
+            >
+                + Upload Beat / Track
+            </a>
 
-      </div>
+            <a
+                href="/dashboard/albums/new"
+                class="btn btn-outline"
+            >
+                + Create Album
+            </a>
 
+        </div>
 
-      <form
-        method="get"
-        action="/dashboard"
-        style="
-          display:flex;
-          gap:8px;
-          min-width:300px;
-        "
-      >
-
-        <input
-          type="search"
-          name="q"
-          value="{{ track_search }}"
-          placeholder="Search title, genre or tags..."
-          style="flex:1;"
-        >
-
-        <button
-          type="submit"
-          class="btn btn-outline"
-        >
-          Search
-        </button>
-
-        {% if track_search %}
-
-          <a
-            href="/dashboard"
-            class="btn btn-outline"
-          >
-            Clear
-          </a>
-
-        {% endif %}
-
-      </form>
-
-    </div>
+    </section>
 
 
-    {% if tracks %}
+    <!-- =====================================================
+         EARNINGS / PERFORMANCE
+         ===================================================== -->
 
-      <div class="dashboard-grid">
+    <section class="dashboard-section">
 
-        {% for track in tracks %}
+        <div class="section-heading">
 
-          <div
-            class="form-card"
-            style="padding:18px;"
-          >
+            <div>
+                <h2>Performance</h2>
 
-            <!-- COVER ART -->
+                <p>
+                    Your creator activity and earnings at a glance.
+                </p>
+            </div>
 
-            {% if track.cover_art_url %}
+        </div>
 
-              <div
-                style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  margin-bottom:14px;
-                  overflow:hidden;
-                  border-radius:10px;
-                  background:#111;
-                "
-              >
+        <div class="stats-grid">
 
-                <img
-                  src="{{ track.cover_art_url }}"
-                  alt="{{ track.title }}"
-                  loading="lazy"
-                  style="
-                    width:100%;
-                    height:100%;
-                    object-fit:cover;
-                    display:block;
-                  "
-                  onerror="this.parentElement.style.display='none';"
+            <div class="stat-card balance">
+
+                <div class="stat-label">
+                    Available Balance
+                </div>
+
+                <div class="stat-value">
+                    KSh {{ "%.2f"|format(available_balance|float) }}
+                </div>
+
+                <div class="stat-sub">
+                    Ready for withdrawal
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-label">
+                    Total Sales
+                </div>
+
+                <div class="stat-value">
+                    {{ total_sales|default(0) }}
+                </div>
+
+                <div class="stat-sub">
+                    Completed orders
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-label">
+                    Net Earnings
+                </div>
+
+                <div class="stat-value">
+                    KSh {{ "%.2f"|format(net_earnings|float) }}
+                </div>
+
+                <div class="stat-sub">
+                    After platform commission
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-label">
+                    Pending Withdrawal
+                </div>
+
+                <div class="stat-value">
+                    KSh {{ "%.2f"|format(pending_withdrawal|float) }}
+                </div>
+
+                <div class="stat-sub">
+                    Currently being processed
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =====================================================
+         QUICK ACTIONS
+         ===================================================== -->
+
+    <section class="dashboard-section">
+
+        <div class="section-heading">
+
+            <div>
+                <h2>Creator Tools</h2>
+
+                <p>
+                    Everything you need to manage your BeatHub profile.
+                </p>
+            </div>
+
+        </div>
+
+        <div class="quick-actions">
+
+            <a
+                href="/dashboard/upload"
+                class="action-card"
+            >
+
+                <div class="action-icon">
+                    🎵
+                </div>
+
+                <div>
+                    <strong>Upload Beat / Track</strong>
+
+                    <span>
+                        Add new music to your catalog
+                    </span>
+                </div>
+
+            </a>
+
+
+            <a
+                href="/dashboard/albums/new"
+                class="action-card"
+            >
+
+                <div class="action-icon">
+                    💿
+                </div>
+
+                <div>
+                    <strong>Create Album</strong>
+
+                    <span>
+                        Package tracks into an album
+                    </span>
+                </div>
+
+            </a>
+
+
+            <a
+                href="/dashboard/merch"
+                class="action-card"
+            >
+
+                <div class="action-icon">
+                    👕
+                </div>
+
+                <div>
+                    <strong>Manage Merchandise</strong>
+
+                    <span>
+                        Add products to your creator brand
+                    </span>
+                </div>
+
+            </a>
+
+
+            {% if store_url %}
+
+                <a
+                    href="{{ store_url }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="action-card"
                 >
 
-              </div>
+                    <div class="action-icon">
+                        🛍️
+                    </div>
+
+                    <div>
+                        <strong>View Public Store</strong>
+
+                        <span>
+                            See what your customers see
+                        </span>
+                    </div>
+
+                </a>
+
+            {% else %}
+
+                <a
+                    href="/dashboard"
+                    class="action-card"
+                >
+
+                    <div class="action-icon">
+                        🛍️
+                    </div>
+
+                    <div>
+                        <strong>Your Public Store</strong>
+
+                        <span>
+                            Store link will appear here
+                        </span>
+                    </div>
+
+                </a>
 
             {% endif %}
 
 
-            <div class="eyebrow">
-
-              {{ track.genre or 'BEAT' }}
-
-              {% if track.bpm %}
-                &middot; {{ track.bpm }} BPM
-              {% endif %}
-
-            </div>
-
-
-            <h3
-              style="
-                font-size:19px;
-                margin:5px 0 8px;
-              "
-            >
-              {{ track.title }}
-            </h3>
-
-
-            <div class="sub">
-              KSh {{ '%.2f'|format(track.price) }}
-            </div>
-
-
-            <div
-              style="
-                display:flex;
-                gap:7px;
-                flex-wrap:wrap;
-                margin-top:10px;
-              "
-            >
-
-              {% if track.sales_model.value == 'exclusive' %}
-
-                {% if track.is_sold %}
-
-                  <span class="badge badge-sold">
-                    SOLD
-                  </span>
-
-                {% else %}
-
-                  <span class="badge badge-exclusive">
-                    EXCLUSIVE
-                  </span>
-
-                {% endif %}
-
-              {% else %}
-
-                <span class="badge badge-nonexclusive">
-                  NON-EXCLUSIVE
-                </span>
-
-              {% endif %}
-
-
-              {% if track.is_published %}
-
-                <span class="badge">
-                  PUBLISHED
-                </span>
-
-              {% else %}
-
-                <span class="badge badge-sold">
-                  UNPUBLISHED
-                </span>
-
-              {% endif %}
-
-            </div>
-
-
-            <div
-              style="
-                display:flex;
-                gap:8px;
-                margin-top:16px;
-                flex-wrap:wrap;
-              "
-            >
-
-              <a
-                href="/track/{{ track.slug }}"
-                target="_blank"
-                rel="noopener"
-                class="btn btn-outline"
-              >
-                View Store Page
-              </a>
-
-              {% if not track.is_sold %}
-              <form
-                method="post"
-                action="/dashboard/tracks/{{ track.id }}/delete"
-                style="display:inline;"
-                onsubmit="return confirm('Delete {{ track.title|e }}? This will remove the uploaded audio and artwork.');"
-              >
-                <button
-                  type="submit"
-                  class="btn btn-outline"
-                  style="border-color:rgba(255,90,90,.35);color:#ff8b8b;"
-                >
-                  Delete
-                </button>
-              </form>
-              {% else %}
-              <span
-                class="btn btn-outline"
-                style="opacity:.45;cursor:not-allowed;"
-                title="Sold tracks cannot be deleted."
-              >
-                Sold
-              </span>
-              {% endif %}
-
-            </div>
-
-          </div>
-
-        {% endfor %}
-
-      </div>
-
-
-      <!-- PAGINATION -->
-
-      {% if track_total_pages > 1 %}
-
-        <div
-          style="
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            gap:8px;
-            flex-wrap:wrap;
-            margin-top:28px;
-          "
-        >
-
-          {% if track_page > 1 %}
-
             <a
-              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page - 1 }}"
-              class="btn btn-outline"
+                href="/dashboard/withdraw"
+                class="action-card"
             >
-              Previous
+
+                <div class="action-icon">
+                    💰
+                </div>
+
+                <div>
+                    <strong>Withdraw Earnings</strong>
+
+                    <span>
+                        Request an M-Pesa payout
+                    </span>
+                </div>
+
             </a>
-
-          {% endif %}
-
-
-          <span class="sub">
-            Page {{ track_page }}
-            of
-            {{ track_total_pages }}
-          </span>
-
-
-          {% if track_page < track_total_pages %}
-
-            <a
-              href="/dashboard?q={{ track_search|urlencode }}&page={{ track_page + 1 }}"
-              class="btn btn-outline"
-            >
-              Next
-            </a>
-
-          {% endif %}
 
         </div>
 
-      {% endif %}
+    </section>
 
 
-    {% else %}
+    <!-- =====================================================
+         MAIN TWO-COLUMN AREA
+         ===================================================== -->
 
-      <div
-        class="form-card"
-        style="
-          padding:30px;
-          text-align:center;
-        "
-      >
-
-        {% if track_search %}
-
-          <h3>
-            No tracks found
-          </h3>
-
-          <p class="sub">
-            Try another search.
-          </p>
-
-          <a
-            href="/dashboard"
-            class="btn btn-outline"
-          >
-            Show All Tracks
-          </a>
-
-        {% else %}
-
-          <h3>
-            Your track library is empty
-          </h3>
-
-          <p class="sub">
-            Upload your first beat and it will appear here.
-          </p>
-
-          <a
-            href="/dashboard/upload"
-            class="btn btn-primary"
-          >
-            Upload Track
-          </a>
-
-        {% endif %}
-
-      </div>
-
-    {% endif %}
-
-  </div>
+    <div class="dashboard-columns">
 
 
-  <!-- RECENT SALES -->
+        <!-- =================================================
+             LEFT COLUMN
+             ================================================= -->
 
-  <h2
-    style="
-      font-size:20px;
-      margin-top:45px;
-    "
-  >
-    Recent Sales
-  </h2>
+        <div>
 
+            <!-- Earnings -->
 
-  <table class="data-table">
+            <div class="earnings-card">
 
-    <thead>
+                <div class="earnings-top">
 
-      <tr>
-        <th>Order</th>
-        <th>Date</th>
-        <th>You Earned</th>
-      </tr>
+                    <div>
 
-    </thead>
+                        <h2>
+                            Earnings Overview
+                        </h2>
 
+                        <div class="earnings-balance">
+                            KSh {{ "%.2f"|format(available_balance|float) }}
+                        </div>
 
-    <tbody>
+                        <div class="earnings-label">
+                            Available for withdrawal
+                        </div>
 
-      {% for o in stats.recent_orders %}
+                    </div>
 
-        <tr>
+                    <a
+                        href="/dashboard/withdraw"
+                        class="withdraw-btn"
+                    >
+                        Withdraw
+                    </a>
 
-          <td>
-            {{ o.order_number }}
-          </td>
-
-          <td>
-
-            {{
-              o.completed_at.strftime('%d %b %Y')
-              if o.completed_at
-              else ''
-            }}
-
-          </td>
-
-          <td>
-            KSh {{ '%.2f'|format(o.net_amount) }}
-          </td>
-
-        </tr>
-
-      {% else %}
-
-        <tr>
-
-          <td
-            colspan="3"
-            class="sub"
-          >
-            No sales yet.
-          </td>
-
-        </tr>
-
-      {% endfor %}
-
-    </tbody>
-
-  </table>
+                </div>
 
 
-  <!-- WITHDRAWAL -->
+                <div class="earnings-breakdown">
 
-  <h2
-    style="
-      font-size:20px;
-      margin-top:45px;
-    "
-  >
-    Request Withdrawal
-  </h2>
+                    <div class="earning-item">
+
+                        <span>
+                            Gross Revenue
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(gross_revenue|float) }}
+                        </strong>
+
+                    </div>
 
 
-  <form
-    action="/dashboard/withdraw"
-    method="post"
-    style="max-width:420px;"
-  >
+                    <div class="earning-item">
 
-    <div class="field">
+                        <span>
+                            Platform Commission
+                        </span>
 
-      <label>
-        Amount (KSh)
-      </label>
+                        <strong>
+                            KSh {{ "%.2f"|format(platform_commission|float) }}
+                        </strong>
 
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        name="amount"
-        required
-      >
+                    </div>
+
+
+                    <div class="earning-item">
+
+                        <span>
+                            Net Earnings
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(net_earnings|float) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div class="earning-item">
+
+                        <span>
+                            Pending Withdrawal
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(pending_withdrawal|float) }}
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- Recent Sales -->
+
+            <div
+                class="panel"
+                style="margin-top:20px;"
+            >
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Recent Sales
+                        </h2>
+
+                        <p>
+                            Your latest completed orders.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                {% if recent_orders %}
+
+                    <div class="recent-table-wrap">
+
+                        <table class="recent-table">
+
+                            <thead>
+
+                                <tr>
+                                    <th>Track</th>
+                                    <th>Amount</th>
+                                    <th>Commission</th>
+                                    <th>Net</th>
+                                    <th>Status</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                {% for order in recent_orders %}
+
+                                    <tr>
+
+                                        <td>
+
+                                            <div class="order-title">
+
+                                                {% if order.track %}
+                                                    {{ order.track.title }}
+                                                {% else %}
+                                                    Beat purchase
+                                                {% endif %}
+
+                                            </div>
+
+                                            <div class="order-date">
+
+                                                {% if order.completed_at %}
+                                                    {{ order.completed_at.strftime("%d %b %Y %H:%M") }}
+
+                                                {% elif order.created_at %}
+                                                    {{ order.created_at.strftime("%d %b %Y %H:%M") }}
+
+                                                {% endif %}
+
+                                            </div>
+
+                                        </td>
+
+
+                                        <td>
+                                            KSh {{ "%.2f"|format(order.gross_amount|float) }}
+                                        </td>
+
+
+                                        <td>
+                                            KSh {{ "%.2f"|format(order.commission_amount|float) }}
+                                        </td>
+
+
+                                        <td>
+                                            KSh {{ "%.2f"|format(order.net_amount|float) }}
+                                        </td>
+
+
+                                        <td>
+
+                                            <span class="status-badge">
+                                                Completed
+                                            </span>
+
+                                        </td>
+
+                                    </tr>
+
+                                {% endfor %}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                {% else %}
+
+                    <div class="empty-state">
+
+                        <strong>
+                            No completed sales yet
+                        </strong>
+
+                        Your completed purchases will appear here once
+                        customers buy your music.
+
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+
+            <!-- Withdrawal History -->
+
+            <div class="panel withdrawals-panel">
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Withdrawal History
+                        </h2>
+
+                        <p>
+                            Track your M-Pesa payout requests.
+                        </p>
+
+                    </div>
+
+                    <a
+                        href="/dashboard/withdraw"
+                        class="section-link"
+                    >
+                        Manage →
+                    </a>
+
+                </div>
+
+
+                {% if withdrawal_requests %}
+
+                    {% for withdrawal in withdrawal_requests[:5] %}
+
+                        <div class="withdrawal-row">
+
+                            <div>
+
+                                <div class="withdrawal-label">
+                                    Amount
+                                </div>
+
+                                <div class="withdrawal-value">
+                                    KSh {{ "%.2f"|format(withdrawal.amount|float) }}
+                                </div>
+
+                            </div>
+
+
+                            <div>
+
+                                <div class="withdrawal-label">
+                                    M-Pesa
+                                </div>
+
+                                <div class="withdrawal-value">
+                                    {{ withdrawal.phone_number }}
+                                </div>
+
+                            </div>
+
+
+                            <div>
+
+                                <div class="withdrawal-label">
+                                    Date
+                                </div>
+
+                                <div class="withdrawal-value">
+
+                                    {% if withdrawal.created_at %}
+                                        {{ withdrawal.created_at.strftime("%d %b %Y") }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+
+                                </div>
+
+                            </div>
+
+
+                            <div>
+
+                                {% set withdrawal_status =
+                                    withdrawal.status|string|lower
+                                %}
+
+                                <span
+                                    class="badge {{ withdrawal_status }}"
+                                >
+                                    {{ withdrawal.status }}
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <div class="empty-state">
+
+                        <strong>
+                            No withdrawal requests
+                        </strong>
+
+                        When you request a payout, its status will appear here.
+
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             RIGHT COLUMN
+             ================================================= -->
+
+        <div>
+
+            <!-- Public Store -->
+
+            <div class="store-card">
+
+                <h2>
+                    Your Public Store
+                </h2>
+
+                <p>
+                    Share your BeatHub store with artists, customers and
+                    your audience so they can discover and purchase your music.
+                </p>
+
+
+                {% if store_url %}
+
+                    <div class="store-url-box">
+
+                        <div
+                            class="store-url"
+                            id="creatorStoreUrl"
+                        >{{ store_url }}</div>
+
+
+                        <button
+                            type="button"
+                            class="copy-store"
+                            onclick="copyStoreUrl()"
+                        >
+                            Copy
+                        </button>
+
+                    </div>
+
+
+                    <div class="social-links">
+
+                        <a
+                            href="{{ store_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="social-link"
+                        >
+                            Open Store ↗
+                        </a>
+
+
+                        {% if youtube_url %}
+
+                            <a
+                                href="{{ youtube_url }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="social-link"
+                            >
+                                YouTube ↗
+                            </a>
+
+                        {% endif %}
+
+
+                        {% if discord_url %}
+
+                            <a
+                                href="{{ discord_url }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="social-link"
+                            >
+                                Discord ↗
+                            </a>
+
+                        {% endif %}
+
+                    </div>
+
+                {% else %}
+
+                    <div
+                        class="empty-state"
+                        style="padding:25px 0 5px;"
+                    >
+                        Your public store link is not available yet.
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+
+            <!-- Catalog -->
+
+            <div
+                class="dashboard-section"
+                style="margin-top:20px;"
+            >
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <h2>
+                            Your Catalog
+                        </h2>
+
+                        <p>
+                            Your published BeatHub content.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="content-overview">
+
+                    <div class="content-card">
+
+                        <div class="content-card-top">
+
+                            <h3>
+                                Beats / Tracks
+                            </h3>
+
+                            <span>
+                                🎵
+                            </span>
+
+                        </div>
+
+
+                        <div class="content-number">
+                            {{ track_count|default(0) }}
+                        </div>
+
+
+                        <p>
+                            Tracks in your catalog
+                        </p>
+
+
+                        <a href="/dashboard/upload">
+                            Add another track →
+                        </a>
+
+                    </div>
+
+
+                    <div class="content-card">
+
+                        <div class="content-card-top">
+
+                            <h3>
+                                Albums
+                            </h3>
+
+                            <span>
+                                💿
+                            </span>
+
+                        </div>
+
+
+                        <div class="content-number">
+                            {{ album_count|default(0) }}
+                        </div>
+
+
+                        <p>
+                            Albums you've created
+                        </p>
+
+
+                        <a href="/dashboard/albums/new">
+                            Create an album →
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- Revenue Summary -->
+
+            <div class="panel">
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Revenue Summary
+                        </h2>
+
+                        <p>
+                            How your sales are performing.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="panel-body">
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Total Sales
+                        </span>
+
+                        <strong>
+                            {{ total_sales|default(0) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Gross Revenue
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(gross_revenue|float) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div
+                        class="earning-item"
+                        style="margin-bottom:10px;"
+                    >
+
+                        <span>
+                            Platform Commission
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(platform_commission|float) }}
+                        </strong>
+
+                    </div>
+
+
+                    <div class="earning-item">
+
+                        <span>
+                            Your Net Earnings
+                        </span>
+
+                        <strong>
+                            KSh {{ "%.2f"|format(net_earnings|float) }}
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
 
     </div>
 
-
-    <div class="field">
-
-      <label>
-        M-Pesa Phone Number
-      </label>
-
-      <input
-        type="tel"
-        name="phone_number"
-        placeholder="07XX XXX XXX"
-        required
-      >
-
-    </div>
-
-
-    <button
-      type="submit"
-      class="btn btn-primary"
-    >
-      Request Withdrawal
-    </button>
-
-  </form>
-
-</section>
+</div>
 
 
 <script>
-function copyStoreLink() {
-  const input = document.getElementById("store-link");
-  const message = document.getElementById("copy-message");
+function copyStoreUrl() {
+    const element = document.getElementById(
+        "creatorStoreUrl"
+    );
 
-  if (!input) {
-    return;
-  }
+    if (!element) {
+        return;
+    }
 
-  if (
-    navigator.clipboard &&
-    window.isSecureContext
-  ) {
-    navigator.clipboard.writeText(
-      input.value
-    ).then(function () {
-      message.textContent =
-        "Store link copied. Share it anywhere.";
-    }).catch(function () {
-      fallbackCopy(input, message);
-    });
-  } else {
-    fallbackCopy(input, message);
-  }
-}
+    const path = element.textContent.trim();
 
-function fallbackCopy(input, message) {
-  input.focus();
-  input.select();
+    const fullUrl = path.startsWith("http")
+        ? path
+        : window.location.origin + path;
 
-  try {
-    document.execCommand("copy");
+    if (
+        navigator.clipboard &&
+        navigator.clipboard.writeText
+    ) {
+        navigator.clipboard.writeText(fullUrl)
+            .then(function () {
 
-    message.textContent =
-      "Store link copied. Share it anywhere.";
-  } catch (error) {
-    message.textContent =
-      "Copy failed. Please copy the link manually.";
-  }
+                const button =
+                    document.querySelector(
+                        ".copy-store"
+                    );
+
+                if (!button) {
+                    return;
+                }
+
+                const original =
+                    button.textContent;
+
+                button.textContent =
+                    "Copied!";
+
+                setTimeout(
+                    function () {
+                        button.textContent =
+                            original;
+                    },
+                    1800
+                );
+            })
+            .catch(function () {
+                window.prompt(
+                    "Copy your BeatHub store URL:",
+                    fullUrl
+                );
+            });
+
+    } else {
+        window.prompt(
+            "Copy your BeatHub store URL:",
+            fullUrl
+        );
+    }
 }
 </script>
 
