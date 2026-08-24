@@ -14,20 +14,19 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.music import Track
+from app.models.order import License, Order, OrderStatus
 from app.services.storage import media_url
 from app.utils.deps import get_optional_user
-
 
 logger = logging.getLogger("beathub.music")
 
 router = APIRouter(tags=["music"])
-
 templates = Jinja2Templates(directory="app/templates")
 
 
-# ======================================================================
-# HELPERS
-# ======================================================================
+# ============================================================
+# GENERIC MODEL HELPERS
+# ============================================================
 
 def _model_value(
     obj: Any,
@@ -46,19 +45,36 @@ def _model_value(
     return default
 
 
+# ============================================================
+# TRACK VISIBILITY
+# ============================================================
+
 def _track_is_public(track: Track) -> bool:
     if getattr(track, "is_published", True) is False:
         return False
 
     sales_model = getattr(track, "sales_model", None)
-    sales_value = getattr(sales_model, "value", sales_model)
+    sales_value = getattr(
+        sales_model,
+        "value",
+        sales_model,
+    )
 
-    if str(sales_value or "").strip().lower() == "exclusive":
+    if (
+        str(sales_value or "")
+        .strip()
+        .lower()
+        == "exclusive"
+    ):
         if getattr(track, "is_sold", False):
             return False
 
     return True
 
+
+# ============================================================
+# TRACK PRICE
+# ============================================================
 
 def _track_price(track: Track) -> float:
     raw = _model_value(
@@ -76,9 +92,9 @@ def _track_price(track: Track) -> float:
         return 0.0
 
 
-# ======================================================================
-# ARTWORK
-# ======================================================================
+# ============================================================
+# ARTWORK STORAGE PATH
+# ============================================================
 
 def _track_storage_path(
     track: Track,
@@ -86,7 +102,6 @@ def _track_storage_path(
     value = _model_value(
         track,
         "cover_art_path",
-        "artwork_path",
         "cover_url",
         "artwork_url",
         "image_url",
@@ -105,83 +120,34 @@ def _track_storage_path(
     return value or None
 
 
-def _track_artwork(
-    track: Track,
-) -> Optional[str]:
-    """
-    Build a browser-safe artwork URL.
-
-    Uploaded artwork is stored in Track.cover_art_path.
-    The browser receives the BeatHub artwork route instead
-    of the raw storage path.
-    """
-
-    stored = _track_storage_path(track)
-
-    if not stored:
-        return None
-
-    slug = _model_value(
-        track,
-        "slug",
-        default=None,
-    )
-
-    if slug:
-        return f"/track/{slug}/artwork"
-
-    try:
-        return media_url(stored)
-    except Exception:
-        logger.exception(
-            "Unable to create artwork URL"
-        )
-        return None
-
-
-# ======================================================================
-# AUDIO / PREVIEW
-# ======================================================================
+# ============================================================
+# AUDIO STORAGE PATH
+#
+# IMPORTANT:
+# Uploaded BeatHub tracks use audio_file_path.
+# Older versions may use one of the preview fields.
+# ============================================================
 
 def _track_audio_storage_path(
     track: Track,
 ) -> Optional[str]:
-    """
-    Resolve the actual uploaded audio file.
-
-    IMPORTANT:
-    The BeatHub upload route stores uploaded audio in
-    Track.audio_file_path.
-
-    Older versions of this router only checked preview-specific
-    fields, which caused:
-
-        GET /track/<slug>/preview -> 404
-
-    even though the track had a valid uploaded audio file.
-
-    audio_file_path is therefore checked first.
-    """
-
     value = _model_value(
         track,
 
-        # CURRENT BEATHUB UPLOAD FIELD
+        # CURRENT UPLOAD FIELD
         "audio_file_path",
 
-        # Compatibility with older/newer models
+        # POSSIBLE PREVIEW FIELDS
         "preview_file_path",
         "audio_preview_path",
         "audio_preview_url",
         "preview_url",
+
+        # COMPATIBILITY FIELDS
         "audio_url",
         "stream_url",
         "mp3_url",
         "preview_audio_url",
-        "file_path",
-        "audio_path",
-        "source_file_path",
-        "full_audio_path",
 
         default=None,
     )
@@ -194,14 +160,14 @@ def _track_audio_storage_path(
     return value or None
 
 
-def _track_audio(
+# ============================================================
+# ARTWORK URL
+# ============================================================
+
+def _track_artwork(
     track: Track,
 ) -> Optional[str]:
-    """
-    Return the public browser URL for the preview player.
-    """
-
-    stored = _track_audio_storage_path(track)
+    stored = _track_storage_path(track)
 
     if not stored:
         return None
@@ -213,7 +179,43 @@ def _track_audio(
     )
 
     if slug:
-        return f"/track/{slug}/preview"
+        return (
+            f"/track/{slug}/artwork"
+        )
+
+    try:
+        return media_url(stored)
+    except Exception:
+        logger.exception(
+            "Unable to create artwork URL"
+        )
+        return None
+
+
+# ============================================================
+# PREVIEW URL
+# ============================================================
+
+def _track_audio(
+    track: Track,
+) -> Optional[str]:
+    stored = _track_audio_storage_path(
+        track
+    )
+
+    if not stored:
+        return None
+
+    slug = _model_value(
+        track,
+        "slug",
+        default=None,
+    )
+
+    if slug:
+        return (
+            f"/track/{slug}/preview"
+        )
 
     try:
         return media_url(stored)
@@ -224,9 +226,9 @@ def _track_audio(
         return None
 
 
-# ======================================================================
-# PRODUCER
-# ======================================================================
+# ============================================================
+# PRODUCER NAME
+# ============================================================
 
 def _producer_name(
     track: Track,
@@ -241,7 +243,6 @@ def _producer_name(
     )
 
     if profile is not None:
-
         name = _model_value(
             profile,
             "stage_name",
@@ -262,7 +263,6 @@ def _producer_name(
         )
 
         if user is not None:
-
             name = _model_value(
                 user,
                 "name",
@@ -291,10 +291,13 @@ def _producer_name(
     )
 
 
+# ============================================================
+# PRODUCER STORE URL
+# ============================================================
+
 def _producer_store_url(
     track: Track,
 ) -> Optional[str]:
-
     profile = _model_value(
         track,
         "creator_profile",
@@ -315,19 +318,20 @@ def _producer_store_url(
     )
 
     if slug:
-        return f"/store/{slug}"
+        return (
+            f"/store/{slug}"
+        )
 
     return None
 
 
-# ======================================================================
+# ============================================================
 # TRACK URL
-# ======================================================================
+# ============================================================
 
 def _track_url(
     track: Track,
 ) -> str:
-
     slug = _model_value(
         track,
         "slug",
@@ -341,17 +345,21 @@ def _track_url(
     )
 
     if slug:
-        return f"/track/{slug}"
+        return (
+            f"/track/{slug}"
+        )
 
     if track_id is not None:
-        return f"/track/{track_id}"
+        return (
+            f"/track/{track_id}"
+        )
 
     return "#"
 
 
-# ======================================================================
-# CATALOG
-# ======================================================================
+# ============================================================
+# CATALOG QUERY
+# ============================================================
 
 def _query_catalog(
     db: Session,
@@ -361,11 +369,9 @@ def _query_catalog(
     min_price: Optional[float],
     max_price: Optional[float],
 ):
-
     query = db.query(Track)
 
     if search:
-
         like = f"%{search}%"
 
         conditions = []
@@ -377,7 +383,6 @@ def _query_catalog(
             "tags",
             "slug",
         ):
-
             field = getattr(
                 Track,
                 field_name,
@@ -395,7 +400,6 @@ def _query_catalog(
             )
 
     if genre:
-
         field = getattr(
             Track,
             "genre",
@@ -415,8 +419,10 @@ def _query_catalog(
         None,
     )
 
-    if mood and mood_field is not None:
-
+    if (
+        mood
+        and mood_field is not None
+    ):
         query = query.filter(
             mood_field.ilike(
                 f"%{mood}%"
@@ -424,7 +430,6 @@ def _query_catalog(
         )
 
     if min_price is not None:
-
         field = getattr(
             Track,
             "price",
@@ -437,7 +442,6 @@ def _query_catalog(
             )
 
     if max_price is not None:
-
         field = getattr(
             Track,
             "price",
@@ -467,13 +471,10 @@ def _query_catalog(
     )
 
     if created is not None:
-
         query = query.order_by(
             created.desc()
         )
-
     else:
-
         query = query.order_by(
             Track.id.desc()
         )
@@ -481,10 +482,13 @@ def _query_catalog(
     return query.all()
 
 
+# ============================================================
+# CATALOG ITEM
+# ============================================================
+
 def _catalog_item(
     track: Track,
 ) -> dict:
-
     title = str(
         _model_value(
             track,
@@ -497,12 +501,37 @@ def _catalog_item(
 
     return {
         "track": track,
+
         "title": title,
-        "producer": _producer_name(track),
-        "producer_store_url": _producer_store_url(track),
-        "price": _track_price(track),
-        "artwork_url": _track_artwork(track),
-        "audio_url": _track_audio(track),
+
+        "producer": _producer_name(
+            track
+        ),
+
+        "producer_store_url":
+            _producer_store_url(
+                track
+            ),
+
+        "price": _track_price(
+            track
+        ),
+
+        "artwork_url":
+            _track_artwork(
+                track
+            ),
+
+        "audio_url":
+            _track_audio(
+                track
+            ),
+
+        "url":
+            _track_url(
+                track
+            ),
+
         "genre": str(
             _model_value(
                 track,
@@ -512,6 +541,7 @@ def _catalog_item(
             )
             or ""
         ),
+
         "mood": str(
             _model_value(
                 track,
@@ -520,6 +550,7 @@ def _catalog_item(
             )
             or ""
         ),
+
         "bpm": str(
             _model_value(
                 track,
@@ -529,6 +560,7 @@ def _catalog_item(
             )
             or ""
         ),
+
         "key": str(
             _model_value(
                 track,
@@ -538,6 +570,7 @@ def _catalog_item(
             )
             or ""
         ),
+
         "description": str(
             _model_value(
                 track,
@@ -550,151 +583,9 @@ def _catalog_item(
     }
 
 
-def _catalog_filters(
-    tracks: list[Track],
-) -> tuple[list[str], list[str]]:
-
-    genres = sorted(
-        {
-            str(
-                _model_value(
-                    track,
-                    "genre",
-                    "category",
-                    default="",
-                )
-            ).strip()
-            for track in tracks
-            if _model_value(
-                track,
-                "genre",
-                "category",
-                default="",
-            )
-        },
-        key=str.lower,
-    )
-
-    moods = sorted(
-        {
-            str(
-                _model_value(
-                    track,
-                    "mood",
-                    default="",
-                )
-            ).strip()
-            for track in tracks
-            if _model_value(
-                track,
-                "mood",
-                default="",
-            )
-        },
-        key=str.lower,
-    )
-
-    return genres, moods
-
-
-def _beats_context(
-    request: Request,
-    current_user,
-    tracks: list[Track],
-    catalog: list[dict],
-    total: int,
-    page: int,
-    per_page: int,
-    search: str,
-    genre: str,
-    mood: str,
-    min_price: Optional[float],
-    max_price: Optional[float],
-    title: str = "Find Your Sound",
-) -> dict:
-
-    total_pages = max(
-        1,
-        math.ceil(
-            total / per_page
-        ),
-    )
-
-    start = (
-        page - 1
-    ) * per_page
-
-    end = start + per_page
-
-    genres, moods = _catalog_filters(
-        tracks
-    )
-
-    return {
-        "request": request,
-        "current_user": current_user,
-        "user": current_user,
-        "current_year": 2026,
-
-        "tracks": tracks,
-        "beats": tracks,
-        "catalog": catalog,
-
-        "total": total,
-        "total_results": total,
-
-        "page": page,
-        "track_page": page,
-
-        "per_page": per_page,
-        "track_per_page": per_page,
-
-        "total_pages": total_pages,
-        "track_total_pages": total_pages,
-
-        "genres": genres,
-        "moods": moods,
-
-        "query": search,
-        "q": search,
-
-        "genre": genre,
-        "mood": mood,
-
-        "min_price": min_price,
-        "max_price": max_price,
-
-        "has_previous": page > 1,
-        "has_next": page < total_pages,
-
-        "previous_page": max(
-            1,
-            page - 1,
-        ),
-
-        "next_page": min(
-            total_pages,
-            page + 1,
-        ),
-
-        "catalog_start": (
-            0
-            if total == 0
-            else start + 1
-        ),
-
-        "catalog_end": min(
-            end,
-            total,
-        ),
-
-        "title": title,
-    }
-
-
-# ======================================================================
+# ============================================================
 # BEATS
-# ======================================================================
+# ============================================================
 
 @router.get(
     "/beats",
@@ -736,13 +627,11 @@ def beats_catalog(
     ),
     db: Session = Depends(get_db),
 ):
-
     search = q.strip()
     genre = genre.strip()
     mood = mood.strip()
 
     try:
-
         tracks = _query_catalog(
             db=db,
             search=search,
@@ -759,11 +648,9 @@ def beats_catalog(
         ]
 
     except Exception:
-
         logger.exception(
             "Unable to load BeatHub beat catalog"
         )
-
         tracks = []
 
     total = len(tracks)
@@ -793,31 +680,156 @@ def beats_catalog(
         for track in page_tracks
     ]
 
+    genres = sorted(
+        {
+            str(
+                _model_value(
+                    track,
+                    "genre",
+                    "category",
+                    default="",
+                )
+            ).strip()
+            for track in tracks
+            if _model_value(
+                track,
+                "genre",
+                "category",
+                default="",
+            )
+        },
+        key=str.lower,
+    )
+
+    moods = sorted(
+        {
+            str(
+                _model_value(
+                    track,
+                    "mood",
+                    default="",
+                )
+            ).strip()
+            for track in tracks
+            if _model_value(
+                track,
+                "mood",
+                default="",
+            )
+        },
+        key=str.lower,
+    )
+
     return templates.TemplateResponse(
         request,
         "beats.html",
-        _beats_context(
-            request=request,
-            current_user=current_user,
-            tracks=page_tracks,
-            catalog=catalog,
-            total=total,
-            page=page,
-            per_page=per_page,
-            search=search,
-            genre=genre,
-            mood=mood,
-            min_price=min_price,
-            max_price=max_price,
-        ),
+        {
+            "request": request,
+            "current_user":
+                current_user,
+            "user":
+                current_user,
+            "current_year":
+                2026,
+
+            "tracks":
+                page_tracks,
+
+            "beats":
+                page_tracks,
+
+            "catalog":
+                catalog,
+
+            "total":
+                total,
+
+            "total_results":
+                total,
+
+            "page":
+                page,
+
+            "track_page":
+                page,
+
+            "per_page":
+                per_page,
+
+            "track_per_page":
+                per_page,
+
+            "total_pages":
+                total_pages,
+
+            "track_total_pages":
+                total_pages,
+
+            "genres":
+                genres,
+
+            "moods":
+                moods,
+
+            "query":
+                search,
+
+            "q":
+                search,
+
+            "genre":
+                genre,
+
+            "mood":
+                mood,
+
+            "min_price":
+                min_price,
+
+            "max_price":
+                max_price,
+
+            "has_previous":
+                page > 1,
+
+            "has_next":
+                page < total_pages,
+
+            "previous_page":
+                max(
+                    1,
+                    page - 1,
+                ),
+
+            "next_page":
+                min(
+                    total_pages,
+                    page + 1,
+                ),
+
+            "catalog_start":
+                (
+                    0
+                    if total == 0
+                    else start + 1
+                ),
+
+            "catalog_end":
+                min(
+                    end,
+                    total,
+                ),
+        },
     )
 
 
-# ======================================================================
+# ============================================================
 # HOT PICKS
-# ======================================================================
+# ============================================================
 
-@router.get("/hot-picks")
+@router.get(
+    "/hot-picks"
+)
 def hot_picks(
     request: Request,
     q: str = Query(
@@ -837,13 +849,11 @@ def hot_picks(
     ),
     db: Session = Depends(get_db),
 ):
-
     search = q.strip()
     genre = genre.strip()
     mood = mood.strip()
 
     try:
-
         tracks = _query_catalog(
             db,
             search,
@@ -860,11 +870,9 @@ def hot_picks(
         ][:12]
 
     except Exception:
-
         logger.exception(
             "Unable to load BeatHub hot picks"
         )
-
         tracks = []
 
     catalog = [
@@ -875,27 +883,107 @@ def hot_picks(
     return templates.TemplateResponse(
         request,
         "beats.html",
-        _beats_context(
-            request=request,
-            current_user=current_user,
-            tracks=tracks,
-            catalog=catalog,
-            total=len(tracks),
-            page=1,
-            per_page=12,
-            search=search,
-            genre=genre,
-            mood=mood,
-            min_price=None,
-            max_price=None,
-            title="Hot Picks",
-        ),
+        {
+            "request":
+                request,
+
+            "current_user":
+                current_user,
+
+            "user":
+                current_user,
+
+            "current_year":
+                2026,
+
+            "tracks":
+                tracks,
+
+            "beats":
+                tracks,
+
+            "catalog":
+                catalog,
+
+            "total":
+                len(tracks),
+
+            "total_results":
+                len(tracks),
+
+            "page":
+                1,
+
+            "track_page":
+                1,
+
+            "per_page":
+                12,
+
+            "track_per_page":
+                12,
+
+            "total_pages":
+                1,
+
+            "track_total_pages":
+                1,
+
+            "genres":
+                [],
+
+            "moods":
+                [],
+
+            "query":
+                search,
+
+            "q":
+                search,
+
+            "genre":
+                genre,
+
+            "mood":
+                mood,
+
+            "min_price":
+                None,
+
+            "max_price":
+                None,
+
+            "has_previous":
+                False,
+
+            "has_next":
+                False,
+
+            "previous_page":
+                1,
+
+            "next_page":
+                1,
+
+            "catalog_start":
+                (
+                    1
+                    if tracks
+                    else 0
+                ),
+
+            "catalog_end":
+                len(tracks),
+
+            "title":
+                "Hot Picks",
+        },
     )
 
 
-# ======================================================================
-# LOCAL MEDIA
-# ======================================================================
+# ============================================================
+# LOCAL MEDIA RESOLUTION
+# ============================================================
 
 def _resolve_local_media_path(
     stored_path: str,
@@ -920,107 +1008,98 @@ def _resolve_local_media_path(
 
     stored = Path(value)
 
-    try:
-
-        media_root_value = (
-            getattr(
-                settings,
-                "MEDIA_ROOT",
-                None,
-            )
-            or "media"
+    media_root_value = (
+        getattr(
+            settings,
+            "MEDIA_ROOT",
+            None,
         )
+        or "media"
+    )
 
-        media_root = Path(
-            media_root_value
-        ).expanduser()
+    media_root = Path(
+        media_root_value
+    ).expanduser()
 
-        if not media_root.is_absolute():
-            media_root = (
-                Path.cwd()
-                / media_root
-            )
-
+    if not media_root.is_absolute():
         media_root = (
-            media_root.resolve()
+            Path.cwd()
+            / media_root
         )
 
-        candidates = []
+    media_root = media_root.resolve()
 
-        if stored.is_absolute():
+    candidates = []
 
+    if stored.is_absolute():
+        candidates.append(
+            stored.resolve()
+        )
+
+    else:
+        candidates.append(
+            (
+                Path.cwd()
+                / stored
+            ).resolve()
+        )
+
+        candidates.append(
+            (
+                media_root
+                / stored
+            ).resolve()
+        )
+
+        clean = (
+            str(stored)
+            .replace(
+                "\\",
+                "/",
+            )
+            .lstrip("/")
+        )
+
+        if clean.startswith(
+            "media/"
+        ):
             candidates.append(
-                stored.resolve()
-            )
-
-        else:
-
-            candidates.extend(
-                [
-                    (
-                        Path.cwd()
-                        / stored
-                    ).resolve(),
-
-                    (
-                        media_root
-                        / stored
-                    ).resolve(),
-                ]
-            )
-
-            clean = (
-                str(stored)
-                .replace("\\", "/")
-                .lstrip("/")
-            )
-
-            if clean.startswith(
-                "media/"
-            ):
-
-                candidates.append(
-                    (
-                        media_root
-                        / clean[6:]
-                    ).resolve()
-                )
-
-        for candidate in candidates:
-
-            try:
-                candidate.relative_to(
+                (
                     media_root
-                )
-            except ValueError:
-                continue
+                    / clean[6:]
+                ).resolve()
+            )
 
-            if candidate.is_file():
-                return candidate
+    for candidate in candidates:
 
-    except Exception:
+        try:
+            candidate.relative_to(
+                media_root
+            )
+        except ValueError:
+            continue
 
-        logger.exception(
-            "Unable to resolve local media path: %s",
-            stored_path,
-        )
+        if (
+            candidate.exists()
+            and candidate.is_file()
+        ):
+            return candidate
 
     return None
 
+
+# ============================================================
+# MEDIA RESPONSE
+# ============================================================
 
 def _media_response(
     stored_path: str,
     *,
     fallback_media_type: str,
 ):
-
     value = str(
         stored_path
     ).strip()
-
-    # --------------------------------------------------------------
-    # Direct public URL
-    # --------------------------------------------------------------
 
     if value.startswith(
         (
@@ -1028,15 +1107,10 @@ def _media_response(
             "https://",
         )
     ):
-
         return RedirectResponse(
             url=value,
             status_code=307,
         )
-
-    # --------------------------------------------------------------
-    # Cloudflare R2 / S3 storage
-    # --------------------------------------------------------------
 
     if value.startswith(
         (
@@ -1044,22 +1118,21 @@ def _media_response(
             "s3://",
         )
     ):
-
         try:
-            url = media_url(value)
+            url = media_url(
+                value
+            )
         except Exception:
             logger.exception(
-                "Unable to create remote media URL."
+                "Unable to create cloud media URL"
             )
             url = None
 
         if not url:
-
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    "Media is currently "
-                    "unavailable."
+                    "Media is currently unavailable."
                 ),
             )
 
@@ -1068,60 +1141,77 @@ def _media_response(
             status_code=307,
         )
 
-    # --------------------------------------------------------------
-    # Local Render media
-    # --------------------------------------------------------------
-
     path = _resolve_local_media_path(
         value
     )
 
     if not path:
-
         raise HTTPException(
             status_code=404,
             detail=(
-                "Media file is currently "
-                "unavailable."
+                "Media file is currently unavailable."
             ),
         )
 
     suffix = path.suffix.lower()
 
     content_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
+        ".jpg":
+            "image/jpeg",
 
-        ".mp3": "audio/mpeg",
-        ".wav": "audio/wav",
-        ".m4a": "audio/mp4",
-        ".aac": "audio/aac",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-        ".webm": "audio/webm",
+        ".jpeg":
+            "image/jpeg",
+
+        ".png":
+            "image/png",
+
+        ".webp":
+            "image/webp",
+
+        ".gif":
+            "image/gif",
+
+        ".mp3":
+            "audio/mpeg",
+
+        ".wav":
+            "audio/wav",
+
+        ".m4a":
+            "audio/mp4",
+
+        ".aac":
+            "audio/aac",
+
+        ".ogg":
+            "audio/ogg",
+
+        ".flac":
+            "audio/flac",
     }
 
     return FileResponse(
         path=str(path),
-        media_type=content_types.get(
-            suffix,
-            fallback_media_type,
-        ),
-        headers={
-            "Cache-Control": (
-                "public, max-age=3600"
+
+        media_type=
+            content_types.get(
+                suffix,
+                fallback_media_type,
             ),
-            "Accept-Ranges": "bytes",
+
+        headers={
+            "Cache-Control":
+                "public, max-age=3600",
+
+            "Accept-Ranges":
+                "bytes",
         },
     )
 
 
-# ======================================================================
+# ============================================================
 # TRACK LOOKUP
-# ======================================================================
+# ============================================================
 
 def _get_track_by_slug(
     slug: str,
@@ -1137,7 +1227,6 @@ def _get_track_by_slug(
     )
 
     if not track:
-
         raise HTTPException(
             status_code=404,
             detail="Track not found.",
@@ -1146,9 +1235,9 @@ def _get_track_by_slug(
     return track
 
 
-# ======================================================================
+# ============================================================
 # TRACK ARTWORK
-# ======================================================================
+# ============================================================
 
 @router.get(
     "/track/{slug}/artwork",
@@ -1158,7 +1247,6 @@ def track_artwork(
     slug: str,
     db: Session = Depends(get_db),
 ):
-
     track = _get_track_by_slug(
         slug,
         db,
@@ -1169,24 +1257,28 @@ def track_artwork(
     )
 
     if not stored:
-
         raise HTTPException(
             status_code=404,
             detail=(
-                "This beat has no "
-                "artwork."
+                "This beat has no artwork."
             ),
         )
 
     return _media_response(
         stored,
-        fallback_media_type="image/jpeg",
+        fallback_media_type=
+            "image/jpeg",
     )
 
 
-# ======================================================================
-# TRACK PREVIEW
-# ======================================================================
+# ============================================================
+# TRACK AUDIO PREVIEW
+#
+# Public before purchase.
+#
+# The browser/player stops the preview after
+# the configured preview duration on the store page.
+# ============================================================
 
 @router.get(
     "/track/{slug}/preview",
@@ -1196,7 +1288,6 @@ def track_preview(
     slug: str,
     db: Session = Depends(get_db),
 ):
-
     track = _get_track_by_slug(
         slug,
         db,
@@ -1207,53 +1298,136 @@ def track_preview(
     )
 
     if not stored:
-
-        logger.warning(
-            "Preview requested but no audio "
-            "path exists for track slug=%s",
-            slug,
-        )
-
         raise HTTPException(
             status_code=404,
             detail=(
-                "This track has no "
-                "preview audio."
+                "This beat has no preview audio."
             ),
         )
 
-    logger.info(
-        "Serving preview for track=%s "
-        "from audio path=%s",
-        slug,
-        stored,
-    )
-
     return _media_response(
         stored,
-        fallback_media_type="audio/mpeg",
+        fallback_media_type=
+            "audio/mpeg",
     )
 
 
-# ======================================================================
-# SESSIONS
-# ======================================================================
+# ============================================================
+# TRACK DETAIL
+# ============================================================
 
-@router.get("/sessions")
+@router.get(
+    "/track/{slug}",
+    name="track_detail",
+)
+def track_detail(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(
+        get_optional_user
+    ),
+):
+    track = _get_track_by_slug(
+        slug,
+        db,
+    )
+
+    purchased = False
+
+    if current_user:
+
+        try:
+            purchased = (
+                db.query(
+                    License
+                )
+                .join(
+                    Order,
+                    License.order_id
+                    == Order.id,
+                )
+                .filter(
+                    License.buyer_id
+                    == current_user.id,
+
+                    License.track_id
+                    == track.id,
+
+                    Order.status
+                    == OrderStatus.COMPLETED,
+                )
+                .first()
+                is not None
+            )
+
+        except Exception:
+            logger.exception(
+                "Unable to check track ownership"
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "track_detail.html",
+        {
+            "request":
+                request,
+
+            "current_user":
+                current_user,
+
+            "user":
+                current_user,
+
+            "current_year":
+                2026,
+
+            "track":
+                track,
+
+            "purchased":
+                purchased,
+
+            "preview_url":
+                (
+                    f"/track/{track.slug}/preview"
+                ),
+
+            "artwork_url":
+                (
+                    f"/track/{track.slug}/artwork"
+                ),
+        },
+    )
+
+
+# ============================================================
+# SESSIONS
+# ============================================================
+
+@router.get(
+    "/sessions"
+)
 def sessions_page(
     request: Request,
     current_user=Depends(
         get_optional_user
     ),
 ):
-
     return templates.TemplateResponse(
         request,
         "sessions.html",
         {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
+            "request":
+                request,
+
+            "current_user":
+                current_user,
+
+            "user":
+                current_user,
+
+            "current_year":
+                2026,
         },
     )
