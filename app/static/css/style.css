@@ -99,6 +99,70 @@ a { color: inherit; text-decoration: none; }
 .hero p { color: var(--text-muted); max-width: 620px; font-size: 17px; margin-bottom: 32px; }
 .hero-actions { display: flex; gap: 14px; }
 
+/* =========================================================
+   HOMEPAGE HERO MOTION
+   Restores the floating/rotating visual movement without
+   changing the homepage structure or content.
+========================================================= */
+
+@keyframes beathubVinylSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes beathubFloatOne {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-2deg); }
+  25% { transform: translate3d(10px, -14px, 0) rotate(1deg); }
+  50% { transform: translate3d(2px, -24px, 0) rotate(3deg); }
+  75% { transform: translate3d(-10px, -10px, 0) rotate(0deg); }
+}
+
+@keyframes beathubFloatTwo {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(2deg); }
+  25% { transform: translate3d(-12px, -10px, 0) rotate(-1deg); }
+  50% { transform: translate3d(-4px, -22px, 0) rotate(-3deg); }
+  75% { transform: translate3d(12px, -8px, 0) rotate(1deg); }
+}
+
+@keyframes beathubWavePulse {
+  0%, 100% { transform: scaleY(.72); opacity: .62; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+.hero-visual .vinyl {
+  animation: beathubVinylSpin 9s linear infinite;
+  will-change: transform;
+}
+
+.hero-visual .floating-card.one {
+  animation: beathubFloatOne 5.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.hero-visual .floating-card.two {
+  animation: beathubFloatTwo 6.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.hero-visual .waveform span {
+  transform-origin: center;
+  animation: beathubWavePulse 1.15s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.hero-visual .waveform span:nth-child(2n) { animation-delay: -.35s; }
+.hero-visual .waveform span:nth-child(3n) { animation-delay: -.7s; }
+.hero-visual .waveform span:nth-child(5n) { animation-delay: -.15s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-visual .vinyl,
+  .hero-visual .floating-card.one,
+  .hero-visual .floating-card.two,
+  .hero-visual .waveform span {
+    animation: none;
+  }
+}
+
 .search-panel {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -196,4 +260,19 @@ table.data-table th { color: var(--text-muted); text-transform: uppercase; font-
 @media (max-width: 768px) {
   .hero h1 { font-size: 38px; }
   .nav-links { display: none; }
+
+  .hero-visual .floating-card.one {
+    left: 4px;
+    top: 35px;
+  }
+
+  .hero-visual .floating-card.two {
+    right: 4px;
+    bottom: 35px;
+  }
+
+  .hero-visual .vinyl {
+    max-width: 190px;
+    max-height: 190px;
+  }
 }
