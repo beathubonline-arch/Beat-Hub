@@ -5,83 +5,432 @@
 {% block content %}
 
 <style>
+
+    /* =========================================================
+       BEATHUB ADMIN — PLATFORM EARNINGS
+       Premium black / gold styling
+       ALL EXISTING FUNCTIONALITY PRESERVED
+       ========================================================= */
+
     .earnings-page {
-        padding: 32px 0 60px;
+        position: relative;
+        min-height: calc(100vh - 70px);
+        padding: 38px 0 70px;
+        overflow: hidden;
     }
 
+    .earnings-page::before {
+        content: "";
+        position: absolute;
+        width: 560px;
+        height: 560px;
+        top: -300px;
+        right: -180px;
+        border-radius: 50%;
+        background:
+            radial-gradient(
+                circle,
+                rgba(244, 200, 66, .10),
+                rgba(244, 200, 66, .025) 42%,
+                transparent 72%
+            );
+        pointer-events: none;
+    }
+
+    .earnings-page::after {
+        content: "";
+        position: absolute;
+        width: 500px;
+        height: 500px;
+        left: -270px;
+        bottom: -300px;
+        border-radius: 50%;
+        background:
+            radial-gradient(
+                circle,
+                rgba(244, 200, 66, .045),
+                transparent 70%
+            );
+        pointer-events: none;
+    }
+
+
+    /* =========================================================
+       CONTAINER
+       ========================================================= */
+
+    .earnings-container {
+        position: relative;
+        z-index: 2;
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 0 28px;
+    }
+
+
+    /* =========================================================
+       HEADER
+       ========================================================= */
+
     .earnings-header {
-        margin-bottom: 25px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 25px;
+        margin-bottom: 27px;
+        flex-wrap: wrap;
+    }
+
+    .earnings-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 12px;
+        border: 1px solid rgba(244, 200, 66, .20);
+        border-radius: 999px;
+        background: rgba(244, 200, 66, .045);
+        color: #ffe58a;
+        font-size: 9px;
+        font-weight: 950;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }
+
+    .earnings-kicker-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #f4c842;
+        box-shadow: 0 0 9px rgba(244, 200, 66, .75);
     }
 
     .earnings-header h1 {
-        margin: 0;
-        font-size: 30px;
+        margin: 14px 0 0;
+        color: #fff;
+        font-size: clamp(40px, 5vw, 55px);
+        line-height: .98;
+        font-weight: 950;
+        letter-spacing: -2.5px;
+    }
+
+    .earnings-header h1 span {
+        color: #f4c842;
     }
 
     .earnings-header p {
-        color: #71717a;
-        margin-top: 8px;
+        max-width: 680px;
+        margin: 11px 0 0;
+        color: #818181;
+        font-size: 12px;
+        line-height: 1.65;
     }
 
+    .earnings-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 13px;
+        border: 1px solid rgba(244, 200, 66, .15);
+        border-radius: 10px;
+        background: rgba(244, 200, 66, .035);
+        color: #bca858;
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: .7px;
+        text-transform: uppercase;
+    }
+
+    .earnings-badge::before {
+        content: "◆";
+        color: #f4c842;
+        font-size: 7px;
+    }
+
+
+    /* =========================================================
+       ALERTS
+       ========================================================= */
+
+    .earnings-alert {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-bottom: 18px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        font-size: 10px;
+        line-height: 1.5;
+    }
+
+    .earnings-alert-icon {
+        display: grid;
+        place-items: center;
+        width: 25px;
+        height: 25px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 950;
+    }
+
+    .earnings-alert.error {
+        border: 1px solid rgba(248, 113, 113, .17);
+        background:
+            linear-gradient(
+                135deg,
+                rgba(248, 113, 113, .065),
+                rgba(255,255,255,.008)
+            );
+        color: #efaaaa;
+    }
+
+    .earnings-alert.error .earnings-alert-icon {
+        background: rgba(248,113,113,.09);
+        color: #f87171;
+    }
+
+    .earnings-alert.success {
+        border: 1px solid rgba(74, 222, 128, .17);
+        background:
+            linear-gradient(
+                135deg,
+                rgba(74, 222, 128, .065),
+                rgba(255,255,255,.008)
+            );
+        color: #9be8b2;
+    }
+
+    .earnings-alert.success .earnings-alert-icon {
+        background: rgba(74,222,128,.09);
+        color: #4ade80;
+    }
+
+
+    /* =========================================================
+       WALLET HERO
+       ========================================================= */
+
     .wallet {
-        background: #18181b;
-        color: white;
+        position: relative;
+        overflow: hidden;
+
+        padding: 30px;
+
+        margin-bottom: 22px;
+
+        border: 1px solid rgba(244,200,66,.16);
         border-radius: 18px;
-        padding: 28px;
-        margin-bottom: 24px;
+
+        background:
+            radial-gradient(
+                circle at 88% 10%,
+                rgba(244,200,66,.085),
+                transparent 34%
+            ),
+            linear-gradient(
+                145deg,
+                rgba(255,255,255,.035),
+                rgba(255,255,255,.008)
+            ),
+            #0c0c0c;
+
+        box-shadow:
+            0 25px 65px rgba(0,0,0,.30),
+            inset 0 1px 0 rgba(255,255,255,.025);
+    }
+
+    .wallet::after {
+        content: "KES";
+
+        position: absolute;
+
+        right: 28px;
+        top: 21px;
+
+        color: rgba(244,200,66,.08);
+
+        font-size: 74px;
+        font-weight: 950;
+        letter-spacing: -4px;
+
+        pointer-events: none;
     }
 
     .wallet-label {
-        color: #a1a1aa;
-        font-size: 13px;
+        position: relative;
+        z-index: 2;
+
+        color: #8a8a8a;
+
+        font-size: 9px;
+        font-weight: 850;
+
+        letter-spacing: .7px;
+        text-transform: uppercase;
     }
 
     .wallet-amount {
-        font-size: 40px;
-        font-weight: 800;
-        margin: 8px 0 22px;
+        position: relative;
+        z-index: 2;
+
+        margin: 9px 0 25px;
+
+        color: #fff;
+
+        font-size: clamp(39px, 6vw, 55px);
+        line-height: 1;
+
+        font-weight: 950;
+        letter-spacing: -2.5px;
+
+        text-shadow:
+            0 10px 35px rgba(0,0,0,.35);
     }
 
+    .wallet-amount::first-letter {
+        color: #f4c842;
+    }
+
+
+    /* =========================================================
+       WALLET STATS
+       ========================================================= */
+
     .wallet-grid {
+        position: relative;
+        z-index: 2;
+
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 15px;
+
+        gap: 11px;
     }
 
     .wallet-stat {
-        background: #27272a;
-        border-radius: 10px;
-        padding: 14px;
+        padding: 15px;
+
+        border: 1px solid rgba(255,255,255,.055);
+        border-radius: 11px;
+
+        background:
+            rgba(255,255,255,.018);
+
+        transition:
+            border-color .18s ease,
+            background .18s ease,
+            transform .18s ease;
+    }
+
+    .wallet-stat:hover {
+        transform: translateY(-1px);
+
+        border-color: rgba(244,200,66,.12);
+
+        background:
+            rgba(244,200,66,.025);
     }
 
     .wallet-stat span {
         display: block;
-        color: #a1a1aa;
-        font-size: 12px;
-        margin-bottom: 5px;
+
+        margin-bottom: 7px;
+
+        color: #666;
+
+        font-size: 8px;
+        font-weight: 800;
+
+        letter-spacing: .6px;
+        text-transform: uppercase;
     }
 
     .wallet-stat strong {
-        font-size: 17px;
+        color: #e5e5e5;
+
+        font-size: 14px;
+        font-weight: 850;
     }
+
+
+    /* =========================================================
+       PANELS
+       ========================================================= */
 
     .panel {
-        background: white;
-        border: 1px solid #e4e4e7;
-        border-radius: 14px;
         overflow: hidden;
+
         margin-bottom: 22px;
+
+        border: 1px solid rgba(255,255,255,.075);
+        border-radius: 17px;
+
+        background:
+            linear-gradient(
+                145deg,
+                rgba(255,255,255,.028),
+                rgba(255,255,255,.008)
+            ),
+            rgba(14,14,14,.90);
+
+        box-shadow:
+            0 20px 55px rgba(0,0,0,.23),
+            inset 0 1px 0 rgba(255,255,255,.02);
+
+        backdrop-filter: blur(16px);
     }
 
+
+    /* =========================================================
+       PANEL HEADER
+       ========================================================= */
+
     .panel-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
         padding: 18px 20px;
-        border-bottom: 1px solid #e4e4e7;
+
+        border-bottom: 1px solid rgba(255,255,255,.055);
+    }
+
+    .panel-header::before {
+        content: "$";
+
+        display: grid;
+        place-items: center;
+
+        width: 33px;
+        height: 33px;
+
+        flex-shrink: 0;
+
+        border: 1px solid rgba(244,200,66,.13);
+        border-radius: 9px;
+
+        background: rgba(244,200,66,.035);
+
+        color: #f4c842;
+
+        font-size: 11px;
+        font-weight: 950;
     }
 
     .panel-header h2 {
         margin: 0;
-        font-size: 18px;
+
+        color: #f1f1f1;
+
+        font-size: 14px;
+        font-weight: 900;
+
+        letter-spacing: -.2px;
     }
+
+
+    /* =========================================================
+       WITHDRAW FORM
+       ========================================================= */
 
     .withdraw-form {
         padding: 20px;
@@ -90,362 +439,1039 @@
     .form-grid {
         display: grid;
         grid-template-columns: 1fr 1fr auto;
-        gap: 15px;
+
+        gap: 14px;
+
         align-items: end;
     }
 
-    label {
+    .form-field label {
         display: block;
-        margin-bottom: 7px;
-        font-size: 13px;
-        font-weight: 600;
+
+        margin-bottom: 8px;
+
+        color: #aaa;
+
+        font-size: 9px;
+        font-weight: 800;
+
+        letter-spacing: .2px;
     }
 
     input {
         width: 100%;
-        padding: 12px;
-        border: 1px solid #d4d4d8;
-        border-radius: 8px;
-        box-sizing: border-box;
+        height: 44px;
+
+        padding: 0 12px;
+
+        border: 1px solid rgba(255,255,255,.08);
+        border-radius: 9px;
+
+        outline: none;
+
+        background: rgba(5,5,5,.72);
+
+        color: #fff;
+
+        font-family: inherit;
+        font-size: 10px;
+
+        transition:
+            border-color .18s ease,
+            box-shadow .18s ease,
+            background .18s ease;
     }
 
-    button {
-        border: 0;
-        border-radius: 8px;
-        padding: 12px 18px;
-        background: #18181b;
-        color: white;
-        font-weight: 700;
+    input::placeholder {
+        color: #4e4e4e;
+    }
+
+    input:hover {
+        border-color: rgba(255,255,255,.13);
+    }
+
+    input:focus {
+        border-color: rgba(244,200,66,.40);
+
+        background: rgba(8,8,8,.92);
+
+        box-shadow:
+            0 0 0 3px rgba(244,200,66,.05);
+    }
+
+
+    /* =========================================================
+       BUTTON
+       ========================================================= */
+
+    .withdraw-button {
+        height: 44px;
+
+        padding: 0 18px;
+
+        border: 1px solid rgba(255,255,255,.13);
+        border-radius: 9px;
+
+        background:
+            linear-gradient(
+                135deg,
+                #ffe58a,
+                #f4c842,
+                #c99b1c
+            );
+
+        color: #090909;
+
+        font-family: inherit;
+
+        font-size: 9px;
+        font-weight: 950;
+
+        letter-spacing: .35px;
+        text-transform: uppercase;
+
         cursor: pointer;
+
+        white-space: nowrap;
+
+        box-shadow:
+            0 9px 22px rgba(244,200,66,.10);
+
+        transition:
+            transform .18s ease,
+            filter .18s ease,
+            box-shadow .18s ease;
     }
 
-    button:hover {
-        opacity: .9;
+    .withdraw-button:hover {
+        transform: translateY(-1px);
+
+        filter: brightness(1.05);
+
+        box-shadow:
+            0 13px 28px rgba(244,200,66,.15);
     }
 
-    .alert {
-        margin-bottom: 20px;
+    .withdraw-button:disabled {
+        opacity: .35;
+
+        cursor: not-allowed;
+
+        transform: none;
+
+        filter: grayscale(.25);
+
+        box-shadow: none;
+    }
+
+
+    /* =========================================================
+       TABLE
+       ========================================================= */
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
     }
 
     table {
         width: 100%;
+        min-width: 820px;
+
         border-collapse: collapse;
     }
 
-    th,
-    td {
-        padding: 14px 16px;
-        border-bottom: 1px solid #f4f4f5;
+    th {
+        padding: 13px 17px;
+
         text-align: left;
-        font-size: 13px;
+
+        background: rgba(255,255,255,.015);
+
+        border-bottom: 1px solid rgba(255,255,255,.055);
+
+        color: #555;
+
+        font-size: 8px;
+        font-weight: 950;
+
+        letter-spacing: .8px;
+        text-transform: uppercase;
+
+        white-space: nowrap;
     }
 
-    th {
-        background: #fafafa;
-        color: #71717a;
-        font-size: 11px;
-        text-transform: uppercase;
+    td {
+        padding: 15px 17px;
+
+        border-bottom: 1px solid rgba(255,255,255,.04);
+
+        color: #999;
+
+        font-size: 10px;
+
+        vertical-align: middle;
+
+        white-space: nowrap;
     }
+
+    tbody tr {
+        transition: background .16s ease;
+    }
+
+    tbody tr:hover {
+        background: rgba(244,200,66,.021);
+    }
+
+    tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+
+    /* =========================================================
+       AMOUNT
+       ========================================================= */
+
+    .withdrawal-amount {
+        color: #e4e4e4;
+
+        font-size: 11px;
+        font-weight: 850;
+    }
+
+
+    /* =========================================================
+       PHONE
+       ========================================================= */
+
+    .phone-number {
+        color: #aaa;
+
+        font-family: monospace;
+
+        font-size: 9px;
+    }
+
+
+    /* =========================================================
+       REFERENCE
+       ========================================================= */
+
+    .reference {
+        display: inline-block;
+
+        max-width: 150px;
+
+        overflow: hidden;
+
+        color: #777;
+
+        font-family: monospace;
+        font-size: 8px;
+
+        text-overflow: ellipsis;
+
+        vertical-align: middle;
+    }
+
+
+    /* =========================================================
+       DATE
+       ========================================================= */
+
+    .withdrawal-date {
+        color: #686868;
+
+        font-size: 9px;
+    }
+
+
+    /* =========================================================
+       STATUS
+       ========================================================= */
 
     .status {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+
         padding: 5px 9px;
+
         border-radius: 999px;
-        font-size: 11px;
-        font-weight: 700;
+
+        font-size: 8px;
+        font-weight: 900;
+
+        letter-spacing: .25px;
+
         text-transform: capitalize;
+
+        white-space: nowrap;
+    }
+
+    .status::before {
+        content: "";
+
+        width: 5px;
+        height: 5px;
+
+        border-radius: 50%;
     }
 
     .pending {
-        background: #fef3c7;
-        color: #92400e;
+        background: rgba(250,204,21,.055);
+        border: 1px solid rgba(250,204,21,.14);
+        color: #e8cf70;
+    }
+
+    .pending::before {
+        background: #facc15;
+        box-shadow: 0 0 7px rgba(250,204,21,.4);
     }
 
     .processing {
-        background: #dbeafe;
-        color: #1e40af;
+        background: rgba(96,165,250,.055);
+        border: 1px solid rgba(96,165,250,.14);
+        color: #9cc9f5;
+    }
+
+    .processing::before {
+        background: #60a5fa;
+        box-shadow: 0 0 7px rgba(96,165,250,.4);
     }
 
     .paid {
-        background: #dcfce7;
-        color: #166534;
+        background: rgba(74,222,128,.055);
+        border: 1px solid rgba(74,222,128,.14);
+        color: #91e9ab;
+    }
+
+    .paid::before {
+        background: #4ade80;
+        box-shadow: 0 0 7px rgba(74,222,128,.45);
     }
 
     .rejected {
-        background: #fee2e2;
-        color: #991b1b;
+        background: rgba(248,113,113,.055);
+        border: 1px solid rgba(248,113,113,.14);
+        color: #ef9b9b;
     }
+
+    .rejected::before {
+        background: #f87171;
+        box-shadow: 0 0 7px rgba(248,113,113,.35);
+    }
+
+
+    /* =========================================================
+       ACTIONS
+       ========================================================= */
 
     .action-form {
         display: inline;
     }
 
     .small-button {
-        padding: 7px 10px;
-        font-size: 11px;
+        height: 29px;
+
+        padding: 0 10px;
+
         margin-right: 4px;
+
+        border: 1px solid rgba(255,255,255,.09);
+        border-radius: 7px;
+
+        background:
+            rgba(255,255,255,.045);
+
+        color: #cfcfcf;
+
+        font-family: inherit;
+
+        font-size: 8px;
+        font-weight: 850;
+
+        cursor: pointer;
+
+        transition:
+            background .18s ease,
+            border-color .18s ease,
+            color .18s ease,
+            transform .18s ease;
     }
 
-    .danger {
-        background: #991b1b;
+    .small-button:hover {
+        transform: translateY(-1px);
+
+        background: rgba(255,255,255,.08);
+
+        border-color: rgba(255,255,255,.15);
+
+        color: #fff;
     }
+
+    .small-button.danger {
+        border-color: rgba(248,113,113,.15);
+
+        background:
+            rgba(248,113,113,.055);
+
+        color: #df9696;
+    }
+
+    .small-button.danger:hover {
+        background: rgba(248,113,113,.10);
+
+        border-color: rgba(248,113,113,.24);
+
+        color: #f3aaaa;
+    }
+
+
+    /* =========================================================
+       EMPTY STATE
+       ========================================================= */
 
     .empty {
-        padding: 30px;
+        padding: 60px 20px;
+
         text-align: center;
-        color: #71717a;
+
+        color: #5e5e5e;
+
+        font-size: 10px;
     }
 
-    @media (max-width: 750px) {
-        .wallet-grid,
+    .empty-icon {
+        display: grid;
+        place-items: center;
+
+        width: 45px;
+        height: 45px;
+
+        margin: 0 auto 14px;
+
+        border: 1px solid rgba(244,200,66,.13);
+        border-radius: 12px;
+
+        background: rgba(244,200,66,.035);
+
+        color: #f4c842;
+
+        font-size: 12px;
+        font-weight: 950;
+    }
+
+    .empty strong {
+        display: block;
+
+        margin-bottom: 6px;
+
+        color: #858585;
+
+        font-size: 11px;
+        font-weight: 850;
+    }
+
+
+    /* =========================================================
+       MOBILE
+       ========================================================= */
+
+    @media (max-width: 850px) {
+
+        .earnings-container {
+            padding: 0 20px;
+        }
+
+        .wallet-grid {
+            grid-template-columns: 1fr;
+        }
+
         .form-grid {
             grid-template-columns: 1fr;
         }
 
+        .withdraw-button {
+            width: 100%;
+        }
+
+    }
+
+
+    @media (max-width: 650px) {
+
+        .earnings-page {
+            padding-top: 25px;
+        }
+
+        .earnings-container {
+            padding: 0 14px;
+        }
+
+        .earnings-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .earnings-header h1 {
+            font-size: 39px;
+            letter-spacing: -1.8px;
+        }
+
+        .earnings-badge {
+            display: none;
+        }
+
+        .wallet {
+            padding: 23px 20px;
+        }
+
         .wallet-amount {
-            font-size: 32px;
+            font-size: 38px;
+        }
+
+        .wallet::after {
+            font-size: 54px;
+            right: 17px;
+        }
+
+        .panel-header {
+            padding: 16px;
+        }
+
+        .withdraw-form {
+            padding: 16px;
         }
 
         .panel {
+            overflow: hidden;
+        }
+
+        .table-wrap {
             overflow-x: auto;
         }
 
         table {
-            min-width: 700px;
+            min-width: 820px;
         }
+
     }
+
+
+    @media (max-width: 400px) {
+
+        .earnings-header h1 {
+            font-size: 34px;
+        }
+
+        .wallet-amount {
+            font-size: 34px;
+        }
+
+    }
+
 </style>
+
 
 <div class="earnings-page">
 
-    <div class="earnings-header">
-        <h1>BeatHub Earnings</h1>
-        <p>
-            Manage BeatHub's platform commission separately from creator earnings.
-        </p>
-    </div>
+    <div class="earnings-container">
 
-    {% if request.query_params.get('error') %}
-        <div class="alert alert-error">
-            {{ request.query_params.get('error') }}
-        </div>
-    {% endif %}
 
-    {% if request.query_params.get('success') %}
-        <div class="alert alert-success">
-            {{ request.query_params.get('success') }}
-        </div>
-    {% endif %}
+        <!-- =====================================================
+             HEADER
+             ===================================================== -->
 
-    <section class="wallet">
+        <div class="earnings-header">
 
-        <div class="wallet-label">
-            Available BeatHub Platform Balance
-        </div>
+            <div>
 
-        <div class="wallet-amount">
-            KES {{ "%.2f"|format(platform.available|float) }}
-        </div>
+                <div class="earnings-kicker">
 
-        <div class="wallet-grid">
+                    <span class="earnings-kicker-dot"></span>
 
-            <div class="wallet-stat">
-                <span>Total Commission</span>
-                <strong>
-                    KES {{ "%.2f"|format(platform.total_commission|float) }}
-                </strong>
+                    BeatHub Finance
+
+                </div>
+
+                <h1>
+                    Platform <span>Earnings.</span>
+                </h1>
+
+                <p>
+                    Manage BeatHub's platform commission separately
+                    from creator earnings, withdrawals, and payout
+                    processing.
+                </p>
+
             </div>
 
-            <div class="wallet-stat">
-                <span>Already Withdrawn</span>
-                <strong>
-                    KES {{ "%.2f"|format(platform.withdrawn|float) }}
-                </strong>
-            </div>
 
-            <div class="wallet-stat">
-                <span>Reserved / Processing</span>
-                <strong>
-                    KES {{ "%.2f"|format(platform.reserved|float) }}
-                </strong>
+            <div class="earnings-badge">
+                Finance Control
             </div>
 
         </div>
 
-    </section>
 
-    <section class="panel">
+        <!-- =====================================================
+             ALERTS
+             ===================================================== -->
 
-        <div class="panel-header">
-            <h2>Withdraw BeatHub Commission</h2>
-        </div>
+        {% if request.query_params.get('error') %}
 
-        <form
-            method="post"
-            action="/admin/earnings/withdraw"
-            class="withdraw-form"
-        >
+            <div class="earnings-alert error">
 
-            <div class="form-grid">
-
-                <div>
-                    <label for="amount">
-                        Amount (KES)
-                    </label>
-
-                    <input
-                        id="amount"
-                        name="amount"
-                        type="number"
-                        min="1"
-                        step="0.01"
-                        max="{{ platform.available }}"
-                        placeholder="5000"
-                        required
-                    >
+                <div class="earnings-alert-icon">
+                    !
                 </div>
 
                 <div>
-                    <label for="phone_number">
-                        M-Pesa Number
-                    </label>
-
-                    <input
-                        id="phone_number"
-                        name="phone_number"
-                        type="tel"
-                        placeholder="0712345678"
-                        required
-                    >
+                    {{ request.query_params.get('error') }}
                 </div>
 
-                <button
-                    type="submit"
-                    {% if platform.available <= 0 %}
-                        disabled
-                    {% endif %}
-                >
-                    Withdraw to M-Pesa
-                </button>
-
-            </div>
-
-        </form>
-
-    </section>
-
-    <section class="panel">
-
-        <div class="panel-header">
-            <h2>Platform Withdrawal History</h2>
-        </div>
-
-        {% if withdrawals %}
-
-            <table>
-
-                <thead>
-                    <tr>
-                        <th>Amount</th>
-                        <th>M-Pesa</th>
-                        <th>Status</th>
-                        <th>Reference</th>
-                        <th>Date</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-
-                {% for withdrawal in withdrawals %}
-
-                    {% set status = withdrawal.status.value if withdrawal.status.value is defined else withdrawal.status %}
-
-                    <tr>
-
-                        <td>
-                            <strong>
-                                KES {{ "%.2f"|format(withdrawal.amount|float) }}
-                            </strong>
-                        </td>
-
-                        <td>
-                            {{ withdrawal.phone_number }}
-                        </td>
-
-                        <td>
-                            <span class="status {{ status }}">
-                                {{ status }}
-                            </span>
-                        </td>
-
-                        <td>
-                            {{ withdrawal.conversation_id or "—" }}
-                        </td>
-
-                        <td>
-                            {% if withdrawal.created_at %}
-                                {{ withdrawal.created_at.strftime("%d %b %Y, %H:%M") }}
-                            {% else %}
-                                —
-                            {% endif %}
-                        </td>
-
-                        <td>
-
-                            {% if status in ["processing", "approved"] %}
-
-                                <form
-                                    method="post"
-                                    action="/admin/earnings/{{ withdrawal.id }}/mark-paid"
-                                    class="action-form"
-                                >
-                                    <button
-                                        type="submit"
-                                        class="small-button"
-                                    >
-                                        Mark Paid
-                                    </button>
-                                </form>
-
-                                <form
-                                    method="post"
-                                    action="/admin/earnings/{{ withdrawal.id }}/reject"
-                                    class="action-form"
-                                >
-                                    <button
-                                        type="submit"
-                                        class="small-button danger"
-                                    >
-                                        Reject
-                                    </button>
-                                </form>
-
-                            {% else %}
-
-                                —
-
-                            {% endif %}
-
-                        </td>
-
-                    </tr>
-
-                {% endfor %}
-
-                </tbody>
-
-            </table>
-
-        {% else %}
-
-            <div class="empty">
-                No BeatHub platform withdrawals yet.
             </div>
 
         {% endif %}
 
-    </section>
+
+        {% if request.query_params.get('success') %}
+
+            <div class="earnings-alert success">
+
+                <div class="earnings-alert-icon">
+                    ✓
+                </div>
+
+                <div>
+                    {{ request.query_params.get('success') }}
+                </div>
+
+            </div>
+
+        {% endif %}
+
+
+        <!-- =====================================================
+             WALLET
+             ===================================================== -->
+
+        <section class="wallet">
+
+            <div class="wallet-label">
+                Available BeatHub Platform Balance
+            </div>
+
+
+            <div class="wallet-amount">
+
+                KES
+                {{ "%.2f"|format(platform.available|float) }}
+
+            </div>
+
+
+            <div class="wallet-grid">
+
+
+                <div class="wallet-stat">
+
+                    <span>
+                        Total Commission
+                    </span>
+
+                    <strong>
+
+                        KES
+                        {{
+                            "%.2f"|format(
+                                platform.total_commission|float
+                            )
+                        }}
+
+                    </strong>
+
+                </div>
+
+
+                <div class="wallet-stat">
+
+                    <span>
+                        Already Withdrawn
+                    </span>
+
+                    <strong>
+
+                        KES
+                        {{
+                            "%.2f"|format(
+                                platform.withdrawn|float
+                            )
+                        }}
+
+                    </strong>
+
+                </div>
+
+
+                <div class="wallet-stat">
+
+                    <span>
+                        Reserved / Processing
+                    </span>
+
+                    <strong>
+
+                        KES
+                        {{
+                            "%.2f"|format(
+                                platform.reserved|float
+                            )
+                        }}
+
+                    </strong>
+
+                </div>
+
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             WITHDRAW
+             ===================================================== -->
+
+        <section class="panel">
+
+
+            <div class="panel-header">
+
+                <h2>
+                    Withdraw BeatHub Commission
+                </h2>
+
+            </div>
+
+
+            <form
+                method="post"
+                action="/admin/earnings/withdraw"
+                class="withdraw-form"
+            >
+
+
+                <div class="form-grid">
+
+
+                    <div class="form-field">
+
+                        <label for="amount">
+                            Amount (KES)
+                        </label>
+
+                        <input
+                            id="amount"
+                            name="amount"
+                            type="number"
+                            min="1"
+                            step="0.01"
+                            max="{{ platform.available }}"
+                            placeholder="5000"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label for="phone_number">
+                            M-Pesa Number
+                        </label>
+
+                        <input
+                            id="phone_number"
+                            name="phone_number"
+                            type="tel"
+                            placeholder="0712345678"
+                            required
+                        >
+
+                    </div>
+
+
+                    <button
+                        type="submit"
+                        class="withdraw-button"
+                        {% if platform.available <= 0 %}
+                            disabled
+                        {% endif %}
+                    >
+                        Withdraw to M-Pesa
+                    </button>
+
+
+                </div>
+
+            </form>
+
+        </section>
+
+
+        <!-- =====================================================
+             WITHDRAWAL HISTORY
+             ===================================================== -->
+
+        <section class="panel">
+
+
+            <div class="panel-header">
+
+                <h2>
+                    Platform Withdrawal History
+                </h2>
+
+            </div>
+
+
+            {% if withdrawals %}
+
+
+                <div class="table-wrap">
+
+                    <table>
+
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Amount
+                                </th>
+
+                                <th>
+                                    M-Pesa
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+
+                                <th>
+                                    Reference
+                                </th>
+
+                                <th>
+                                    Date
+                                </th>
+
+                                <th>
+                                    Action
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+
+                        {% for withdrawal in withdrawals %}
+
+
+                            {% set status =
+                                withdrawal.status.value
+                                if withdrawal.status.value is defined
+                                else withdrawal.status
+                            %}
+
+
+                            <tr>
+
+
+                                <!-- AMOUNT -->
+
+                                <td>
+
+                                    <strong class="withdrawal-amount">
+
+                                        KES
+                                        {{
+                                            "%.2f"|format(
+                                                withdrawal.amount|float
+                                            )
+                                        }}
+
+                                    </strong>
+
+                                </td>
+
+
+                                <!-- PHONE -->
+
+                                <td>
+
+                                    <span class="phone-number">
+
+                                        {{ withdrawal.phone_number }}
+
+                                    </span>
+
+                                </td>
+
+
+                                <!-- STATUS -->
+
+                                <td>
+
+                                    <span
+                                        class="status {{ status }}"
+                                    >
+                                        {{ status }}
+                                    </span>
+
+                                </td>
+
+
+                                <!-- REFERENCE -->
+
+                                <td>
+
+                                    <span class="reference">
+
+                                        {{
+                                            withdrawal.conversation_id
+                                            or "—"
+                                        }}
+
+                                    </span>
+
+                                </td>
+
+
+                                <!-- DATE -->
+
+                                <td>
+
+                                    <span class="withdrawal-date">
+
+                                        {% if withdrawal.created_at %}
+
+                                            {{
+                                                withdrawal.created_at.strftime(
+                                                    "%d %b %Y, %H:%M"
+                                                )
+                                            }}
+
+                                        {% else %}
+
+                                            —
+
+                                        {% endif %}
+
+                                    </span>
+
+                                </td>
+
+
+                                <!-- ACTION -->
+
+                                <td>
+
+
+                                    {% if status in [
+                                        "processing",
+                                        "approved"
+                                    ] %}
+
+
+                                        <form
+                                            method="post"
+                                            action="/admin/earnings/{{ withdrawal.id }}/mark-paid"
+                                            class="action-form"
+                                        >
+
+                                            <button
+                                                type="submit"
+                                                class="small-button"
+                                            >
+                                                Mark Paid
+                                            </button>
+
+                                        </form>
+
+
+                                        <form
+                                            method="post"
+                                            action="/admin/earnings/{{ withdrawal.id }}/reject"
+                                            class="action-form"
+                                        >
+
+                                            <button
+                                                type="submit"
+                                                class="small-button danger"
+                                            >
+                                                Reject
+                                            </button>
+
+                                        </form>
+
+
+                                    {% else %}
+
+                                        —
+
+                                    {% endif %}
+
+
+                                </td>
+
+
+                            </tr>
+
+
+                        {% endfor %}
+
+
+                        </tbody>
+
+
+                    </table>
+
+                </div>
+
+
+            {% else %}
+
+
+                <div class="empty">
+
+                    <div class="empty-icon">
+                        $
+                    </div>
+
+                    <strong>
+                        No platform withdrawals yet
+                    </strong>
+
+                    No BeatHub platform commission withdrawals
+                    have been created.
+
+                </div>
+
+
+            {% endif %}
+
+
+        </section>
+
+
+    </div>
 
 </div>
 
