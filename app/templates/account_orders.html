@@ -4,146 +4,1031 @@
 
 {% block content %}
 
-<section style="padding:40px 0;">
-  <div style="max-width:1000px;margin:0 auto;">
+<style>
+    .orders-page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px 0 70px;
+    }
 
-    <div class="eyebrow">MY ORDERS</div>
+    /* =========================================================
+       HERO
+       ========================================================= */
 
-    <h1 style="font-size:32px;margin:6px 0 8px;">
-      Order History
-    </h1>
+    .orders-hero {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 30px;
+        padding: 38px;
+        margin-bottom: 26px;
+        border: 1px solid #27272a;
+        border-radius: 24px;
 
-    <p style="color:var(--text-muted);">
-      Your BeatHub purchases and payment status.
-    </p>
+        background:
+            radial-gradient(
+                circle at 88% 12%,
+                rgba(255,255,255,.09),
+                transparent 30%
+            ),
+            radial-gradient(
+                circle at 5% 100%,
+                rgba(255,255,255,.035),
+                transparent 32%
+            ),
+            linear-gradient(
+                135deg,
+                #18181b 0%,
+                #0f0f11 100%
+            );
+    }
 
-    {% if orders %}
+    .orders-hero::before {
+        content: "";
+        position: absolute;
+        width: 360px;
+        height: 360px;
+        right: -160px;
+        top: -220px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.06);
+        pointer-events: none;
+    }
 
-      <div style="margin-top:28px;display:grid;gap:14px;">
+    .orders-hero::after {
+        content: "";
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        left: -130px;
+        bottom: -150px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.045);
+        pointer-events: none;
+    }
 
-        {% for order in orders %}
+    .orders-hero-content {
+        position: relative;
+        z-index: 1;
+    }
 
-          <div class="stat-card">
+    .orders-eyebrow {
+        margin-bottom: 9px;
+        color: #a1a1aa;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .14em;
+    }
 
-            <div
-              style="
-                display:flex;
-                justify-content:space-between;
-                gap:20px;
-                flex-wrap:wrap;
-              "
+    .orders-hero h1 {
+        margin: 0;
+        color: #fff;
+        font-size: clamp(30px, 4vw, 46px);
+        line-height: 1.05;
+        letter-spacing: -.045em;
+    }
+
+    .orders-hero p {
+        max-width: 650px;
+        margin: 13px 0 0;
+        color: #a1a1aa;
+        font-size: 14px;
+        line-height: 1.65;
+    }
+
+    .orders-hero-action {
+        position: relative;
+        z-index: 1;
+        flex: 0 0 auto;
+    }
+
+    /* =========================================================
+       SUMMARY
+       ========================================================= */
+
+    .orders-summary {
+        display: grid;
+        grid-template-columns:
+            repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 26px;
+    }
+
+    .summary-card {
+        position: relative;
+        overflow: hidden;
+        padding: 20px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #111113;
+    }
+
+    .summary-card::after {
+        content: "";
+        position: absolute;
+        width: 90px;
+        height: 90px;
+        right: -35px;
+        top: -35px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.055);
+    }
+
+    .summary-label {
+        position: relative;
+        z-index: 1;
+        color: #71717a;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .07em;
+    }
+
+    .summary-value {
+        position: relative;
+        z-index: 1;
+        margin-top: 10px;
+        color: #fff;
+        font-size: 28px;
+        font-weight: 850;
+        letter-spacing: -.035em;
+    }
+
+    .summary-description {
+        position: relative;
+        z-index: 1;
+        margin-top: 5px;
+        color: #52525b;
+        font-size: 11px;
+    }
+
+    /* =========================================================
+       ORDERS PANEL
+       ========================================================= */
+
+    .orders-panel {
+        overflow: hidden;
+        border: 1px solid #27272a;
+        border-radius: 20px;
+        background: #111113;
+    }
+
+    .orders-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+        padding: 21px 24px;
+        border-bottom: 1px solid #27272a;
+    }
+
+    .orders-panel-header h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 17px;
+    }
+
+    .orders-panel-header p {
+        margin: 5px 0 0;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .order-count {
+        padding: 6px 10px;
+        border: 1px solid #3f3f46;
+        border-radius: 999px;
+        background: #18181b;
+        color: #a1a1aa;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    /* =========================================================
+       ORDER CARD
+       ========================================================= */
+
+    .orders-list {
+        padding: 14px;
+    }
+
+    .order-card {
+        position: relative;
+        overflow: hidden;
+        padding: 22px;
+        margin-bottom: 10px;
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        background:
+            radial-gradient(
+                circle at 100% 0%,
+                rgba(255,255,255,.035),
+                transparent 35%
+            ),
+            #0d0d0f;
+
+        transition:
+            border-color .18s ease,
+            transform .18s ease,
+            background .18s ease;
+    }
+
+    .order-card:last-child {
+        margin-bottom: 0;
+    }
+
+    .order-card:hover {
+        transform: translateY(-1px);
+        border-color: #3f3f46;
+        background:
+            radial-gradient(
+                circle at 100% 0%,
+                rgba(255,255,255,.05),
+                transparent 35%
+            ),
+            #111113;
+    }
+
+    .order-main {
+        display: grid;
+        grid-template-columns:
+            minmax(0, 1fr)
+            auto;
+        gap: 25px;
+        align-items: center;
+    }
+
+    /* =========================================================
+       ORDER INFO
+       ========================================================= */
+
+    .order-info {
+        min-width: 0;
+    }
+
+    .order-number {
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 8px;
+        color: #71717a;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+
+    .order-title {
+        margin: 0;
+        color: #fff;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -.02em;
+    }
+
+    .order-date {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 7px;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .order-date-dot {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #52525b;
+    }
+
+    /* =========================================================
+       ORDER PAYMENT
+       ========================================================= */
+
+    .order-payment {
+        min-width: 170px;
+        text-align: right;
+    }
+
+    .order-amount {
+        color: #fff;
+        font-size: 20px;
+        font-weight: 850;
+        letter-spacing: -.025em;
+    }
+
+    /* =========================================================
+       STATUS
+       ========================================================= */
+
+    .order-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+
+    .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+    }
+
+    .status-completed {
+        border: 1px solid #166534;
+        background: #052e16;
+        color: #bbf7d0;
+    }
+
+    .status-completed .status-dot {
+        background: #4ade80;
+    }
+
+    .status-pending {
+        border: 1px solid #854d0e;
+        background: #422006;
+        color: #fde68a;
+    }
+
+    .status-pending .status-dot {
+        background: #facc15;
+    }
+
+    .status-failed {
+        border: 1px solid #991b1b;
+        background: #450a0a;
+        color: #fecaca;
+    }
+
+    .status-failed .status-dot {
+        background: #f87171;
+    }
+
+    .status-default {
+        border: 1px solid #3f3f46;
+        background: #18181b;
+        color: #d4d4d8;
+    }
+
+    .status-default .status-dot {
+        background: #a1a1aa;
+    }
+
+    /* =========================================================
+       ORDER FOOTER
+       ========================================================= */
+
+    .order-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-top: 19px;
+        padding-top: 16px;
+        border-top: 1px solid #27272a;
+    }
+
+    .order-type {
+        color: #52525b;
+        font-size: 11px;
+    }
+
+    .order-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .order-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        padding: 0 12px;
+        border: 1px solid #3f3f46;
+        border-radius: 9px;
+        background: #18181b;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 800;
+        transition:
+            background .18s ease,
+            border-color .18s ease,
+            color .18s ease;
+    }
+
+    .order-action:hover {
+        border-color: #52525b;
+        background: #27272a;
+        color: #fff;
+    }
+
+    .order-action.primary {
+        border-color: #fff;
+        background: #fff;
+        color: #09090b;
+    }
+
+    .order-action.primary:hover {
+        background: #e4e4e7;
+        color: #09090b;
+    }
+
+    /* =========================================================
+       EMPTY STATE
+       ========================================================= */
+
+    .empty-orders {
+        padding: 70px 25px;
+        text-align: center;
+    }
+
+    .empty-icon {
+        width: 70px;
+        height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 18px;
+        border: 1px solid #27272a;
+        border-radius: 20px;
+        background:
+            radial-gradient(
+                circle at 50% 20%,
+                rgba(255,255,255,.08),
+                transparent 65%
+            ),
+            #18181b;
+        font-size: 28px;
+    }
+
+    .empty-orders h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 20px;
+    }
+
+    .empty-orders p {
+        max-width: 430px;
+        margin: 9px auto 20px;
+        color: #71717a;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    /* =========================================================
+       BOTTOM NAVIGATION
+       ========================================================= */
+
+    .orders-navigation {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 15px;
+        border: 1px solid #27272a;
+        border-radius: 10px;
+        background: #111113;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+        transition:
+            background .18s ease,
+            border-color .18s ease;
+    }
+
+    .back-link:hover {
+        border-color: #3f3f46;
+        background: #18181b;
+        color: #fff;
+    }
+
+    /* =========================================================
+       MOBILE
+       ========================================================= */
+
+    @media (max-width: 800px) {
+
+        .orders-page {
+            padding-top: 5px;
+        }
+
+        .orders-hero {
+            padding: 26px;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .orders-hero-action {
+            width: 100%;
+        }
+
+        .orders-hero-action a {
+            width: 100%;
+        }
+
+        .orders-summary {
+            grid-template-columns: 1fr;
+        }
+
+        .order-main {
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        .order-payment {
+            min-width: 0;
+            text-align: left;
+        }
+
+        .order-footer {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .order-actions {
+            width: 100%;
+        }
+
+        .order-action {
+            flex: 1;
+        }
+
+        .orders-panel-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+
+    @media (max-width: 500px) {
+
+        .orders-page {
+            padding-bottom: 40px;
+        }
+
+        .orders-hero {
+            border-radius: 18px;
+            padding: 22px;
+        }
+
+        .orders-hero h1 {
+            font-size: 30px;
+        }
+
+        .orders-list {
+            padding: 9px;
+        }
+
+        .order-card {
+            padding: 18px;
+        }
+
+        .order-title {
+            font-size: 16px;
+        }
+
+        .order-amount {
+            font-size: 18px;
+        }
+
+        .order-actions {
+            flex-direction: column;
+        }
+
+        .order-action {
+            width: 100%;
+        }
+    }
+</style>
+
+
+<div class="orders-page">
+
+    <!-- =====================================================
+         HERO
+         ===================================================== -->
+
+    <section class="orders-hero">
+
+        <div class="orders-hero-content">
+
+            <div class="orders-eyebrow">
+                BeatHub Account
+            </div>
+
+            <h1>
+                Order History
+            </h1>
+
+            <p>
+                View your BeatHub purchases, payment status and
+                transaction history in one place.
+            </p>
+
+        </div>
+
+        <div class="orders-hero-action">
+
+            <a
+                href="/beats"
+                class="btn btn-primary"
             >
+                Browse Beats
+            </a>
 
-              <div>
+        </div>
 
-                <div class="label">
-                  {{ order.order_number }}
-                </div>
+    </section>
 
-                <h2 style="margin:5px 0;">
 
-                  {% if order.track %}
-                    {{ order.track.title }}
-                  {% elif order.album %}
-                    {{ order.album.title }}
-                  {% else %}
-                    BeatHub Purchase
-                  {% endif %}
+    <!-- =====================================================
+         SUMMARY
+         ===================================================== -->
 
+    {% set completed_count = 0 %}
+    {% set pending_count = 0 %}
+    {% set total_spent = 0 %}
+
+    {% for order in orders %}
+
+        {% set status_value =
+            order.status.value
+            if order.status and order.status.value
+            else order.status|string
+        %}
+
+        {% if status_value|lower == "completed" %}
+            {% set completed_count = completed_count + 1 %}
+            {% set total_spent =
+                total_spent
+                + (order.gross_amount|float)
+            %}
+        {% endif %}
+
+        {% if status_value|lower == "pending" %}
+            {% set pending_count = pending_count + 1 %}
+        {% endif %}
+
+    {% endfor %}
+
+
+    <section class="orders-summary">
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Total Orders
+            </div>
+
+            <div class="summary-value">
+                {{ orders|length }}
+            </div>
+
+            <div class="summary-description">
+                All purchases
+            </div>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Completed
+            </div>
+
+            <div class="summary-value">
+                {{ completed_count }}
+            </div>
+
+            <div class="summary-description">
+                Successful purchases
+            </div>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <div class="summary-label">
+                Pending
+            </div>
+
+            <div class="summary-value">
+                {{ pending_count }}
+            </div>
+
+            <div class="summary-description">
+                Awaiting payment confirmation
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =====================================================
+         ORDERS
+         ===================================================== -->
+
+    <section class="orders-panel">
+
+        <div class="orders-panel-header">
+
+            <div>
+
+                <h2>
+                    Your Purchases
                 </h2>
 
-                <div style="color:var(--text-muted);font-size:14px;">
-                  {{ order.created_at.strftime("%d %b %Y, %H:%M") if order.created_at else "" }}
-                </div>
-
-              </div>
-
-              <div style="text-align:right;">
-
-                <strong style="font-size:18px;">
-                  KSh {{ "{:,.2f}".format(order.gross_amount|float) }}
-                </strong>
-
-                <div style="margin-top:7px;">
-
-                  {% if order.status.value == "completed" %}
-
-                    <span style="font-weight:600;">
-                      ✓ Completed
-                    </span>
-
-                  {% elif order.status.value == "pending" %}
-
-                    <span style="font-weight:600;">
-                      Pending
-                    </span>
-
-                  {% elif order.status.value == "failed" %}
-
-                    <span style="font-weight:600;">
-                      Failed
-                    </span>
-
-                  {% else %}
-
-                    <span style="font-weight:600;">
-                      {{ order.status.value|title }}
-                    </span>
-
-                  {% endif %}
-
-                </div>
-
-              </div>
+                <p>
+                    Every BeatHub order associated with your account.
+                </p>
 
             </div>
 
-            {% if order.status.value == "pending" %}
+            <div class="order-count">
+                {{ orders|length }} order{% if orders|length != 1 %}s{% endif %}
+            </div>
 
-              <div style="margin-top:18px;">
+        </div>
+
+
+        {% if orders %}
+
+            <div class="orders-list">
+
+                {% for order in orders %}
+
+                    {% set status_value =
+                        order.status.value
+                        if order.status and order.status.value
+                        else order.status|string
+                    %}
+
+                    <article class="order-card">
+
+                        <div class="order-main">
+
+                            <!-- ORDER INFORMATION -->
+
+                            <div class="order-info">
+
+                                <div class="order-number">
+                                    Order {{ order.order_number }}
+                                </div>
+
+                                <h3 class="order-title">
+
+                                    {% if order.track %}
+
+                                        {{ order.track.title }}
+
+                                    {% elif order.album %}
+
+                                        {{ order.album.title }}
+
+                                    {% else %}
+
+                                        BeatHub Purchase
+
+                                    {% endif %}
+
+                                </h3>
+
+                                <div class="order-date">
+
+                                    <span>
+                                        Purchased
+                                    </span>
+
+                                    <span class="order-date-dot"></span>
+
+                                    <span>
+
+                                        {% if order.created_at %}
+
+                                            {{ order.created_at.strftime(
+                                                "%d %b %Y, %H:%M"
+                                            ) }}
+
+                                        {% else %}
+
+                                            Date unavailable
+
+                                        {% endif %}
+
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+
+                            <!-- PAYMENT -->
+
+                            <div class="order-payment">
+
+                                <div class="order-amount">
+                                    KSh {{ "{:,.2f}".format(
+                                        order.gross_amount|float
+                                    ) }}
+                                </div>
+
+
+                                {% if status_value|lower == "completed" %}
+
+                                    <div class="order-status status-completed">
+
+                                        <span class="status-dot"></span>
+
+                                        Completed
+
+                                    </div>
+
+                                {% elif status_value|lower == "pending" %}
+
+                                    <div class="order-status status-pending">
+
+                                        <span class="status-dot"></span>
+
+                                        Pending
+
+                                    </div>
+
+                                {% elif status_value|lower == "failed" %}
+
+                                    <div class="order-status status-failed">
+
+                                        <span class="status-dot"></span>
+
+                                        Failed
+
+                                    </div>
+
+                                {% else %}
+
+                                    <div class="order-status status-default">
+
+                                        <span class="status-dot"></span>
+
+                                        {{ status_value|title }}
+
+                                    </div>
+
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- ORDER FOOTER -->
+
+                        <div class="order-footer">
+
+                            <div class="order-type">
+
+                                {% if order.track %}
+
+                                    Beat / Track purchase
+
+                                {% elif order.album %}
+
+                                    Album purchase
+
+                                {% else %}
+
+                                    BeatHub transaction
+
+                                {% endif %}
+
+                            </div>
+
+
+                            <div class="order-actions">
+
+                                {% if status_value|lower == "pending" %}
+
+                                    <a
+                                        href="/orders/{{ order.id }}/status"
+                                        class="order-action primary"
+                                    >
+                                        Check Payment
+                                    </a>
+
+                                {% endif %}
+
+
+                                {% if status_value|lower == "completed" %}
+
+                                    {% if order.track %}
+
+                                        <a
+                                            href="/account/downloads"
+                                            class="order-action primary"
+                                        >
+                                            View Download
+                                        </a>
+
+                                    {% endif %}
+
+                                    <a
+                                        href="/account/purchases"
+                                        class="order-action"
+                                    >
+                                        My Purchases
+                                    </a>
+
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <!-- =================================================
+                 EMPTY STATE
+                 ================================================= -->
+
+            <div class="empty-orders">
+
+                <div class="empty-icon">
+                    📋
+                </div>
+
+                <h2>
+                    No orders yet
+                </h2>
+
+                <p>
+                    Once you purchase beats, tracks or other
+                    BeatHub products, your order history will
+                    appear here.
+                </p>
+
                 <a
-                  href="/orders/{{ order.id }}/status"
-                  class="btn btn-outline"
+                    href="/beats"
+                    class="btn btn-primary"
                 >
-                  Check Payment
+                    Browse Beats
                 </a>
-              </div>
 
-            {% endif %}
+            </div>
 
-          </div>
+        {% endif %}
 
-        {% endfor %}
+    </section>
 
-      </div>
 
-    {% else %}
+    <!-- =====================================================
+         NAVIGATION
+         ===================================================== -->
 
-      <div class="form-card" style="margin-top:28px;padding:30px;text-align:center;">
+    <div class="orders-navigation">
 
-        <div style="font-size:40px;">📋</div>
-
-        <h2>No orders yet</h2>
-
-        <p style="color:var(--text-muted);">
-          Your BeatHub order history will appear here.
-        </p>
-
-        <a href="/beats" class="btn btn-primary">
-          Browse Beats
+        <a
+            href="/account"
+            class="back-link"
+        >
+            ← Back to My Account
         </a>
 
-      </div>
+        <a
+            href="/beats"
+            class="back-link"
+        >
+            Discover More Beats →
+        </a>
 
-    {% endif %}
-
-    <div style="margin-top:25px;">
-      <a href="/account" class="btn btn-outline">
-        ← Back to My Account
-      </a>
     </div>
 
-  </div>
-</section>
+</div>
 
 {% endblock %}
