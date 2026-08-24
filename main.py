@@ -2,16 +2,18 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, get_db
+from app.models.music import Track
 from app.routers import (
     admin,
     auth,
@@ -22,6 +24,7 @@ from app.routers import (
     music,
     pages,
 )
+from app.services.storage import media_url
 from app.utils.deps import require_admin, require_creator
 
 logger = logging.getLogger("beathub")
@@ -119,6 +122,123 @@ try:
 except Exception:
     logger.exception("Database table initialization failed.")
     raise
+
+
+# ============================================================
+# PUBLIC AUDIO PREVIEW COMPATIBILITY
+# ============================================================
+
+@app.get(
+    "/track/{slug}/preview",
+    include_in_schema=False,
+)
+def public_track_preview(
+    slug: str,
+    db: Session = Depends(get_db),
+):
+    track = (
+        db.query(Track)
+        .filter(Track.slug == slug)
+        .first()
+    )
+
+    if not track:
+        raise HTTPException(
+            status_code=404,
+            detail="Track not found.",
+        )
+
+    if not getattr(track, "is_published", False):
+        raise HTTPException(
+            status_code=404,
+            detail="Preview not available.",
+        )
+
+    stored = str(
+        getattr(track, "preview_file_path", None)
+        or getattr(track, "audio_file_path", None)
+        or ""
+    ).strip()
+
+    if not stored:
+        raise HTTPException(
+            status_code=404,
+            detail="Preview audio is not available.",
+        )
+
+    if stored.startswith(("http://", "https://")):
+        return RedirectResponse(
+            url=stored,
+            status_code=307,
+        )
+
+    if stored.startswith(("r2://", "s3://")):
+        url = media_url(stored, expires=3600)
+
+        if not url:
+            raise HTTPException(
+                status_code=404,
+                detail="Preview audio is not available.",
+            )
+
+        return RedirectResponse(
+            url=url,
+            status_code=307,
+        )
+
+    value = stored.replace("\\", "/").lstrip("/")
+    media_root_value = getattr(settings, "MEDIA_ROOT", None) or "media"
+    media_root = Path(media_root_value).expanduser()
+
+    if not media_root.is_absolute():
+        media_root = Path.cwd() / media_root
+
+    media_root = media_root.resolve()
+
+    candidates = []
+    stored_path = Path(stored)
+
+    if stored_path.is_absolute():
+        candidates.append(stored_path.resolve())
+    else:
+        candidates.append((Path.cwd() / stored_path).resolve())
+        candidates.append((media_root / stored_path).resolve())
+
+        if value.startswith("media/"):
+            candidates.append((media_root / value[6:]).resolve())
+
+    for candidate in candidates:
+        try:
+            candidate.relative_to(media_root)
+        except ValueError:
+            continue
+
+        if candidate.is_file():
+            media_type = {
+                ".mp3": "audio/mpeg",
+                ".wav": "audio/wav",
+                ".m4a": "audio/mp4",
+                ".aac": "audio/aac",
+                ".ogg": "audio/ogg",
+                ".flac": "audio/flac",
+            }.get(
+                candidate.suffix.lower(),
+                "application/octet-stream",
+            )
+
+            return FileResponse(
+                path=str(candidate),
+                media_type=media_type,
+                headers={
+                    "Cache-Control": "public, max-age=3600",
+                    "Accept-Ranges": "bytes",
+                },
+            )
+
+    raise HTTPException(
+        status_code=404,
+        detail="Preview audio is not available.",
+    )
 
 
 # ============================================================
