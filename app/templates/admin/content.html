@@ -1,341 +1,1307 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>BeatHub — Content</title>
 
     <link rel="stylesheet" href="/static/css/style.css">
 
     <style>
+
         * {
             box-sizing: border-box;
         }
 
-        body {
-            margin: 0;
-            background: #09090b;
-            color: #f4f4f5;
-            font-family: Arial, sans-serif;
+        html {
+            scroll-behavior: smooth;
         }
 
+        body {
+            margin: 0;
+            min-height: 100vh;
+
+            background:
+                radial-gradient(
+                    circle at 85% 0%,
+                    rgba(244, 200, 66, .055),
+                    transparent 30%
+                ),
+                #080808;
+
+            color: #f4f4f5;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+        }
+
+
+        /* =====================================================
+           TOP BAR
+           ===================================================== */
+
         .topbar {
+
             min-height: 72px;
+
             padding: 0 32px;
+
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #111113;
-            border-bottom: 1px solid #27272a;
+
+            background:
+                rgba(13, 13, 13, .94);
+
+            border-bottom:
+                1px solid rgba(255,255,255,.07);
+
+            backdrop-filter: blur(16px);
+
+            position: sticky;
+            top: 0;
+
+            z-index: 100;
         }
+
 
         .brand {
+
             color: #fff;
+
             text-decoration: none;
-            font-size: 22px;
-            font-weight: 800;
+
+            font-size: 20px;
+
+            font-weight: 950;
+
+            letter-spacing: -.7px;
         }
+
 
         .brand span {
-            color: #a1a1aa;
+            color: #f4c842;
         }
+
+
+        .brand::after {
+
+            content: "ADMIN";
+
+            margin-left: 9px;
+
+            padding: 4px 7px;
+
+            border:
+                1px solid rgba(244,200,66,.18);
+
+            border-radius: 5px;
+
+            background:
+                rgba(244,200,66,.045);
+
+            color: #c8ad57;
+
+            font-size: 7px;
+
+            font-weight: 900;
+
+            letter-spacing: .8px;
+
+            vertical-align: middle;
+        }
+
 
         .topbar-right {
+
             display: flex;
+
             align-items: center;
-            gap: 14px;
+
+            gap: 12px;
         }
+
 
         .topbar-right span {
-            color: #a1a1aa;
-            font-size: 13px;
-        }
 
-        .logout {
-            padding: 9px 14px;
-            border: 1px solid #3f3f46;
-            border-radius: 8px;
-            background: transparent;
-            color: #fff;
-            cursor: pointer;
-        }
+            color: #777;
 
-        .layout {
-            display: flex;
-            min-height: calc(100vh - 72px);
-        }
+            font-size: 9px;
 
-        .sidebar {
-            width: 230px;
-            flex-shrink: 0;
-            padding: 24px 16px;
-            background: #111113;
-            border-right: 1px solid #27272a;
-        }
+            max-width: 230px;
 
-        .sidebar-label {
-            margin: 0 12px 12px;
-            color: #71717a;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: .08em;
-        }
-
-        .sidebar a {
-            display: block;
-            padding: 11px 12px;
-            margin-bottom: 4px;
-            border-radius: 8px;
-            color: #a1a1aa;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .sidebar a:hover,
-        .sidebar a.active {
-            background: #27272a;
-            color: #fff;
-        }
-
-        .main {
-            flex: 1;
-            min-width: 0;
-            padding: 32px;
-        }
-
-        .heading {
-            margin-bottom: 24px;
-        }
-
-        .heading h1 {
-            margin: 0 0 7px;
-            font-size: 30px;
-        }
-
-        .heading p {
-            margin: 0;
-            color: #a1a1aa;
-        }
-
-        .toolbar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 24px;
-        }
-
-        .search {
-            flex: 1;
-            max-width: 500px;
-            padding: 12px 14px;
-            border: 1px solid #3f3f46;
-            border-radius: 9px;
-            background: #111113;
-            color: #fff;
-            outline: none;
-        }
-
-        .button {
-            padding: 12px 18px;
-            border: 0;
-            border-radius: 9px;
-            background: #fff;
-            color: #09090b;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .content-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .panel {
-            border: 1px solid #27272a;
-            border-radius: 14px;
-            background: #111113;
             overflow: hidden;
-        }
 
-        .panel-header {
-            padding: 18px 20px;
-            border-bottom: 1px solid #27272a;
-        }
+            text-overflow: ellipsis;
 
-        .panel-header h2 {
-            margin: 0 0 5px;
-            font-size: 17px;
-        }
-
-        .panel-header p {
-            margin: 0;
-            color: #71717a;
-            font-size: 12px;
-        }
-
-        .table-wrap {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 14px 16px;
-            border-bottom: 1px solid #27272a;
-            text-align: left;
             white-space: nowrap;
         }
 
+
+        .logout {
+
+            height: 34px;
+
+            padding: 0 13px;
+
+            border:
+                1px solid rgba(255,255,255,.09);
+
+            border-radius: 8px;
+
+            background:
+                rgba(255,255,255,.025);
+
+            color: #aaa;
+
+            font-family: inherit;
+
+            font-size: 9px;
+
+            font-weight: 800;
+
+            cursor: pointer;
+
+            transition:
+                .18s ease;
+        }
+
+
+        .logout:hover {
+
+            color: #fff;
+
+            border-color:
+                rgba(255,255,255,.16);
+
+            background:
+                rgba(255,255,255,.06);
+
+            transform: translateY(-1px);
+        }
+
+
+        /* =====================================================
+           LAYOUT
+           ===================================================== */
+
+        .layout {
+
+            display: flex;
+
+            min-height:
+                calc(100vh - 72px);
+        }
+
+
+        /* =====================================================
+           SIDEBAR
+           ===================================================== */
+
+        .sidebar {
+
+            width: 230px;
+
+            flex-shrink: 0;
+
+            padding: 25px 14px;
+
+            background:
+                rgba(12,12,12,.86);
+
+            border-right:
+                1px solid rgba(255,255,255,.065);
+
+            position: sticky;
+
+            top: 72px;
+
+            height:
+                calc(100vh - 72px);
+
+            overflow-y: auto;
+        }
+
+
+        .sidebar-label {
+
+            margin:
+                0 12px 12px;
+
+            color: #4f4f4f;
+
+            font-size: 8px;
+
+            font-weight: 900;
+
+            text-transform: uppercase;
+
+            letter-spacing: 1px;
+        }
+
+
+        .sidebar a {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            padding: 11px 12px;
+
+            margin-bottom: 4px;
+
+            border:
+                1px solid transparent;
+
+            border-radius: 9px;
+
+            color: #777;
+
+            text-decoration: none;
+
+            font-size: 10px;
+
+            font-weight: 700;
+
+            transition:
+                background .18s ease,
+                border-color .18s ease,
+                color .18s ease,
+                transform .18s ease;
+        }
+
+
+        .sidebar a::before {
+
+            content: "";
+
+            width: 5px;
+
+            height: 5px;
+
+            border-radius: 50%;
+
+            background: #363636;
+
+            transition: .18s ease;
+        }
+
+
+        .sidebar a:hover {
+
+            color: #ddd;
+
+            background:
+                rgba(255,255,255,.035);
+
+            border-color:
+                rgba(255,255,255,.05);
+
+            transform: translateX(1px);
+        }
+
+
+        .sidebar a:hover::before {
+
+            background: #777;
+        }
+
+
+        .sidebar a.active {
+
+            color: #f5e4a0;
+
+            background:
+                linear-gradient(
+                    90deg,
+                    rgba(244,200,66,.085),
+                    rgba(244,200,66,.025)
+                );
+
+            border-color:
+                rgba(244,200,66,.12);
+
+            box-shadow:
+                inset 3px 0 0 #f4c842;
+        }
+
+
+        .sidebar a.active::before {
+
+            background: #f4c842;
+
+            box-shadow:
+                0 0 8px rgba(244,200,66,.55);
+        }
+
+
+        /* =====================================================
+           MAIN
+           ===================================================== */
+
+        .main {
+
+            flex: 1;
+
+            min-width: 0;
+
+            padding: 40px 36px 70px;
+
+            position: relative;
+        }
+
+
+        .main::before {
+
+            content: "";
+
+            position: absolute;
+
+            width: 450px;
+
+            height: 450px;
+
+            top: -220px;
+
+            right: -170px;
+
+            border-radius: 50%;
+
+            background:
+                radial-gradient(
+                    circle,
+                    rgba(244,200,66,.055),
+                    transparent 70%
+                );
+
+            pointer-events: none;
+        }
+
+
+        /* =====================================================
+           HEADING
+           ===================================================== */
+
+        .heading {
+
+            position: relative;
+
+            z-index: 2;
+
+            margin-bottom: 27px;
+        }
+
+
+        .heading-kicker {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 7px;
+
+            padding: 6px 10px;
+
+            border:
+                1px solid rgba(244,200,66,.16);
+
+            border-radius: 999px;
+
+            background:
+                rgba(244,200,66,.035);
+
+            color: #bca858;
+
+            font-size: 8px;
+
+            font-weight: 900;
+
+            text-transform: uppercase;
+
+            letter-spacing: .8px;
+        }
+
+
+        .heading-kicker::before {
+
+            content: "";
+
+            width: 5px;
+
+            height: 5px;
+
+            border-radius: 50%;
+
+            background: #f4c842;
+
+            box-shadow:
+                0 0 8px rgba(244,200,66,.7);
+        }
+
+
+        .heading h1 {
+
+            margin:
+                14px 0 7px;
+
+            color: #fff;
+
+            font-size: clamp(38px, 5vw, 52px);
+
+            line-height: .98;
+
+            font-weight: 950;
+
+            letter-spacing: -2.5px;
+        }
+
+
+        .heading h1 span {
+            color: #f4c842;
+        }
+
+
+        .heading p {
+
+            margin: 0;
+
+            color: #737373;
+
+            font-size: 10px;
+
+            line-height: 1.6;
+        }
+
+
+        /* =====================================================
+           TOOLBAR
+           ===================================================== */
+
+        .toolbar {
+
+            position: relative;
+
+            z-index: 2;
+
+            display: flex;
+
+            gap: 9px;
+
+            margin-bottom: 23px;
+
+            max-width: 720px;
+        }
+
+
+        .search {
+
+            flex: 1;
+
+            height: 43px;
+
+            padding: 0 13px;
+
+            border:
+                1px solid rgba(255,255,255,.08);
+
+            border-radius: 9px;
+
+            background:
+                rgba(14,14,14,.9);
+
+            color: #fff;
+
+            outline: none;
+
+            font-family: inherit;
+
+            font-size: 10px;
+
+            transition:
+                border-color .18s ease,
+                box-shadow .18s ease;
+        }
+
+
+        .search::placeholder {
+            color: #4d4d4d;
+        }
+
+
+        .search:hover {
+            border-color:
+                rgba(255,255,255,.13);
+        }
+
+
+        .search:focus {
+
+            border-color:
+                rgba(244,200,66,.38);
+
+            box-shadow:
+                0 0 0 3px rgba(244,200,66,.045);
+        }
+
+
+        .button {
+
+            height: 43px;
+
+            padding: 0 18px;
+
+            border:
+                1px solid rgba(244,200,66,.18);
+
+            border-radius: 9px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #ffe58a,
+                    #f4c842,
+                    #c99b1c
+                );
+
+            color: #090909;
+
+            font-size: 9px;
+
+            font-weight: 950;
+
+            text-transform: uppercase;
+
+            letter-spacing: .3px;
+
+            cursor: pointer;
+
+            box-shadow:
+                0 8px 20px rgba(244,200,66,.08);
+
+            transition:
+                transform .18s ease,
+                filter .18s ease;
+        }
+
+
+        .button:hover {
+
+            transform: translateY(-1px);
+
+            filter: brightness(1.05);
+        }
+
+
+        /* =====================================================
+           CONTENT GRID
+           ===================================================== */
+
+        .content-grid {
+
+            position: relative;
+
+            z-index: 2;
+
+            display: grid;
+
+            grid-template-columns:
+                minmax(0, 1.4fr)
+                minmax(0, 1fr);
+
+            gap: 18px;
+        }
+
+
+        /* =====================================================
+           PANEL
+           ===================================================== */
+
+        .panel {
+
+            overflow: hidden;
+
+            border:
+                1px solid rgba(255,255,255,.075);
+
+            border-radius: 16px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(255,255,255,.028),
+                    rgba(255,255,255,.008)
+                ),
+                rgba(12,12,12,.92);
+
+            box-shadow:
+                0 20px 50px rgba(0,0,0,.22),
+                inset 0 1px 0 rgba(255,255,255,.02);
+
+            backdrop-filter: blur(14px);
+        }
+
+
+        .panel-header {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 18px 20px;
+
+            border-bottom:
+                1px solid rgba(255,255,255,.055);
+        }
+
+
+        .panel-icon {
+
+            display: grid;
+
+            place-items: center;
+
+            width: 34px;
+
+            height: 34px;
+
+            flex-shrink: 0;
+
+            border:
+                1px solid rgba(244,200,66,.13);
+
+            border-radius: 9px;
+
+            background:
+                rgba(244,200,66,.035);
+
+            color: #f4c842;
+
+            font-size: 10px;
+
+            font-weight: 950;
+        }
+
+
+        .panel-header h2 {
+
+            margin: 0 0 4px;
+
+            color: #eee;
+
+            font-size: 13px;
+
+            font-weight: 900;
+        }
+
+
+        .panel-header p {
+
+            margin: 0;
+
+            color: #575757;
+
+            font-size: 8px;
+
+            line-height: 1.5;
+        }
+
+
+        /* =====================================================
+           TABLE
+           ===================================================== */
+
+        .table-wrap {
+
+            width: 100%;
+
+            overflow-x: auto;
+        }
+
+
+        table {
+
+            width: 100%;
+
+            border-collapse: collapse;
+
+            min-width: 590px;
+        }
+
+
+        th,
+        td {
+
+            padding:
+                13px 15px;
+
+            text-align: left;
+
+            white-space: nowrap;
+
+            border-bottom:
+                1px solid rgba(255,255,255,.04);
+        }
+
+
         th {
-            color: #71717a;
-            font-size: 11px;
+
+            background:
+                rgba(255,255,255,.012);
+
+            color: #505050;
+
+            font-size: 7px;
+
+            font-weight: 950;
+
+            letter-spacing: .75px;
+
             text-transform: uppercase;
         }
 
+
         td {
-            color: #d4d4d8;
-            font-size: 13px;
+
+            color: #a3a3a3;
+
+            font-size: 9px;
+
+            vertical-align: middle;
         }
+
 
         tr:last-child td {
             border-bottom: 0;
         }
 
-        .status {
-            display: inline-block;
-            padding: 5px 8px;
-            border-radius: 999px;
-            background: #27272a;
-            color: #d4d4d8;
-            font-size: 11px;
+
+        tbody tr {
+
+            transition:
+                background .16s ease;
         }
+
+
+        tbody tr:hover {
+
+            background:
+                rgba(244,200,66,.018);
+        }
+
+
+        /* =====================================================
+           TITLE
+           ===================================================== */
+
+        td:first-child {
+
+            color: #d8d8d8;
+
+            font-weight: 750;
+        }
+
+
+        /* =====================================================
+           STATUS
+           ===================================================== */
+
+        .status {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 6px;
+
+            padding: 5px 9px;
+
+            border:
+                1px solid rgba(255,255,255,.075);
+
+            border-radius: 999px;
+
+            background:
+                rgba(255,255,255,.025);
+
+            color: #888;
+
+            font-size: 7px;
+
+            font-weight: 900;
+
+            letter-spacing: .3px;
+
+            text-transform: uppercase;
+        }
+
+
+        .status::before {
+
+            content: "";
+
+            width: 5px;
+
+            height: 5px;
+
+            border-radius: 50%;
+
+            background: #777;
+        }
+
+
+        /* Published */
+
+        .status.published {
+
+            border-color:
+                rgba(74,222,128,.14);
+
+            background:
+                rgba(74,222,128,.045);
+
+            color: #8cdda4;
+        }
+
+
+        .status.published::before {
+
+            background: #4ade80;
+
+            box-shadow:
+                0 0 7px rgba(74,222,128,.45);
+        }
+
+
+        /* Hidden */
+
+        .status.hidden {
+
+            border-color:
+                rgba(255,255,255,.07);
+
+            background:
+                rgba(255,255,255,.025);
+
+            color: #777;
+        }
+
+
+        .status.hidden::before {
+
+            background: #555;
+        }
+
+
+        /* =====================================================
+           ACTION
+           ===================================================== */
 
         .action {
-            padding: 7px 10px;
-            border: 1px solid #3f3f46;
+
+            height: 29px;
+
+            padding: 0 10px;
+
+            border:
+                1px solid rgba(255,255,255,.09);
+
             border-radius: 7px;
-            background: transparent;
-            color: #fff;
+
+            background:
+                rgba(255,255,255,.025);
+
+            color: #aaa;
+
+            font-family: inherit;
+
             cursor: pointer;
-            font-size: 12px;
+
+            font-size: 8px;
+
+            font-weight: 850;
+
+            transition:
+                .18s ease;
         }
+
 
         .action:hover {
-            background: #27272a;
+
+            color: #f5e4a0;
+
+            border-color:
+                rgba(244,200,66,.18);
+
+            background:
+                rgba(244,200,66,.045);
+
+            transform:
+                translateY(-1px);
         }
+
+
+        /* =====================================================
+           EMPTY
+           ===================================================== */
 
         .empty {
-            padding: 25px;
+
+            padding: 50px 20px;
+
             text-align: center;
-            color: #71717a;
+
+            color: #505050;
+
+            font-size: 9px;
         }
 
-        @media (max-width: 900px) {
+
+        .empty::before {
+
+            content: "♪";
+
+            display: grid;
+
+            place-items: center;
+
+            width: 40px;
+
+            height: 40px;
+
+            margin:
+                0 auto 12px;
+
+            border:
+                1px solid rgba(244,200,66,.11);
+
+            border-radius: 11px;
+
+            background:
+                rgba(244,200,66,.025);
+
+            color: #b89a31;
+
+            font-size: 14px;
+        }
+
+
+        /* =====================================================
+           MOBILE
+           ===================================================== */
+
+        @media (max-width: 1000px) {
+
             .content-grid {
+
                 grid-template-columns: 1fr;
             }
+
         }
 
+
         @media (max-width: 700px) {
-            .layout {
-                display: block;
-            }
-
-            .sidebar {
-                width: 100%;
-                display: flex;
-                gap: 5px;
-                overflow-x: auto;
-                border-right: 0;
-                border-bottom: 1px solid #27272a;
-            }
-
-            .sidebar-label {
-                display: none;
-            }
-
-            .sidebar a {
-                white-space: nowrap;
-            }
-
-            .main {
-                padding: 20px 16px;
-            }
 
             .topbar {
+
                 padding: 0 16px;
             }
 
-            .topbar-right span {
+
+            .brand {
+
+                font-size: 17px;
+            }
+
+
+            .brand::after {
+
                 display: none;
             }
+
+
+            .topbar-right span {
+
+                display: none;
+            }
+
+
+            .layout {
+
+                display: block;
+            }
+
+
+            .sidebar {
+
+                position: relative;
+
+                top: 0;
+
+                width: 100%;
+
+                height: auto;
+
+                display: flex;
+
+                gap: 4px;
+
+                padding: 9px;
+
+                overflow-x: auto;
+
+                border-right: 0;
+
+                border-bottom:
+                    1px solid rgba(255,255,255,.065);
+            }
+
+
+            .sidebar-label {
+
+                display: none;
+            }
+
+
+            .sidebar a {
+
+                flex-shrink: 0;
+
+                margin: 0;
+
+                padding:
+                    9px 11px;
+
+                white-space: nowrap;
+
+                font-size: 9px;
+            }
+
+
+            .sidebar a.active {
+
+                box-shadow:
+                    inset 0 -2px 0 #f4c842;
+            }
+
+
+            .main {
+
+                padding:
+                    28px 16px 55px;
+            }
+
+
+            .heading h1 {
+
+                font-size: 39px;
+
+                letter-spacing: -1.8px;
+            }
+
+
+            .toolbar {
+
+                width: 100%;
+            }
+
+
+            .search {
+
+                min-width: 0;
+            }
+
+
+            .content-grid {
+
+                gap: 15px;
+            }
+
         }
+
+
+        @media (max-width: 430px) {
+
+            .toolbar {
+
+                flex-direction: column;
+            }
+
+
+            .search {
+
+                max-width: none;
+            }
+
+
+            .button {
+
+                width: 100%;
+            }
+
+
+            .heading h1 {
+
+                font-size: 34px;
+            }
+
+        }
+
     </style>
+
 </head>
+
 
 <body>
 
+
+<!-- =========================================================
+     TOP BAR
+     ========================================================= -->
+
 <header class="topbar">
 
-    <a href="/admin" class="brand">
-        BEAT<span>HUB</span> ADMIN
+
+    <a
+        href="/admin"
+        class="brand"
+    >
+        BEAT<span>HUB</span>
     </a>
+
 
     <div class="topbar-right">
 
-        <span>{{ current_user.email }}</span>
 
-        <form action="/logout" method="post">
-            <button class="logout" type="submit">
+        <span>
+            {{ current_user.email }}
+        </span>
+
+
+        <form
+            action="/logout"
+            method="post"
+        >
+
+            <button
+                class="logout"
+                type="submit"
+            >
                 Logout
             </button>
+
         </form>
+
 
     </div>
 
+
 </header>
+
+
+<!-- =========================================================
+     ADMIN LAYOUT
+     ========================================================= -->
 
 <div class="layout">
 
+
+    <!-- =====================================================
+         SIDEBAR
+         ===================================================== -->
+
     <aside class="sidebar">
 
-        <div class="sidebar-label">Management</div>
+
+        <div class="sidebar-label">
+            Management
+        </div>
+
 
         <a href="/admin">
             Overview
         </a>
 
+
         <a href="/admin/users">
             Users
         </a>
 
-        <a href="/admin/content" class="active">
+
+        <a
+            href="/admin/content"
+            class="active"
+        >
             Content
         </a>
+
 
         <a href="/admin/sales">
             Sales
         </a>
 
+
         <a href="/admin/withdrawals">
             Withdrawals
         </a>
 
+
     </aside>
+
+
+    <!-- =====================================================
+         MAIN CONTENT
+         ===================================================== -->
 
     <main class="main">
 
+
+        <!-- HEADING -->
+
         <div class="heading">
-            <h1>Content</h1>
-            <p>Review tracks and albums published on BeatHub.</p>
+
+
+            <div class="heading-kicker">
+                Content Management
+            </div>
+
+
+            <h1>
+                BeatHub <span>Content.</span>
+            </h1>
+
+
+            <p>
+                Review tracks and albums published on BeatHub,
+                and control their public visibility.
+            </p>
+
+
         </div>
 
-        <form method="get" action="/admin/content" class="toolbar">
+
+        <!-- =================================================
+             SEARCH
+             ================================================= -->
+
+        <form
+            method="get"
+            action="/admin/content"
+            class="toolbar"
+        >
+
 
             <input
                 class="search"
@@ -345,158 +1311,324 @@
                 placeholder="Search tracks or albums..."
             >
 
-            <button class="button" type="submit">
+
+            <button
+                class="button"
+                type="submit"
+            >
                 Search
             </button>
 
+
         </form>
+
+
+        <!-- =================================================
+             CONTENT GRID
+             ================================================= -->
 
         <div class="content-grid">
 
+
+            <!-- =============================================
+                 TRACKS
+                 ============================================= -->
+
             <section class="panel">
 
+
                 <div class="panel-header">
-                    <h2>Tracks</h2>
-                    <p>Review and control published beats.</p>
+
+
+                    <div class="panel-icon">
+                        ♪
+                    </div>
+
+
+                    <div>
+
+                        <h2>
+                            Tracks
+                        </h2>
+
+                        <p>
+                            Review and control published beats.
+                        </p>
+
+                    </div>
+
+
                 </div>
+
 
                 <div class="table-wrap">
 
+
                     <table>
 
+
                         <thead>
+
                             <tr>
-                                <th>Title</th>
-                                <th>Published</th>
-                                <th>Created</th>
-                                <th>Action</th>
+
+                                <th>
+                                    Title
+                                </th>
+
+                                <th>
+                                    Published
+                                </th>
+
+                                <th>
+                                    Created
+                                </th>
+
+                                <th>
+                                    Action
+                                </th>
+
                             </tr>
+
                         </thead>
+
 
                         <tbody>
 
+
                         {% for track in tracks %}
 
+
                             <tr>
+
 
                                 <td>
                                     {{ track.title }}
                                 </td>
 
+
                                 <td>
+
 
                                     {% if track.is_published %}
-                                        <span class="status">Published</span>
+
+                                        <span class="status published">
+                                            Published
+                                        </span>
+
                                     {% else %}
-                                        <span class="status">Hidden</span>
+
+                                        <span class="status hidden">
+                                            Hidden
+                                        </span>
+
                                     {% endif %}
 
+
                                 </td>
 
-                                <td>
-                                    {{ track.created_at.strftime('%d %b %Y') if track.created_at else '—' }}
-                                </td>
 
                                 <td>
+
+                                    {{
+                                        track.created_at.strftime(
+                                            '%d %b %Y'
+                                        )
+                                        if track.created_at
+                                        else '—'
+                                    }}
+
+                                </td>
+
+
+                                <td>
+
 
                                     <form
                                         method="post"
                                         action="/admin/content/track/{{ track.id }}/toggle-published"
                                     >
 
+
                                         <button
                                             type="submit"
                                             class="action"
                                         >
+
                                             {% if track.is_published %}
+
                                                 Unpublish
+
                                             {% else %}
+
                                                 Publish
+
                                             {% endif %}
+
                                         </button>
+
 
                                     </form>
 
+
                                 </td>
 
+
                             </tr>
+
 
                         {% else %}
 
+
                             <tr>
-                                <td colspan="4" class="empty">
+
+                                <td
+                                    colspan="4"
+                                    class="empty"
+                                >
                                     No tracks found.
                                 </td>
+
                             </tr>
+
 
                         {% endfor %}
 
+
                         </tbody>
+
 
                     </table>
 
+
                 </div>
+
 
             </section>
 
 
+            <!-- =============================================
+                 ALBUMS
+                 ============================================= -->
+
             <section class="panel">
 
+
                 <div class="panel-header">
-                    <h2>Albums</h2>
-                    <p>Review albums created by creators.</p>
+
+
+                    <div class="panel-icon">
+                        ▣
+                    </div>
+
+
+                    <div>
+
+                        <h2>
+                            Albums
+                        </h2>
+
+                        <p>
+                            Review albums created by creators.
+                        </p>
+
+                    </div>
+
+
                 </div>
+
 
                 <div class="table-wrap">
 
+
                     <table>
 
+
                         <thead>
+
                             <tr>
-                                <th>Title</th>
-                                <th>Created</th>
+
+                                <th>
+                                    Title
+                                </th>
+
+                                <th>
+                                    Created
+                                </th>
+
                             </tr>
+
                         </thead>
+
 
                         <tbody>
 
+
                         {% for album in albums %}
 
+
                             <tr>
+
 
                                 <td>
                                     {{ album.title }}
                                 </td>
 
+
                                 <td>
-                                    {{ album.created_at.strftime('%d %b %Y') if album.created_at else '—' }}
+
+                                    {{
+                                        album.created_at.strftime(
+                                            '%d %b %Y'
+                                        )
+                                        if album.created_at
+                                        else '—'
+                                    }}
+
                                 </td>
 
+
                             </tr>
+
 
                         {% else %}
 
+
                             <tr>
-                                <td colspan="2" class="empty">
+
+                                <td
+                                    colspan="2"
+                                    class="empty"
+                                >
                                     No albums found.
                                 </td>
+
                             </tr>
+
 
                         {% endfor %}
 
+
                         </tbody>
+
 
                     </table>
 
+
                 </div>
+
 
             </section>
 
+
         </div>
+
 
     </main>
 
+
 </div>
 
+
 </body>
+
 </html>
