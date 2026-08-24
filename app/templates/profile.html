@@ -4,56 +4,880 @@
 
 {% block content %}
 
-<section style="padding:40px 0;">
+<style>
+  /* ============================================================
+     BEATHUB PRODUCER STORE
+  ============================================================ */
 
-  <div style="max-width:1100px; margin:0 auto;">
+  .store-page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 34px 18px 80px;
+  }
 
-    <!-- STORE HEADER -->
-    <div style="text-align:center; margin-bottom:35px;">
+  /* ============================================================
+     HERO
+  ============================================================ */
 
-      <div class="eyebrow">BEATHUB STORE</div>
+  .store-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    padding: 46px 38px;
+    margin-bottom: 30px;
 
-      <h1 style="font-size:36px; margin:6px 0;">
-        {{ profile.stage_name }}
-      </h1>
+    background:
+      radial-gradient(
+        circle at 85% 15%,
+        rgba(212,175,55,.18),
+        transparent 34%
+      ),
+      radial-gradient(
+        circle at 10% 90%,
+        rgba(255,255,255,.045),
+        transparent 30%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255,255,255,.045),
+        rgba(255,255,255,.018)
+      );
 
-      {% if profile.bio %}
-        <p class="sub" style="
-          max-width:650px;
-          margin:10px auto;
-          line-height:1.6;
-        ">
-          {{ profile.bio }}
-        </p>
-      {% endif %}
+    border: 1px solid rgba(212,175,55,.18);
+    box-shadow:
+      0 25px 70px rgba(0,0,0,.18);
+  }
 
-      <p class="sub">
-        Browse the music below and choose a track to view its details
-        and purchase.
-      </p>
+  .store-hero-inner {
+    position: relative;
+    z-index: 2;
+
+    display: flex;
+    align-items: center;
+    gap: 30px;
+  }
+
+  .store-avatar {
+    width: 118px;
+    height: 118px;
+    min-width: 118px;
+
+    border-radius: 50%;
+    overflow: hidden;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+      radial-gradient(
+        circle at 30% 25%,
+        rgba(212,175,55,.35),
+        transparent 45%
+      ),
+      rgba(255,255,255,.045);
+
+    border: 2px solid rgba(212,175,55,.28);
+
+    box-shadow:
+      0 15px 45px rgba(0,0,0,.3);
+  }
+
+  .store-avatar span {
+    font-size: 42px;
+    font-weight: 900;
+    color: var(--gold, #d4af37);
+  }
+
+  .store-hero-content {
+    min-width: 0;
+  }
+
+  .store-eyebrow {
+    color: var(--gold, #d4af37);
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .store-name {
+    margin: 0;
+    font-size: clamp(34px, 5vw, 54px);
+    line-height: 1;
+    letter-spacing: -.025em;
+  }
+
+  .store-bio {
+    max-width: 700px;
+    margin: 14px 0 0;
+    color: var(--text-muted);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+
+  .store-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  .store-meta-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 31px;
+    padding: 0 11px;
+
+    border-radius: 999px;
+
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.08);
+
+    font-size: 11px;
+    font-weight: 750;
+    color: rgba(255,255,255,.72);
+  }
+
+  .store-meta-pill.gold {
+    color: var(--gold, #d4af37);
+    border-color: rgba(212,175,55,.25);
+    background: rgba(212,175,55,.08);
+  }
+
+  /* ============================================================
+     STORE LINK
+  ============================================================ */
+
+  .store-share {
+    margin-top: 22px;
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .store-share-input {
+    min-width: 0;
+    flex: 1;
+
+    height: 42px;
+    box-sizing: border-box;
+
+    padding: 0 13px;
+
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.09);
+
+    background: rgba(0,0,0,.22);
+    color: rgba(255,255,255,.62);
+
+    font-size: 12px;
+  }
+
+  .store-copy-btn {
+    height: 42px;
+    padding: 0 15px;
+
+    border-radius: 10px;
+    border: 1px solid rgba(212,175,55,.28);
+
+    background: rgba(212,175,55,.1);
+    color: var(--gold, #d4af37);
+
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .store-copy-btn:hover {
+    background: rgba(212,175,55,.18);
+  }
+
+  /* ============================================================
+     SECTION HEAD
+  ============================================================ */
+
+  .store-section {
+    margin-top: 38px;
+  }
+
+  .store-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 15px;
+    margin-bottom: 16px;
+  }
+
+  .store-section-title {
+    margin: 0;
+    font-size: 23px;
+    letter-spacing: -.01em;
+  }
+
+  .store-section-subtitle {
+    margin: 5px 0 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .store-count {
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* ============================================================
+     TRACK GRID
+  ============================================================ */
+
+  .store-track-grid {
+    display: grid;
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+
+    gap: 18px;
+  }
+
+  .store-track-card {
+    overflow: hidden;
+    border-radius: 18px;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255,255,255,.045),
+        rgba(255,255,255,.022)
+      );
+
+    border: 1px solid rgba(255,255,255,.08);
+
+    transition:
+      transform .2s ease,
+      border-color .2s ease,
+      box-shadow .2s ease;
+  }
+
+  .store-track-card:hover {
+    transform: translateY(-4px);
+
+    border-color:
+      rgba(212,175,55,.32);
+
+    box-shadow:
+      0 18px 45px rgba(0,0,0,.2);
+  }
+
+  /* ============================================================
+     ARTWORK
+  ============================================================ */
+
+  .store-art {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+
+    overflow: hidden;
+
+    background:
+      radial-gradient(
+        circle at 30% 25%,
+        rgba(212,175,55,.2),
+        transparent 38%
+      ),
+      rgba(255,255,255,.035);
+  }
+
+  .store-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+
+    transition:
+      transform .35s ease;
+  }
+
+  .store-track-card:hover .store-art img {
+    transform: scale(1.035);
+  }
+
+  .store-art-placeholder {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 52px;
+
+    color: var(--gold, #d4af37);
+  }
+
+  .store-art-overlay {
+    position: absolute;
+    inset: auto 0 0 0;
+
+    height: 100px;
+
+    background:
+      linear-gradient(
+        to top,
+        rgba(0,0,0,.55),
+        transparent
+      );
+
+    pointer-events: none;
+  }
+
+  /* ============================================================
+     PREVIEW
+  ============================================================ */
+
+  .store-preview {
+    position: absolute;
+
+    left: 13px;
+    bottom: 13px;
+
+    width: 46px;
+    height: 46px;
+
+    border-radius: 50%;
+
+    border: 1px solid rgba(255,255,255,.2);
+
+    background: rgba(0,0,0,.72);
+
+    color: white;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    cursor: pointer;
+
+    backdrop-filter: blur(8px);
+
+    font-size: 16px;
+
+    transition:
+      transform .18s ease,
+      background .18s ease;
+  }
+
+  .store-preview:hover {
+    transform: scale(1.06);
+    background: rgba(212,175,55,.9);
+    color: #080808;
+  }
+
+  /* ============================================================
+     CARD CONTENT
+  ============================================================ */
+
+  .store-track-content {
+    padding: 17px;
+  }
+
+  .store-track-label {
+    color: var(--gold, #d4af37);
+
+    font-size: 10px;
+    font-weight: 850;
+
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .store-track-title {
+    margin: 5px 0 0;
+
+    font-size: 18px;
+    line-height: 1.25;
+
+    letter-spacing: -.01em;
+  }
+
+  .store-track-description {
+    margin: 9px 0 0;
+
+    color: var(--text-muted);
+
+    font-size: 13px;
+    line-height: 1.55;
+
+    min-height: 40px;
+  }
+
+  .store-track-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    margin-top: 13px;
+  }
+
+  .store-track-pill {
+    display: inline-flex;
+    align-items: center;
+
+    min-height: 27px;
+    padding: 0 9px;
+
+    border-radius: 7px;
+
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.06);
+
+    font-size: 10px;
+    font-weight: 700;
+
+    color: rgba(255,255,255,.68);
+  }
+
+  /* ============================================================
+     PRICE / ACTION
+  ============================================================ */
+
+  .store-track-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    margin-top: 17px;
+  }
+
+  .store-price-label {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .store-price {
+    margin-top: 2px;
+
+    font-size: 20px;
+    font-weight: 900;
+
+    color: var(--gold, #d4af37);
+  }
+
+  .store-buy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 40px;
+
+    padding: 0 15px;
+
+    border-radius: 9px;
+
+    background: var(--gold, #d4af37);
+    color: #080808;
+
+    text-decoration: none;
+
+    font-size: 12px;
+    font-weight: 900;
+
+    white-space: nowrap;
+  }
+
+  .store-buy:hover {
+    filter: brightness(1.06);
+  }
+
+  /* ============================================================
+     SALES BADGES
+  ============================================================ */
+
+  .store-sales-badge {
+    display: inline-flex;
+    align-items: center;
+
+    min-height: 26px;
+
+    padding: 0 8px;
+
+    border-radius: 7px;
+
+    font-size: 9px;
+    font-weight: 900;
+
+    letter-spacing: .08em;
+  }
+
+  .store-sales-badge.exclusive {
+    color: #ffd96a;
+    background: rgba(212,175,55,.12);
+    border: 1px solid rgba(212,175,55,.25);
+  }
+
+  .store-sales-badge.nonexclusive {
+    color: rgba(255,255,255,.68);
+    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.08);
+  }
+
+  /* ============================================================
+     EMPTY STATE
+  ============================================================ */
+
+  .store-empty {
+    padding: 55px 25px;
+
+    text-align: center;
+
+    border-radius: 18px;
+
+    border: 1px dashed rgba(255,255,255,.13);
+
+    background: rgba(255,255,255,.02);
+  }
+
+  .store-empty-icon {
+    font-size: 43px;
+    margin-bottom: 12px;
+  }
+
+  .store-empty h3 {
+    margin: 0 0 8px;
+  }
+
+  .store-empty p {
+    max-width: 500px;
+    margin: 0 auto;
+
+    color: var(--text-muted);
+
+    line-height: 1.6;
+  }
+
+  /* ============================================================
+     ALBUMS
+  ============================================================ */
+
+  .album-grid {
+    display: grid;
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+
+    gap: 18px;
+  }
+
+  .album-card {
+    overflow: hidden;
+
+    border-radius: 18px;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255,255,255,.045),
+        rgba(255,255,255,.02)
+      );
+
+    border: 1px solid rgba(255,255,255,.08);
+
+    transition:
+      transform .2s ease,
+      border-color .2s ease;
+  }
+
+  .album-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(212,175,55,.3);
+  }
+
+  .album-art {
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+
+    background: rgba(255,255,255,.035);
+  }
+
+  .album-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .album-placeholder {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 45px;
+    color: var(--gold, #d4af37);
+  }
+
+  .album-content {
+    padding: 16px;
+  }
+
+  .album-label {
+    color: var(--gold, #d4af37);
+
+    font-size: 10px;
+    font-weight: 850;
+
+    letter-spacing: .14em;
+  }
+
+  .album-title {
+    margin: 5px 0;
+
+    font-size: 18px;
+  }
+
+  .album-description {
+    color: var(--text-muted);
+
+    font-size: 13px;
+    line-height: 1.55;
+
+    min-height: 40px;
+  }
+
+  .album-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 40px;
+
+    margin-top: 14px;
+
+    border-radius: 9px;
+
+    border: 1px solid rgba(255,255,255,.1);
+
+    color: inherit;
+    text-decoration: none;
+
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .album-button:hover {
+    border-color: rgba(212,175,55,.3);
+    color: var(--gold, #d4af37);
+  }
+
+  /* ============================================================
+     RESPONSIVE
+  ============================================================ */
+
+  @media (max-width: 950px) {
+
+    .store-track-grid,
+    .album-grid {
+      grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+    }
+
+  }
+
+  @media (max-width: 650px) {
+
+    .store-page {
+      padding:
+        20px
+        12px
+        55px;
+    }
+
+    .store-hero {
+      padding: 30px 20px;
+      border-radius: 18px;
+    }
+
+    .store-hero-inner {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .store-avatar {
+      width: 90px;
+      height: 90px;
+      min-width: 90px;
+    }
+
+    .store-avatar span {
+      font-size: 32px;
+    }
+
+    .store-name {
+      font-size: 36px;
+    }
+
+    .store-share {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .store-copy-btn {
+      width: 100%;
+    }
+
+    .store-section-head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .store-track-grid,
+    .album-grid {
+      grid-template-columns: 1fr;
+    }
+
+  }
+</style>
+
+
+<div class="store-page">
+
+  <!-- ==========================================================
+       PRODUCER HERO
+  =========================================================== -->
+
+  <section class="store-hero">
+
+    <div class="store-hero-inner">
+
+      <div class="store-avatar">
+
+        {% if profile.stage_name %}
+
+          <span>
+            {{ profile.stage_name[:1]|upper }}
+          </span>
+
+        {% else %}
+
+          <span>♪</span>
+
+        {% endif %}
+
+      </div>
+
+
+      <div class="store-hero-content">
+
+        <div class="store-eyebrow">
+          BEATHUB PRODUCER STORE
+        </div>
+
+        <h1 class="store-name">
+          {{ profile.stage_name }}
+        </h1>
+
+        {% if profile.bio %}
+
+          <p class="store-bio">
+            {{ profile.bio }}
+          </p>
+
+        {% else %}
+
+          <p class="store-bio">
+            Discover beats and tracks from
+            {{ profile.stage_name }} on BeatHub.
+          </p>
+
+        {% endif %}
+
+
+        <div class="store-meta">
+
+          <span class="store-meta-pill gold">
+            🎧 {{ tracks|length }}
+            Track{% if tracks|length != 1 %}s{% endif %}
+          </span>
+
+          {% if albums %}
+
+            <span class="store-meta-pill">
+              💿 {{ albums|length }}
+              Album{% if albums|length != 1 %}s{% endif %}
+            </span>
+
+          {% endif %}
+
+          <span class="store-meta-pill">
+            ✓ BeatHub Producer
+          </span>
+
+        </div>
+
+
+        {% if store_url %}
+
+          <div class="store-share">
+
+            <input
+              id="store-url"
+              class="store-share-input"
+              type="text"
+              value="{{ store_url }}"
+              readonly
+              aria-label="Public store link"
+            >
+
+            <button
+              type="button"
+              class="store-copy-btn"
+              onclick="copyStoreLink()"
+            >
+              Copy Store Link
+            </button>
+
+          </div>
+
+        {% endif %}
+
+      </div>
 
     </div>
 
+  </section>
 
-    <!-- TRACK STORE -->
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:end;
-      margin-bottom:18px;
-      gap:15px;
-      flex-wrap:wrap;
-    ">
+
+  <!-- ==========================================================
+       TRACKS
+  =========================================================== -->
+
+  <section class="store-section">
+
+    <div class="store-section-head">
 
       <div>
-        <h2 style="font-size:23px; margin:0;">
+
+        <h2 class="store-section-title">
           Available Tracks
         </h2>
 
-        <p class="sub" style="margin:5px 0 0;">
-          {{ tracks|length }}
-          track{{ '' if tracks|length == 1 else 's' }}
+        <p class="store-section-subtitle">
+          Explore the latest sounds from
+          {{ profile.stage_name }}.
         </p>
+
+      </div>
+
+      <div class="store-count">
+        {{ tracks|length }}
+        available
       </div>
 
     </div>
@@ -61,128 +885,180 @@
 
     {% if tracks %}
 
-      <div class="dashboard-grid">
+      <div class="store-track-grid">
 
         {% for track in tracks %}
 
-          <!-- Only show published, unsold tracks -->
           {% if track.is_published and not track.is_sold %}
 
-            <div class="form-card" style="padding:18px;">
+            <article class="store-track-card">
 
-              <!-- COVER ART -->
-              {% if track.cover_art_url %}
+              <!-- ARTWORK -->
 
-                <div style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  overflow:hidden;
-                  border-radius:10px;
-                  margin-bottom:14px;
-                  background:#111;
-                ">
+              <div class="store-art">
+
+                {% if track.cover_art_url %}
 
                   <img
                     src="{{ track.cover_art_url }}"
-                    alt="{{ track.title }}"
+                    alt="{{ track.title }} cover"
                     loading="lazy"
-                    style="
-                      width:100%;
-                      height:100%;
-                      object-fit:cover;
-                      display:block;
+                    onerror="
+                      this.style.display='none';
+                      this.nextElementSibling.style.display='flex';
                     "
                   >
 
-                </div>
-
-              {% endif %}
-
-
-              <!-- GENRE / BPM -->
-              <div class="eyebrow">
-
-                {{ track.genre or 'BEAT' }}
-
-                {% if track.bpm %}
-                  &middot; {{ track.bpm }} BPM
-                {% endif %}
-
-              </div>
-
-
-              <!-- TITLE -->
-              <h3 style="
-                font-size:20px;
-                margin:5px 0 8px;
-              ">
-                {{ track.title }}
-              </h3>
-
-
-              <!-- DESCRIPTION -->
-              {% if track.description %}
-
-                <p class="sub" style="
-                  line-height:1.5;
-                  margin-bottom:12px;
-                ">
-                  {{ track.description[:140] }}
-
-                  {% if track.description|length > 140 %}
-                    ...
-                  {% endif %}
-                </p>
-
-              {% endif %}
-
-
-              <!-- PRICE -->
-              <div class="value gold" style="font-size:20px;">
-                KSh {{ '%.2f'|format(track.price) }}
-              </div>
-
-
-              <!-- SALES MODEL -->
-              <div style="margin:10px 0;">
-
-                {% if track.sales_model %}
-
-                  {% if track.sales_model.value == 'exclusive' %}
-
-                    <span class="badge badge-exclusive">
-                      EXCLUSIVE
-                    </span>
-
-                  {% else %}
-
-                    <span class="badge badge-nonexclusive">
-                      NON-EXCLUSIVE
-                    </span>
-
-                  {% endif %}
+                  <div
+                    class="store-art-placeholder"
+                    style="display:none;"
+                  >
+                    ♪
+                  </div>
 
                 {% else %}
 
-                  <span class="badge badge-nonexclusive">
-                    NON-EXCLUSIVE
-                  </span>
+                  <div class="store-art-placeholder">
+                    ♪
+                  </div>
+
+                {% endif %}
+
+
+                <div class="store-art-overlay"></div>
+
+
+                {% if track.preview_file_path %}
+
+                  <button
+                    type="button"
+                    class="store-preview"
+                    onclick="
+                      toggleStorePreview(
+                        this,
+                        '{{ track.preview_file_path | e }}'
+                      )
+                    "
+                    aria-label="Preview {{ track.title }}"
+                  >
+                    ▶
+                  </button>
 
                 {% endif %}
 
               </div>
 
 
-              <!-- VIEW / BUY -->
-              <a
-                href="/track/{{ track.slug }}"
-                class="btn btn-primary btn-block"
-                style="margin-top:12px;"
-              >
-                View &amp; Buy
-              </a>
+              <!-- CONTENT -->
 
-            </div>
+              <div class="store-track-content">
+
+                <div class="store-track-label">
+
+                  {{ track.genre or "BEAT" }}
+
+                  {% if track.bpm %}
+                    · {{ track.bpm }} BPM
+                  {% endif %}
+
+                </div>
+
+
+                <h3 class="store-track-title">
+                  {{ track.title }}
+                </h3>
+
+
+                {% if track.description %}
+
+                  <p class="store-track-description">
+
+                    {{ track.description[:115] }}
+
+                    {% if track.description|length > 115 %}
+                      ...
+                    {% endif %}
+
+                  </p>
+
+                {% else %}
+
+                  <p class="store-track-description">
+                    Premium music available from
+                    {{ profile.stage_name }}.
+                  </p>
+
+                {% endif %}
+
+
+                <div class="store-track-meta">
+
+                  {% if track.genre %}
+
+                    <span class="store-track-pill">
+                      {{ track.genre }}
+                    </span>
+
+                  {% endif %}
+
+
+                  {% if track.bpm %}
+
+                    <span class="store-track-pill">
+                      {{ track.bpm }} BPM
+                    </span>
+
+                  {% endif %}
+
+
+                  {% if track.sales_model %}
+
+                    {% if track.sales_model.value == "exclusive" %}
+
+                      <span class="store-sales-badge exclusive">
+                        EXCLUSIVE
+                      </span>
+
+                    {% else %}
+
+                      <span class="store-sales-badge nonexclusive">
+                        NON-EXCLUSIVE
+                      </span>
+
+                    {% endif %}
+
+                  {% endif %}
+
+                </div>
+
+
+                <div class="store-track-bottom">
+
+                  <div>
+
+                    <div class="store-price-label">
+                      Price
+                    </div>
+
+                    <div class="store-price">
+                      KSh {{ "{:,.2f}".format(track.price or 0) }}
+                    </div>
+
+                  </div>
+
+
+                  <a
+                    href="/track/{{ track.slug }}"
+                    class="store-buy"
+                  >
+                    View &amp; Buy
+                  </a>
+
+                </div>
+
+              </div>
+
+            </article>
 
           {% endif %}
 
@@ -193,87 +1069,120 @@
 
     {% else %}
 
-      <div class="form-card" style="
-        padding:35px;
-        text-align:center;
-      ">
+      <div class="store-empty">
 
-        <h3>No music available yet</h3>
+        <div class="store-empty-icon">
+          🎧
+        </div>
 
-        <p class="sub">
-          This store has no published tracks available for purchase.
+        <h3>
+          No music available yet
+        </h3>
+
+        <p>
+          {{ profile.stage_name }} has not published
+          any tracks available for purchase yet.
         </p>
 
       </div>
 
     {% endif %}
 
+  </section>
 
-    <!-- ALBUMS -->
-    {% if albums %}
 
-      <div style="margin-top:50px;">
+  <!-- ==========================================================
+       ALBUMS
+  =========================================================== -->
 
-        <h2 style="font-size:23px;">
-          Albums
-        </h2>
+  {% if albums %}
 
-        <div class="dashboard-grid">
+    <section class="store-section">
 
-          {% for album in albums %}
+      <div class="store-section-head">
 
-            <div class="form-card" style="padding:18px;">
+        <div>
 
-              <!-- ALBUM ART -->
+          <h2 class="store-section-title">
+            Albums
+          </h2>
+
+          <p class="store-section-subtitle">
+            Full projects from {{ profile.stage_name }}.
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <div class="album-grid">
+
+        {% for album in albums %}
+
+          <article class="album-card">
+
+            <div class="album-art">
+
               {% if album.artwork_url %}
 
-                <div style="
-                  width:100%;
-                  aspect-ratio:1/1;
-                  overflow:hidden;
-                  border-radius:10px;
-                  margin-bottom:14px;
-                  background:#111;
-                ">
+                <img
+                  src="{{ album.artwork_url }}"
+                  alt="{{ album.title }} artwork"
+                  loading="lazy"
+                  onerror="
+                    this.style.display='none';
+                    this.nextElementSibling.style.display='flex';
+                  "
+                >
 
-                  <img
-                    src="{{ album.artwork_url }}"
-                    alt="{{ album.title }}"
-                    loading="lazy"
-                    style="
-                      width:100%;
-                      height:100%;
-                      object-fit:cover;
-                      display:block;
-                    "
-                  >
+                <div
+                  class="album-placeholder"
+                  style="display:none;"
+                >
+                  💿
+                </div>
 
+              {% else %}
+
+                <div class="album-placeholder">
+                  💿
                 </div>
 
               {% endif %}
 
+            </div>
 
-              <div class="eyebrow">
-                {{ album.genre or 'ALBUM' }}
+
+            <div class="album-content">
+
+              <div class="album-label">
+                {{ album.genre or "ALBUM" }}
               </div>
 
 
-              <h3 style="
-                font-size:20px;
-                margin:5px 0;
-              ">
+              <h3 class="album-title">
                 {{ album.title }}
               </h3>
 
 
               {% if album.description %}
 
-                <p class="sub">
+                <p class="album-description">
+
                   {{ album.description[:120] }}
 
                   {% if album.description|length > 120 %}
                     ...
                   {% endif %}
+
+                </p>
+
+              {% else %}
+
+                <p class="album-description">
+                  Explore this project from
+                  {{ profile.stage_name }}.
                 </p>
 
               {% endif %}
@@ -281,24 +1190,247 @@
 
               <a
                 href="/album/{{ album.slug }}"
-                class="btn btn-outline btn-block"
-                style="margin-top:12px;"
+                class="album-button"
               >
                 View Album
               </a>
 
             </div>
 
-          {% endfor %}
+          </article>
 
-        </div>
+        {% endfor %}
 
       </div>
 
-    {% endif %}
+    </section>
 
-  </div>
+  {% endif %}
 
-</section>
+</div>
+
+
+<!-- ============================================================
+     STORE PREVIEW PLAYER
+============================================================= -->
+
+<script>
+
+let beatHubStoreAudio = null;
+let beatHubStoreButton = null;
+
+
+function toggleStorePreview(button, source) {
+
+  if (!source) {
+    return;
+  }
+
+
+  /*
+   * Same button:
+   * pause / resume
+   */
+
+  if (
+    beatHubStoreAudio &&
+    beatHubStoreButton === button
+  ) {
+
+    if (!beatHubStoreAudio.paused) {
+
+      beatHubStoreAudio.pause();
+
+      button.textContent = "▶";
+
+      return;
+    }
+
+
+    beatHubStoreAudio
+      .play()
+      .then(function () {
+
+        button.textContent = "❚❚";
+
+      })
+      .catch(function () {
+
+        button.textContent = "▶";
+
+      });
+
+    return;
+  }
+
+
+  /*
+   * Stop previous preview.
+   */
+
+  if (beatHubStoreAudio) {
+
+    beatHubStoreAudio.pause();
+
+    beatHubStoreAudio.currentTime = 0;
+
+  }
+
+
+  if (beatHubStoreButton) {
+
+    beatHubStoreButton.textContent = "▶";
+
+  }
+
+
+  /*
+   * Start new preview.
+   */
+
+  beatHubStoreAudio = new Audio(source);
+
+  beatHubStoreButton = button;
+
+  button.textContent = "❚❚";
+
+
+  beatHubStoreAudio.addEventListener(
+    "ended",
+    function () {
+
+      button.textContent = "▶";
+
+      beatHubStoreAudio = null;
+
+      beatHubStoreButton = null;
+
+    }
+  );
+
+
+  beatHubStoreAudio.addEventListener(
+    "error",
+    function () {
+
+      button.textContent = "▶";
+
+      beatHubStoreAudio = null;
+
+      beatHubStoreButton = null;
+
+    }
+  );
+
+
+  beatHubStoreAudio
+    .play()
+    .catch(function () {
+
+      button.textContent = "▶";
+
+    });
+
+}
+
+
+/*
+ * Copy public producer store URL.
+ */
+
+function copyStoreLink() {
+
+  const input =
+    document.getElementById("store-url");
+
+  if (!input) {
+    return;
+  }
+
+
+  const value = input.value;
+
+
+  if (
+    navigator.clipboard &&
+    window.isSecureContext
+  ) {
+
+    navigator.clipboard
+      .writeText(value)
+      .then(function () {
+
+        showCopySuccess();
+
+      })
+      .catch(function () {
+
+        fallbackCopy(input);
+
+      });
+
+  } else {
+
+    fallbackCopy(input);
+
+  }
+
+}
+
+
+function fallbackCopy(input) {
+
+  input.focus();
+
+  input.select();
+
+  try {
+
+    document.execCommand("copy");
+
+    showCopySuccess();
+
+  } catch (error) {
+
+    alert(
+      "Copy failed. Please copy the store link manually."
+    );
+
+  }
+
+}
+
+
+function showCopySuccess() {
+
+  const button =
+    document.querySelector(".store-copy-btn");
+
+  if (!button) {
+    return;
+  }
+
+
+  const original =
+    button.textContent;
+
+
+  button.textContent =
+    "Copied ✓";
+
+
+  setTimeout(
+    function () {
+
+      button.textContent =
+        original;
+
+    },
+    1800
+  );
+
+}
+
+</script>
 
 {% endblock %}
