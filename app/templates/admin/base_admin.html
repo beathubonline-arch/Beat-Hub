@@ -1,18 +1,641 @@
 {% extends "base.html" %}
+
 {% block content %}
-<div style="display:flex; gap:30px; padding: 30px 0;">
-  <aside style="width:200px; flex-shrink:0;">
-    <div class="eyebrow" style="margin-bottom:14px;">ADMIN</div>
-    <div style="display:flex; flex-direction:column; gap:6px;">
-      <a href="/admin" class="btn btn-outline" style="text-align:left;">Overview</a>
-      <a href="/admin/users" class="btn btn-outline" style="text-align:left;">Users</a>
-      <a href="/admin/content" class="btn btn-outline" style="text-align:left;">Content</a>
-      <a href="/admin/sales" class="btn btn-outline" style="text-align:left;">Sales</a>
-      <a href="/admin/withdrawals" class="btn btn-outline" style="text-align:left;">Withdrawals</a>
-    </div>
-  </aside>
-  <main style="flex:1; min-width:0;">
-    {% block admin_content %}{% endblock %}
-  </main>
+
+<style>
+
+    /* =========================================================
+       BEATHUB ADMIN SHELL
+       ========================================================= */
+
+    .admin-shell {
+
+        display: flex;
+
+        gap: 0;
+
+        min-height:
+            calc(100vh - 90px);
+
+        margin:
+            -20px 0 -60px;
+
+        background:
+            radial-gradient(
+                circle at 85% 0%,
+                rgba(244, 200, 66, .045),
+                transparent 32%
+            ),
+            #080808;
+
+        color: #f4f4f5;
+
+    }
+
+
+    /* =========================================================
+       SIDEBAR
+       ========================================================= */
+
+    .admin-sidebar {
+
+        width: 225px;
+
+        flex-shrink: 0;
+
+        padding:
+            30px 14px;
+
+        background:
+            rgba(12, 12, 12, .94);
+
+        border-right:
+            1px solid rgba(255,255,255,.065);
+
+        position: sticky;
+
+        top: 0;
+
+        align-self: flex-start;
+
+        min-height:
+            calc(100vh - 90px);
+
+        z-index: 10;
+
+    }
+
+
+    .admin-sidebar-brand {
+
+        display: flex;
+
+        align-items: center;
+
+        gap: 9px;
+
+        padding:
+            0 11px 25px;
+
+        margin-bottom: 7px;
+
+        border-bottom:
+            1px solid rgba(255,255,255,.055);
+
+    }
+
+
+    .admin-brand-mark {
+
+        width: 31px;
+
+        height: 31px;
+
+        display: grid;
+
+        place-items: center;
+
+        border-radius: 8px;
+
+        background:
+            linear-gradient(
+                135deg,
+                #ffe58a,
+                #f4c842,
+                #b88612
+            );
+
+        color: #090909;
+
+        font-size: 10px;
+
+        font-weight: 950;
+
+        box-shadow:
+            0 7px 18px rgba(244,200,66,.10);
+
+    }
+
+
+    .admin-brand-text {
+
+        color: #fff;
+
+        font-size: 12px;
+
+        font-weight: 950;
+
+        letter-spacing: -.3px;
+
+    }
+
+
+    .admin-brand-text span {
+        color: #f4c842;
+    }
+
+
+    .admin-eyebrow {
+
+        margin:
+            22px 11px 10px;
+
+        color: #4f4f4f;
+
+        font-size: 7px;
+
+        font-weight: 950;
+
+        letter-spacing: 1px;
+
+        text-transform: uppercase;
+
+    }
+
+
+    .admin-navigation {
+
+        display: flex;
+
+        flex-direction: column;
+
+        gap: 3px;
+
+    }
+
+
+    .admin-navigation a {
+
+        position: relative;
+
+        display: flex;
+
+        align-items: center;
+
+        gap: 10px;
+
+        min-height: 39px;
+
+        padding:
+            0 11px;
+
+        border:
+            1px solid transparent;
+
+        border-radius: 9px;
+
+        color: #777;
+
+        background: transparent;
+
+        text-decoration: none;
+
+        font-size: 9px;
+
+        font-weight: 750;
+
+        transition:
+            color .18s ease,
+            background .18s ease,
+            border-color .18s ease,
+            transform .18s ease;
+
+    }
+
+
+    .admin-navigation a::before {
+
+        content: "";
+
+        width: 5px;
+
+        height: 5px;
+
+        flex-shrink: 0;
+
+        border-radius: 50%;
+
+        background: #363636;
+
+        transition: .18s ease;
+
+    }
+
+
+    .admin-navigation a:hover {
+
+        color: #ddd;
+
+        background:
+            rgba(255,255,255,.035);
+
+        border-color:
+            rgba(255,255,255,.05);
+
+        transform:
+            translateX(1px);
+
+    }
+
+
+    .admin-navigation a:hover::before {
+
+        background: #777;
+
+    }
+
+
+    .admin-navigation a.active {
+
+        color: #f5e4a0;
+
+        background:
+            linear-gradient(
+                90deg,
+                rgba(244,200,66,.09),
+                rgba(244,200,66,.025)
+            );
+
+        border-color:
+            rgba(244,200,66,.12);
+
+        box-shadow:
+            inset 3px 0 0 #f4c842;
+
+    }
+
+
+    .admin-navigation a.active::before {
+
+        background: #f4c842;
+
+        box-shadow:
+            0 0 8px rgba(244,200,66,.65);
+
+    }
+
+
+    /* =========================================================
+       MAIN ADMIN AREA
+       ========================================================= */
+
+    .admin-main {
+
+        flex: 1;
+
+        min-width: 0;
+
+        padding:
+            35px 36px 70px;
+
+    }
+
+
+    .admin-main-inner {
+
+        width: 100%;
+
+        max-width: 1500px;
+
+        margin: 0 auto;
+
+    }
+
+
+    /* =========================================================
+       ADMIN TOP STRIP
+       ========================================================= */
+
+    .admin-top-strip {
+
+        display: flex;
+
+        align-items: center;
+
+        justify-content: space-between;
+
+        gap: 15px;
+
+        margin-bottom: 25px;
+
+        padding-bottom: 16px;
+
+        border-bottom:
+            1px solid rgba(255,255,255,.055);
+
+    }
+
+
+    .admin-section-label {
+
+        display: flex;
+
+        align-items: center;
+
+        gap: 7px;
+
+        color: #777;
+
+        font-size: 8px;
+
+        font-weight: 850;
+
+        text-transform: uppercase;
+
+        letter-spacing: .8px;
+
+    }
+
+
+    .admin-section-label::before {
+
+        content: "";
+
+        width: 5px;
+
+        height: 5px;
+
+        border-radius: 50%;
+
+        background: #f4c842;
+
+        box-shadow:
+            0 0 8px rgba(244,200,66,.6);
+
+    }
+
+
+    .admin-status {
+
+        display: inline-flex;
+
+        align-items: center;
+
+        gap: 6px;
+
+        padding:
+            5px 9px;
+
+        border:
+            1px solid rgba(74,222,128,.12);
+
+        border-radius: 999px;
+
+        background:
+            rgba(74,222,128,.035);
+
+        color: #76c98d;
+
+        font-size: 7px;
+
+        font-weight: 900;
+
+        text-transform: uppercase;
+
+        letter-spacing: .5px;
+
+    }
+
+
+    .admin-status::before {
+
+        content: "";
+
+        width: 5px;
+
+        height: 5px;
+
+        border-radius: 50%;
+
+        background: #4ade80;
+
+        box-shadow:
+            0 0 7px rgba(74,222,128,.55);
+
+    }
+
+
+    /* =========================================================
+       RESPONSIVE
+       ========================================================= */
+
+    @media (max-width: 850px) {
+
+        .admin-shell {
+
+            display: block;
+
+            margin-top: -20px;
+
+        }
+
+
+        .admin-sidebar {
+
+            position: relative;
+
+            top: 0;
+
+            width: 100%;
+
+            min-height: auto;
+
+            padding:
+                12px;
+
+            border-right: 0;
+
+            border-bottom:
+                1px solid rgba(255,255,255,.065);
+
+        }
+
+
+        .admin-sidebar-brand {
+
+            display: none;
+
+        }
+
+
+        .admin-eyebrow {
+
+            display: none;
+
+        }
+
+
+        .admin-navigation {
+
+            flex-direction: row;
+
+            gap: 4px;
+
+            overflow-x: auto;
+
+            padding-bottom: 1px;
+
+        }
+
+
+        .admin-navigation a {
+
+            flex-shrink: 0;
+
+            min-height: 36px;
+
+            padding:
+                0 12px;
+
+            white-space: nowrap;
+
+        }
+
+
+        .admin-navigation a.active {
+
+            box-shadow:
+                inset 0 -2px 0 #f4c842;
+
+        }
+
+
+        .admin-main {
+
+            padding:
+                27px 18px 55px;
+
+        }
+
+    }
+
+
+    @media (max-width: 500px) {
+
+        .admin-top-strip {
+
+            margin-bottom: 20px;
+
+        }
+
+
+        .admin-status {
+
+            display: none;
+
+        }
+
+
+        .admin-main {
+
+            padding-left: 14px;
+
+            padding-right: 14px;
+
+        }
+
+    }
+
+</style>
+
+
+<div class="admin-shell">
+
+
+    <!-- =====================================================
+         ADMIN SIDEBAR
+         ===================================================== -->
+
+    <aside class="admin-sidebar">
+
+
+        <div class="admin-sidebar-brand">
+
+            <div class="admin-brand-mark">
+                BH
+            </div>
+
+            <div class="admin-brand-text">
+                BEAT<span>HUB</span>
+            </div>
+
+        </div>
+
+
+        <div class="admin-eyebrow">
+            Administration
+        </div>
+
+
+        <nav class="admin-navigation">
+
+
+            <a href="/admin">
+                <span>Overview</span>
+            </a>
+
+
+            <a href="/admin/users">
+                <span>Users</span>
+            </a>
+
+
+            <a href="/admin/content">
+                <span>Content</span>
+            </a>
+
+
+            <a href="/admin/sales">
+                <span>Sales</span>
+            </a>
+
+
+            <a href="/admin/withdrawals">
+                <span>Withdrawals</span>
+            </a>
+
+
+        </nav>
+
+
+    </aside>
+
+
+    <!-- =====================================================
+         ADMIN MAIN CONTENT
+         ===================================================== -->
+
+    <main class="admin-main">
+
+
+        <div class="admin-main-inner">
+
+
+            <div class="admin-top-strip">
+
+
+                <div class="admin-section-label">
+                    BeatHub Administration
+                </div>
+
+
+                <div class="admin-status">
+                    System Online
+                </div>
+
+
+            </div>
+
+
+            {% block admin_content %}{% endblock %}
+
+
+        </div>
+
+
+    </main>
+
+
 </div>
+
 {% endblock %}
