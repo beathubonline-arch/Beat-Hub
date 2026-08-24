@@ -29,6 +29,8 @@ from app.utils.deps import require_user
 router = APIRouter(tags=["paystack"])
 logger = logging.getLogger("beathub.paystack")
 
+PAYSTACK_KES_MINIMUM = Decimal("3.00")
+
 
 def _headers() -> dict:
     return {
@@ -40,16 +42,6 @@ def _headers() -> dict:
 def _amount_kobo(amount: Decimal) -> int:
     # Paystack expects the amount in the currency's smallest unit.
     return int((amount * Decimal("100")).quantize(Decimal("1")))
-
-
-def _new_order_number() -> str:
-    """Generate the required BeatHub order number before inserting the order.
-
-    The orders.order_number column is NOT NULL and UNIQUE in PostgreSQL, so
-    Paystack orders must never rely on a database default or leave this field
-    unset. UUID hex provides enough entropy for practical uniqueness.
-    """
-    return f"BH{uuid.uuid4().hex[:10].upper()}"
 
 
 def _available(track: Track) -> bool:
@@ -147,10 +139,19 @@ async def paystack_checkout(
     if price <= 0:
         raise HTTPException(status_code=400, detail="This track has an invalid price.")
 
+    # Paystack's current KES transaction minimum is KSh 3.00. Do not silently
+    # increase the customer's price; require the seller to use a Paystack-
+    # eligible price instead.
+    if price < PAYSTACK_KES_MINIMUM:
+        return RedirectResponse(
+            f"/checkout/track/{slug}?error=Paystack%20requires%20a%20minimum%20payment%20of%20KSh%203.00.%20Please%20set%20this%20track%20price%20to%20at%20least%20KSh%203.00%20or%20use%20M-Pesa.",
+            303,
+        )
+
     split = calculate_split(track.price)
     order = Order(
         id=str(uuid.uuid4()),
-        order_number=_new_order_number(),
+        order_number=f"BH{uuid.uuid4().hex[:10].upper()}",
         buyer_id=user.id,
         track_id=track.id,
         album_id=None,
@@ -168,7 +169,7 @@ async def paystack_checkout(
     callback_url = f"{settings.BASE_URL.rstrip('/')}/paystack/callback"
     payload = {
         "email": user.email,
-        "amount": _amount_kobo(price),
+        "amount": str(_amount_kobo(price)),
         "currency": "KES",
         "reference": order.order_number,
         "callback_url": callback_url,
@@ -193,8 +194,15 @@ async def paystack_checkout(
         raise HTTPException(status_code=502, detail="Paystack could not be reached. Please try again.")
 
     if response.status_code >= 400 or not data.get("status"):
+        message = data.get("message") or "Paystack could not initialize checkout."
+        logger.error(
+            "Paystack initialization rejected: status=%s message=%s order=%s",
+            response.status_code,
+            message,
+            order.id,
+        )
         db.rollback()
-        raise HTTPException(status_code=400, detail=data.get("message") or "Paystack could not initialize checkout.")
+        raise HTTPException(status_code=400, detail=message)
 
     authorization = data.get("data", {}).get("authorization_url")
     reference = data.get("data", {}).get("reference") or order.order_number
