@@ -18,6 +18,7 @@ from app.routers import (
     admin,
     auth,
     checkout,
+    creator_store,
     dashboard,
     flutterwave_checkout,
     merchandise,
@@ -44,6 +45,18 @@ app = FastAPI(
     description="BeatHub — beats, music, sessions, producer stores and creator merchandise.",
     version="1.0.0",
 )
+
+
+@app.middleware("http")
+async def homepage_motion_assets(request: Request, call_next):
+    response = await call_next(request)
+
+    # The homepage is a standalone template, so load its motion layer
+    # without changing the existing page markup or global stylesheet.
+    if request.url.path == "/" and response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Link"] = "</static/css/home-animation.css>; rel=stylesheet"
+
+    return response
 
 
 def _session_secret() -> str:
@@ -151,6 +164,9 @@ app.include_router(mpesa_callback.router)
 app.include_router(paystack_checkout.router)
 app.include_router(flutterwave_checkout.router)
 app.include_router(stripe_checkout.router)
+# This must be registered before the legacy dashboard creator-store route so
+# /creator/{slug} receives the authenticated user and can render owner view.
+app.include_router(creator_store.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(merchandise.router)
