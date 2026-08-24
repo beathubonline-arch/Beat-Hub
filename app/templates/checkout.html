@@ -14,13 +14,11 @@
 
     {% if error %}<div class="alert alert-error" style="margin-top:18px;">{{ error }}</div>{% endif %}
 
-    <div style="margin-top:24px; display:grid; gap:14px;">
-      <form action="/checkout/track/{{ track.slug }}" method="post">
-        <div class="field">
-          <label>M-Pesa Phone Number</label>
-          <input type="tel" name="phone_number" placeholder="07XX XXX XXX" required>
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">Pay with M-Pesa</button>
+    <div style="margin-top:24px;display:grid;gap:14px;">
+      <form action="/paystack/checkout/track/{{ track.slug }}" method="post">
+        <button type="submit" class="btn btn-primary btn-block">
+          Pay with Paystack — M-Pesa / Card
+        </button>
       </form>
 
       <div style="display:flex;align-items:center;gap:12px;color:#777;margin:2px 0;">
@@ -29,17 +27,18 @@
         <span style="height:1px;background:rgba(255,255,255,.1);flex:1;"></span>
       </div>
 
-      <form action="/flutterwave/checkout/track/{{ track.slug }}" method="post">
-        <button type="submit" class="btn btn-block" style="background:#f5a623;color:#111;border-color:#f5a623;">
-          Pay with Card / M-Pesa
-        </button>
+      <form action="/checkout/track/{{ track.slug }}" method="post">
+        <div class="field">
+          <label>M-Pesa Phone Number</label>
+          <input type="tel" name="phone_number" placeholder="07XX XXX XXX" required>
+        </div>
+        <button type="submit" class="btn btn-block">Pay directly with M-Pesa</button>
       </form>
     </div>
 
     <p class="sub" style="margin-top:16px;">
-      BeatHub keeps the order pending until the payment provider confirms the
-      transaction. Flutterwave securely handles card and Kenyan M-Pesa payments,
-      including international card payments.
+      Paystack securely handles M-Pesa and card payments. BeatHub grants ownership
+      only after the payment is verified by the payment provider.
     </p>
   </div>
 </div>
