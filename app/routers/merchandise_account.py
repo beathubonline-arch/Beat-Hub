@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -21,7 +21,6 @@ def _esc(value) -> str:
 
 @router.get("/account/merchandise-orders", response_class=HTMLResponse)
 def merchandise_orders(
-    request: Request,
     db: Session = Depends(get_db),
     user=Depends(require_user),
 ):
@@ -53,15 +52,21 @@ def merchandise_orders(
             created_text = created.strftime("%d %b %Y, %H:%M")
         else:
             created_text = str(created or "")
+
+        try:
+            total_text = f"{float(row['total_amount'] or 0):.2f}"
+        except (TypeError, ValueError):
+            total_text = "0.00"
+
         items.append(
             f"""
-            <a class=order href='/merch/orders/{_esc(row['id'])}'>
+            <a class="order" href="/merch/orders/{_esc(row['id'])}">
               <div>
                 <strong>{_esc(row['product_name'])}</strong>
                 <span>Qty {int(row['quantity'] or 1)} · {_esc(created_text)}</span>
               </div>
-              <div class=right>
-                <strong>KSh {_esc(f\"{float(row['total_amount'] or 0):.2f}\")}</strong>
+              <div class="right">
+                <strong>KSh {_esc(total_text)}</strong>
                 <span>{_esc(status)}</span>
               </div>
             </a>
@@ -69,12 +74,12 @@ def merchandise_orders(
         )
 
     body = "".join(items) if items else """
-      <div class=empty>You do not have any merchandise orders yet.</div>
+      <div class="empty">You do not have any merchandise orders yet.</div>
     """
 
     return HTMLResponse(
         f"""<!doctype html>
-<html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>My Merchandise Orders · BeatHub</title>
 <style>
 body{{margin:0;background:#070709;color:#f7f7f8;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}}
@@ -92,10 +97,10 @@ p{{color:#999;line-height:1.6}}
 .empty{{padding:35px;border:1px dashed #34343d;border-radius:16px;color:#8c8c96;text-align:center}}
 @media(max-width:600px){{h1{{font-size:34px}}.order{{flex-direction:column}}.right{{text-align:left}}}}
 </style></head>
-<body><main class=wrap>
-<a class=back href='/account'>← Back to My Account</a>
+<body><main class="wrap">
+<a class="back" href="/account">← Back to My Account</a>
 <h1>My Merchandise Orders</h1>
 <p>Track merchandise purchases made from your BeatHub account.</p>
-<section class=list>{body}</section>
+<section class="list">{body}</section>
 </main></body></html>"""
     )
