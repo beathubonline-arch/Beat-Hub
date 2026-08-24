@@ -1,15 +1,18 @@
 """Add missing payment transaction result description column.
 
-Revision ID: beathub_payment_result_description_002
+Revision ID: pay_result_desc_002
 Revises: fix_withdrawal_status_001
 Create Date: 2026-08-24
+
+The revision ID is intentionally <= 32 characters because the production
+PostgreSQL alembic_version.version_num column is varchar(32).
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "beathub_payment_result_description_002"
+revision = "pay_result_desc_002"
 down_revision = "fix_withdrawal_status_001"
 branch_labels = None
 depends_on = None
