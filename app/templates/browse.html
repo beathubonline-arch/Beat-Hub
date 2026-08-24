@@ -12,21 +12,16 @@
   }
 
   .market-hero {
-    padding: 34px 28px;
+    position: relative;
+    overflow: hidden;
+    padding: 38px 30px;
     border-radius: 22px;
     margin-bottom: 24px;
     background:
-      radial-gradient(
-        circle at 90% 10%,
-        rgba(212,175,55,.16),
-        transparent 35%
-      ),
-      linear-gradient(
-        135deg,
-        rgba(255,255,255,.035),
-        rgba(255,255,255,.015)
-      );
-    border: 1px solid rgba(212,175,55,.18);
+      radial-gradient(circle at 90% 10%, rgba(212,175,55,.17), transparent 35%),
+      linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.012));
+    border: 1px solid rgba(212,175,55,.20);
+    box-shadow: 0 25px 70px rgba(0,0,0,.22);
   }
 
   .market-eyebrow {
@@ -42,20 +37,21 @@
     margin: 0;
     font-size: clamp(30px, 5vw, 52px);
     line-height: 1.02;
+    letter-spacing: -1.5px;
   }
 
   .market-subtitle {
     max-width: 700px;
-    margin: 13px 0 0;
-    opacity: .72;
-    line-height: 1.6;
+    margin: 14px 0 0;
+    color: var(--text-muted, #929292);
+    line-height: 1.65;
   }
 
   .market-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 22px;
+    margin-top: 23px;
   }
 
   .market-action {
@@ -84,7 +80,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
 
   .market-search input {
@@ -101,6 +97,7 @@
 
   .market-search input:focus {
     border-color: rgba(212,175,55,.55);
+    box-shadow: 0 0 0 3px rgba(212,175,55,.06);
   }
 
   .search-button {
@@ -119,7 +116,7 @@
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-    margin-bottom: 27px;
+    margin-bottom: 28px;
   }
 
   .filter-label {
@@ -142,6 +139,10 @@
     font-weight: 700;
   }
 
+  .filter-pill:hover {
+    border-color: rgba(212,175,55,.35);
+  }
+
   .filter-pill.active {
     background: rgba(212,175,55,.13);
     border-color: rgba(212,175,55,.42);
@@ -159,6 +160,7 @@
     background: rgba(255,255,255,.04);
     border: 1px solid rgba(255,255,255,.1);
     color: inherit;
+    outline: none;
   }
 
   .section-head {
@@ -194,13 +196,15 @@
     transition:
       transform .18s ease,
       border-color .18s ease,
-      background .18s ease;
+      background .18s ease,
+      box-shadow .18s ease;
   }
 
   .track-card:hover {
     transform: translateY(-3px);
     border-color: rgba(212,175,55,.32);
     background: rgba(255,255,255,.04);
+    box-shadow: 0 18px 45px rgba(0,0,0,.22);
   }
 
   .cover-wrap {
@@ -225,27 +229,73 @@
     justify-content: center;
     font-size: 44px;
     background:
-      radial-gradient(
-        circle at 30% 20%,
-        rgba(212,175,55,.2),
-        transparent 35%
-      ),
-      rgba(255,255,255,.025);
+      radial-gradient(circle at 30% 20%, rgba(212,175,55,.20), transparent 35%),
+      linear-gradient(145deg, #171717, #090909);
   }
 
+  /*
+   * IMPORTANT:
+   * The button does NOT use the stored audio path directly.
+   * It calls /track/{slug}/preview, which is the public preview
+   * endpoint in the music router.
+   */
   .preview-button {
     position: absolute;
-    left: 12px;
-    bottom: 12px;
-    width: 43px;
-    height: 43px;
+    left: 13px;
+    bottom: 13px;
+
+    width: 48px;
+    height: 48px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
     border-radius: 50%;
-    border: 1px solid rgba(255,255,255,.18);
-    background: rgba(0,0,0,.72);
+    border: 1px solid rgba(255,255,255,.22);
+
+    background: rgba(0,0,0,.78);
     color: white;
+
     cursor: pointer;
-    font-size: 16px;
+    font-size: 17px;
+    font-weight: 900;
+
+    backdrop-filter: blur(10px);
+
+    box-shadow: 0 8px 25px rgba(0,0,0,.30);
+
+    transition:
+      transform .15s ease,
+      background .15s ease,
+      border-color .15s ease;
+  }
+
+  .preview-button:hover {
+    transform: scale(1.06);
+    background: rgba(212,175,55,.94);
+    color: #080808;
+    border-color: rgba(212,175,55,.8);
+  }
+
+  .preview-button.playing {
+    background: var(--gold, #d4af37);
+    color: #080808;
+    border-color: var(--gold, #d4af37);
+  }
+
+  .preview-label {
+    position: absolute;
+    left: 70px;
+    bottom: 16px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(0,0,0,.68);
+    color: rgba(255,255,255,.86);
+    font-size: 10px;
+    font-weight: 750;
     backdrop-filter: blur(8px);
+    pointer-events: none;
   }
 
   .track-info {
@@ -271,6 +321,15 @@
     margin-top: 5px;
     font-size: 13px;
     opacity: .6;
+  }
+
+  .producer a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .producer a:hover {
+    color: var(--gold, #d4af37);
   }
 
   .meta-row {
@@ -299,22 +358,10 @@
   .price {
     font-size: 18px;
     font-weight: 850;
+    white-space: nowrap;
   }
 
-  .buy-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 38px;
-    padding: 0 14px;
-    border-radius: 9px;
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 850;
-    background: var(--gold, #d4af37);
-    color: #080808;
-  }
-
+  .buy-button,
   .view-button {
     display: inline-flex;
     align-items: center;
@@ -324,15 +371,39 @@
     border-radius: 9px;
     text-decoration: none;
     font-size: 12px;
-    font-weight: 750;
+    font-weight: 800;
+  }
+
+  .buy-button {
+    background: var(--gold, #d4af37);
+    color: #080808;
+  }
+
+  .view-button {
     border: 1px solid rgba(255,255,255,.1);
     color: inherit;
+    background: rgba(255,255,255,.025);
+  }
+
+  .view-button:hover {
+    border-color: rgba(212,175,55,.35);
   }
 
   .card-buttons {
     display: flex;
     gap: 7px;
     align-items: center;
+  }
+
+  .preview-status {
+    margin-top: 10px;
+    min-height: 16px;
+    font-size: 11px;
+    color: rgba(255,255,255,.45);
+  }
+
+  .preview-status.error {
+    color: #ff8585;
   }
 
   .empty-state {
@@ -405,15 +476,23 @@
       align-items: start;
       flex-direction: column;
     }
+
+    .price-row {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .card-buttons {
+      width: 100%;
+    }
+
+    .card-buttons a {
+      flex: 1;
+    }
   }
 </style>
 
-
 <div class="market-wrap">
-
-  <!-- ============================================================
-       HERO
-  ============================================================ -->
 
   <section class="market-hero">
 
@@ -426,32 +505,22 @@
     </h1>
 
     <p class="market-subtitle">
-      Discover beats and tracks from BeatHub producers.
-      Preview your favourites, choose your sound and get
-      your next release moving.
+      Discover beats, songs and mixes from BeatHub producers and DJs.
+      Preview available sounds before choosing the right track for your next release.
     </p>
 
     <div class="market-actions">
 
-      <a
-        href="#beats"
-        class="market-action primary"
-      >
+      <a href="#beats" class="market-action primary">
         🎧 Browse Beats
       </a>
 
       {% if current_user %}
-        <a
-          href="/account"
-          class="market-action secondary"
-        >
+        <a href="/account" class="market-action secondary">
           My Purchases
         </a>
       {% else %}
-        <a
-          href="/login"
-          class="market-action secondary"
-        >
+        <a href="/login" class="market-action secondary">
           Login
         </a>
       {% endif %}
@@ -461,23 +530,15 @@
   </section>
 
 
-  <!-- ============================================================
-       SEARCH
-  ============================================================ -->
-
-  <form
-    class="market-search"
-    action="/beats"
-    method="get"
-  >
+  <form class="market-search" action="/beats" method="get">
 
     <input
       type="search"
       name="q"
       value="{{ search or '' }}"
-      placeholder="Search beats, genres, producers or keywords..."
+      placeholder="Search beats, songs, mixes, genres or producers..."
       autocomplete="off"
-      aria-label="Search BeatHub beats"
+      aria-label="Search BeatHub"
     >
 
     {% if selected_genre %}
@@ -488,19 +549,12 @@
       >
     {% endif %}
 
-    <button
-      type="submit"
-      class="search-button"
-    >
+    <button type="submit" class="search-button">
       Search
     </button>
 
   </form>
 
-
-  <!-- ============================================================
-       FILTERS
-  ============================================================ -->
 
   <div class="filter-bar">
 
@@ -528,58 +582,31 @@
 
     <div class="sort-wrap">
 
-      <form
-        action="/beats"
-        method="get"
-      >
+      <form action="/beats" method="get">
 
         {% if search %}
-          <input
-            type="hidden"
-            name="q"
-            value="{{ search }}"
-          >
+          <input type="hidden" name="q" value="{{ search }}">
         {% endif %}
 
         {% if selected_genre %}
-          <input
-            type="hidden"
-            name="genre"
-            value="{{ selected_genre }}"
-          >
+          <input type="hidden" name="genre" value="{{ selected_genre }}">
         {% endif %}
 
-        <select
-          name="sort"
-          onchange="this.form.submit()"
-          aria-label="Sort beats"
-        >
+        <select name="sort" onchange="this.form.submit()" aria-label="Sort beats">
 
-          <option
-            value="newest"
-            {% if sort == "newest" %}selected{% endif %}
-          >
+          <option value="newest" {% if sort == "newest" %}selected{% endif %}>
             Newest
           </option>
 
-          <option
-            value="oldest"
-            {% if sort == "oldest" %}selected{% endif %}
-          >
+          <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>
             Oldest
           </option>
 
-          <option
-            value="price_low"
-            {% if sort == "price_low" %}selected{% endif %}
-          >
+          <option value="price_low" {% if sort == "price_low" %}selected{% endif %}>
             Price: Low → High
           </option>
 
-          <option
-            value="price_high"
-            {% if sort == "price_high" %}selected{% endif %}
-          >
+          <option value="price_high" {% if sort == "price_high" %}selected{% endif %}>
             Price: High → Low
           </option>
 
@@ -592,10 +619,6 @@
   </div>
 
 
-  <!-- ============================================================
-       FEATURED / NEWEST
-  ============================================================ -->
-
   {% if featured_tracks %}
 
     <section>
@@ -604,26 +627,22 @@
 
         <div>
           <h2>🔥 Fresh on BeatHub</h2>
-
-          <p>
-            New sounds from producers on the platform.
-          </p>
+          <p>New sounds from producers and DJs on the platform.</p>
         </div>
 
-        <a
-          href="/beats"
-          class="view-button"
-        >
+        <a href="/beats" class="view-button">
           View all
         </a>
 
       </div>
 
-
       <div class="track-grid">
 
         {% for track in featured_tracks %}
 
+          {% include "partials/track_card.html" ignore missing %}
+
+          {% if not loop.first or true %}
           <article class="track-card">
 
             <div class="cover-wrap">
@@ -634,13 +653,10 @@
                   src="{{ track.cover_art_url }}"
                   alt="{{ track.title }} cover"
                   loading="lazy"
-                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
                 >
 
-                <div
-                  class="cover-placeholder"
-                  style="display:none;"
-                >
+                <div class="cover-placeholder" style="display:none;">
                   🎵
                 </div>
 
@@ -652,21 +668,26 @@
 
               {% endif %}
 
-              {% if track.preview_file_path %}
+              {% if track.preview_file_path or track.audio_preview_path or track.preview_url or track.audio_url or track.slug %}
 
                 <button
                   type="button"
                   class="preview-button"
-                  onclick="togglePreview(this, '{{ track.preview_file_path | e }}')"
+                  data-preview-url="/track/{{ track.slug }}/preview"
+                  onclick="togglePreview(this)"
                   aria-label="Preview {{ track.title }}"
+                  title="Preview before purchase"
                 >
                   ▶
                 </button>
 
+                <span class="preview-label">
+                  Preview
+                </span>
+
               {% endif %}
 
             </div>
-
 
             <div class="track-info">
 
@@ -677,27 +698,23 @@
               </h3>
 
               <div class="producer">
-
                 {% if track.creator_profile %}
                   {{ track.creator_profile.stage_name }}
+                {% elif track.producer_name %}
+                  {{ track.producer_name }}
                 {% else %}
                   BeatHub Producer
                 {% endif %}
-
               </div>
 
               <div class="meta-row">
 
                 {% if track.genre %}
-                  <span class="meta">
-                    {{ track.genre }}
-                  </span>
+                  <span class="meta">{{ track.genre }}</span>
                 {% endif %}
 
                 {% if track.bpm %}
-                  <span class="meta">
-                    {{ track.bpm }} BPM
-                  </span>
+                  <span class="meta">{{ track.bpm }} BPM</span>
                 {% endif %}
 
                 {% if track.sales_model %}
@@ -716,10 +733,7 @@
 
                 <div class="card-buttons">
 
-                  <a
-                    href="/track/{{ track.slug }}"
-                    class="view-button"
-                  >
+                  <a href="/track/{{ track.slug }}" class="view-button">
                     View
                   </a>
 
@@ -736,9 +750,12 @@
 
               </div>
 
+              <div class="preview-status" aria-live="polite"></div>
+
             </div>
 
           </article>
+          {% endif %}
 
         {% endfor %}
 
@@ -748,10 +765,6 @@
 
   {% endif %}
 
-
-  <!-- ============================================================
-       ALL RESULTS
-  ============================================================ -->
 
   <section id="beats">
 
@@ -772,19 +785,11 @@
         <p>
 
           {% if search %}
-
-            Results for
-            <strong>{{ search }}</strong>
-
+            Results for <strong>{{ search }}</strong>
           {% elif selected_genre %}
-
-            Beats in
-            <strong>{{ selected_genre }}</strong>
-
+            Beats in <strong>{{ selected_genre }}</strong>
           {% else %}
-
             Find the sound for your next song.
-
           {% endif %}
 
         </p>
@@ -793,7 +798,8 @@
 
       {% if tracks %}
         <span class="results-note">
-          {{ tracks|length }} beat{% if tracks|length != 1 %}s{% endif %}
+          {{ tracks|length }}
+          beat{% if tracks|length != 1 %}s{% endif %}
         </span>
       {% endif %}
 
@@ -816,13 +822,10 @@
                   src="{{ track.cover_art_url }}"
                   alt="{{ track.title }} cover"
                   loading="lazy"
-                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
                 >
 
-                <div
-                  class="cover-placeholder"
-                  style="display:none;"
-                >
+                <div class="cover-placeholder" style="display:none;">
                   🎵
                 </div>
 
@@ -835,16 +838,22 @@
               {% endif %}
 
 
-              {% if track.preview_file_path %}
+              {% if track.preview_file_path or track.audio_preview_path or track.preview_url or track.audio_url or track.slug %}
 
                 <button
                   type="button"
                   class="preview-button"
-                  onclick="togglePreview(this, '{{ track.preview_file_path | e }}')"
+                  data-preview-url="/track/{{ track.slug }}/preview"
+                  onclick="togglePreview(this)"
                   aria-label="Preview {{ track.title }}"
+                  title="Preview before purchase"
                 >
                   ▶
                 </button>
+
+                <span class="preview-label">
+                  Preview
+                </span>
 
               {% endif %}
 
@@ -854,13 +863,9 @@
             <div class="track-info">
 
               <h3 class="track-title">
-
-                <a
-                  href="/track/{{ track.slug }}"
-                >
+                <a href="/track/{{ track.slug }}">
                   {{ track.title }}
                 </a>
-
               </h3>
 
 
@@ -869,6 +874,10 @@
                 {% if track.creator_profile %}
 
                   {{ track.creator_profile.stage_name }}
+
+                {% elif track.producer_name %}
+
+                  {{ track.producer_name }}
 
                 {% else %}
 
@@ -882,32 +891,24 @@
               <div class="meta-row">
 
                 {% if track.genre %}
-
                   <span class="meta">
                     {{ track.genre }}
                   </span>
-
                 {% endif %}
 
-
                 {% if track.bpm %}
-
                   <span class="meta">
                     {{ track.bpm }} BPM
                   </span>
-
                 {% endif %}
 
-
                 {% if track.sales_model %}
-
                   <span class="meta">
                     {{ track.sales_model.value
                       | replace("_", " ")
                       | title
                     }}
                   </span>
-
                 {% endif %}
 
               </div>
@@ -916,10 +917,7 @@
               <div class="price-row">
 
                 <div class="price">
-
-                  KSh
-                  {{ "{:,.0f}".format(track.price or 0) }}
-
+                  KSh {{ "{:,.0f}".format(track.price or 0) }}
                 </div>
 
 
@@ -956,6 +954,8 @@
 
               </div>
 
+              <div class="preview-status" aria-live="polite"></div>
+
             </div>
 
           </article>
@@ -984,10 +984,7 @@
             Try another keyword or explore all available beats.
           </p>
 
-          <a
-            href="/beats"
-            class="market-action primary"
-          >
+          <a href="/beats" class="market-action primary">
             Browse all beats
           </a>
 
@@ -1004,19 +1001,13 @@
 
           {% if current_user %}
 
-            <a
-              href="/account"
-              class="market-action secondary"
-            >
+            <a href="/account" class="market-action secondary">
               Go to my account
             </a>
 
           {% else %}
 
-            <a
-              href="/signup"
-              class="market-action primary"
-            >
+            <a href="/signup" class="market-action primary">
               Join BeatHub
             </a>
 
@@ -1033,103 +1024,190 @@
 </div>
 
 
-<!-- ================================================================
-     PREVIEW PLAYER
-================================================================ -->
-
 <script>
+(function () {
 
-let beatHubPreview = null;
-let beatHubPreviewButton = null;
+  let activeAudio = null;
+  let activeButton = null;
 
-function togglePreview(button, source) {
+  function stopActivePreview() {
 
-  if (!source) {
-    return;
+    if (activeAudio) {
+      try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+      } catch (e) {}
+    }
+
+    if (activeButton) {
+      activeButton.textContent = "▶";
+      activeButton.classList.remove("playing");
+    }
+
+    activeAudio = null;
+    activeButton = null;
   }
 
-  // Stop current preview if the same button is clicked.
-  if (
-    beatHubPreview &&
-    beatHubPreviewButton === button
-  ) {
 
-    if (!beatHubPreview.paused) {
+  window.togglePreview = function (button) {
 
-      beatHubPreview.pause();
+    if (!button) {
+      return;
+    }
 
-      button.textContent = "▶";
+    const url = button.dataset.previewUrl;
+
+    if (!url) {
+      return;
+    }
+
+
+    /*
+     * Same button:
+     * pause if playing,
+     * resume if paused.
+     */
+    if (activeButton === button && activeAudio) {
+
+      if (activeAudio.paused) {
+
+        activeAudio.play()
+          .then(function () {
+            button.textContent = "❚❚";
+            button.classList.add("playing");
+          })
+          .catch(function () {
+            button.textContent = "▶";
+            button.classList.remove("playing");
+          });
+
+      } else {
+
+        activeAudio.pause();
+
+        button.textContent = "▶";
+        button.classList.remove("playing");
+
+      }
 
       return;
     }
 
-    beatHubPreview.play();
 
-    button.textContent = "❚❚";
-
-    return;
-  }
-
-
-  // Stop previous preview.
-  if (beatHubPreview) {
-
-    beatHubPreview.pause();
-
-    beatHubPreview.currentTime = 0;
-  }
-
-  if (beatHubPreviewButton) {
-
-    beatHubPreviewButton.textContent = "▶";
-  }
+    /*
+     * A different track was selected.
+     */
+    stopActivePreview();
 
 
-  // Create new preview.
-  beatHubPreview = new Audio(source);
+    const card = button.closest(".track-card");
 
-  beatHubPreviewButton = button;
+    const status = card
+      ? card.querySelector(".preview-status")
+      : null;
 
-  button.textContent = "❚❚";
 
-
-  beatHubPreview.addEventListener(
-    "ended",
-    function () {
-
-      button.textContent = "▶";
-
-      beatHubPreview = null;
-
-      beatHubPreviewButton = null;
-
+    if (status) {
+      status.textContent = "Loading preview…";
+      status.classList.remove("error");
     }
-  );
 
 
-  beatHubPreview.addEventListener(
-    "error",
-    function () {
+    const audio = new Audio();
 
-      button.textContent = "▶";
+    audio.preload = "metadata";
+    audio.src = url;
 
-      beatHubPreview = null;
-
-      beatHubPreviewButton = null;
-
-    }
-  );
+    activeAudio = audio;
+    activeButton = button;
 
 
-  beatHubPreview.play().catch(
-    function () {
+    audio.addEventListener("canplay", function () {
 
-      button.textContent = "▶";
+      if (status) {
+        status.textContent = "Now playing preview";
+        status.classList.remove("error");
+      }
 
-    }
-  );
-}
+    }, { once: true });
 
+
+    audio.addEventListener("ended", function () {
+
+      if (activeButton === button) {
+
+        button.textContent = "▶";
+        button.classList.remove("playing");
+
+        if (status) {
+          status.textContent = "";
+        }
+
+        activeAudio = null;
+        activeButton = null;
+      }
+
+    });
+
+
+    audio.addEventListener("error", function () {
+
+      if (activeButton === button) {
+
+        button.textContent = "▶";
+        button.classList.remove("playing");
+
+        if (status) {
+          status.textContent =
+            "Preview unavailable for this track.";
+          status.classList.add("error");
+        }
+
+        activeAudio = null;
+        activeButton = null;
+      }
+
+    });
+
+
+    audio.play()
+      .then(function () {
+
+        button.textContent = "❚❚";
+        button.classList.add("playing");
+
+        if (status) {
+          status.textContent = "Now playing preview";
+          status.classList.remove("error");
+        }
+
+      })
+      .catch(function () {
+
+        button.textContent = "▶";
+        button.classList.remove("playing");
+
+        if (status) {
+          status.textContent =
+            "Preview could not be started.";
+          status.classList.add("error");
+        }
+
+        activeAudio = null;
+        activeButton = null;
+      });
+
+  };
+
+
+  /*
+   * Stop audio when leaving the page.
+   */
+  window.addEventListener("beforeunload", function () {
+    stopActivePreview();
+  });
+
+})();
 </script>
 
 {% endblock %}
