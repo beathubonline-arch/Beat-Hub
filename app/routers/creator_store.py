@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.profile import Profile
-from app.models.music import Track
 from app.services.storage import r2_presigned_url
 from app.utils.deps import get_optional_user
 
@@ -13,12 +12,19 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/creator/{slug}")
+@router.get("/store/{slug}")
+@router.get("/profile/{slug}")
 def creator_store(
     request: Request,
     slug: str,
     db: Session = Depends(get_db),
     current_user=Depends(get_optional_user),
 ):
+    """Render one creator store consistently for buyers and its owner.
+
+    All public creator-store URLs use this same handler so an authenticated
+    producer never falls through to the older buyer-only presentation.
+    """
     profile = (
         db.query(Profile)
         .filter(Profile.slug == slug)
@@ -65,6 +71,12 @@ def creator_store(
 
         albums.append(album)
 
+    is_owner = bool(
+        current_user
+        and str(getattr(current_user, "id", ""))
+        == str(getattr(profile, "user_id", ""))
+    )
+
     return templates.TemplateResponse(
         request,
         "profile_detail.html",
@@ -77,6 +89,6 @@ def creator_store(
             "creator": getattr(profile, "user", None),
             "tracks": tracks,
             "albums": albums,
-            "is_owner": bool(current_user and current_user.id == profile.user_id),
+            "is_owner": is_owner,
         },
     )
