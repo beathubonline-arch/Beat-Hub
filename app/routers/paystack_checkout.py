@@ -7,12 +7,13 @@ BeatHub ownership is granted. The existing M-Pesa checkout is untouched.
 import hashlib
 import hmac
 import logging
+import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,7 @@ router = APIRouter(tags=["paystack"])
 logger = logging.getLogger("beathub.paystack")
 
 PAYSTACK_KES_MINIMUM = Decimal("3.00")
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _headers() -> dict:
@@ -40,7 +42,6 @@ def _headers() -> dict:
 
 
 def _amount_kobo(amount: Decimal) -> int:
-    # Paystack expects the amount in the currency's smallest unit.
     return int((amount * Decimal("100")).quantize(Decimal("1")))
 
 
@@ -102,8 +103,6 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     if phone:
         payment.phone_number = str(phone)[:20]
 
-    # Reuse BeatHub's existing, idempotent ownership/license/exclusive-lock
-    # completion path so Paystack does not introduce a second purchase system.
     complete_successful_payment(
         db=db,
         payment=payment,
@@ -119,6 +118,7 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
 async def paystack_checkout(
     slug: str,
     request: Request,
+    email: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -139,12 +139,22 @@ async def paystack_checkout(
     if price <= 0:
         raise HTTPException(status_code=400, detail="This track has an invalid price.")
 
-    # Paystack's current KES transaction minimum is KSh 3.00. Do not silently
-    # increase the customer's price; require the seller to use a Paystack-
-    # eligible price instead.
     if price < PAYSTACK_KES_MINIMUM:
         return RedirectResponse(
             f"/checkout/track/{slug}?error=Paystack%20requires%20a%20minimum%20payment%20of%20KSh%203.00.%20Please%20set%20this%20track%20price%20to%20at%20least%20KSh%203.00%20or%20use%20M-Pesa.",
+            303,
+        )
+
+    # Paystack requires a syntactically valid email. Some existing BeatHub
+    # accounts may contain legacy/test values, so collect the actual receipt
+    # email at checkout rather than allowing Paystack to reject initialization.
+    customer_email = (email or "").strip().lower()
+    if not customer_email:
+        customer_email = (getattr(user, "email", "") or "").strip().lower()
+
+    if not EMAIL_RE.fullmatch(customer_email):
+        return RedirectResponse(
+            f"/checkout/track/{slug}?error=Please%20enter%20a%20valid%20email%20address%20for%20Paystack%20checkout.",
             303,
         )
 
@@ -168,7 +178,7 @@ async def paystack_checkout(
 
     callback_url = f"{settings.BASE_URL.rstrip('/')}/paystack/callback"
     payload = {
-        "email": user.email,
+        "email": customer_email,
         "amount": str(_amount_kobo(price)),
         "currency": "KES",
         "reference": order.order_number,
