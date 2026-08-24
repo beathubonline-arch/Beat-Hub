@@ -1,12 +1,583 @@
 {% extends "base.html" %}
-{% block title %}Sessions — BeatHub{% endblock %}
+
+{% block title %}Creative Sessions — BeatHub{% endblock %}
+
 {% block content %}
-<section style="padding: 50px 0;">
-  <h1 style="font-size: 30px;">Creative Sessions</h1>
-  <p class="sub" style="color: var(--text-muted); max-width: 600px;">
-    Session booking between artists and producers is on the roadmap for a
-    future release. Reach out to producers directly via their profile pages
-    for now.
-  </p>
+
+<style>
+/* ============================================================
+   BEATHUB SESSIONS MARKETPLACE
+   Premium Black + Gold Theme
+============================================================ */
+
+.sessions-page{
+    position:relative;
+    overflow:hidden;
+    padding:55px 20px 80px;
+    background:
+        radial-gradient(circle at top right,rgba(212,175,55,.08),transparent 32%),
+        radial-gradient(circle at bottom left,rgba(212,175,55,.05),transparent 28%);
+}
+
+.sessions-container{
+    width:100%;
+    max-width:1200px;
+    margin:auto;
+}
+
+.sessions-hero{
+    display:grid;
+    grid-template-columns:1.2fr .8fr;
+    gap:50px;
+    align-items:center;
+    margin-bottom:70px;
+}
+
+.hero-label{
+    color:var(--gold);
+    font-size:11px;
+    font-weight:900;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    margin-bottom:10px;
+}
+
+.sessions-hero h1{
+    font-size:clamp(42px,6vw,72px);
+    line-height:.95;
+    margin:0;
+    letter-spacing:-.05em;
+}
+
+.sessions-hero h1 span{
+    color:var(--gold);
+}
+
+.sessions-hero p{
+    margin-top:18px;
+    color:var(--text-muted);
+    font-size:16px;
+    line-height:1.8;
+    max-width:560px;
+}
+
+.hero-buttons{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    margin-top:28px;
+}
+
+.hero-card{
+    background:linear-gradient(180deg,#141414,#0c0c0c);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:24px;
+    padding:28px;
+    box-shadow:0 20px 50px rgba(0,0,0,.25);
+}
+
+.hero-card h3{
+    margin:0 0 18px;
+    font-size:22px;
+}
+
+.hero-stat{
+    display:flex;
+    justify-content:space-between;
+    padding:14px 0;
+    border-bottom:1px solid rgba(255,255,255,.06);
+}
+
+.hero-stat:last-child{
+    border:none;
+}
+
+.hero-stat strong{
+    color:#fff;
+    font-size:20px;
+}
+
+.hero-stat span{
+    color:var(--text-muted);
+    font-size:13px;
+}
+
+/* ==========================================
+   HOW IT WORKS
+========================================== */
+
+.section-title{
+    margin-bottom:30px;
+}
+
+.section-title h2{
+    font-size:34px;
+    margin:6px 0;
+}
+
+.section-title p{
+    color:var(--text-muted);
+    max-width:650px;
+}
+
+.steps{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:18px;
+    margin-bottom:70px;
+}
+
+.step-card{
+    padding:28px;
+    border-radius:20px;
+    background:linear-gradient(180deg,#131313,#0b0b0b);
+    border:1px solid rgba(255,255,255,.08);
+    transition:.25s;
+}
+
+.step-card:hover{
+    border-color:rgba(212,175,55,.25);
+    transform:translateY(-4px);
+}
+
+.step-number{
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    background:rgba(212,175,55,.12);
+    color:var(--gold);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:900;
+    margin-bottom:18px;
+}
+
+.step-card h3{
+    margin:0 0 10px;
+}
+
+.step-card p{
+    color:var(--text-muted);
+    line-height:1.7;
+    font-size:14px;
+}
+
+/* ==========================================
+   FEATURED SERVICES
+========================================== */
+
+.service-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:18px;
+    margin-bottom:70px;
+}
+
+.service-card{
+    border-radius:22px;
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,.08);
+    background:#111;
+    transition:.25s;
+}
+
+.service-card:hover{
+    transform:translateY(-5px);
+    border-color:rgba(212,175,55,.25);
+}
+
+.service-image{
+    height:190px;
+    background:#181818;
+}
+
+.service-body{
+    padding:20px;
+}
+
+.service-tag{
+    color:var(--gold);
+    font-size:10px;
+    letter-spacing:.14em;
+    font-weight:900;
+    text-transform:uppercase;
+}
+
+.service-body h3{
+    margin:8px 0 10px;
+    font-size:21px;
+}
+
+.service-body p{
+    color:var(--text-muted);
+    line-height:1.6;
+    font-size:14px;
+}
+
+.price{
+    margin-top:18px;
+    color:#fff;
+    font-size:24px;
+    font-weight:900;
+}
+
+/* ==========================================
+   FEATURE COMPARISON
+========================================== */
+
+.coming-section{
+    margin-bottom:70px;
+}
+
+.feature-table{
+    width:100%;
+    border-collapse:collapse;
+    overflow:hidden;
+    border-radius:20px;
+    border:1px solid rgba(255,255,255,.08);
+}
+
+.feature-table th{
+    background:#151515;
+    color:#fff;
+    padding:18px;
+    text-align:left;
+}
+
+.feature-table td{
+    padding:16px 18px;
+    border-top:1px solid rgba(255,255,255,.06);
+}
+
+.feature-table tr:hover td{
+    background:rgba(255,255,255,.02);
+}
+
+.available{
+    color:#3ddc84;
+    font-weight:700;
+}
+
+.soon{
+    color:var(--gold);
+    font-weight:700;
+}
+
+/* ==========================================
+   CTA
+========================================== */
+
+.cta-box{
+    padding:40px;
+    border-radius:28px;
+    text-align:center;
+    background:
+      radial-gradient(circle at top right,rgba(212,175,55,.12),transparent 35%),
+      linear-gradient(180deg,#171717,#0c0c0c);
+    border:1px solid rgba(212,175,55,.18);
+}
+
+.cta-box h2{
+    font-size:36px;
+    margin-bottom:12px;
+}
+
+.cta-box p{
+    max-width:650px;
+    margin:auto auto 28px;
+    color:var(--text-muted);
+    line-height:1.7;
+}
+
+.btn-row{
+    display:flex;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap:15px;
+}
+
+/* ==========================================
+   RESPONSIVE
+========================================== */
+
+@media(max-width:900px){
+
+.sessions-hero{
+grid-template-columns:1fr;
+}
+
+.steps{
+grid-template-columns:1fr;
+}
+
+}
+</style>
+
+<section class="sessions-page">
+
+<div class="sessions-container">
+
+  <!-- HERO -->
+
+  <div class="sessions-hero">
+
+    <div>
+
+      <div class="hero-label">BeatHub Sessions Marketplace</div>
+
+      <h1>
+        Book Creative
+        <span>Studio Sessions.</span>
+      </h1>
+
+      <p>
+        Connect directly with BeatHub producers for recording sessions,
+        mixing, mastering, songwriting, beat customization and full music
+        production. Everything happens inside BeatHub — simple, secure,
+        and creator-first.
+      </p>
+
+      <div class="hero-buttons">
+
+        <a href="/beats" class="btn btn-primary">
+          Browse Producers
+        </a>
+
+        <a href="/dashboard" class="btn btn-outline">
+          Artist Dashboard
+        </a>
+
+      </div>
+
+    </div>
+
+    <div class="hero-card">
+
+      <h3>Sessions Coming to BeatHub</h3>
+
+      <div class="hero-stat">
+        <span>Recording Sessions</span>
+        <strong>Soon</strong>
+      </div>
+
+      <div class="hero-stat">
+        <span>Mix & Master Services</span>
+        <strong>Soon</strong>
+      </div>
+
+      <div class="hero-stat">
+        <span>Beat Customization</span>
+        <strong>Soon</strong>
+      </div>
+
+      <div class="hero-stat">
+        <span>Songwriting Collaboration</span>
+        <strong>Soon</strong>
+      </div>
+
+      <div class="hero-stat">
+        <span>Secure Payments</span>
+        <strong>✓ BeatHub</strong>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- HOW IT WORKS -->
+
+  <div class="section-title">
+    <div class="hero-label">How Sessions Work</div>
+    <h2>Book producers in three simple steps.</h2>
+    <p>
+      The BeatHub Sessions marketplace is designed to let artists hire producers,
+      collaborate remotely, and receive finished work securely.
+    </p>
+  </div>
+
+  <div class="steps">
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>Browse Producers</h3>
+      <p>
+        Discover verified BeatHub producers by genre, style, location and ratings.
+      </p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>Book a Session</h3>
+      <p>
+        Choose a service package, select your preferred date and securely pay through BeatHub.
+      </p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>Receive Your Music</h3>
+      <p>
+        Finished sessions, stems, mixes and masters will appear in your BeatHub account.
+      </p>
+    </div>
+
+  </div>
+
+  <!-- FEATURED SERVICES -->
+
+  <div class="section-title">
+    <div class="hero-label">Popular Session Types</div>
+    <h2>Everything artists need in one place.</h2>
+  </div>
+
+  <div class="service-grid">
+
+    <div class="service-card">
+      <div class="service-image">
+        <AsyncImage query="professional music producer in recording studio with mixing console" aspectRatio="4:3" width="100%" radius="none"/>
+      </div>
+      <div class="service-body">
+        <div class="service-tag">Studio Session</div>
+        <h3>Recording Session</h3>
+        <p>Book studio time with a BeatHub producer and record vocals professionally.</p>
+        <div class="price">Coming Soon</div>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-image">
+        <AsyncImage query="audio engineer mixing vocals on studio monitors" aspectRatio="4:3" width="100%" radius="none"/>
+      </div>
+      <div class="service-body">
+        <div class="service-tag">Mix & Master</div>
+        <h3>Professional Mixing</h3>
+        <p>Get radio-ready mixes and mastering from verified BeatHub engineers.</p>
+        <div class="price">Coming Soon</div>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-image">
+        <AsyncImage query="music producer creating afrobeat instrumental on laptop midi keyboard" aspectRatio="4:3" width="100%" radius="none"/>
+      </div>
+      <div class="service-body">
+        <div class="service-tag">Custom Beats</div>
+        <h3>Beat Customization</h3>
+        <p>Request edits, intros, tempo changes, stems or fully custom production.</p>
+        <div class="price">Coming Soon</div>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-image">
+        <AsyncImage query="songwriter writing lyrics in music studio with microphone" aspectRatio="4:3" width="100%" radius="none"/>
+      </div>
+      <div class="service-body">
+        <div class="service-tag">Songwriting</div>
+        <h3>Songwriting Collaboration</h3>
+        <p>Work with BeatHub writers to create hooks, verses and melodies.</p>
+        <div class="price">Coming Soon</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ROADMAP TABLE -->
+
+  <div class="coming-section">
+
+    <div class="section-title">
+      <div class="hero-label">Roadmap</div>
+      <h2>Sessions Marketplace Features</h2>
+    </div>
+
+    <table class="feature-table">
+
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+
+      <tbody>
+
+        <tr>
+          <td>Browse BeatHub Producers</td>
+          <td class="available">✓ Available</td>
+        </tr>
+
+        <tr>
+          <td>Producer Public Stores</td>
+          <td class="available">✓ Available</td>
+        </tr>
+
+        <tr>
+          <td>Creative Session Listings</td>
+          <td class="soon">Coming Soon</td>
+        </tr>
+
+        <tr>
+          <td>Session Booking Calendar</td>
+          <td class="soon">Coming Soon</td>
+        </tr>
+
+        <tr>
+          <td>Chat Between Artist & Producer</td>
+          <td class="soon">Coming Soon</td>
+        </tr>
+
+        <tr>
+          <td>Session Progress Tracker</td>
+          <td class="soon">Coming Soon</td>
+        </tr>
+
+        <tr>
+          <td>File Delivery Inside BeatHub</td>
+          <td class="soon">Coming Soon</td>
+        </tr>
+
+        <tr>
+          <td>M-Pesa Session Payments</td>
+          <td class="soon">Coming Soon</td>
+        </tr>
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+  <!-- CTA -->
+
+  <div class="cta-box">
+
+    <div class="hero-label">For Artists & Producers</div>
+
+    <h2>Creative collaboration starts here.</h2>
+
+    <p>
+      BeatHub Sessions will become the easiest way for artists across Africa to
+      hire producers, book studio time and collaborate securely from anywhere.
+    </p>
+
+    <div class="btn-row">
+
+      <a href="/beats" class="btn btn-primary">
+        Explore Beat Marketplace
+      </a>
+
+      <a href="/dashboard" class="btn btn-outline">
+        Go to Dashboard
+      </a>
+
+    </div>
+
+  </div>
+
+</div>
+
 </section>
+
 {% endblock %}
