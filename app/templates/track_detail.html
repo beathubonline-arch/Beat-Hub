@@ -3,504 +3,93 @@
 {% block title %}{{ track.title }} — BeatHub{% endblock %}
 
 {% block content %}
-
 <style>
-.track-page {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 40px 18px 70px;
-}
-
-.track-hero {
-    border: 1px solid rgba(212,175,55,.18);
-    border-radius: 22px;
-    padding: 30px;
-    background:
-        radial-gradient(
-            circle at 90% 10%,
-            rgba(212,175,55,.14),
-            transparent 35%
-        ),
-        rgba(255,255,255,.025);
-}
-
-.track-art {
-    width: 260px;
-    height: 260px;
-    margin: 0 auto 25px;
-    border-radius: 18px;
-    overflow: hidden;
-    background: rgba(255,255,255,.04);
-}
-
-.track-art img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
-.track-art-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 65px;
-}
-
-.track-eyebrow {
-    color: var(--gold, #d4af37);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-}
-
-.track-page h1 {
-    font-size: clamp(32px, 6vw, 48px);
-    margin: 7px 0;
-    line-height: 1.05;
-}
-
-.track-producer {
-    color: var(--text-muted);
-    margin-top: 7px;
-}
-
-.track-producer a {
-    color: var(--gold, #d4af37);
-    text-decoration: none;
-}
-
-.preview-panel {
-    margin-top: 24px;
-    padding: 18px;
-    border: 1px solid rgba(255,255,255,.08);
-    border-radius: 15px;
-    background: rgba(255,255,255,.025);
-}
-
-.preview-label {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .12em;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-}
-
-.preview-controls {
-    display: flex;
-    align-items: center;
-    gap: 13px;
-}
-
-.preview-play {
-    width: 50px;
-    height: 50px;
-    border: 0;
-    border-radius: 50%;
-    background: var(--gold, #d4af37);
-    color: #080808;
-    font-size: 18px;
-    font-weight: 900;
-    cursor: pointer;
-}
-
-.preview-play:hover {
-    transform: scale(1.04);
-}
-
-.preview-status {
-    color: var(--text-muted);
-    font-size: 13px;
-}
-
-.preview-progress {
-    margin-top: 13px;
-    width: 100%;
-    height: 4px;
-    border-radius: 99px;
-    overflow: hidden;
-    background: rgba(255,255,255,.08);
-}
-
-.preview-progress-bar {
-    width: 0%;
-    height: 100%;
-    background: var(--gold, #d4af37);
-}
-
-.price-card {
-    margin-top: 24px;
-    padding: 20px;
-    border: 1px solid rgba(212,175,55,.2);
-    border-radius: 15px;
-    background: rgba(212,175,55,.045);
-}
-
-.price-label {
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.price-value {
-    color: var(--gold, #d4af37);
-    font-size: 28px;
-    font-weight: 850;
-    margin-top: 4px;
-}
-
-.track-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 22px;
-}
-
-@media(max-width:600px) {
-    .track-page {
-        padding: 25px 12px 50px;
-    }
-
-    .track-hero {
-        padding: 22px 17px;
-    }
-
-    .track-art {
-        width: 210px;
-        height: 210px;
-    }
-}
+  .track-page{padding:34px 0 70px}
+  .track-shell{max-width:1080px;margin:0 auto}
+  .track-panel{display:grid;grid-template-columns:minmax(280px,430px) minmax(0,1fr);gap:34px;padding:28px;border:1px solid rgba(212,175,55,.2);border-radius:24px;background:radial-gradient(circle at 15% 10%,rgba(212,175,55,.1),transparent 30%),linear-gradient(135deg,rgba(255,255,255,.025),rgba(212,175,55,.025));box-shadow:0 24px 70px rgba(0,0,0,.3)}
+  .track-art{position:relative;aspect-ratio:1/1;border-radius:18px;overflow:hidden;background:#090909;border:1px solid rgba(255,255,255,.06)}
+  .track-art img{width:100%;height:100%;object-fit:cover;display:block}
+  .track-art-fallback{height:100%;display:flex;align-items:center;justify-content:center;color:#d4af37;font-size:70px;background:radial-gradient(circle at center,rgba(212,175,55,.14),transparent 60%)}
+  .track-preview{position:absolute;left:18px;bottom:18px;width:60px;height:60px;border:0;border-radius:50%;background:linear-gradient(145deg,#f0d878,#c39b2c);color:#050505;font-weight:900;font-size:20px;cursor:pointer;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+  .track-preview.playing{font-size:17px}
+  .track-eyebrow{color:#f0d878;text-transform:uppercase;letter-spacing:2px;font-size:10px;font-weight:800;margin-bottom:9px}
+  .track-info h1{font-size:clamp(32px,5vw,52px);line-height:1.04;letter-spacing:-1.8px;margin:0 0 10px}
+  .track-by{color:#888;font-size:13px;margin-bottom:20px}.track-by a{color:#f0d878;text-decoration:none}
+  .track-desc{color:#929292;font-size:14px;line-height:1.75;margin:20px 0}
+  .track-meta{display:flex;flex-wrap:wrap;gap:8px;margin:15px 0}.track-pill{padding:7px 10px;border:1px solid rgba(255,255,255,.08);border-radius:999px;color:#aaa;font-size:10px;background:rgba(255,255,255,.02)}
+  .track-price{margin-top:25px;padding:18px;border:1px solid rgba(212,175,55,.18);border-radius:14px;background:rgba(212,175,55,.05)}
+  .track-price-label{color:#777;font-size:11px;margin-bottom:5px}.track-price-value{color:#f0d878;font-size:28px;font-weight:900}
+  .track-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.track-buy,.track-back{display:inline-flex;align-items:center;justify-content:center;border-radius:11px;padding:13px 18px;font-size:12px;font-weight:900;text-decoration:none}.track-buy{background:linear-gradient(135deg,#f0d878,#c39b2c);color:#080808}.track-back{border:1px solid rgba(255,255,255,.1);color:#ddd;background:rgba(255,255,255,.02)}
+  .preview-label{color:#666;font-size:11px;margin-top:14px}
+  @media(max-width:800px){.track-panel{grid-template-columns:1fr;padding:20px}.track-page{padding:22px 0 50px}}
 </style>
 
 <section class="track-page">
+  <div class="track-shell">
+    <div class="track-panel">
+      <div class="track-art">
+        <img src="{{ artwork_url }}" alt="{{ track.title }} cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+        <div class="track-art-fallback" style="display:none;">♪</div>
+        <button id="track-preview-button" class="track-preview" type="button" aria-label="Preview {{ track.title }}">▶</button>
+      </div>
 
-    <div class="track-hero">
-
-        <div class="track-art">
-
-            {% if track.cover_art_url %}
-
-                <img
-                    src="{{ track.cover_art_url }}"
-                    alt="{{ track.title }}"
-                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-                >
-
-                <div
-                    class="track-art-placeholder"
-                    style="display:none;"
-                >
-                    🎵
-                </div>
-
-            {% else %}
-
-                <div class="track-art-placeholder">
-                    🎵
-                </div>
-
-            {% endif %}
-
-        </div>
-
-
-        <div class="track-eyebrow">
-            {{ track.genre or 'BEAT' }}
-
-            {% if track.bpm %}
-                &middot; {{ track.bpm }} BPM
-            {% endif %}
-        </div>
-
-
-        <h1>
-            {{ track.title }}
-        </h1>
-
+      <div class="track-info">
+        <div class="track-eyebrow">{{ track.genre or 'Track' }}{% if track.bpm %} · {{ track.bpm }} BPM{% endif %}</div>
+        <h1>{{ track.title }}</h1>
 
         {% if track.creator_profile %}
-
-            <div class="track-producer">
-
-                By
-
-                <a href="/profile/{{ track.creator_profile.slug }}">
-                    {{ track.creator_profile.stage_name }}
-                </a>
-
-            </div>
-
+          <div class="track-by">By <a href="/store/{{ track.creator_profile.slug }}">{{ track.creator_profile.stage_name }}</a></div>
         {% endif %}
 
-
-        <div style="margin-top:18px;">
-
-            {% if track.sales_model and track.sales_model.value == 'exclusive' %}
-
-                {% if track.is_sold %}
-
-                    <span class="badge badge-sold">
-                        SOLD — EXCLUSIVELY OWNED
-                    </span>
-
-                {% else %}
-
-                    <span class="badge badge-exclusive">
-                        EXCLUSIVE — ONE-TIME PURCHASE
-                    </span>
-
-                {% endif %}
-
-            {% else %}
-
-                <span class="badge badge-nonexclusive">
-                    NON-EXCLUSIVE LICENSE
-                </span>
-
-            {% endif %}
-
+        <div class="track-meta">
+          {% if track.bpm %}<span class="track-pill">{{ track.bpm }} BPM</span>{% endif %}
+          {% if track.sales_model %}<span class="track-pill">{{ track.sales_model.value|replace('_',' ')|title }}</span>{% endif %}
+          {% if purchased %}<span class="track-pill">Purchased</span>{% endif %}
         </div>
 
+        {% if track.description %}<p class="track-desc">{{ track.description }}</p>{% endif %}
 
-        {% if track.description %}
-
-            <p
-                class="sub"
-                style="
-                    margin-top:20px;
-                    line-height:1.7;
-                    color:var(--text-muted);
-                "
-            >
-                {{ track.description }}
-            </p>
-
-        {% endif %}
-
-
-        <!-- PREVIEW -->
-
-        <div class="preview-panel">
-
-            <div class="preview-label">
-                PREVIEW BEFORE PURCHASE
-            </div>
-
-            <div class="preview-controls">
-
-                <button
-                    type="button"
-                    class="preview-play"
-                    id="previewButton"
-                    onclick="toggleTrackPreview()"
-                    aria-label="Play preview"
-                >
-                    ▶
-                </button>
-
-                <div class="preview-status" id="previewStatus">
-                    Listen to a 30-second preview
-                </div>
-
-            </div>
-
-            <div class="preview-progress">
-                <div
-                    class="preview-progress-bar"
-                    id="previewProgress"
-                ></div>
-            </div>
-
+        <div class="track-price">
+          <div class="track-price-label">Price</div>
+          <div class="track-price-value">KSh {{ '%.2f'|format(track.price or 0) }}</div>
         </div>
-
-
-        <!-- PRICE -->
-
-        <div class="price-card">
-
-            <div class="price-label">
-                PRICE
-            </div>
-
-            <div class="price-value">
-                KSh {{ "%.2f"|format(track.price or 0) }}
-            </div>
-
-        </div>
-
-
-        <!-- ACTION -->
 
         <div class="track-actions">
-
-            {% if purchased %}
-
-                <a
-                    href="/account/download/{{ track.id }}"
-                    class="btn btn-primary"
-                >
-                    Download Track
-                </a>
-
-            {% elif track.is_available %}
-
-                <a
-                    href="/checkout/track/{{ track.slug }}"
-                    class="btn btn-primary"
-                >
-                    Buy Now
-                </a>
-
+          {% if purchased %}
+            <a class="track-buy" href="/account/download/{{ track.id }}">Download Your Track</a>
+          {% else %}
+            {% set model = track.sales_model.value if track.sales_model else 'non_exclusive' %}
+            {% if model == 'exclusive' and track.is_sold %}
+              <span class="track-back" style="opacity:.55;">Sold — Unavailable</span>
             {% else %}
-
-                <button
-                    class="btn disabled"
-                    disabled
-                >
-                    {% if track.sales_model and track.sales_model.value == 'exclusive' %}
-                        Sold — Unavailable
-                    {% else %}
-                        Unavailable
-                    {% endif %}
-                </button>
-
+              <a class="track-buy" href="/checkout/track/{{ track.slug }}">Buy Now</a>
             {% endif %}
-
-            {% if track.creator_profile %}
-
-                <a
-                    href="/profile/{{ track.creator_profile.slug }}"
-                    class="btn btn-outline"
-                >
-                    View Producer
-                </a>
-
-            {% endif %}
-
+          {% endif %}
+          <a class="track-back" href="/store/{{ track.creator_profile.slug if track.creator_profile else '' }}">← Back to Store</a>
         </div>
 
+        <div class="preview-label">Preview the track before purchasing. Starting playback here does not require an account.</div>
+      </div>
     </div>
-
+  </div>
 </section>
 
-
+<audio id="track-preview-player" preload="none"></audio>
 <script>
-(function () {
-
-    let audio = null;
-    let timer = null;
-
-    const button = document.getElementById("previewButton");
-    const status = document.getElementById("previewStatus");
-    const progress = document.getElementById("previewProgress");
-
-    window.toggleTrackPreview = function () {
-
-        if (!audio) {
-
-            audio = new Audio(
-                "/track/{{ track.slug }}/preview"
-            );
-
-            audio.preload = "metadata";
-
-            audio.addEventListener(
-                "timeupdate",
-                function () {
-
-                    const percent =
-                        Math.min(
-                            (audio.currentTime / 30) * 100,
-                            100
-                        );
-
-                    progress.style.width =
-                        percent + "%";
-
-                    if (audio.currentTime >= 30) {
-                        stopPreview();
-                    }
-                }
-            );
-
-            audio.addEventListener(
-                "ended",
-                stopPreview
-            );
-
-            audio.addEventListener(
-                "error",
-                function () {
-
-                    button.textContent = "▶";
-
-                    status.textContent =
-                        "Preview is currently unavailable.";
-
-                    progress.style.width = "0%";
-
-                    audio = null;
-                }
-            );
-
-        }
-
-        if (audio.paused) {
-
-            audio.play()
-                .then(function () {
-
-                    button.textContent = "❚❚";
-
-                    status.textContent =
-                        "Playing preview…";
-
-                })
-                .catch(function () {
-
-                    status.textContent =
-                        "Preview could not be played.";
-
-                });
-
-        } else {
-
-            audio.pause();
-
-            button.textContent = "▶";
-
-            status.textContent =
-                "Preview paused.";
-
-        }
-    };
-
-
-    function stopPreview() {
-
-        if (timer) {
-            clearTimeout(timer);
-            timer = null;
-        }
-
-        if (audio) {
-
-            audio.pause();
-
-            audio.currentTime = 0;
-        }
-
-        button.textContent = "▶";
-
-        status.textContent =
-            "Listen to a 30-second preview";
-
-        progress.style.width = "0%";
-    }
-
+(function(){
+  const button=document.getElementById('track-preview-button');
+  const player=document.getElementById('track-preview-player');
+  if(!button||!player)return;
+  const url={{ preview_url|tojson }};
+  button.addEventListener('click',function(){
+    if(!url)return;
+    if(!player.paused){player.pause();button.textContent='▶';button.classList.remove('playing');return;}
+    player.src=url;
+    button.textContent='❚❚';button.classList.add('playing');
+    player.play().catch(function(){button.textContent='▶';button.classList.remove('playing');});
+  });
+  player.addEventListener('ended',function(){button.textContent='▶';button.classList.remove('playing');});
+  player.addEventListener('error',function(){button.textContent='▶';button.classList.remove('playing');});
 })();
 </script>
-
 {% endblock %}
