@@ -29,17 +29,17 @@
         <span style="height:1px;background:rgba(255,255,255,.1);flex:1;"></span>
       </div>
 
-      <form action="/stripe/checkout/track/{{ track.slug }}" method="post">
-        <button type="submit" class="btn btn-block" style="background:#635bff;color:#fff;border-color:#635bff;">
-          Pay securely with Card / Stripe
+      <form action="/flutterwave/checkout/track/{{ track.slug }}" method="post">
+        <button type="submit" class="btn btn-block" style="background:#f5a623;color:#111;border-color:#f5a623;">
+          Pay with Card / M-Pesa
         </button>
       </form>
     </div>
 
     <p class="sub" style="margin-top:16px;">
-      M-Pesa uses your phone for an STK prompt. Stripe Checkout securely handles
-      international card payments. Ownership is only granted after the payment
-      provider confirms the payment.
+      BeatHub keeps the order pending until the payment provider confirms the
+      transaction. Flutterwave securely handles card and Kenyan M-Pesa payments,
+      including international card payments.
     </p>
   </div>
 </div>
