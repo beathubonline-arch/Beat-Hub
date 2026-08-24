@@ -4,93 +4,795 @@
 
 {% block content %}
 
-<section style="padding:40px 0;">
-  <div style="max-width:760px;margin:0 auto;">
+<style>
+    .settings-page {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 20px 0 70px;
+    }
 
-    <div class="eyebrow">ACCOUNT SETTINGS</div>
+    /* =========================================================
+       HERO
+       ========================================================= */
 
-    <h1 style="font-size:32px;margin:6px 0 8px;">
-      Account Settings
-    </h1>
+    .settings-hero {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 30px;
+        padding: 38px;
+        margin-bottom: 24px;
 
-    <p style="color:var(--text-muted);">
-      Your BeatHub account information.
-    </p>
+        border: 1px solid #27272a;
+        border-radius: 24px;
 
-    <div
-      class="form-card"
-      style="
-        margin-top:28px;
-        padding:25px;
-      "
-    >
+        background:
+            radial-gradient(
+                circle at 88% 12%,
+                rgba(255,255,255,.09),
+                transparent 30%
+            ),
+            radial-gradient(
+                circle at 8% 100%,
+                rgba(255,255,255,.035),
+                transparent 30%
+            ),
+            linear-gradient(
+                135deg,
+                #18181b 0%,
+                #0f0f11 100%
+            );
+    }
 
-      <div style="margin-bottom:22px;">
+    .settings-hero::before {
+        content: "";
+        position: absolute;
+        width: 350px;
+        height: 350px;
+        right: -150px;
+        top: -220px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.06);
+        pointer-events: none;
+    }
 
-        <div class="label">
-          EMAIL ADDRESS
+    .settings-hero::after {
+        content: "";
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        left: -130px;
+        bottom: -150px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.045);
+        pointer-events: none;
+    }
+
+    .settings-hero-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .settings-eyebrow {
+        margin-bottom: 9px;
+        color: #a1a1aa;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .14em;
+    }
+
+    .settings-hero h1 {
+        margin: 0;
+        color: #fff;
+        font-size: clamp(30px, 4vw, 46px);
+        line-height: 1.05;
+        letter-spacing: -.045em;
+    }
+
+    .settings-hero p {
+        max-width: 620px;
+        margin: 13px 0 0;
+        color: #a1a1aa;
+        font-size: 14px;
+        line-height: 1.65;
+    }
+
+    .settings-hero-action {
+        position: relative;
+        z-index: 1;
+        flex: 0 0 auto;
+    }
+
+    /* =========================================================
+       MAIN GRID
+       ========================================================= */
+
+    .settings-grid {
+        display: grid;
+        grid-template-columns:
+            minmax(0, 1.45fr)
+            minmax(280px, .75fr);
+        gap: 20px;
+        align-items: start;
+    }
+
+    /* =========================================================
+       ACCOUNT CARD
+       ========================================================= */
+
+    .settings-card {
+        overflow: hidden;
+        border: 1px solid #27272a;
+        border-radius: 20px;
+        background: #111113;
+    }
+
+    .settings-card-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 22px 24px;
+        border-bottom: 1px solid #27272a;
+    }
+
+    .settings-card-icon {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        border: 1px solid #3f3f46;
+        border-radius: 12px;
+
+        background:
+            radial-gradient(
+                circle at 50% 20%,
+                rgba(255,255,255,.08),
+                transparent 70%
+            ),
+            #18181b;
+
+        font-size: 18px;
+    }
+
+    .settings-card-header h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 17px;
+    }
+
+    .settings-card-header p {
+        margin: 4px 0 0;
+        color: #71717a;
+        font-size: 12px;
+    }
+
+    .settings-card-body {
+        padding: 24px;
+    }
+
+    /* =========================================================
+       INFORMATION ROW
+       ========================================================= */
+
+    .account-info-row {
+        position: relative;
+        padding: 19px 0;
+        border-bottom: 1px solid #27272a;
+    }
+
+    .account-info-row:first-child {
+        padding-top: 0;
+    }
+
+    .account-info-row:last-child {
+        padding-bottom: 0;
+        border-bottom: 0;
+    }
+
+    .account-info-label {
+        color: #71717a;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .09em;
+    }
+
+    .account-info-value {
+        margin-top: 8px;
+        color: #f4f4f5;
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.5;
+        word-break: break-word;
+    }
+
+    .account-info-value.email {
+        font-size: 17px;
+        font-weight: 700;
+    }
+
+    .account-info-sub {
+        margin-top: 5px;
+        color: #52525b;
+        font-size: 11px;
+    }
+
+    /* =========================================================
+       ACCOUNT TYPE BADGE
+       ========================================================= */
+
+    .account-type-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+
+        margin-top: 8px;
+        padding: 7px 11px;
+
+        border: 1px solid #3f3f46;
+        border-radius: 999px;
+
+        background: #18181b;
+        color: #d4d4d8;
+
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .account-type-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #a1a1aa;
+    }
+
+    /* =========================================================
+       SIDE CARDS
+       ========================================================= */
+
+    .settings-side {
+        display: grid;
+        gap: 16px;
+    }
+
+    .side-card {
+        position: relative;
+        overflow: hidden;
+        padding: 22px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background:
+            radial-gradient(
+                circle at 100% 0%,
+                rgba(255,255,255,.055),
+                transparent 35%
+            ),
+            #111113;
+    }
+
+    .side-card::after {
+        content: "";
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        right: -45px;
+        top: -45px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.05);
+    }
+
+    .side-card-icon {
+        width: 42px;
+        height: 42px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        margin-bottom: 15px;
+
+        border: 1px solid #3f3f46;
+        border-radius: 12px;
+        background: #18181b;
+
+        font-size: 18px;
+    }
+
+    .side-card h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 15px;
+    }
+
+    .side-card p {
+        margin: 7px 0 0;
+        color: #71717a;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    .side-card a {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 15px;
+        color: #d4d4d8;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .side-card a:hover {
+        color: #fff;
+    }
+
+    /* =========================================================
+       SECURITY NOTE
+       ========================================================= */
+
+    .security-card {
+        padding: 20px;
+        border: 1px solid #27272a;
+        border-radius: 18px;
+        background: #09090b;
+    }
+
+    .security-top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .security-icon {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        border: 1px solid #27272a;
+        border-radius: 10px;
+        background: #18181b;
+
+        font-size: 16px;
+    }
+
+    .security-title {
+        color: #e4e4e7;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .security-text {
+        margin-top: 12px;
+        color: #52525b;
+        font-size: 11px;
+        line-height: 1.6;
+    }
+
+    /* =========================================================
+       BOTTOM ACTIONS
+       ========================================================= */
+
+    .settings-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .settings-actions-left,
+    .settings-actions-right {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .settings-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        min-height: 42px;
+        padding: 0 15px;
+
+        border: 1px solid #27272a;
+        border-radius: 10px;
+
+        background: #111113;
+        color: #d4d4d8;
+
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 800;
+
+        transition:
+            background .18s ease,
+            border-color .18s ease,
+            color .18s ease;
+    }
+
+    .settings-link:hover {
+        border-color: #3f3f46;
+        background: #18181b;
+        color: #fff;
+    }
+
+    .settings-link.primary {
+        border-color: #fff;
+        background: #fff;
+        color: #09090b;
+    }
+
+    .settings-link.primary:hover {
+        border-color: #e4e4e7;
+        background: #e4e4e7;
+        color: #09090b;
+    }
+
+    /* =========================================================
+       MOBILE
+       ========================================================= */
+
+    @media (max-width: 850px) {
+
+        .settings-page {
+            padding-top: 5px;
+        }
+
+        .settings-hero {
+            padding: 28px;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .settings-hero-action {
+            width: 100%;
+        }
+
+        .settings-hero-action a {
+            width: 100%;
+        }
+
+        .settings-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .settings-actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .settings-actions-left,
+        .settings-actions-right {
+            width: 100%;
+        }
+
+        .settings-link {
+            flex: 1;
+        }
+    }
+
+    @media (max-width: 500px) {
+
+        .settings-page {
+            padding-bottom: 40px;
+        }
+
+        .settings-hero {
+            padding: 23px;
+            border-radius: 19px;
+        }
+
+        .settings-hero h1 {
+            font-size: 30px;
+        }
+
+        .settings-card-body {
+            padding: 20px;
+        }
+
+        .settings-card-header {
+            padding: 19px 20px;
+        }
+
+        .settings-actions-left,
+        .settings-actions-right {
+            flex-direction: column;
+        }
+
+        .settings-link {
+            width: 100%;
+        }
+    }
+</style>
+
+
+<div class="settings-page">
+
+    <!-- =====================================================
+         HERO
+         ===================================================== -->
+
+    <section class="settings-hero">
+
+        <div class="settings-hero-content">
+
+            <div class="settings-eyebrow">
+                BeatHub Account
+            </div>
+
+            <h1>
+                Account Settings
+            </h1>
+
+            <p>
+                Manage your account information and view the details
+                associated with your BeatHub account.
+            </p>
+
         </div>
 
-        <div
-          style="
-            font-size:18px;
-            margin-top:7px;
-            word-break:break-word;
-          "
-        >
-          {{ current_user.email }}
+        <div class="settings-hero-action">
+
+            <a
+                href="/account"
+                class="btn btn-outline"
+            >
+                ← My Account
+            </a>
+
         </div>
 
-      </div>
+    </section>
 
 
-      <div style="margin-bottom:22px;">
+    <!-- =====================================================
+         CONTENT
+         ===================================================== -->
 
-        <div class="label">
-          ACCOUNT TYPE
-        </div>
+    <div class="settings-grid">
 
-        <div style="font-size:18px;margin-top:7px;">
-          Artist / Buyer
-        </div>
+        <!-- =================================================
+             ACCOUNT INFORMATION
+             ================================================= -->
 
-      </div>
+        <section class="settings-card">
+
+            <div class="settings-card-header">
+
+                <div class="settings-card-icon">
+                    👤
+                </div>
+
+                <div>
+
+                    <h2>
+                        Account Information
+                    </h2>
+
+                    <p>
+                        Your current BeatHub account details.
+                    </p>
+
+                </div>
+
+            </div>
 
 
-      <div>
+            <div class="settings-card-body">
 
-        <div class="label">
-          MEMBER SINCE
-        </div>
+                <!-- EMAIL -->
 
-        <div style="font-size:16px;margin-top:7px;">
-          {{ current_user.created_at.strftime("%d %B %Y") if current_user.created_at else "—" }}
-        </div>
+                <div class="account-info-row">
 
-      </div>
+                    <div class="account-info-label">
+                        Email Address
+                    </div>
+
+                    <div class="account-info-value email">
+                        {{ current_user.email }}
+                    </div>
+
+                    <div class="account-info-sub">
+                        This is the email associated with your account.
+                    </div>
+
+                </div>
+
+
+                <!-- ACCOUNT TYPE -->
+
+                <div class="account-info-row">
+
+                    <div class="account-info-label">
+                        Account Type
+                    </div>
+
+                    <div>
+
+                        <span class="account-type-badge">
+
+                            <span class="account-type-dot"></span>
+
+                            Artist / Buyer
+
+                        </span>
+
+                    </div>
+
+                    <div class="account-info-sub">
+                        Your account can discover and purchase music
+                        from BeatHub creators.
+                    </div>
+
+                </div>
+
+
+                <!-- MEMBER SINCE -->
+
+                <div class="account-info-row">
+
+                    <div class="account-info-label">
+                        Member Since
+                    </div>
+
+                    <div class="account-info-value">
+
+                        {% if current_user.created_at %}
+
+                            {{ current_user.created_at.strftime(
+                                "%d %B %Y"
+                            ) }}
+
+                        {% else %}
+
+                            —
+
+                        {% endif %}
+
+                    </div>
+
+                    <div class="account-info-sub">
+                        Date your BeatHub account was created.
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =================================================
+             SIDE INFORMATION
+             ================================================= -->
+
+        <aside class="settings-side">
+
+            <!-- DISCOVER MUSIC -->
+
+            <div class="side-card">
+
+                <div class="side-card-icon">
+                    🎵
+                </div>
+
+                <h3>
+                    Discover Music
+                </h3>
+
+                <p>
+                    Explore beats and tracks from BeatHub creators
+                    and find the right sound for your next project.
+                </p>
+
+                <a href="/beats">
+                    Browse Beats →
+                </a>
+
+            </div>
+
+
+            <!-- PURCHASES -->
+
+            <div class="side-card">
+
+                <div class="side-card-icon">
+                    🛍️
+                </div>
+
+                <h3>
+                    Your Purchases
+                </h3>
+
+                <p>
+                    View your purchased music, licenses and available
+                    downloads from your BeatHub account.
+                </p>
+
+                <a href="/account/purchases">
+                    View Purchases →
+                </a>
+
+            </div>
+
+
+            <!-- SECURITY -->
+
+            <div class="security-card">
+
+                <div class="security-top">
+
+                    <div class="security-icon">
+                        🔒
+                    </div>
+
+                    <div class="security-title">
+                        Account Security
+                    </div>
+
+                </div>
+
+                <div class="security-text">
+                    Keep your account credentials private and only
+                    access BeatHub through the official website.
+                </div>
+
+            </div>
+
+        </aside>
 
     </div>
 
-    <div
-      style="
-        display:flex;
-        gap:12px;
-        margin-top:25px;
-        flex-wrap:wrap;
-      "
-    >
 
-      <a href="/account" class="btn btn-outline">
-        ← Back to My Account
-      </a>
+    <!-- =====================================================
+         ACTIONS
+         ===================================================== -->
 
-      <a href="/beats" class="btn btn-primary">
-        Browse Beats
-      </a>
+    <div class="settings-actions">
+
+        <div class="settings-actions-left">
+
+            <a
+                href="/account"
+                class="settings-link"
+            >
+                ← Back to My Account
+            </a>
+
+            <a
+                href="/account/orders"
+                class="settings-link"
+            >
+                View Orders
+            </a>
+
+        </div>
+
+
+        <div class="settings-actions-right">
+
+            <a
+                href="/beats"
+                class="settings-link primary"
+            >
+                Browse Beats
+            </a>
+
+        </div>
 
     </div>
 
-  </div>
-</section>
+</div>
 
 {% endblock %}
