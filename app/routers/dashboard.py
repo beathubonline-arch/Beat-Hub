@@ -9,12 +9,13 @@ Provides:
     - Track uploads
     - Album creation
     - Withdrawal requests
+    - Producer profile photo upload
 
-Architecture:
+Important:
     - Creator-only routes use require_creator.
-    - Shared template context is provided by ctx().
-    - Public store URLs are generated as complete absolute URLs.
+    - Public store URLs are generated as COMPLETE absolute URLs.
     - Existing upload, album, withdrawal and statistics behaviour is preserved.
+    - Profile photos use the existing BeatHub storage service.
 """
 
 from datetime import datetime
@@ -33,7 +34,7 @@ from fastapi import (
 )
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -46,7 +47,9 @@ from app.services.storage import (
     ALLOWED_AUDIO_EXT,
     ALLOWED_IMAGE_EXT,
     UploadValidationError,
+    r2_presigned_url,
     save_upload,
+    save_upload_to_r2,
 )
 from app.utils.deps import require_creator
 from app.utils.text import unique_slug
@@ -75,8 +78,6 @@ def ctx(
         - upload_track.html
         - upload_album.html
         - older dashboard templates
-
-    store_url is always intended to be a complete absolute URL.
     """
 
     base = {
@@ -124,9 +125,10 @@ def ctx(
         "store_url": None,
         "store_share_url": None,
 
-        # Producer identity
+        # Creator display
         "profile_slug": None,
         "producer_name": None,
+        "profile_photo_url": None,
 
         # Messages
         "error": None,
@@ -139,10 +141,101 @@ def ctx(
 
 
 # ============================================================
+# PRODUCER PROFILE PHOTO STORAGE
+# ============================================================
+
+_PROFILE_PHOTO_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS creator_profile_photos (
+    profile_id VARCHAR(255) PRIMARY KEY,
+    image_path TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def _ensure_profile_photo_table(
+    db: Session,
+) -> None:
+    """
+    Create the profile-photo storage table if it does not exist.
+
+    This deliberately does NOT alter the existing Profile model.
+
+    It therefore avoids:
+        - changing the existing profile schema
+        - requiring a migration
+        - touching existing producer accounts
+        - breaking existing profile relationships
+    """
+
+    db.execute(
+        text(
+            _PROFILE_PHOTO_TABLE_SQL
+        )
+    )
+
+    db.commit()
+
+
+def _profile_photo_path(
+    db: Session,
+    profile_id,
+) -> Optional[str]:
+    """
+    Return the stored profile-photo path.
+    """
+
+    _ensure_profile_photo_table(db)
+
+    row = db.execute(
+        text(
+            """
+            SELECT image_path
+            FROM creator_profile_photos
+            WHERE profile_id = :profile_id
+            """
+        ),
+        {
+            "profile_id": str(profile_id),
+        },
+    ).first()
+
+    if not row:
+        return None
+
+    return (
+        str(row[0])
+        if row[0]
+        else None
+    )
+
+
+def _profile_photo_url(
+    profile_id,
+) -> str:
+    """
+    Browser-facing profile-photo URL.
+
+    The actual storage location remains private to the application.
+    """
+
+    return (
+        "/creator-photo/"
+        + quote(
+            str(profile_id),
+            safe="",
+        )
+    )
+
+
+# ============================================================
 # DECIMAL HELPER
 # ============================================================
 
-def _decimal(value) -> Decimal:
+def _decimal(
+    value,
+) -> Decimal:
     """
     Safely convert database numeric values to Decimal.
     """
@@ -150,11 +243,16 @@ def _decimal(value) -> Decimal:
     if value is None:
         return Decimal("0")
 
-    if isinstance(value, Decimal):
+    if isinstance(
+        value,
+        Decimal,
+    ):
         return value
 
     try:
-        return Decimal(str(value))
+        return Decimal(
+            str(value)
+        )
     except (
         InvalidOperation,
         ValueError,
@@ -180,15 +278,17 @@ def _build_public_store_url(
 
     becomes:
 
-        https://your-render-domain.onrender.com/store/mr-mapema
+        https://beat-hub-ox42.onrender.com/store/mr-mapema
 
-    The deployed hostname is detected automatically from request.base_url.
+    No hard-coded Render domain is used.
     """
 
     if not profile_slug:
         return None
 
-    clean_slug = str(profile_slug).strip()
+    clean_slug = str(
+        profile_slug
+    ).strip()
 
     if not clean_slug:
         return None
@@ -202,7 +302,9 @@ def _build_public_store_url(
         request.base_url
     ).rstrip("/")
 
-    return f"{base_url}/store/{encoded_slug}"
+    return (
+        f"{base_url}/store/{encoded_slug}"
+    )
 
 
 # ============================================================
@@ -229,15 +331,19 @@ def _creator_stats(
             Order.track_id == Track.id,
         )
         .filter(
-            Track.creator_profile_id == profile_id,
-            Order.status == OrderStatus.COMPLETED,
+            Track.creator_profile_id
+            == profile_id,
+            Order.status
+            == OrderStatus.COMPLETED,
         )
         .all()
     )
 
     gross = sum(
         (
-            _decimal(order.gross_amount)
+            _decimal(
+                order.gross_amount
+            )
             for order in orders
         ),
         Decimal("0"),
@@ -245,7 +351,9 @@ def _creator_stats(
 
     commission = sum(
         (
-            _decimal(order.commission_amount)
+            _decimal(
+                order.commission_amount
+            )
             for order in orders
         ),
         Decimal("0"),
@@ -253,7 +361,9 @@ def _creator_stats(
 
     net = sum(
         (
-            _decimal(order.net_amount)
+            _decimal(
+                order.net_amount
+            )
             for order in orders
         ),
         Decimal("0"),
@@ -273,7 +383,8 @@ def _creator_stats(
             )
         )
         .filter(
-            WithdrawalRequest.creator_profile_id == profile_id,
+            WithdrawalRequest.creator_profile_id
+            == profile_id,
             WithdrawalRequest.status.in_(
                 [
                     "approved",
@@ -299,14 +410,21 @@ def _creator_stats(
             )
         )
         .filter(
-            WithdrawalRequest.creator_profile_id == profile_id,
-            WithdrawalRequest.status == "pending",
+            WithdrawalRequest.creator_profile_id
+            == profile_id,
+            WithdrawalRequest.status
+            == "pending",
         )
         .scalar()
     )
 
-    withdrawn_decimal = _decimal(withdrawn)
-    pending_decimal = _decimal(pending_withdrawal)
+    withdrawn_decimal = _decimal(
+        withdrawn
+    )
+
+    pending_decimal = _decimal(
+        pending_withdrawal
+    )
 
     # --------------------------------------------------------
     # Available balance
@@ -344,7 +462,9 @@ def _creator_stats(
     )[:8]
 
     return {
-        "total_sales": len(orders),
+        "total_sales": len(
+            orders
+        ),
         "gross_revenue": gross,
         "platform_commission": commission,
         "net_earnings": net,
@@ -367,59 +487,18 @@ def _withdrawal_history(
     """
 
     return (
-        db.query(WithdrawalRequest)
+        db.query(
+            WithdrawalRequest
+        )
         .filter(
-            WithdrawalRequest.creator_profile_id == profile_id
+            WithdrawalRequest.creator_profile_id
+            == profile_id
         )
         .order_by(
             WithdrawalRequest.created_at.desc()
         )
         .all()
     )
-
-
-# ============================================================
-# PRODUCER DISPLAY NAME
-# ============================================================
-
-def _producer_display_name(
-    user: User,
-    profile,
-) -> str:
-    """
-    Determine the best display name for the producer.
-
-    Priority:
-        1. User's name
-        2. Creator stage name
-        3. Profile username
-        4. User username
-        5. User full name
-        6. Generic Producer fallback
-
-    This ensures the dashboard greeting can display:
-
-        Welcome back, Mr Mapema
-    """
-
-    candidates = [
-        getattr(user, "name", None),
-        getattr(profile, "stage_name", None),
-        getattr(profile, "username", None),
-        getattr(user, "username", None),
-        getattr(user, "full_name", None),
-    ]
-
-    for value in candidates:
-        if value is None:
-            continue
-
-        cleaned = str(value).strip()
-
-        if cleaned:
-            return cleaned
-
-    return "Producer"
 
 
 # ============================================================
@@ -447,10 +526,6 @@ def _dashboard_context(
             detail="Creator profile missing.",
         )
 
-    # --------------------------------------------------------
-    # Statistics
-    # --------------------------------------------------------
-
     stats = _creator_stats(
         db,
         profile.id,
@@ -463,7 +538,8 @@ def _dashboard_context(
     track_count = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id == profile.id
+            Track.creator_profile_id
+            == profile.id
         )
         .count()
     )
@@ -471,7 +547,8 @@ def _dashboard_context(
     album_count = (
         db.query(Album)
         .filter(
-            Album.creator_profile_id == profile.id
+            Album.creator_profile_id
+            == profile.id
         )
         .count()
     )
@@ -480,9 +557,11 @@ def _dashboard_context(
     # Withdrawal history
     # --------------------------------------------------------
 
-    withdrawal_requests = _withdrawal_history(
-        db,
-        profile.id,
+    withdrawal_requests = (
+        _withdrawal_history(
+            db,
+            profile.id,
+        )
     )
 
     # --------------------------------------------------------
@@ -513,18 +592,53 @@ def _dashboard_context(
                 f"/store/{encoded_slug}"
             )
 
-            store_url = _build_public_store_url(
-                request,
-                clean_slug,
+            store_url = (
+                _build_public_store_url(
+                    request,
+                    clean_slug,
+                )
             )
 
     # --------------------------------------------------------
     # Producer display name
     # --------------------------------------------------------
 
-    producer_name = _producer_display_name(
-        user,
-        profile,
+    producer_name = (
+        getattr(
+            profile,
+            "stage_name",
+            None,
+        )
+        or getattr(
+            profile,
+            "username",
+            None,
+        )
+        or getattr(
+            user,
+            "username",
+            None,
+        )
+        or "Producer"
+    )
+
+    # --------------------------------------------------------
+    # Producer profile photo
+    # --------------------------------------------------------
+
+    profile_photo_path = (
+        _profile_photo_path(
+            db,
+            profile.id,
+        )
+    )
+
+    profile_photo_url = (
+        _profile_photo_url(
+            profile.id
+        )
+        if profile_photo_path
+        else None
     )
 
     # --------------------------------------------------------
@@ -560,11 +674,6 @@ def _dashboard_context(
         None,
     )
 
-    if discord_url:
-        discord_url = str(
-            discord_url
-        ).strip() or None
-
     # --------------------------------------------------------
     # Producer tracks
     # --------------------------------------------------------
@@ -572,7 +681,8 @@ def _dashboard_context(
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id == profile.id
+            Track.creator_profile_id
+            == profile.id
         )
         .order_by(
             Track.created_at.desc()
@@ -587,7 +697,8 @@ def _dashboard_context(
     albums = (
         db.query(Album)
         .filter(
-            Album.creator_profile_id == profile.id
+            Album.creator_profile_id
+            == profile.id
         )
         .order_by(
             Album.created_at.desc()
@@ -595,60 +706,339 @@ def _dashboard_context(
         .all()
     )
 
-    # --------------------------------------------------------
-    # Final template context
-    # --------------------------------------------------------
-
     return ctx(
         request,
         user,
 
+        # ----------------------------------------------------
         # Profile
+        # ----------------------------------------------------
+
         profile=profile,
+
         producer_name=producer_name,
+
         profile_slug=profile_slug,
 
-        # Stats
+        profile_photo_url=profile_photo_url,
+
+        # ----------------------------------------------------
+        # Stats object
+        # ----------------------------------------------------
+
         stats=stats,
 
+        # ----------------------------------------------------
         # Financial values
-        total_sales=stats["total_sales"],
-        gross_revenue=stats["gross_revenue"],
-        platform_commission=stats["platform_commission"],
-        net_earnings=stats["net_earnings"],
-        available_balance=stats["available_balance"],
-        pending_withdrawal=stats["pending_withdrawal"],
+        # ----------------------------------------------------
 
+        total_sales=stats[
+            "total_sales"
+        ],
+
+        gross_revenue=stats[
+            "gross_revenue"
+        ],
+
+        platform_commission=stats[
+            "platform_commission"
+        ],
+
+        net_earnings=stats[
+            "net_earnings"
+        ],
+
+        available_balance=stats[
+            "available_balance"
+        ],
+
+        pending_withdrawal=stats[
+            "pending_withdrawal"
+        ],
+
+        # ----------------------------------------------------
         # Orders
-        recent_orders=stats["recent_orders"],
+        # ----------------------------------------------------
 
+        recent_orders=stats[
+            "recent_orders"
+        ],
+
+        # ----------------------------------------------------
         # Catalog
+        # ----------------------------------------------------
+
         track_count=track_count,
+
         album_count=album_count,
+
         tracks=tracks,
+
         albums=albums,
 
+        # ----------------------------------------------------
         # Withdrawals
+        # ----------------------------------------------------
+
         withdrawal_requests=withdrawal_requests,
 
+        # ----------------------------------------------------
         # Social/store
+        # ----------------------------------------------------
+
         youtube_url=youtube_url,
+
         youtube_channel_id=youtube_channel_id,
+
         discord_url=discord_url,
+
         store_path=store_path,
+
         store_url=store_url,
+
         store_share_url=store_url,
 
+        # ----------------------------------------------------
         # Pagination compatibility
+        # ----------------------------------------------------
+
         track_page=1,
+
         track_total_pages=1,
-        track_total=len(tracks),
-        track_total_count=len(tracks),
+
+        track_total=len(
+            tracks
+        ),
+
+        track_total_count=len(
+            tracks
+        ),
+
         track_per_page=12,
+
         track_search="",
-        track_start=1 if tracks else 0,
-        track_end=len(tracks),
+
+        track_start=(
+            1
+            if tracks
+            else 0
+        ),
+
+        track_end=len(
+            tracks
+        ),
+
         q="",
+    )
+
+
+# ============================================================
+# PRODUCER PROFILE PHOTO
+# ============================================================
+
+@router.get(
+    "/creator-photo/{profile_id}",
+    include_in_schema=False,
+)
+def creator_photo(
+    profile_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Public browser endpoint for a producer profile photo.
+
+    The browser supplies only the profile ID.
+    The actual storage path is looked up server-side.
+    """
+
+    path = _profile_photo_path(
+        db,
+        profile_id,
+    )
+
+    if not path:
+        raise HTTPException(
+            status_code=404,
+            detail="Profile photo not found.",
+        )
+
+    url = r2_presigned_url(
+        path
+    )
+
+    if not url:
+        raise HTTPException(
+            status_code=404,
+            detail="Profile photo is unavailable.",
+        )
+
+    return RedirectResponse(
+        url=url,
+        status_code=307,
+    )
+
+
+@router.post(
+    "/dashboard/profile-photo"
+)
+async def upload_profile_photo(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+    photo: UploadFile = File(...),
+):
+    """
+    Upload or replace the creator's profile photo.
+
+    Uses Cloudflare R2 when the current BeatHub storage
+    configuration reports R2 as enabled.
+
+    Otherwise uses the existing local media storage.
+    """
+
+    profile = getattr(
+        user,
+        "profile",
+        None,
+    )
+
+    if profile is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Creator profile missing.",
+        )
+
+    if (
+        not photo
+        or not photo.filename
+    ):
+        return RedirectResponse(
+            url=(
+                "/dashboard?error="
+                + quote(
+                    "Please choose a profile photo."
+                )
+            ),
+            status_code=303,
+        )
+
+    try:
+        _ensure_profile_photo_table(
+            db
+        )
+
+        r2_enabled = bool(
+            getattr(
+                settings,
+                "r2_enabled",
+                False,
+            )
+        )
+
+        if r2_enabled:
+            image_path = (
+                await save_upload_to_r2(
+                    photo,
+                    "profile-photos",
+                    ALLOWED_IMAGE_EXT,
+                )
+            )
+        else:
+            image_path = (
+                await save_upload(
+                    photo,
+                    "profile-photos",
+                    ALLOWED_IMAGE_EXT,
+                )
+            )
+
+        existing = db.execute(
+            text(
+                """
+                SELECT profile_id
+                FROM creator_profile_photos
+                WHERE profile_id = :profile_id
+                """
+            ),
+            {
+                "profile_id": str(
+                    profile.id
+                ),
+            },
+        ).first()
+
+        if existing:
+            db.execute(
+                text(
+                    """
+                    UPDATE creator_profile_photos
+                    SET image_path = :image_path,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE profile_id = :profile_id
+                    """
+                ),
+                {
+                    "profile_id": str(
+                        profile.id
+                    ),
+                    "image_path": image_path,
+                },
+            )
+        else:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO creator_profile_photos
+                        (
+                            profile_id,
+                            image_path,
+                            created_at,
+                            updated_at
+                        )
+                    VALUES
+                        (
+                            :profile_id,
+                            :image_path,
+                            CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP
+                        )
+                    """
+                ),
+                {
+                    "profile_id": str(
+                        profile.id
+                    ),
+                    "image_path": image_path,
+                },
+            )
+
+        db.commit()
+
+    except UploadValidationError as exc:
+        db.rollback()
+
+        return RedirectResponse(
+            url=(
+                "/dashboard?error="
+                + quote(
+                    str(exc)
+                )
+            ),
+            status_code=303,
+        )
+
+    except Exception:
+        db.rollback()
+        raise
+
+    return RedirectResponse(
+        url=(
+            "/dashboard?success="
+            + quote(
+                "Profile photo updated successfully."
+            )
+        ),
+        status_code=303,
     )
 
 
@@ -675,9 +1065,13 @@ def dashboard_home(
         user,
     )
 
-    # Preserve query-string success/error messages.
-    success = request.query_params.get("success")
-    error = request.query_params.get("error")
+    success = request.query_params.get(
+        "success"
+    )
+
+    error = request.query_params.get(
+        "error"
+    )
 
     if success:
         context["success"] = success
@@ -696,7 +1090,9 @@ def dashboard_home(
 # WITHDRAWAL PAGE
 # ============================================================
 
-@router.get("/dashboard/withdraw")
+@router.get(
+    "/dashboard/withdraw"
+)
 def withdrawal_page(
     request: Request,
     db: Session = Depends(get_db),
@@ -712,15 +1108,6 @@ def withdrawal_page(
         user,
     )
 
-    success = request.query_params.get("success")
-    error = request.query_params.get("error")
-
-    if success:
-        context["success"] = success
-
-    if error:
-        context["error"] = error
-
     return templates.TemplateResponse(
         request,
         "withdraw.html",
@@ -732,7 +1119,9 @@ def withdrawal_page(
 # UPLOAD TRACK PAGE
 # ============================================================
 
-@router.get("/dashboard/upload")
+@router.get(
+    "/dashboard/upload"
+)
 def upload_page(
     request: Request,
     user: User = Depends(require_creator),
@@ -755,7 +1144,9 @@ def upload_page(
 # UPLOAD TRACK
 # ============================================================
 
-@router.post("/dashboard/upload")
+@router.post(
+    "/dashboard/upload"
+)
 async def upload_submit(
     request: Request,
     db: Session = Depends(get_db),
@@ -769,8 +1160,13 @@ async def upload_submit(
     prices: List[str] = Form(...),
     sales_models: List[str] = Form(...),
 
-    audio_files: List[UploadFile] = File(...),
-    cover_files: Optional[List[UploadFile]] = File(None),
+    audio_files: List[
+        UploadFile
+    ] = File(...),
+
+    cover_files: Optional[
+        List[UploadFile]
+    ] = File(None),
 ):
     """
     Upload one or more tracks.
@@ -788,7 +1184,9 @@ async def upload_submit(
             detail="Creator profile missing.",
         )
 
-    def error(message: str):
+    def error(
+        message: str,
+    ):
         return templates.TemplateResponse(
             request,
             "upload_track.html",
@@ -814,7 +1212,9 @@ async def upload_submit(
             "At least one audio file is required."
         )
 
-    if len(titles) != len(audio_files):
+    if len(titles) != len(
+        audio_files
+    ):
         return error(
             "Track details and audio files do not match."
         )
@@ -822,7 +1222,10 @@ async def upload_submit(
     created_count = 0
 
     try:
-        for i, raw_title in enumerate(titles):
+
+        for i, raw_title in enumerate(
+            titles
+        ):
 
             title = (
                 raw_title or ""
@@ -853,7 +1256,9 @@ async def upload_submit(
                         f"BPM for '{title}' must be a whole number."
                     )
 
-                bpm_value = int(bpm_raw)
+                bpm_value = int(
+                    bpm_raw
+                )
 
                 if (
                     bpm_value < 1
@@ -878,6 +1283,7 @@ async def upload_submit(
                 price_value = Decimal(
                     price_raw
                 )
+
             except (
                 InvalidOperation,
                 ValueError,
@@ -887,7 +1293,9 @@ async def upload_submit(
                     f"Price for '{title}' is invalid."
                 )
 
-            if price_value < Decimal("0"):
+            if price_value < Decimal(
+                "0"
+            ):
                 return error(
                     f"Price for '{title}' cannot be negative."
                 )
@@ -896,34 +1304,46 @@ async def upload_submit(
             # Sales model
             # ------------------------------------------------
 
-            model_raw = "non_exclusive"
+            model_raw = (
+                "non_exclusive"
+            )
 
-            if i < len(sales_models):
+            if i < len(
+                sales_models
+            ):
                 model_raw = (
                     sales_models[i]
                     or "non_exclusive"
                 ).strip().lower()
 
             if model_raw == "exclusive":
-                sales_model = SalesModel.EXCLUSIVE
+                sales_model = (
+                    SalesModel.EXCLUSIVE
+                )
             else:
-                sales_model = SalesModel.NON_EXCLUSIVE
+                sales_model = (
+                    SalesModel.NON_EXCLUSIVE
+                )
 
             # ------------------------------------------------
             # Audio
             # ------------------------------------------------
 
-            audio_file = audio_files[i]
+            audio_file = (
+                audio_files[i]
+            )
 
             if not audio_file.filename:
                 return error(
                     f"Audio file is missing for '{title}'."
                 )
 
-            audio_path = await save_upload(
-                audio_file,
-                "audio",
-                ALLOWED_AUDIO_EXT,
+            audio_path = (
+                await save_upload(
+                    audio_file,
+                    "audio",
+                    ALLOWED_AUDIO_EXT,
+                )
             )
 
             # ------------------------------------------------
@@ -934,18 +1354,26 @@ async def upload_submit(
 
             if (
                 cover_files
-                and i < len(cover_files)
+                and i < len(
+                    cover_files
+                )
             ):
-                cover_file = cover_files[i]
+
+                cover_file = (
+                    cover_files[i]
+                )
 
                 if (
                     cover_file is not None
                     and cover_file.filename
                 ):
-                    cover_path = await save_upload(
-                        cover_file,
-                        "covers",
-                        ALLOWED_IMAGE_EXT,
+
+                    cover_path = (
+                        await save_upload(
+                            cover_file,
+                            "covers",
+                            ALLOWED_IMAGE_EXT,
+                        )
                     )
 
             # ------------------------------------------------
@@ -965,9 +1393,12 @@ async def upload_submit(
 
             description = None
 
-            if i < len(descriptions):
+            if i < len(
+                descriptions
+            ):
                 description = (
-                    descriptions[i] or ""
+                    descriptions[i]
+                    or ""
                 ).strip() or None
 
             # ------------------------------------------------
@@ -976,9 +1407,12 @@ async def upload_submit(
 
             genre = None
 
-            if i < len(genres):
+            if i < len(
+                genres
+            ):
                 genre = (
-                    genres[i] or ""
+                    genres[i]
+                    or ""
                 ).strip() or None
 
             # ------------------------------------------------
@@ -987,9 +1421,12 @@ async def upload_submit(
 
             tags = None
 
-            if i < len(tags_list):
+            if i < len(
+                tags_list
+            ):
                 tags = (
-                    tags_list[i] or ""
+                    tags_list[i]
+                    or ""
                 ).strip() or None
 
             # ------------------------------------------------
@@ -1012,13 +1449,16 @@ async def upload_submit(
                 is_published=True,
             )
 
-            db.add(track)
+            db.add(
+                track
+            )
 
             created_count += 1
 
         db.commit()
 
     except UploadValidationError as exc:
+
         db.rollback()
 
         return error(
@@ -1026,7 +1466,9 @@ async def upload_submit(
         )
 
     except Exception:
+
         db.rollback()
+
         raise
 
     message = (
@@ -1046,7 +1488,9 @@ async def upload_submit(
 # CREATE ALBUM PAGE
 # ============================================================
 
-@router.get("/dashboard/albums/new")
+@router.get(
+    "/dashboard/albums/new"
+)
 def new_album_page(
     request: Request,
     db: Session = Depends(get_db),
@@ -1071,7 +1515,8 @@ def new_album_page(
     tracks = (
         db.query(Track)
         .filter(
-            Track.creator_profile_id == profile.id
+            Track.creator_profile_id
+            == profile.id
         )
         .order_by(
             Track.created_at.desc()
@@ -1094,7 +1539,9 @@ def new_album_page(
 # CREATE ALBUM
 # ============================================================
 
-@router.post("/dashboard/albums/new")
+@router.post(
+    "/dashboard/albums/new"
+)
 async def new_album_submit(
     request: Request,
     db: Session = Depends(get_db),
@@ -1103,7 +1550,11 @@ async def new_album_submit(
     title: str = Form(...),
     description: str = Form(""),
     genre: str = Form(""),
-    artwork: Optional[UploadFile] = File(None),
+
+    artwork: Optional[
+        UploadFile
+    ] = File(None),
+
     track_ids: List[str] = Form([]),
 ):
     """
@@ -1126,7 +1577,8 @@ async def new_album_submit(
         return (
             db.query(Track)
             .filter(
-                Track.creator_profile_id == profile.id
+                Track.creator_profile_id
+                == profile.id
             )
             .order_by(
                 Track.created_at.desc()
@@ -1134,7 +1586,9 @@ async def new_album_submit(
             .all()
         )
 
-    def error(message: str):
+    def error(
+        message: str,
+    ):
         return templates.TemplateResponse(
             request,
             "upload_album.html",
@@ -1179,14 +1633,19 @@ async def new_album_submit(
         artwork
         and artwork.filename
     ):
+
         try:
-            artwork_path = await save_upload(
-                artwork,
-                "artwork",
-                ALLOWED_IMAGE_EXT,
+
+            artwork_path = (
+                await save_upload(
+                    artwork,
+                    "artwork",
+                    ALLOWED_IMAGE_EXT,
+                )
             )
 
         except UploadValidationError as exc:
+
             return error(
                 str(exc)
             )
@@ -1216,9 +1675,12 @@ async def new_album_submit(
         is_published=True,
     )
 
-    db.add(album)
+    db.add(
+        album
+    )
 
     try:
+
         db.flush()
 
         # ----------------------------------------------------
@@ -1228,13 +1690,17 @@ async def new_album_submit(
         valid_tracks = (
             db.query(Track)
             .filter(
-                Track.id.in_(track_ids),
-                Track.creator_profile_id == profile.id,
+                Track.id.in_(
+                    track_ids
+                ),
+                Track.creator_profile_id
+                == profile.id,
             )
             .all()
         )
 
         if not valid_tracks:
+
             db.rollback()
 
             return error(
@@ -1263,11 +1729,14 @@ async def new_album_submit(
                 position=position,
             )
 
-            db.add(album_track)
+            db.add(
+                album_track
+            )
 
             position += 1
 
         if position == 0:
+
             db.rollback()
 
             return error(
@@ -1277,7 +1746,9 @@ async def new_album_submit(
         db.commit()
 
     except Exception:
+
         db.rollback()
+
         raise
 
     return RedirectResponse(
@@ -1293,7 +1764,9 @@ async def new_album_submit(
 # WITHDRAWAL REQUEST
 # ============================================================
 
-@router.post("/dashboard/withdraw")
+@router.post(
+    "/dashboard/withdraw"
+)
 def request_withdrawal(
     request: Request,
     db: Session = Depends(get_db),
@@ -1336,8 +1809,11 @@ def request_withdrawal(
     # --------------------------------------------------------
 
     try:
+
         amount_value = Decimal(
-            str(amount).strip()
+            str(
+                amount
+            ).strip()
         )
 
     except (
@@ -1345,6 +1821,7 @@ def request_withdrawal(
         ValueError,
         TypeError,
     ):
+
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw"
@@ -1357,7 +1834,10 @@ def request_withdrawal(
     # Positive amount
     # --------------------------------------------------------
 
-    if amount_value <= Decimal("0"):
+    if amount_value <= Decimal(
+        "0"
+    ):
+
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw"
@@ -1370,7 +1850,13 @@ def request_withdrawal(
     # Available balance
     # --------------------------------------------------------
 
-    if amount_value > stats["available_balance"]:
+    if (
+        amount_value
+        > stats[
+            "available_balance"
+        ]
+    ):
+
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw"
@@ -1388,6 +1874,7 @@ def request_withdrawal(
     ).strip()
 
     if not phone_number:
+
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw"
@@ -1406,8 +1893,12 @@ def request_withdrawal(
         .replace("-", "")
     )
 
-    if normalized_phone.startswith("+"):
-        normalized_phone = normalized_phone[1:]
+    if normalized_phone.startswith(
+        "+"
+    ):
+        normalized_phone = (
+            normalized_phone[1:]
+        )
 
     valid_phone = False
 
@@ -1428,8 +1919,11 @@ def request_withdrawal(
     elif (
         len(normalized_phone) == 12
         and normalized_phone.isdigit()
-        and normalized_phone.startswith("254")
-        and normalized_phone[3:5] in (
+        and normalized_phone.startswith(
+            "254"
+        )
+        and normalized_phone[3:5]
+        in (
             "07",
             "01",
         )
@@ -1437,6 +1931,7 @@ def request_withdrawal(
         valid_phone = True
 
     if not valid_phone:
+
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw"
@@ -1450,17 +1945,27 @@ def request_withdrawal(
     # --------------------------------------------------------
 
     existing_pending = (
-        db.query(WithdrawalRequest)
+        db.query(
+            WithdrawalRequest
+        )
         .filter(
-            WithdrawalRequest.creator_profile_id == profile.id,
-            WithdrawalRequest.status == "pending",
-            WithdrawalRequest.amount == amount_value,
-            WithdrawalRequest.phone_number == phone_number,
+            WithdrawalRequest.creator_profile_id
+            == profile.id,
+
+            WithdrawalRequest.status
+            == "pending",
+
+            WithdrawalRequest.amount
+            == amount_value,
+
+            WithdrawalRequest.phone_number
+            == phone_number,
         )
         .first()
     )
 
     if existing_pending:
+
         return RedirectResponse(
             url=(
                 "/dashboard/withdraw"
@@ -1480,13 +1985,18 @@ def request_withdrawal(
         status="pending",
     )
 
-    db.add(withdrawal)
+    db.add(
+        withdrawal
+    )
 
     try:
+
         db.commit()
 
     except Exception:
+
         db.rollback()
+
         raise
 
     return RedirectResponse(
