@@ -121,6 +121,13 @@ def _track_audio_storage_path(track: Track) -> Optional[str]:
         # When no separate preview file exists, use the uploaded audio
         # through the public preview endpoint so existing tracks work.
         "audio_file_path",
+        # Compatibility with older BeatHub schemas.
+        "audio_path",
+        "file_path",
+        "track_file_path",
+        "original_audio_path",
+        "audio_file_url",
+        "file_url",
         default=None,
     )
     if value is None:
@@ -670,6 +677,7 @@ def _media_response(
         ),
         headers={
             "Cache-Control": "public, max-age=3600",
+            "Accept-Ranges": "bytes",
         },
     )
 
