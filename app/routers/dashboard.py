@@ -1,6 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import List, Optional
+import shutil
+import tempfile
 
 from fastapi import (
     APIRouter,
@@ -11,7 +14,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -483,6 +486,118 @@ def dashboard_home(
 
 
 # ============================================================
+# BPM ANALYSIS
+# ============================================================
+
+@router.post("/dashboard/analyze-bpm")
+async def analyze_bpm(
+    audio_file: UploadFile = File(...),
+    user: User = Depends(require_creator),
+):
+    """Analyze an uploaded audio file and return an estimated BPM.
+
+    This endpoint never stores the analysis upload. It uses a temporary
+    file, first checks common embedded BPM metadata, then falls back to
+    librosa beat tracking when available.
+    """
+    if not audio_file or not audio_file.filename:
+        return JSONResponse({"ok": False, "error": "No audio file supplied."}, status_code=400)
+
+    suffix = Path(audio_file.filename).suffix.lower()
+    if suffix not in ALLOWED_AUDIO_EXT:
+        return JSONResponse({
+            "ok": False,
+            "error": "Unsupported audio type. Use MP3, WAV, M4A or FLAC.",
+        }, status_code=400)
+
+    temp_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            temp_path = Path(tmp.name)
+            shutil.copyfileobj(audio_file.file, tmp)
+
+        # First try embedded BPM metadata. This is fast and exact when the
+        # producer/DJ file already contains a tempo tag.
+        try:
+            from mutagen import File as MutagenFile
+
+            meta = MutagenFile(str(temp_path), easy=True)
+            if meta is not None:
+                for key in ("bpm", "TBPM", "tempo"):
+                    values = meta.get(key) or []
+                    for raw in values:
+                        try:
+                            bpm = float(str(raw).strip())
+                            if 1 <= bpm <= 999:
+                                return {"ok": True, "bpm": int(round(bpm)), "source": "metadata"}
+                        except (TypeError, ValueError):
+                            continue
+        except Exception:
+            pass
+
+        # Fall back to actual beat tracking. librosa is an optional runtime
+        # dependency, but the requirements file includes it for production.
+        try:
+            import librosa
+            import numpy as np
+
+            y, sr = librosa.load(
+                str(temp_path),
+                sr=22050,
+                mono=True,
+                duration=90,
+            )
+
+            if y is None or len(y) < sr * 2:
+                raise ValueError("Audio is too short for reliable BPM detection.")
+
+            tempo, _ = librosa.beat.beat_track(
+                y=y,
+                sr=sr,
+                trim=True,
+            )
+
+            tempo_value = float(np.asarray(tempo).reshape(-1)[0])
+
+            # Normalize common half/double-time estimates into a useful
+            # musical range without changing ordinary values.
+            while tempo_value < 60:
+                tempo_value *= 2
+            while tempo_value > 200:
+                tempo_value /= 2
+
+            bpm = int(round(tempo_value))
+            if not 1 <= bpm <= 999:
+                raise ValueError("BPM estimate was outside the valid range.")
+
+            return {"ok": True, "bpm": bpm, "source": "analysis"}
+
+        except ImportError:
+            return JSONResponse({
+                "ok": False,
+                "error": "Automatic BPM analysis is not available on this deployment yet. You can enter the BPM manually.",
+            }, status_code=200)
+        except Exception as exc:
+            return JSONResponse({
+                "ok": False,
+                "error": f"Could not detect BPM from this audio. You can enter it manually. ({type(exc).__name__})",
+            }, status_code=200)
+
+    except Exception:
+        return JSONResponse({
+            "ok": False,
+            "error": "The audio could not be prepared for BPM analysis. You can enter the BPM manually.",
+        }, status_code=200)
+    finally:
+        if temp_path:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+# ============================================================
 # UPLOAD TRACK PAGE
 # ============================================================
 
@@ -513,7 +628,7 @@ async def upload_submit(
     titles: List[str] = Form(...),
     descriptions: List[str] = Form(...),
     genres: List[str] = Form(...),
-    bpms: List[str] = Form(...),
+    bpms: Optional[List[str]] = Form(None),
     tags_list: List[str] = Form(...),
     prices: List[str] = Form(...),
     sales_models: List[str] = Form(...),
@@ -551,6 +666,7 @@ async def upload_submit(
         )
 
     created = []
+    bpms = bpms or []
 
     try:
         for i, audio_file in enumerate(audio_files):
@@ -761,16 +877,15 @@ def delete_track(
         try:
             if not stored:
                 continue
+
             value = str(stored).strip()
+
             if value.startswith(("r2://", "s3://")):
-                bucket, key = _parse_r2_path(value.replace("s3://", "r2://", 1))
-                if bucket and key:
-                    _r2_client().delete_object(Bucket=bucket, Key=key)
+                from app.services.storage import delete_r2_object
+                delete_r2_object(value.replace("s3://", "r2://", 1))
             else:
-                from app.services.storage import _resolve_local_path
-                local = _resolve_local_path(value)
-                if local and local.exists() and local.is_file():
-                    local.unlink(missing_ok=True)
+                from app.services.storage import delete_local_object
+                delete_local_object(value)
         except Exception:
             pass
 
