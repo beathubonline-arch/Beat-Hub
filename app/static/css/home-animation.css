@@ -1,4 +1,4 @@
-/* BeatHub homepage motion layer. Scoped to the existing home visual only. */
+/* BeatHub homepage motion layer. Loaded only on the standalone homepage. */
 
 @keyframes beathub-vinyl-spin {
   from { transform: rotate(0deg); }
@@ -25,39 +25,39 @@
   50% { box-shadow: 0 40px 100px rgba(0,0,0,.56), 0 0 45px rgba(255,184,0,.06), inset 0 1px 0 rgba(255,255,255,.05); }
 }
 
-.home-motion-ready .vinyl {
+.vinyl {
   animation: beathub-vinyl-spin 12s linear infinite;
   transform-origin: center;
 }
 
-.home-motion-ready .studio-card {
+.studio-card {
   animation: beathub-glow 4.5s ease-in-out infinite;
 }
 
-.home-motion-ready .floating-card.one {
+.floating-card.one {
   animation: beathub-float-left 4s ease-in-out infinite;
 }
 
-.home-motion-ready .floating-card.two {
+.floating-card.two {
   animation: beathub-float-right 4.6s ease-in-out infinite;
 }
 
-.home-motion-ready .waveform span {
+.waveform span {
   transform-origin: center;
   animation: beathub-pulse-wave 1.35s ease-in-out infinite;
 }
 
-.home-motion-ready .waveform span:nth-child(2n) { animation-delay: -.2s; }
-.home-motion-ready .waveform span:nth-child(3n) { animation-delay: -.4s; }
-.home-motion-ready .waveform span:nth-child(4n) { animation-delay: -.6s; }
-.home-motion-ready .waveform span:nth-child(5n) { animation-delay: -.8s; }
+.waveform span:nth-child(2n) { animation-delay: -.2s; }
+.waveform span:nth-child(3n) { animation-delay: -.4s; }
+.waveform span:nth-child(4n) { animation-delay: -.6s; }
+.waveform span:nth-child(5n) { animation-delay: -.8s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-motion-ready .vinyl,
-  .home-motion-ready .studio-card,
-  .home-motion-ready .floating-card.one,
-  .home-motion-ready .floating-card.two,
-  .home-motion-ready .waveform span {
+  .vinyl,
+  .studio-card,
+  .floating-card.one,
+  .floating-card.two,
+  .waveform span {
     animation: none !important;
   }
 }
