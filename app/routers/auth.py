@@ -24,6 +24,7 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
@@ -53,6 +54,17 @@ templates = Jinja2Templates(directory="app/templates")
 COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 
+def _safe_next_url(value: str | None) -> str:
+    """Allow only local application paths as post-login destinations."""
+    candidate = (value or "").strip()
+    if not candidate or not candidate.startswith("/") or candidate.startswith("//"):
+        return ""
+    parsed = urlparse(candidate)
+    if parsed.scheme or parsed.netloc:
+        return ""
+    return candidate
+
+
 # ======================================================================
 # HELPERS
 # ======================================================================
@@ -68,25 +80,6 @@ def slugify(value: str) -> str:
 
 
 def dashboard_url_for_user(user: User) -> str:
-    """
-    Decide where a user lands after signup/login.
-
-    Admin      -> /admin
-    Creator    -> /dashboard
-    Buyer      -> /account
-
-    Buyers/artists receive a dedicated account landing page.
-    From there they can easily access:
-        - Browse Beats
-        - Dashboard
-        - Purchases
-        - Other buyer features
-
-    IMPORTANT:
-    This does NOT remove or change /beats.
-    It only changes the first destination after authentication.
-    """
-
     role = get_role_name(user)
 
     if role == "admin":
@@ -103,16 +96,6 @@ def base_context(
     current_user=None,
     **extra,
 ):
-    """
-    Shared template context.
-
-    IMPORTANT:
-    Do not use request.form inside Jinja templates.
-
-    Values that need to survive a failed form submission
-    are explicitly passed here.
-    """
-
     context = {
         "request": request,
         "current_user": current_user,
@@ -125,12 +108,8 @@ def base_context(
 
 
 def get_admin_credentials():
-    username = (
-        os.getenv("ADMIN_USERNAME") or ""
-    ).strip()
-
+    username = (os.getenv("ADMIN_USERNAME") or "").strip()
     password = os.getenv("ADMIN_PASSWORD") or ""
-
     return username, password
 
 
@@ -138,29 +117,16 @@ def verify_admin_credentials(
     identifier: str,
     password: str,
 ) -> bool:
-    configured_username, configured_password = (
-        get_admin_credentials()
-    )
+    configured_username, configured_password = get_admin_credentials()
 
     if not configured_username or not configured_password:
         return False
 
-    submitted_username = (
-        identifier or ""
-    ).strip()
-
+    submitted_username = (identifier or "").strip()
     submitted_password = password or ""
 
-    username_match = hmac.compare_digest(
-        submitted_username,
-        configured_username,
-    )
-
-    password_match = hmac.compare_digest(
-        submitted_password,
-        configured_password,
-    )
-
+    username_match = hmac.compare_digest(submitted_username, configured_username)
+    password_match = hmac.compare_digest(submitted_password, configured_password)
     return username_match and password_match
 
 
@@ -179,18 +145,11 @@ def create_admin_session_token() -> str:
 # ======================================================================
 
 @router.get("/signup")
-def signup_page(
-    request: Request,
-):
+def signup_page(request: Request):
     return templates.TemplateResponse(
         request,
         "signup.html",
-        base_context(
-            request,
-            stage_name="",
-            email="",
-            role="creator",
-        ),
+        base_context(request, stage_name="", email="", role="creator"),
     )
 
 
@@ -209,22 +168,6 @@ def signup_submit(
     role: str = Form("buyer"),
     agree_terms: str = Form(None),
 ):
-    """
-    Create a normal BeatHub user.
-
-    Creator:
-        /dashboard
-
-    Buyer / artist:
-        /account
-
-    Public signup can NEVER create an administrator account.
-    """
-
-    # --------------------------------------------------------------
-    # Preserve entered form values when validation fails.
-    # --------------------------------------------------------------
-
     stage_name = (stage_name or "").strip()
     email_norm = (email or "").strip().lower()
     role = (role or "buyer").strip().lower()
@@ -238,86 +181,34 @@ def signup_submit(
                 error=message,
                 stage_name=stage_name,
                 email=email_norm,
-                role=(
-                    "creator"
-                    if role in {"creator", "producer"}
-                    else "buyer"
-                ),
+                role=("creator" if role in {"creator", "producer"} else "buyer"),
             ),
             status_code=400,
         )
 
-    # --------------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------------
-
     if not stage_name:
-        return error(
-            "Stage name / artist name is required."
-        )
-
+        return error("Stage name / artist name is required.")
     if len(stage_name) > 255:
-        return error(
-            "Stage name is too long."
-        )
-
+        return error("Stage name is too long.")
     if not email_norm:
-        return error(
-            "Email address is required."
-        )
-
+        return error("Email address is required.")
     if len(email_norm) > 255:
-        return error(
-            "Email address is too long."
-        )
-
+        return error("Email address is too long.")
     if not agree_terms:
-        return error(
-            "You must agree to the Terms & Conditions."
-        )
-
+        return error("You must agree to the Terms & Conditions.")
     if len(password) < 8:
-        return error(
-            "Password must be at least 8 characters."
-        )
-
+        return error("Password must be at least 8 characters.")
     if password != confirm_password:
-        return error(
-            "Passwords do not match."
-        )
+        return error("Passwords do not match.")
 
-    # --------------------------------------------------------------
-    # PUBLIC SIGNUP CAN NEVER CREATE ADMIN
-    # --------------------------------------------------------------
-
-    if role in {
-        "creator",
-        "producer",
-    }:
+    if role in {"creator", "producer"}:
         user_role = UserRole.CREATOR
     else:
         user_role = UserRole.BUYER
 
-    # --------------------------------------------------------------
-    # CHECK EXISTING EMAIL
-    # --------------------------------------------------------------
-
-    existing_user = (
-        db.query(User)
-        .filter(
-            User.email == email_norm
-        )
-        .first()
-    )
-
+    existing_user = db.query(User).filter(User.email == email_norm).first()
     if existing_user:
-        return error(
-            "An account with this email already exists."
-        )
-
-    # --------------------------------------------------------------
-    # CREATE USER
-    # --------------------------------------------------------------
+        return error("An account with this email already exists.")
 
     user = User(
         id=str(uuid.uuid4()),
@@ -327,33 +218,19 @@ def signup_submit(
         is_active=True,
         is_verified=False,
     )
-
     db.add(user)
 
     try:
         db.flush()
-
     except IntegrityError:
         db.rollback()
-
-        return error(
-            "An account with this email already exists."
-        )
-
-    # --------------------------------------------------------------
-    # CREATE PUBLIC PROFILE
-    # --------------------------------------------------------------
+        return error("An account with this email already exists.")
 
     base_slug = slugify(stage_name)
-
     slug = base_slug
     suffix = 1
 
-    while (
-        db.query(Profile)
-        .filter(Profile.slug == slug)
-        .first()
-    ):
+    while db.query(Profile).filter(Profile.slug == slug).first():
         suffix += 1
         slug = f"{base_slug}-{suffix}"
 
@@ -362,46 +239,28 @@ def signup_submit(
         user_id=user.id,
         stage_name=stage_name,
         slug=slug,
-        is_producer=(
-            user_role == UserRole.CREATOR
-        ),
+        is_producer=(user_role == UserRole.CREATOR),
     )
-
     db.add(profile)
 
     try:
         db.commit()
-
     except IntegrityError:
         db.rollback()
-
-        return error(
-            "Could not create account. Please try again."
-        )
+        return error("Could not create account. Please try again.")
 
     db.refresh(user)
 
-    # --------------------------------------------------------------
-    # LOGIN IMMEDIATELY
-    # --------------------------------------------------------------
-
     token = create_access_token(
         subject=user.id,
-        extra_claims={
-            "role": get_role_name(user),
-        },
+        extra_claims={"role": get_role_name(user)},
     )
 
     destination = dashboard_url_for_user(user)
-
     response = RedirectResponse(
-        url=(
-            f"{destination}"
-            "?success=Account created. Welcome to BeatHub!"
-        ),
+        url=f"{destination}?success=Account created. Welcome to BeatHub!",
         status_code=303,
     )
-
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -411,7 +270,6 @@ def signup_submit(
         secure=False,
         path="/",
     )
-
     return response
 
 
@@ -420,13 +278,12 @@ def signup_submit(
 # ======================================================================
 
 @router.get("/login")
-def login_page(
-    request: Request,
-):
+def login_page(request: Request):
+    next_url = _safe_next_url(request.query_params.get("next"))
     return templates.TemplateResponse(
         request,
         "login.html",
-        base_context(request),
+        base_context(request, next_url=next_url),
     )
 
 
@@ -441,50 +298,28 @@ def login_submit(
     identifier: str = Form(...),
     password: str = Form(...),
 ):
+    next_url = _safe_next_url(request.query_params.get("next"))
+
     def error(message: str):
         return templates.TemplateResponse(
             request,
             "login.html",
-            base_context(
-                request,
-                error=message,
-            ),
+            base_context(request, error=message, next_url=next_url),
             status_code=401,
         )
 
-    identifier_raw = (
-        identifier or ""
-    ).strip()
-
+    identifier_raw = (identifier or "").strip()
     identifier_norm = identifier_raw.lower()
-
     password = password or ""
 
     if not identifier_raw:
-        return error(
-            "Email or username is required."
-        )
-
+        return error("Email or username is required.")
     if not password:
-        return error(
-            "Password is required."
-        )
+        return error("Password is required.")
 
-    # --------------------------------------------------------------
-    # ADMIN FIRST
-    # --------------------------------------------------------------
-
-    if verify_admin_credentials(
-        identifier_raw,
-        password,
-    ):
+    if verify_admin_credentials(identifier_raw, password):
         token = create_admin_session_token()
-
-        response = RedirectResponse(
-            url="/admin",
-            status_code=303,
-        )
-
+        response = RedirectResponse(url="/admin", status_code=303)
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=token,
@@ -494,86 +329,32 @@ def login_submit(
             secure=False,
             path="/",
         )
-
         return response
 
-    # --------------------------------------------------------------
-    # NORMAL USER BY EMAIL
-    # --------------------------------------------------------------
-
-    user = (
-        db.query(User)
-        .filter(
-            User.email == identifier_norm
-        )
-        .first()
-    )
-
-    # --------------------------------------------------------------
-    # NORMAL USER BY PROFILE SLUG
-    # --------------------------------------------------------------
+    user = db.query(User).filter(User.email == identifier_norm).first()
 
     if not user and identifier_norm:
-
-        possible_slug = slugify(
-            identifier_norm
-        )
-
-        profile = (
-            db.query(Profile)
-            .filter(
-                Profile.slug == possible_slug
-            )
-            .first()
-        )
-
+        possible_slug = slugify(identifier_norm)
+        profile = db.query(Profile).filter(Profile.slug == possible_slug).first()
         if profile:
-            user = (
-                db.query(User)
-                .filter(
-                    User.id == profile.user_id
-                )
-                .first()
-            )
+            user = db.query(User).filter(User.id == profile.user_id).first()
 
     if not user:
-        return error(
-            "Invalid credentials. Please try again."
-        )
-
-    if not verify_password(
-        password,
-        user.hashed_password,
-    ):
-        return error(
-            "Invalid credentials. Please try again."
-        )
-
+        return error("Invalid credentials. Please try again.")
+    if not verify_password(password, user.hashed_password):
+        return error("Invalid credentials. Please try again.")
     if not user.is_active:
-        return error(
-            "This account has been deactivated. Contact support."
-        )
+        return error("This account has been deactivated. Contact support.")
 
     db.refresh(user)
 
-    # --------------------------------------------------------------
-    # CREATE SESSION
-    # --------------------------------------------------------------
-
     token = create_access_token(
         subject=user.id,
-        extra_claims={
-            "role": get_role_name(user),
-        },
+        extra_claims={"role": get_role_name(user)},
     )
 
-    destination = dashboard_url_for_user(user)
-
-    response = RedirectResponse(
-        url=destination,
-        status_code=303,
-    )
-
+    destination = next_url or dashboard_url_for_user(user)
+    response = RedirectResponse(url=destination, status_code=303)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -583,7 +364,6 @@ def login_submit(
         secure=False,
         path="/",
     )
-
     return response
 
 
@@ -596,12 +376,7 @@ def perform_logout() -> RedirectResponse:
         url="/?success=You have been logged out.",
         status_code=303,
     )
-
-    response.delete_cookie(
-        key=SESSION_COOKIE_NAME,
-        path="/",
-    )
-
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
     return response
 
 
@@ -620,14 +395,8 @@ def logout_get():
 # ======================================================================
 
 @router.get("/forgot-password")
-def forgot_password_page(
-    request: Request,
-):
-    return templates.TemplateResponse(
-        request,
-        "forgot_password.html",
-        base_context(request),
-    )
+def forgot_password_page(request: Request):
+    return templates.TemplateResponse(request, "forgot_password.html", base_context(request))
 
 
 @router.post("/forgot-password")
@@ -636,56 +405,29 @@ def forgot_password_submit(
     db: Session = Depends(get_db),
     email: str = Form(...),
 ):
-    email_norm = (
-        email or ""
-    ).strip().lower()
-
-    user = (
-        db.query(User)
-        .filter(
-            User.email == email_norm
-        )
-        .first()
-    )
+    email_norm = (email or "").strip().lower()
+    user = db.query(User).filter(User.email == email_norm).first()
 
     if user:
-
         token = secrets.token_urlsafe(32)
-
         user.reset_token = token
-
-        user.reset_token_expires = (
-            datetime.utcnow()
-            + timedelta(hours=1)
-        )
-
+        user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
         db.commit()
-
-        reset_link = (
-            f"/reset-password?token={token}"
-        )
-
-        print(
-            "[BeatHub] Password reset link "
-            f"for {email_norm}: {reset_link}"
-        )
+        reset_link = f"/reset-password?token={token}"
+        print(f"[BeatHub] Password reset link for {email_norm}: {reset_link}")
 
     return templates.TemplateResponse(
         request,
         "forgot_password.html",
         base_context(
             request,
-            success=(
-                "If an account exists for "
-                "that email, a reset link "
-                "has been sent."
-            ),
+            success="If an account exists for that email, a reset link has been sent.",
         ),
     )
 
 
 # ======================================================================
-# RESET PASSWORD PAGE
+# RESET PASSWORD
 # ======================================================================
 
 @router.get("/reset-password")
@@ -694,35 +436,18 @@ def reset_password_page(
     token: str,
     db: Session = Depends(get_db),
 ):
-    user = (
-        db.query(User)
-        .filter(
-            User.reset_token == token
-        )
-        .first()
-    )
-
+    user = db.query(User).filter(User.reset_token == token).first()
     valid = bool(
         user
         and user.reset_token_expires
-        and user.reset_token_expires
-        > datetime.utcnow()
+        and user.reset_token_expires > datetime.utcnow()
     )
-
     return templates.TemplateResponse(
         request,
         "reset_password.html",
-        base_context(
-            request,
-            token=token,
-            valid=valid,
-        ),
+        base_context(request, token=token, valid=valid),
     )
 
-
-# ======================================================================
-# RESET PASSWORD SUBMIT
-# ======================================================================
 
 @router.post("/reset-password")
 def reset_password_submit(
@@ -732,19 +457,11 @@ def reset_password_submit(
     password: str = Form(...),
     confirm_password: str = Form(...),
 ):
-    user = (
-        db.query(User)
-        .filter(
-            User.reset_token == token
-        )
-        .first()
-    )
-
+    user = db.query(User).filter(User.reset_token == token).first()
     valid = bool(
         user
         and user.reset_token_expires
-        and user.reset_token_expires
-        > datetime.utcnow()
+        and user.reset_token_expires > datetime.utcnow()
     )
 
     if not valid:
@@ -755,18 +472,12 @@ def reset_password_submit(
                 request,
                 token=token,
                 valid=False,
-                error=(
-                    "This reset link is invalid "
-                    "or has expired."
-                ),
+                error="This reset link is invalid or has expired.",
             ),
             status_code=400,
         )
 
-    if (
-        len(password) < 8
-        or password != confirm_password
-    ):
+    if len(password) < 8 or password != confirm_password:
         return templates.TemplateResponse(
             request,
             "reset_password.html",
@@ -774,28 +485,17 @@ def reset_password_submit(
                 request,
                 token=token,
                 valid=True,
-                error=(
-                    "Passwords must match and "
-                    "be at least 8 characters."
-                ),
+                error="Passwords must match and be at least 8 characters.",
             ),
             status_code=400,
         )
 
-    user.hashed_password = hash_password(
-        password
-    )
-
+    user.hashed_password = hash_password(password)
     user.reset_token = None
     user.reset_token_expires = None
-
     db.commit()
 
     return RedirectResponse(
-        url=(
-            "/login"
-            "?success=Password updated. "
-            "Please log in."
-        ),
+        url="/login?success=Password updated. Please log in.",
         status_code=303,
     )
