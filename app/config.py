@@ -59,6 +59,18 @@ class Settings(BaseSettings):
         return "https://sandbox.safaricom.co.ke"
 
     # --------------------------------------------------------------
+    # STRIPE
+    # --------------------------------------------------------------
+
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+
+    # Stripe does not support KES as a presentment currency. BeatHub's
+    # catalog remains priced in KES; this rate converts the server-side
+    # KES price into USD for Stripe Checkout.
+    STRIPE_KES_TO_USD_RATE: float = 0.0
+
+    # --------------------------------------------------------------
     # SOCIAL
     # --------------------------------------------------------------
 
@@ -87,10 +99,7 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "beathub"
 
-    # Optional public R2/custom-domain URL.
-    # Leave blank when using private bucket + signed URLs.
     R2_PUBLIC_URL: str = ""
-
     R2_PUBLIC_URL_EXPIRES: int = 3600
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
