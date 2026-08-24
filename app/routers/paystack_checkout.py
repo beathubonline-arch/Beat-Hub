@@ -7,6 +7,7 @@ BeatHub ownership is granted. The existing M-Pesa checkout is untouched.
 import hashlib
 import hmac
 import logging
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -138,6 +139,8 @@ async def paystack_checkout(
 
     split = calculate_split(track.price)
     order = Order(
+        id=str(uuid.uuid4()),
+        order_number=f"BH{uuid.uuid4().hex[:10].upper()}",
         buyer_id=user.id,
         track_id=track.id,
         album_id=None,
