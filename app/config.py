@@ -15,34 +15,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --------------------------------------------------------------
-    # CORE
-    # --------------------------------------------------------------
-
     APP_ENV: str = "development"
     APP_NAME: str = "BeatHub"
     SECRET_KEY: str = "change-me-in-production"
-
     DATABASE_URL: str = "sqlite:///./beathub.db"
     BASE_URL: str = "http://localhost:8000"
-
-    # --------------------------------------------------------------
-    # AUTH
-    # --------------------------------------------------------------
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     JWT_ALGORITHM: str = "HS256"
 
-    # --------------------------------------------------------------
-    # PLATFORM ECONOMICS
-    # --------------------------------------------------------------
-
     PLATFORM_COMMISSION_PERCENT: float = 10.0
     PLATFORM_COMMISSION_RATE: float = 10.0
-
-    # --------------------------------------------------------------
-    # M-PESA
-    # --------------------------------------------------------------
 
     MPESA_ENVIRONMENT: str = "sandbox"
     MPESA_CONSUMER_KEY: str = ""
@@ -55,35 +38,23 @@ class Settings(BaseSettings):
     def mpesa_base_url(self) -> str:
         if self.MPESA_ENVIRONMENT.lower() == "production":
             return "https://api.safaricom.co.ke"
-
         return "https://sandbox.safaricom.co.ke"
 
-    # --------------------------------------------------------------
-    # FLUTTERWAVE
-    # --------------------------------------------------------------
+    # Paystack — Kenya M-PESA + card checkout
+    PAYSTACK_SECRET_KEY: str = ""
+    PAYSTACK_PUBLIC_KEY: str = ""
+    PAYSTACK_BASE_URL: str = "https://api.paystack.co"
 
     FLW_SECRET_KEY: str = ""
     FLW_SECRET_HASH: str = ""
     FLW_BASE_URL: str = "https://api.flutterwave.com"
 
-    # --------------------------------------------------------------
-    # STRIPE (kept for compatibility; not used by the primary checkout)
-    # --------------------------------------------------------------
-
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_KES_TO_USD_RATE: float = 0.0
 
-    # --------------------------------------------------------------
-    # SOCIAL
-    # --------------------------------------------------------------
-
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
-
-    # --------------------------------------------------------------
-    # EMAIL
-    # --------------------------------------------------------------
 
     EMAIL_ENABLED: bool = False
     EMAIL_HOST: str = ""
@@ -92,21 +63,14 @@ class Settings(BaseSettings):
     EMAIL_PASSWORD: str = ""
     EMAIL_FROM: str = ""
 
-    # --------------------------------------------------------------
-    # STORAGE - CLOUDFLARE R2
-    # --------------------------------------------------------------
-
     MEDIA_STORAGE: str = "r2"
-
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "beathub"
-
     R2_PUBLIC_URL: str = ""
     R2_PUBLIC_URL_EXPIRES: int = 3600
     R2_DOWNLOAD_URL_EXPIRES: int = 900
-
     MAX_UPLOAD_MB: int = 50
 
     @property
@@ -123,12 +87,7 @@ class Settings(BaseSettings):
     def r2_endpoint_url(self) -> str:
         if not self.R2_ACCOUNT_ID:
             return ""
-
         return f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-
-    # --------------------------------------------------------------
-    # ENVIRONMENT
-    # --------------------------------------------------------------
 
     @property
     def is_production(self) -> bool:
