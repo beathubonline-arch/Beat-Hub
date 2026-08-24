@@ -8,7 +8,7 @@ Supports:
 - Existing r2_url() callers
 - Existing r2_presigned_url() callers
 - Existing save_upload() callers
-- Explicit save_upload_to_r2() callers
+- Automatic R2 uploads through save_upload() when configured
 - Safe local path handling
 - Safe R2 object handling
 - Image and audio validation
@@ -658,11 +658,20 @@ async def save_upload(
     allowed_extensions: set[str],
 ) -> str:
     """
-    Save an upload to local media storage.
+    Save an upload using persistent R2 when configured.
 
-    This remains the compatibility function used by the existing
-    dashboard, music and merchandise routes.
+    Existing callers do not need to change: dashboard, music, albums and
+    merchandise all continue calling save_upload(). On Render, R2 is used
+    automatically when its credentials are configured; otherwise the
+    existing local-media behaviour is preserved for development.
     """
+
+    if _r2_is_configured():
+        return await save_upload_to_r2(
+            file,
+            subfolder,
+            allowed_extensions,
+        )
 
     contents, extension = (
         await _read_upload(
