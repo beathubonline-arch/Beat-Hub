@@ -42,6 +42,16 @@ def _amount_kobo(amount: Decimal) -> int:
     return int((amount * Decimal("100")).quantize(Decimal("1")))
 
 
+def _new_order_number() -> str:
+    """Generate the required BeatHub order number before inserting the order.
+
+    The orders.order_number column is NOT NULL and UNIQUE in PostgreSQL, so
+    Paystack orders must never rely on a database default or leave this field
+    unset. UUID hex provides enough entropy for practical uniqueness.
+    """
+    return f"BH{uuid.uuid4().hex[:10].upper()}"
+
+
 def _available(track: Track) -> bool:
     if not track or not getattr(track, "is_published", False):
         return False
@@ -140,7 +150,7 @@ async def paystack_checkout(
     split = calculate_split(track.price)
     order = Order(
         id=str(uuid.uuid4()),
-        order_number=f"BH{uuid.uuid4().hex[:10].upper()}",
+        order_number=_new_order_number(),
         buyer_id=user.id,
         track_id=track.id,
         album_id=None,
