@@ -1,0 +1,108 @@
+/* BeatHub homepage motion layer.
+   Scoped entirely to the existing homepage hero classes so it cannot alter
+   dashboards, stores, checkout, merchandise, or other pages. */
+
+@keyframes beathubHeroFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(2deg); }
+  50% { transform: translate3d(0, -10px, 0) rotate(1deg); }
+}
+
+@keyframes beathubVinylSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes beathubCardFloatOne {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-4deg); }
+  50% { transform: translate3d(9px, -12px, 0) rotate(2deg); }
+}
+
+@keyframes beathubCardFloatTwo {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(3deg); }
+  50% { transform: translate3d(-10px, 9px, 0) rotate(-3deg); }
+}
+
+@keyframes beathubWavePulse {
+  0%, 100% { transform: scaleY(.72); opacity: .65; }
+  50% { transform: scaleY(1.08); opacity: 1; }
+}
+
+@keyframes beathubOrbitGlow {
+  0% { transform: rotate(0deg); opacity: .55; }
+  50% { opacity: .9; }
+  100% { transform: rotate(360deg); opacity: .55; }
+}
+
+/* The existing homepage visual gets a subtle floating/rotating presentation. */
+.hero-visual .studio-card {
+  animation: beathubHeroFloat 5.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.hero-visual .vinyl {
+  animation: beathubVinylSpin 10s linear infinite;
+  will-change: transform;
+}
+
+.hero-visual .floating-card.one {
+  animation: beathubCardFloatOne 4.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.hero-visual .floating-card.two {
+  animation: beathubCardFloatTwo 5.1s ease-in-out infinite;
+  will-change: transform;
+}
+
+.hero-visual .waveform span {
+  transform-origin: center;
+  animation: beathubWavePulse 1.25s ease-in-out infinite;
+}
+
+.hero-visual .waveform span:nth-child(2n) { animation-delay: -.25s; }
+.hero-visual .waveform span:nth-child(3n) { animation-delay: -.45s; }
+.hero-visual .waveform span:nth-child(4n) { animation-delay: -.7s; }
+
+/* Orbiting glow rings behind the existing hero artwork. */
+.hero-visual::before,
+.hero-visual::after {
+  content: "";
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.hero-visual::before {
+  border: 1px solid rgba(255,184,0,.12);
+  box-shadow: 0 0 45px rgba(255,184,0,.05), inset 0 0 45px rgba(24,213,170,.035);
+  animation: beathubOrbitGlow 14s linear infinite;
+}
+
+.hero-visual::after {
+  width: 390px;
+  height: 390px;
+  border: 1px dashed rgba(24,213,170,.08);
+  animation: beathubOrbitGlow 19s linear infinite reverse;
+}
+
+@media (max-width: 900px) {
+  .hero-visual::before { width: 260px; height: 260px; }
+  .hero-visual::after { width: 330px; height: 330px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-visual .studio-card,
+  .hero-visual .vinyl,
+  .hero-visual .floating-card.one,
+  .hero-visual .floating-card.two,
+  .hero-visual .waveform span,
+  .hero-visual::before,
+  .hero-visual::after {
+    animation: none !important;
+  }
+}
