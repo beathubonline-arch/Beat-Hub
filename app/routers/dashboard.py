@@ -587,7 +587,7 @@ async def analyze_bpm(
     except Exception:
         return JSONResponse({
             "ok": False,
-            "error": "The audio could not be prepared for BPM analysis. You can enter the BPM manually.",
+            "error": "The audio could not be prepared for BPM analysis. You can enter it manually.",
         }, status_code=200)
     finally:
         if temp_path:
@@ -837,7 +837,12 @@ def delete_track(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    """Delete a creator's unsold track and its stored media."""
+    """Delete an unreferenced creator track, or archive one with order history.
+
+    A track referenced by an order is never physically deleted. This keeps
+    purchase history, buyer ownership and creator accounting intact while
+    removing the track from the public catalog.
+    """
     profile = getattr(user, "profile", None)
     if profile is None:
         raise HTTPException(status_code=400, detail="Creator profile missing.")
@@ -859,12 +864,37 @@ def delete_track(
             status_code=303,
         )
 
+    # PostgreSQL protects this relationship with orders.track_id -> tracks.id.
+    # Any order reference means the track must remain in the database so
+    # historical purchases and accounting are never destroyed.
+    has_order_history = (
+        db.query(Order.id)
+        .filter(Order.track_id == track.id)
+        .first()
+        is not None
+    )
+
+    if has_order_history:
+        try:
+            track.is_published = False
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        return RedirectResponse(
+            url="/dashboard?success=Track%20archived%20because%20it%20has%20purchase%20history.%20Existing%20orders%20and%20buyer%20rights%20were%20preserved.",
+            status_code=303,
+        )
+
     audio_path = getattr(track, "audio_file_path", None)
     cover_path = getattr(track, "cover_art_path", None)
 
     try:
         # Remove album relationships first so deletion does not break albums.
-        db.query(AlbumTrack).filter(AlbumTrack.track_id == track.id).delete(synchronize_session=False)
+        db.query(AlbumTrack).filter(
+            AlbumTrack.track_id == track.id
+        ).delete(synchronize_session=False)
         db.delete(track)
         db.commit()
     except Exception:
