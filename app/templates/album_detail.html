@@ -4,88 +4,310 @@
 
 {% block content %}
 
-<section style="padding:40px 0; max-width:760px;">
+<section class="album-page">
 
-  <div class="eyebrow">
-    {{ album.genre or 'ALBUM' }}
-  </div>
+  <div class="album-shell">
 
-  <h1 style="font-size:36px; margin:6px 0;">
-    {{ album.title }}
-  </h1>
+    <!-- ============================================================
+         BACK / BREADCRUMB
+    ============================================================ -->
 
-  <p class="sub">
+    <div class="album-topbar">
+      <a href="/beats" class="back-link">
+        ← Browse Beats
+      </a>
 
-    By
+      <span class="top-label">
+        BEATHUB MUSIC
+      </span>
+    </div>
 
-    <a
-      href="/profile/{{ album.creator_profile.slug }}"
-      style="color:var(--teal);"
-    >
-      {{ album.creator_profile.stage_name }}
-    </a>
 
-  </p>
+    <!-- ============================================================
+         ALBUM HERO
+    ============================================================ -->
 
-  {% if album.description %}
+    <div class="album-hero">
 
-    <p
-      class="sub"
-      style="
-        color:var(--text-muted);
-        line-height:1.6;
-      "
-    >
-      {{ album.description }}
-    </p>
+      <div class="album-art">
 
-  {% endif %}
+        {% if album.cover_art_url %}
 
-  <div style="margin-top:28px;">
+          <img
+            src="{{ album.cover_art_url }}"
+            alt="{{ album.title }}"
+            loading="eager"
+          >
 
-    <table class="data-table">
+        {% elif album.cover_url %}
 
-      <thead>
+          <img
+            src="{{ album.cover_url }}"
+            alt="{{ album.title }}"
+            loading="eager"
+          >
 
-        <tr>
-          <th>#</th>
-          <th>Track</th>
-          <th>Price</th>
-          <th>Type</th>
-          <th></th>
-        </tr>
+        {% elif album.artwork_url %}
 
-      </thead>
+          <img
+            src="{{ album.artwork_url }}"
+            alt="{{ album.title }}"
+            loading="eager"
+          >
 
-      <tbody>
+        {% else %}
+
+          <div class="album-art-fallback">
+            <span>BH</span>
+          </div>
+
+        {% endif %}
+
+      </div>
+
+
+      <div class="album-info">
+
+        <div class="eyebrow">
+          {{ album.genre or 'ALBUM' }}
+        </div>
+
+        <h1>
+          {{ album.title }}
+        </h1>
+
+
+        {% if album.creator_profile %}
+
+          <div class="creator-line">
+
+            <span>Created by</span>
+
+            <a
+              href="/profile/{{ album.creator_profile.slug }}"
+              class="creator-link"
+            >
+              {{ album.creator_profile.stage_name }}
+            </a>
+
+          </div>
+
+        {% endif %}
+
+
+        {% if album.description %}
+
+          <p class="album-description">
+            {{ album.description }}
+          </p>
+
+        {% else %}
+
+          <p class="album-description muted">
+            Explore the tracks included in this BeatHub collection.
+          </p>
+
+        {% endif %}
+
+
+        <div class="album-stats">
+
+          <div class="album-stat">
+
+            <strong>
+              {{ album.album_tracks|length }}
+            </strong>
+
+            <span>
+              Tracks
+            </span>
+
+          </div>
+
+
+          <div class="album-stat">
+
+            <strong>
+              {% set available_count = namespace(value=0) %}
+
+              {% for at in album.album_tracks %}
+
+                {% if not at.track.is_sold %}
+                  {% set available_count.value = available_count.value + 1 %}
+                {% endif %}
+
+              {% endfor %}
+
+              {{ available_count.value }}
+            </strong>
+
+            <span>
+              Available
+            </span>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ============================================================
+         TRACKLIST HEADER
+    ============================================================ -->
+
+    <div class="tracklist-heading">
+
+      <div>
+
+        <div class="eyebrow">
+          TRACKLIST
+        </div>
+
+        <h2>
+          Inside this album
+        </h2>
+
+      </div>
+
+      <span class="track-count">
+        {{ album.album_tracks|length }}
+        {% if album.album_tracks|length == 1 %}
+          track
+        {% else %}
+          tracks
+        {% endif %}
+      </span>
+
+    </div>
+
+
+    <!-- ============================================================
+         TRACKLIST
+    ============================================================ -->
+
+    {% if album.album_tracks %}
+
+      <div class="track-list">
 
         {% for at in album.album_tracks %}
 
-          <tr>
+          <article class="track-row">
 
-            <td>{{ loop.index }}</td>
+            <!-- NUMBER -->
 
-            <td>
-              {{ at.track.title }}
-            </td>
+            <div class="track-number">
+              {{ '%02d'|format(loop.index) }}
+            </div>
 
-            <td>
-              KSh {{ '%.2f'|format(at.track.price) }}
-            </td>
 
-            <td>
+            <!-- TRACK ART -->
+
+            <div class="track-mini-art">
+
+              {% if at.track.cover_art_url %}
+
+                <img
+                  src="{{ at.track.cover_art_url }}"
+                  alt="{{ at.track.title }}"
+                  loading="lazy"
+                >
+
+              {% elif at.track.cover_url %}
+
+                <img
+                  src="{{ at.track.cover_url }}"
+                  alt="{{ at.track.title }}"
+                  loading="lazy"
+                >
+
+              {% elif at.track.artwork_url %}
+
+                <img
+                  src="{{ at.track.artwork_url }}"
+                  alt="{{ at.track.title }}"
+                  loading="lazy"
+                >
+
+              {% else %}
+
+                <div class="mini-fallback">
+                  ♪
+                </div>
+
+              {% endif %}
+
+            </div>
+
+
+            <!-- TRACK INFORMATION -->
+
+            <div class="track-main">
+
+              <a
+                href="/track/{{ at.track.slug }}"
+                class="track-title"
+              >
+                {{ at.track.title }}
+              </a>
+
+              <div class="track-meta">
+
+                {% if at.track.genre %}
+                  <span>{{ at.track.genre }}</span>
+                {% endif %}
+
+                {% if at.track.bpm %}
+                  <span>{{ at.track.bpm }} BPM</span>
+                {% endif %}
+
+                {% if at.track.key %}
+                  <span>{{ at.track.key }}</span>
+                {% endif %}
+
+              </div>
+
+            </div>
+
+
+            <!-- PRICE -->
+
+            <div class="track-price">
+
+              {% if at.track.sales_model.value == 'exclusive' and at.track.is_sold %}
+
+                <span class="sold-price">
+                  SOLD
+                </span>
+
+              {% else %}
+
+                <strong>
+                  KSh {{ '%.2f'|format(at.track.price or 0) }}
+                </strong>
+
+              {% endif %}
+
+            </div>
+
+
+            <!-- TYPE -->
+
+            <div class="track-license">
 
               {% if at.track.sales_model.value == 'exclusive' %}
 
                 {% if at.track.is_sold %}
 
-                  <span class="badge badge-sold">
+                  <span class="license-badge sold">
                     SOLD
                   </span>
 
                 {% else %}
 
-                  <span class="badge badge-exclusive">
+                  <span class="license-badge exclusive">
                     EXCLUSIVE
                   </span>
 
@@ -93,35 +315,917 @@
 
               {% else %}
 
-                <span class="badge badge-nonexclusive">
+                <span class="license-badge nonexclusive">
                   NON-EXCLUSIVE
                 </span>
 
               {% endif %}
 
-            </td>
+            </div>
 
-            <td>
+
+            <!-- ACTION -->
+
+            <div class="track-action">
 
               <a
                 href="/track/{{ at.track.slug }}"
-                class="btn btn-outline"
+                class="view-button"
               >
-                View
+                View Beat
+                <span>→</span>
               </a>
 
-            </td>
+            </div>
 
-          </tr>
+          </article>
 
         {% endfor %}
 
-      </tbody>
+      </div>
 
-    </table>
+    {% else %}
+
+      <div class="empty-album">
+
+        <div class="empty-icon">
+          ♪
+        </div>
+
+        <h2>
+          No tracks yet
+        </h2>
+
+        <p>
+          This album doesn't have any published tracks yet.
+        </p>
+
+        <a
+          href="/beats"
+          class="btn btn-primary"
+        >
+          Browse Beats
+        </a>
+
+      </div>
+
+    {% endif %}
+
+
+    <!-- ============================================================
+         BOTTOM CTA
+    ============================================================ -->
+
+    {% if album.album_tracks %}
+
+      <div class="album-cta">
+
+        <div>
+
+          <div class="eyebrow">
+            FIND YOUR SOUND
+          </div>
+
+          <h2>
+            Looking for more beats?
+          </h2>
+
+          <p>
+            Explore more music from BeatHub creators and find the
+            sound for your next release.
+          </p>
+
+        </div>
+
+        <a
+          href="/beats"
+          class="btn btn-primary"
+        >
+          Explore Marketplace
+        </a>
+
+      </div>
+
+    {% endif %}
 
   </div>
 
 </section>
+
+
+<style>
+
+  /* ================================================================
+     ALBUM PAGE
+  ================================================================ */
+
+  .album-page {
+    width: 100%;
+    padding: 38px 20px 80px;
+  }
+
+  .album-shell {
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+
+  /* ================================================================
+     TOP BAR
+  ================================================================ */
+
+  .album-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-muted, #a1a1aa);
+    font-size: 14px;
+    font-weight: 800;
+    transition: .2s ease;
+  }
+
+  .back-link:hover {
+    color: #fff;
+    transform: translateX(-2px);
+  }
+
+  .top-label {
+    color: #71717a;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .14em;
+  }
+
+
+  /* ================================================================
+     HERO
+  ================================================================ */
+
+  .album-hero {
+    display: grid;
+    grid-template-columns: minmax(260px, 360px) 1fr;
+    gap: 42px;
+    align-items: center;
+
+    padding: 28px;
+
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 24px;
+
+    background:
+      radial-gradient(
+        circle at 80% 10%,
+        rgba(212,175,55,.09),
+        transparent 38%
+      ),
+      linear-gradient(
+        145deg,
+        rgba(255,255,255,.045),
+        rgba(255,255,255,.015)
+      );
+
+    box-shadow:
+      0 25px 80px rgba(0,0,0,.28);
+  }
+
+
+  /* ================================================================
+     ALBUM ART
+  ================================================================ */
+
+  .album-art {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+
+    overflow: hidden;
+
+    border-radius: 18px;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(212,175,55,.18),
+        rgba(255,255,255,.025)
+      );
+
+    border: 1px solid rgba(255,255,255,.08);
+
+    box-shadow:
+      0 20px 50px rgba(0,0,0,.35);
+  }
+
+  .album-art img {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+  }
+
+  .album-art-fallback {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+      radial-gradient(
+        circle at 30% 20%,
+        rgba(212,175,55,.22),
+        transparent 35%
+      ),
+      linear-gradient(
+        135deg,
+        #18181b,
+        #09090b
+      );
+  }
+
+  .album-art-fallback span {
+    font-size: 62px;
+    font-weight: 1000;
+    letter-spacing: -.08em;
+    color: rgba(255,255,255,.85);
+  }
+
+
+  /* ================================================================
+     HERO INFORMATION
+  ================================================================ */
+
+  .album-info h1 {
+    margin: 6px 0 12px;
+
+    font-size:
+      clamp(34px, 5vw, 58px);
+
+    line-height: .98;
+    letter-spacing: -.04em;
+
+    color: var(--text, #f7f7f8);
+  }
+
+  .creator-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+
+    margin-bottom: 20px;
+
+    color: var(--text-muted, #a1a1aa);
+    font-size: 14px;
+  }
+
+  .creator-link {
+    color: #e8c85a;
+    font-weight: 900;
+  }
+
+  .creator-link:hover {
+    color: #fff;
+  }
+
+  .album-description {
+    max-width: 650px;
+
+    margin: 0;
+
+    color: var(--text-muted, #a1a1aa);
+
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .album-description.muted {
+    opacity: .7;
+  }
+
+
+  /* ================================================================
+     STATS
+  ================================================================ */
+
+  .album-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    margin-top: 26px;
+  }
+
+  .album-stat {
+    min-width: 115px;
+
+    padding: 13px 15px;
+
+    border-radius: 13px;
+
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(255,255,255,.07);
+  }
+
+  .album-stat strong {
+    display: block;
+
+    color: #fff;
+
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .album-stat span {
+    display: block;
+
+    margin-top: 4px;
+
+    color: var(--text-muted, #a1a1aa);
+
+    font-size: 11px;
+    font-weight: 800;
+
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+
+  /* ================================================================
+     TRACKLIST HEADER
+  ================================================================ */
+
+  .tracklist-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+
+    gap: 20px;
+
+    margin: 46px 0 18px;
+  }
+
+  .tracklist-heading h2 {
+    margin: 5px 0 0;
+
+    font-size: 28px;
+    letter-spacing: -.025em;
+  }
+
+  .track-count {
+    padding: 8px 12px;
+
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 999px;
+
+    background: rgba(255,255,255,.025);
+
+    color: var(--text-muted, #a1a1aa);
+
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+
+  /* ================================================================
+     TRACK LIST
+  ================================================================ */
+
+  .track-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .track-row {
+    display: grid;
+
+    grid-template-columns:
+      34px
+      62px
+      minmax(180px, 1fr)
+      105px
+      145px
+      115px;
+
+    align-items: center;
+
+    gap: 14px;
+
+    padding: 12px 14px;
+
+    border: 1px solid rgba(255,255,255,.065);
+    border-radius: 15px;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(255,255,255,.035),
+        rgba(255,255,255,.018)
+      );
+
+    transition:
+      transform .2s ease,
+      border-color .2s ease,
+      background .2s ease,
+      box-shadow .2s ease;
+  }
+
+  .track-row:hover {
+    transform: translateY(-2px);
+
+    border-color: rgba(212,175,55,.25);
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(212,175,55,.06),
+        rgba(255,255,255,.025)
+      );
+
+    box-shadow:
+      0 12px 35px rgba(0,0,0,.2);
+  }
+
+
+  /* ================================================================
+     TRACK NUMBER
+  ================================================================ */
+
+  .track-number {
+    color: #52525b;
+
+    font-size: 12px;
+    font-weight: 900;
+
+    text-align: center;
+  }
+
+
+  /* ================================================================
+     MINI ART
+  ================================================================ */
+
+  .track-mini-art {
+    width: 62px;
+    height: 62px;
+
+    overflow: hidden;
+
+    border-radius: 10px;
+
+    background: #111113;
+
+    border: 1px solid rgba(255,255,255,.07);
+  }
+
+  .track-mini-art img {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+  }
+
+  .mini-fallback {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    color: #71717a;
+
+    font-size: 25px;
+    font-weight: 900;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(212,175,55,.13),
+        rgba(255,255,255,.025)
+      );
+  }
+
+
+  /* ================================================================
+     TRACK INFO
+  ================================================================ */
+
+  .track-main {
+    min-width: 0;
+  }
+
+  .track-title {
+    display: block;
+
+    overflow: hidden;
+
+    color: #fff;
+
+    font-size: 16px;
+    font-weight: 900;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .track-title:hover {
+    color: #e8c85a;
+  }
+
+  .track-meta {
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 7px;
+
+    margin-top: 6px;
+
+    color: var(--text-muted, #a1a1aa);
+
+    font-size: 11px;
+  }
+
+  .track-meta span:not(:last-child)::after {
+    content: "•";
+    margin-left: 7px;
+    color: #52525b;
+  }
+
+
+  /* ================================================================
+     PRICE
+  ================================================================ */
+
+  .track-price {
+    text-align: right;
+  }
+
+  .track-price strong {
+    color: #fff;
+
+    font-size: 14px;
+    font-weight: 950;
+  }
+
+  .sold-price {
+    color: #71717a;
+
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+
+  /* ================================================================
+     LICENSE BADGES
+  ================================================================ */
+
+  .track-license {
+    display: flex;
+    justify-content: center;
+  }
+
+  .license-badge {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 28px;
+
+    padding: 5px 9px;
+
+    border-radius: 999px;
+
+    font-size: 9px;
+    font-weight: 950;
+
+    letter-spacing: .05em;
+
+    white-space: nowrap;
+  }
+
+  .license-badge.exclusive {
+    color: #f4d66d;
+
+    background: rgba(212,175,55,.1);
+
+    border: 1px solid rgba(212,175,55,.25);
+  }
+
+  .license-badge.nonexclusive {
+    color: #d4d4d8;
+
+    background: rgba(255,255,255,.045);
+
+    border: 1px solid rgba(255,255,255,.09);
+  }
+
+  .license-badge.sold {
+    color: #a1a1aa;
+
+    background: rgba(113,113,122,.08);
+
+    border: 1px solid rgba(113,113,122,.2);
+  }
+
+
+  /* ================================================================
+     VIEW BUTTON
+  ================================================================ */
+
+  .track-action {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .view-button {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+
+    min-height: 38px;
+
+    padding: 9px 13px;
+
+    border-radius: 10px;
+
+    color: #fff;
+
+    background: rgba(255,255,255,.055);
+
+    border: 1px solid rgba(255,255,255,.1);
+
+    font-size: 12px;
+    font-weight: 900;
+
+    transition: .2s ease;
+  }
+
+  .view-button span {
+    color: #e8c85a;
+    transition: transform .2s ease;
+  }
+
+  .view-button:hover {
+    background: rgba(212,175,55,.1);
+    border-color: rgba(212,175,55,.3);
+  }
+
+  .view-button:hover span {
+    transform: translateX(3px);
+  }
+
+
+  /* ================================================================
+     EMPTY
+  ================================================================ */
+
+  .empty-album {
+    padding: 65px 25px;
+
+    text-align: center;
+
+    border: 1px dashed rgba(255,255,255,.12);
+    border-radius: 20px;
+
+    background: rgba(255,255,255,.018);
+  }
+
+  .empty-icon {
+    display: grid;
+    place-items: center;
+
+    width: 64px;
+    height: 64px;
+
+    margin: 0 auto 16px;
+
+    border-radius: 18px;
+
+    background: rgba(212,175,55,.08);
+
+    border: 1px solid rgba(212,175,55,.16);
+
+    color: #d4af37;
+
+    font-size: 28px;
+  }
+
+  .empty-album h2 {
+    margin: 0 0 8px;
+  }
+
+  .empty-album p {
+    max-width: 480px;
+
+    margin: 0 auto 22px;
+
+    color: var(--text-muted, #a1a1aa);
+
+    line-height: 1.6;
+  }
+
+
+  /* ================================================================
+     BOTTOM CTA
+  ================================================================ */
+
+  .album-cta {
+    display: flex;
+
+    justify-content: space-between;
+    align-items: center;
+
+    gap: 25px;
+
+    margin-top: 45px;
+
+    padding: 25px 27px;
+
+    border-radius: 19px;
+
+    border: 1px solid rgba(212,175,55,.15);
+
+    background:
+      radial-gradient(
+        circle at 85% 50%,
+        rgba(212,175,55,.08),
+        transparent 35%
+      ),
+      rgba(255,255,255,.025);
+  }
+
+  .album-cta h2 {
+    margin: 5px 0 6px;
+
+    font-size: 21px;
+  }
+
+  .album-cta p {
+    max-width: 600px;
+
+    margin: 0;
+
+    color: var(--text-muted, #a1a1aa);
+
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+
+  /* ================================================================
+     RESPONSIVE
+  ================================================================ */
+
+  @media (max-width: 950px) {
+
+    .album-hero {
+      grid-template-columns: 250px 1fr;
+      gap: 28px;
+    }
+
+    .track-row {
+      grid-template-columns:
+        28px
+        58px
+        minmax(160px, 1fr)
+        90px
+        105px;
+    }
+
+    .track-action {
+      grid-column: 3 / -1;
+      justify-content: flex-start;
+      padding-top: 2px;
+    }
+
+  }
+
+
+  @media (max-width: 700px) {
+
+    .album-page {
+      padding: 25px 14px 55px;
+    }
+
+    .album-hero {
+      grid-template-columns: 1fr;
+
+      padding: 18px;
+
+      gap: 24px;
+    }
+
+    .album-art {
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    .album-info {
+      text-align: left;
+    }
+
+    .album-info h1 {
+      font-size: 40px;
+    }
+
+    .tracklist-heading {
+      align-items: flex-start;
+    }
+
+    .track-row {
+      grid-template-columns:
+        26px
+        54px
+        minmax(0, 1fr);
+
+      gap: 11px;
+
+      padding: 10px;
+    }
+
+    .track-mini-art {
+      width: 54px;
+      height: 54px;
+    }
+
+    .track-price {
+      grid-column: 3;
+      text-align: left;
+      margin-top: -3px;
+    }
+
+    .track-license {
+      grid-column: 3;
+      justify-content: flex-start;
+    }
+
+    .track-action {
+      grid-column: 3;
+      justify-content: flex-start;
+    }
+
+    .album-cta {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+  }
+
+
+  @media (max-width: 480px) {
+
+    .album-topbar {
+      margin-bottom: 18px;
+    }
+
+    .top-label {
+      display: none;
+    }
+
+    .album-info h1 {
+      font-size: 34px;
+    }
+
+    .album-stats {
+      width: 100%;
+    }
+
+    .album-stat {
+      flex: 1;
+    }
+
+    .tracklist-heading h2 {
+      font-size: 23px;
+    }
+
+    .track-count {
+      font-size: 10px;
+    }
+
+    .license-badge {
+      font-size: 8px;
+    }
+
+  }
+
+</style>
 
 {% endblock %}
