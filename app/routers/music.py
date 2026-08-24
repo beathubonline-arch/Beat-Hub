@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.music import Track
-from app.services.storage import media_url
+from app.services.storage import media_url, storage_exists
 from app.utils.deps import get_optional_user
 
 logger = logging.getLogger("beathub.music")
@@ -117,11 +117,10 @@ def _track_audio_storage_path(track: Track) -> Optional[str]:
         "stream_url",
         "mp3_url",
         "preview_audio_url",
-        # Current uploads store the original uploaded audio here.
-        # When no separate preview file exists, use the uploaded audio
-        # through the public preview endpoint so existing tracks work.
+        # Existing uploads may store the original audio under any of
+        # these fields. Keep all compatibility fallbacks so old tracks
+        # remain playable without a database migration.
         "audio_file_path",
-        # Compatibility with older BeatHub schemas.
         "audio_path",
         "file_path",
         "track_file_path",
@@ -677,7 +676,6 @@ def _media_response(
         ),
         headers={
             "Cache-Control": "public, max-age=3600",
-            "Accept-Ranges": "bytes",
         },
     )
 
@@ -686,36 +684,11 @@ def _get_track_by_slug(
     slug: str,
     db: Session,
 ) -> Track:
-    """Resolve a public track reference without changing stored slugs."""
-    value = str(slug or "").strip()
-
     track = (
         db.query(Track)
-        .filter(Track.slug == value)
+        .filter(Track.slug == slug)
         .first()
     )
-
-    # Compatibility for older records whose slug casing was not normalised.
-    if not track and value:
-        try:
-            track = (
-                db.query(Track)
-                .filter(Track.slug.ilike(value))
-                .first()
-            )
-        except Exception:
-            track = None
-
-    # Compatibility when an older page accidentally linked a Track id.
-    if not track and value:
-        try:
-            track = (
-                db.query(Track)
-                .filter(Track.id == value)
-                .first()
-            )
-        except Exception:
-            track = None
 
     if not track:
         raise HTTPException(
@@ -724,62 +697,6 @@ def _get_track_by_slug(
         )
 
     return track
-
-
-@router.get(
-    "/track/{slug}",
-    name="track_detail",
-)
-def track_detail(
-    slug: str,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_optional_user),
-):
-    """Public track detail page.
-
-    This route is intentionally public: buyers must be able to inspect a
-    track and preview its audio before purchasing it. Downloading the
-    purchased master remains protected by the existing download routes.
-    """
-    track = _get_track_by_slug(slug, db)
-
-    purchased = False
-    if current_user:
-        try:
-            from app.models.order import License, Order, OrderStatus
-
-            purchased = (
-                db.query(License)
-                .join(Order, License.order_id == Order.id)
-                .filter(
-                    License.buyer_id == current_user.id,
-                    License.track_id == track.id,
-                    Order.status == OrderStatus.COMPLETED,
-                )
-                .first()
-                is not None
-            )
-        except Exception:
-            logger.exception(
-                "Unable to determine purchase status for track %s",
-                slug,
-            )
-
-    return templates.TemplateResponse(
-        request,
-        "track_detail.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "track": track,
-            "purchased": purchased,
-            "preview_url": f"/track/{slug}/preview",
-            "artwork_url": f"/track/{slug}/artwork",
-        },
-    )
 
 
 @router.get(
