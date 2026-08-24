@@ -19,6 +19,7 @@ from app.routers import (
     auth,
     checkout,
     dashboard,
+    flutterwave_checkout,
     merchandise,
     mpesa_callback,
     music,
@@ -137,23 +138,13 @@ def public_track_preview(
     slug: str,
     db: Session = Depends(get_db),
 ):
-    track = (
-        db.query(Track)
-        .filter(Track.slug == slug)
-        .first()
-    )
+    track = db.query(Track).filter(Track.slug == slug).first()
 
     if not track:
-        raise HTTPException(
-            status_code=404,
-            detail="Track not found.",
-        )
+        raise HTTPException(status_code=404, detail="Track not found.")
 
     if not getattr(track, "is_published", False):
-        raise HTTPException(
-            status_code=404,
-            detail="Preview not available.",
-        )
+        raise HTTPException(status_code=404, detail="Preview not available.")
 
     stored = str(
         getattr(track, "preview_file_path", None)
@@ -162,30 +153,16 @@ def public_track_preview(
     ).strip()
 
     if not stored:
-        raise HTTPException(
-            status_code=404,
-            detail="Preview audio is not available.",
-        )
+        raise HTTPException(status_code=404, detail="Preview audio is not available.")
 
     if stored.startswith(("http://", "https://")):
-        return RedirectResponse(
-            url=stored,
-            status_code=307,
-        )
+        return RedirectResponse(url=stored, status_code=307)
 
     if stored.startswith(("r2://", "s3://")):
         url = media_url(stored, expires=3600)
-
         if not url:
-            raise HTTPException(
-                status_code=404,
-                detail="Preview audio is not available.",
-            )
-
-        return RedirectResponse(
-            url=url,
-            status_code=307,
-        )
+            raise HTTPException(status_code=404, detail="Preview audio is not available.")
+        return RedirectResponse(url=url, status_code=307)
 
     value = stored.replace("\\", "/").lstrip("/")
     media_root_value = getattr(settings, "MEDIA_ROOT", None) or "media"
@@ -222,10 +199,7 @@ def public_track_preview(
                 ".aac": "audio/aac",
                 ".ogg": "audio/ogg",
                 ".flac": "audio/flac",
-            }.get(
-                candidate.suffix.lower(),
-                "application/octet-stream",
-            )
+            }.get(candidate.suffix.lower(), "application/octet-stream")
 
             return FileResponse(
                 path=str(candidate),
@@ -236,10 +210,7 @@ def public_track_preview(
                 },
             )
 
-    raise HTTPException(
-        status_code=404,
-        detail="Preview audio is not available.",
-    )
+    raise HTTPException(status_code=404, detail="Preview audio is not available.")
 
 
 # ============================================================
@@ -251,6 +222,7 @@ app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
 app.include_router(mpesa_callback.router)
+app.include_router(flutterwave_checkout.router)
 app.include_router(stripe_checkout.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
@@ -261,18 +233,13 @@ app.include_router(merchandise.router)
 # TEMPLATE HELPERS
 # ============================================================
 
-def _template_context(
-    request: Request,
-    current_user=None,
-    **extra,
-):
+def _template_context(request: Request, current_user=None, **extra):
     context = {
         "request": request,
         "current_user": current_user,
         "user": current_user,
         "current_year": 2026,
     }
-
     context.update(extra)
     return context
 
@@ -285,92 +252,44 @@ def _template_exists(template_name: str) -> bool:
 # COMPATIBILITY DASHBOARD URLS
 # ============================================================
 
-@app.get(
-    "/artist/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/creator/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/producer/dashboard",
-    include_in_schema=False,
-)
-@app.get(
-    "/dashboard/home",
-    include_in_schema=False,
-)
-@app.get(
-    "/dashboard/index",
-    include_in_schema=False,
-)
-def dashboard_alias(
-    user=Depends(require_creator),
-):
-    return RedirectResponse(
-        url="/dashboard",
-        status_code=303,
-    )
+@app.get("/artist/dashboard", include_in_schema=False)
+@app.get("/creator/dashboard", include_in_schema=False)
+@app.get("/producer/dashboard", include_in_schema=False)
+@app.get("/dashboard/home", include_in_schema=False)
+@app.get("/dashboard/index", include_in_schema=False)
+def dashboard_alias(user=Depends(require_creator)):
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 # ============================================================
 # COMPATIBILITY WITHDRAWAL URLS
 # ============================================================
 
-@app.get(
-    "/creator/withdraw",
-    include_in_schema=False,
-)
-@app.get(
-    "/producer/withdraw",
-    include_in_schema=False,
-)
-def creator_withdraw_alias(
-    user=Depends(require_creator),
-):
-    return RedirectResponse(
-        url="/dashboard/withdraw",
-        status_code=303,
-    )
+@app.get("/creator/withdraw", include_in_schema=False)
+@app.get("/producer/withdraw", include_in_schema=False)
+def creator_withdraw_alias(user=Depends(require_creator)):
+    return RedirectResponse(url="/dashboard/withdraw", status_code=303)
 
 
-@app.get(
-    "/admin/withdrawal",
-    include_in_schema=False,
-)
-def admin_withdraw_alias(
-    user=Depends(require_admin),
-):
-    return RedirectResponse(
-        url="/admin/withdraw",
-        status_code=303,
-    )
+@app.get("/admin/withdrawal", include_in_schema=False)
+def admin_withdraw_alias(user=Depends(require_admin)):
+    return RedirectResponse(url="/admin/withdraw", status_code=303)
 
 
 # ============================================================
 # HEALTH CHECK
 # ============================================================
 
-@app.api_route(
-    "/healthz",
-    methods=["GET", "HEAD"],
-)
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 def healthz():
     return {
         "status": "ok",
         "app": getattr(settings, "APP_NAME", "BeatHub"),
         "env": getattr(settings, "APP_ENV", "production"),
         "storage": getattr(settings, "MEDIA_STORAGE", "local"),
-        "r2_enabled": bool(
-            getattr(settings, "r2_enabled", False)
-        ),
-        "r2_bucket_configured": bool(
-            getattr(settings, "R2_BUCKET_NAME", None)
-        ),
-        "r2_endpoint_configured": bool(
-            getattr(settings, "r2_endpoint_url", None)
-        ),
+        "r2_enabled": bool(getattr(settings, "r2_enabled", False)),
+        "r2_bucket_configured": bool(getattr(settings, "R2_BUCKET_NAME", None)),
+        "r2_endpoint_configured": bool(getattr(settings, "r2_endpoint_url", None)),
     }
 
 
@@ -378,18 +297,12 @@ def healthz():
 # FAVICON
 # ============================================================
 
-@app.get(
-    "/favicon.ico",
-    include_in_schema=False,
-)
+@app.get("/favicon.ico", include_in_schema=False)
 def favicon_compatibility():
     favicon = STATIC_DIR / "favicon.ico"
 
     if favicon.is_file():
-        return FileResponse(
-            path=str(favicon),
-            media_type="image/x-icon",
-        )
+        return FileResponse(path=str(favicon), media_type="image/x-icon")
 
     return Response(status_code=204)
 
@@ -399,10 +312,7 @@ def favicon_compatibility():
 # ============================================================
 
 @app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(
-    request: Request,
-    exc: StarletteHTTPException,
-):
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 401:
         return RedirectResponse(
             url="/login?error=Please%20log%20in%20to%20continue.",
@@ -411,61 +321,36 @@ async def http_exception_handler(
 
     if exc.status_code == 403:
         template = "errors/403.html"
-
         if _template_exists(template):
             return templates.TemplateResponse(
                 request,
                 template,
-                _template_context(
-                    request,
-                    detail=exc.detail,
-                ),
+                _template_context(request, detail=exc.detail),
                 status_code=403,
             )
-
-        return Response(
-            content="Access denied.",
-            status_code=403,
-            media_type="text/plain",
-        )
+        return Response(content="Access denied.", status_code=403, media_type="text/plain")
 
     if exc.status_code == 404:
         template = "errors/404.html"
-
         if _template_exists(template):
             return templates.TemplateResponse(
                 request,
                 template,
-                _template_context(
-                    request,
-                    detail=exc.detail,
-                ),
+                _template_context(request, detail=exc.detail),
                 status_code=404,
             )
-
-        return Response(
-            content="Page not found.",
-            status_code=404,
-            media_type="text/plain",
-        )
+        return Response(content="Page not found.", status_code=404, media_type="text/plain")
 
     template = "errors/500.html"
-
     if _template_exists(template):
         return templates.TemplateResponse(
             request,
             template,
-            _template_context(
-                request,
-                detail=exc.detail,
-            ),
+            _template_context(request, detail=exc.detail),
             status_code=exc.status_code,
         )
 
-    return {
-        "error": exc.detail,
-        "status_code": exc.status_code,
-    }
+    return {"error": exc.detail, "status_code": exc.status_code}
 
 
 # ============================================================
@@ -473,10 +358,7 @@ async def http_exception_handler(
 # ============================================================
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
-    request: Request,
-    exc: RequestValidationError,
-):
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.warning(
         "Validation error on %s %s: %s",
         request.method,
@@ -485,7 +367,6 @@ async def validation_exception_handler(
     )
 
     template = "errors/400.html"
-
     if _template_exists(template):
         return templates.TemplateResponse(
             request,
@@ -498,10 +379,7 @@ async def validation_exception_handler(
             status_code=422,
         )
 
-    return {
-        "error": "Validation error",
-        "details": exc.errors(),
-    }
+    return {"error": "Validation error", "details": exc.errors()}
 
 
 # ============================================================
@@ -509,10 +387,7 @@ async def validation_exception_handler(
 # ============================================================
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(
-    request: Request,
-    exc: Exception,
-):
+async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception(
         "Unhandled BeatHub error on %s %s",
         request.method,
@@ -520,22 +395,15 @@ async def unhandled_exception_handler(
     )
 
     template = "errors/500.html"
-
     if _template_exists(template):
         return templates.TemplateResponse(
             request,
             template,
-            _template_context(
-                request,
-                detail=None,
-            ),
+            _template_context(request, detail=None),
             status_code=500,
         )
 
-    return {
-        "error": "Internal server error",
-        "status_code": 500,
-    }
+    return {"error": "Internal server error", "status_code": 500}
 
 
 # ============================================================
@@ -545,10 +413,7 @@ async def unhandled_exception_handler(
 @app.on_event("startup")
 async def startup_event():
     logger.info("BeatHub application started.")
-    logger.info(
-        "Storage backend: %s",
-        getattr(settings, "MEDIA_STORAGE", "local"),
-    )
+    logger.info("Storage backend: %s", getattr(settings, "MEDIA_STORAGE", "local"))
 
 
 @app.on_event("shutdown")
