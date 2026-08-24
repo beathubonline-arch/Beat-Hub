@@ -1,40 +1,557 @@
 {% extends "base.html" %}
+
 {% block title %}{{ profile.stage_name }} — BeatHub{% endblock %}
+
 {% block content %}
-<section style="padding: 40px 0;">
-  <div class="eyebrow">
-    {% if profile.is_producer %}PRODUCER{% endif %}
-    {% if profile.is_dj %} &middot; DJ{% endif %}
-    {% if profile.is_artist %} &middot; ARTIST{% endif %}
-  </div>
-  <h1 style="font-size: 36px; margin: 6px 0;">{{ profile.stage_name }}</h1>
-  {% if profile.bio %}<p class="sub" style="color: var(--text-muted); max-width: 600px; line-height:1.6;">{{ profile.bio }}</p>{% endif %}
 
-  <h2 style="font-size: 20px; margin-top: 36px;">Beats &amp; Tracks</h2>
-  <div class="results-grid">
-    {% for track in tracks %}
-      <a href="/track/{{ track.slug }}" class="result-card">
-        <div class="title">{{ track.title }}</div>
-        <div class="sub">KSh {{ '%.0f'|format(track.price) }}</div>
-      </a>
-    {% else %}
-      <p class="sub">No tracks published yet.</p>
-    {% endfor %}
-  </div>
+<style>
+.profile-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 18px 70px;
+}
 
-  <div style="margin-top:28px;">
-    <a href="/store/{{ profile.slug }}/merch" class="btn btn-primary">Shop {{ profile.stage_name }} Merch</a>
-  </div>
+.profile-header {
+    text-align: center;
+    padding: 35px 25px;
+    border-radius: 22px;
+    border: 1px solid rgba(212,175,55,.18);
+    background:
+        radial-gradient(
+            circle at 50% 0%,
+            rgba(212,175,55,.13),
+            transparent 42%
+        ),
+        rgba(255,255,255,.02);
+    margin-bottom: 32px;
+}
 
-  <h2 style="font-size: 20px; margin-top: 36px;">Albums</h2>
-  <div class="results-grid">
-    {% for album in albums %}
-      <a href="/album/{{ album.slug }}" class="result-card">
-        <div class="title">{{ album.title }}</div>
-      </a>
-    {% else %}
-      <p class="sub">No albums published yet.</p>
-    {% endfor %}
-  </div>
+.profile-eyebrow {
+    color: var(--gold, #d4af37);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+}
+
+.profile-header h1 {
+    font-size: clamp(32px, 6vw, 48px);
+    margin: 7px 0;
+}
+
+.profile-bio {
+    max-width: 680px;
+    margin: 12px auto 0;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
+.music-section {
+    margin-top: 30px;
+}
+
+.music-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.music-heading h2 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.music-heading p {
+    margin: 5px 0 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.music-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.music-card {
+    overflow: hidden;
+    border-radius: 17px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.025);
+    transition:
+        transform .18s ease,
+        border-color .18s ease;
+}
+
+.music-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(212,175,55,.35);
+}
+
+.music-art {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: rgba(255,255,255,.04);
+}
+
+.music-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.music-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+}
+
+.profile-preview {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(0,0,0,.78);
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    backdrop-filter: blur(8px);
+}
+
+.profile-preview:hover {
+    background: var(--gold, #d4af37);
+    color: #080808;
+}
+
+.music-info {
+    padding: 15px;
+}
+
+.music-title {
+    margin: 0;
+    font-size: 17px;
+}
+
+.music-title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.music-title a:hover {
+    color: var(--gold, #d4af37);
+}
+
+.music-meta {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.music-price {
+    margin-top: 13px;
+    color: var(--gold, #d4af37);
+    font-size: 17px;
+    font-weight: 850;
+}
+
+.music-button {
+    display: block;
+    margin-top: 12px;
+}
+
+.empty-music {
+    padding: 35px;
+    text-align: center;
+    border-radius: 16px;
+    border: 1px dashed rgba(255,255,255,.12);
+    color: var(--text-muted);
+}
+
+@media(max-width:900px) {
+    .music-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media(max-width:600px) {
+    .profile-page {
+        padding: 25px 12px 50px;
+    }
+
+    .profile-header {
+        padding: 27px 18px;
+    }
+
+    .music-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+
+<section class="profile-page">
+
+    <header class="profile-header">
+
+        <div class="profile-eyebrow">
+
+            {% if profile.is_producer %}
+                PRODUCER
+            {% endif %}
+
+            {% if profile.is_dj %}
+                {% if profile.is_producer %} · {% endif %}
+                DJ
+            {% endif %}
+
+            {% if profile.is_artist %}
+                {% if profile.is_producer or profile.is_dj %} · {% endif %}
+                ARTIST
+            {% endif %}
+
+        </div>
+
+        <h1>
+            {{ profile.stage_name }}
+        </h1>
+
+        {% if profile.bio %}
+
+            <p class="profile-bio">
+                {{ profile.bio }}
+            </p>
+
+        {% endif %}
+
+    </header>
+
+
+    <!-- TRACKS -->
+
+    <section class="music-section">
+
+        <div class="music-heading">
+
+            <div>
+                <h2>
+                    Beats &amp; Tracks
+                </h2>
+
+                <p>
+                    Preview before you purchase.
+                </p>
+            </div>
+
+        </div>
+
+
+        {% if tracks %}
+
+            <div class="music-grid">
+
+                {% for track in tracks %}
+
+                    <article class="music-card">
+
+                        <div class="music-art">
+
+                            {% if track.cover_art_url %}
+
+                                <img
+                                    src="{{ track.cover_art_url }}"
+                                    alt="{{ track.title }}"
+                                    loading="lazy"
+                                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+                                >
+
+                                <div
+                                    class="music-placeholder"
+                                    style="display:none;"
+                                >
+                                    🎵
+                                </div>
+
+                            {% else %}
+
+                                <div class="music-placeholder">
+                                    🎵
+                                </div>
+
+                            {% endif %}
+
+
+                            <button
+                                type="button"
+                                class="profile-preview"
+                                onclick="toggleProfilePreview(this, '{{ track.slug }}')"
+                                aria-label="Preview {{ track.title }}"
+                            >
+                                ▶
+                            </button>
+
+                        </div>
+
+
+                        <div class="music-info">
+
+                            <h3 class="music-title">
+
+                                <a href="/track/{{ track.slug }}">
+                                    {{ track.title }}
+                                </a>
+
+                            </h3>
+
+
+                            <div class="music-meta">
+
+                                {{ track.genre or 'Beat' }}
+
+                                {% if track.bpm %}
+                                    · {{ track.bpm }} BPM
+                                {% endif %}
+
+                            </div>
+
+
+                            <div class="music-price">
+
+                                KSh {{ "%.0f"|format(track.price or 0) }}
+
+                            </div>
+
+
+                            <a
+                                href="/track/{{ track.slug }}"
+                                class="btn btn-primary btn-block music-button"
+                            >
+                                View &amp; Buy
+                            </a>
+
+                        </div>
+
+                    </article>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div class="empty-music">
+                No tracks published yet.
+            </div>
+
+        {% endif %}
+
+    </section>
+
+
+    <!-- ALBUMS -->
+
+    <section class="music-section">
+
+        <div class="music-heading">
+
+            <div>
+                <h2>
+                    Albums
+                </h2>
+
+                <p>
+                    Explore complete releases.
+                </p>
+            </div>
+
+        </div>
+
+
+        {% if albums %}
+
+            <div class="music-grid">
+
+                {% for album in albums %}
+
+                    <article class="music-card">
+
+                        <div class="music-art">
+
+                            {% if album.artwork_url %}
+
+                                <img
+                                    src="{{ album.artwork_url }}"
+                                    alt="{{ album.title }}"
+                                    loading="lazy"
+                                >
+
+                            {% else %}
+
+                                <div class="music-placeholder">
+                                    💿
+                                </div>
+
+                            {% endif %}
+
+                        </div>
+
+
+                        <div class="music-info">
+
+                            <h3 class="music-title">
+                                <a href="/album/{{ album.slug }}">
+                                    {{ album.title }}
+                                </a>
+                            </h3>
+
+                            <div class="music-meta">
+                                {{ album.genre or 'Album' }}
+                            </div>
+
+                            <a
+                                href="/album/{{ album.slug }}"
+                                class="btn btn-outline btn-block music-button"
+                            >
+                                View Album
+                            </a>
+
+                        </div>
+
+                    </article>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div class="empty-music">
+                No albums published yet.
+            </div>
+
+        {% endif %}
+
+    </section>
+
 </section>
+
+
+<script>
+let profilePreview = null;
+let profilePreviewButton = null;
+let profilePreviewTimer = null;
+
+function toggleProfilePreview(button, slug) {
+
+    if (
+        profilePreview &&
+        profilePreviewButton === button
+    ) {
+
+        if (!profilePreview.paused) {
+
+            profilePreview.pause();
+
+            button.textContent = "▶";
+
+            return;
+
+        }
+
+        profilePreview.play().then(function () {
+            button.textContent = "❚❚";
+        }).catch(function () {
+            button.textContent = "▶";
+        });
+
+        return;
+    }
+
+
+    stopProfilePreview();
+
+
+    profilePreview = new Audio(
+        "/track/" + encodeURIComponent(slug) + "/preview"
+    );
+
+    profilePreview.preload = "metadata";
+
+    profilePreviewButton = button;
+
+    button.textContent = "❚❚";
+
+
+    profilePreview.addEventListener(
+        "timeupdate",
+        function () {
+
+            if (profilePreview.currentTime >= 30) {
+                stopProfilePreview();
+            }
+
+        }
+    );
+
+
+    profilePreview.addEventListener(
+        "ended",
+        stopProfilePreview
+    );
+
+
+    profilePreview.addEventListener(
+        "error",
+        function () {
+
+            button.textContent = "▶";
+
+            profilePreview = null;
+
+            profilePreviewButton = null;
+
+        }
+    );
+
+
+    profilePreview.play().catch(function () {
+
+        button.textContent = "▶";
+
+    });
+}
+
+
+function stopProfilePreview() {
+
+    if (profilePreviewTimer) {
+        clearTimeout(profilePreviewTimer);
+        profilePreviewTimer = null;
+    }
+
+    if (profilePreview) {
+
+        profilePreview.pause();
+
+        profilePreview.currentTime = 0;
+
+    }
+
+    if (profilePreviewButton) {
+        profilePreviewButton.textContent = "▶";
+    }
+
+    profilePreview = null;
+    profilePreviewButton = null;
+}
+</script>
+
 {% endblock %}
