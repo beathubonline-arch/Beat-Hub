@@ -21,6 +21,7 @@ from app.routers import (
     dashboard,
     flutterwave_checkout,
     merchandise,
+    merchandise_account,
     mpesa_callback,
     music,
     pages,
@@ -153,6 +154,7 @@ app.include_router(stripe_checkout.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(merchandise.router)
+app.include_router(merchandise_account.router)
 
 
 def _template_context(request: Request, current_user=None, **extra):
