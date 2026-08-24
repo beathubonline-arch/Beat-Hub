@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import logging
 import math
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.music import SalesModel, Track
-from app.models.profile import Profile
+from app.models.music import Track
 from app.utils.deps import get_optional_user
 
 logger = logging.getLogger("beathub.music")
@@ -34,28 +35,13 @@ def _model_value(obj: Any, *names: str, default: Any = None) -> Any:
 
 
 def _track_is_public(track: Track) -> bool:
-    if not bool(getattr(track, "is_published", False)):
-        return False
-
-    sales_model = _model_value(
-        track,
-        "sales_model",
-        default=None,
-    )
-
-    sales_model_value = getattr(
-        sales_model,
-        "value",
-        sales_model,
-    )
-
-    # Do not display an exclusive beat after it has already been sold.
-    if (
-        str(sales_model_value or "").strip().lower()
-        == SalesModel.EXCLUSIVE.value
-        and bool(getattr(track, "is_sold", False))
-    ):
-        return False
+    for field in ("is_published", "published", "is_public", "active"):
+        if hasattr(track, field):
+            try:
+                if getattr(track, field, None) is False:
+                    return False
+            except Exception:
+                pass
 
     return True
 
@@ -76,10 +62,9 @@ def _track_price(track: Track) -> float:
         return 0.0
 
 
-def _track_artwork(track: Track) -> Optional[str]:
+def _track_artwork_path(track: Track) -> Optional[str]:
     value = _model_value(
         track,
-        "cover_art_url",
         "cover_art_path",
         "cover_url",
         "artwork_url",
@@ -91,69 +76,51 @@ def _track_artwork(track: Track) -> Optional[str]:
         default=None,
     )
 
-    return str(value) if value else None
+    if not value:
+        return None
+
+    return str(value)
 
 
 def _track_audio(track: Track) -> Optional[str]:
     value = _model_value(
         track,
-        "preview_url",
-        "preview_file_path",
         "audio_url",
+        "preview_url",
+        "file_url",
         "stream_url",
         "mp3_url",
         "preview_audio_url",
+        "audio_path",
+        "file_path",
         default=None,
     )
 
-    if value:
-        return str(value)
+    if not value:
+        return None
 
-    # Compatibility for deployments where the uploaded audio path
-    # itself is already browser-accessible.
-    value = _model_value(
+    return str(value)
+
+
+def _producer_object(track: Track) -> Any:
+    return _model_value(
         track,
-        "audio_file_path",
-        default=None,
-    )
-
-    if value:
-        value = str(value)
-
-        if value.startswith(
-            (
-                "http://",
-                "https://",
-                "/",
-            )
-        ):
-            return value
-
-    return None
-
-
-def _producer_profile(track: Track) -> Optional[Profile]:
-    profile = _model_value(
-        track,
-        "creator_profile",
-        "profile",
         "producer",
         "creator",
         "owner",
+        "user",
         default=None,
     )
 
-    return profile
-
 
 def _producer_name(track: Track) -> str:
-    producer = _producer_profile(track)
+    producer = _producer_object(track)
 
     if producer is not None:
         name = _model_value(
             producer,
-            "stage_name",
             "display_name",
+            "stage_name",
             "artist_name",
             "username",
             "name",
@@ -172,45 +139,50 @@ def _producer_name(track: Track) -> str:
         default=None,
     )
 
-    return (
-        str(direct)
-        if direct
-        else "BeatHub Creator"
-    )
+    return str(direct) if direct else "BeatHub Creator"
 
 
-def _producer_url(track: Track) -> str:
-    profile = _producer_profile(track)
+def _producer_slug(track: Track) -> Optional[str]:
+    producer = _producer_object(track)
 
-    slug = _model_value(
-        profile,
-        "slug",
+    if producer is not None:
+        value = _model_value(
+            producer,
+            "slug",
+            "store_slug",
+            "username",
+            default=None,
+        )
+
+        if value:
+            return str(value)
+
+    value = _model_value(
+        track,
+        "producer_slug",
+        "creator_slug",
+        "store_slug",
         default=None,
     )
 
-    if slug:
-        return f"/store/{slug}"
+    return str(value) if value else None
 
-    return "#"
+
+def _producer_url(track: Track) -> Optional[str]:
+    slug = _producer_slug(track)
+
+    if not slug:
+        return None
+
+    return f"/producer/{slug}"
 
 
 def _track_url(track: Track) -> str:
-    slug = _model_value(
-        track,
-        "slug",
-        default=None,
-    )
+    slug = _model_value(track, "slug", default=None)
+    track_id = _model_value(track, "id", default=None)
 
-    track_id = _model_value(
-        track,
-        "id",
-        default=None,
-    )
-
-    # Current BeatHub detail / checkout flow uses:
-    # /track/{slug}
     if slug:
-        return f"/track/{slug}"
+        return f"/p/{slug}"
 
     if track_id is not None:
         return f"/track/{track_id}"
@@ -218,22 +190,111 @@ def _track_url(track: Track) -> str:
     return "#"
 
 
-def _track_sales_model(track: Track) -> str:
-    sales_model = _model_value(
-        track,
-        "sales_model",
-        default=None,
+def _track_artwork_url(track: Track) -> Optional[str]:
+    path = _track_artwork_path(track)
+
+    if not path:
+        return None
+
+    value = path.strip()
+
+    if not value:
+        return None
+
+    if value.startswith(("http://", "https://", "data:", "//")):
+        return value
+
+    if value.startswith("/"):
+        return value
+
+    slug = _model_value(track, "slug", default=None)
+
+    if slug:
+        return f"/track/{slug}/artwork"
+
+    track_id = _model_value(track, "id", default=None)
+
+    if track_id is not None:
+        return f"/track/{track_id}/artwork"
+
+    return None
+
+
+def _track_audio_url(track: Track) -> Optional[str]:
+    value = _track_audio(track)
+
+    if not value:
+        return None
+
+    value = value.strip()
+
+    if not value:
+        return None
+
+    if value.startswith(("http://", "https://", "data:", "//", "/")):
+        return value
+
+    slug = _model_value(track, "slug", default=None)
+
+    if slug:
+        return f"/track/{slug}/preview"
+
+    track_id = _model_value(track, "id", default=None)
+
+    if track_id is not None:
+        return f"/track/{track_id}/preview"
+
+    return None
+
+
+def _track_text(track: Track) -> str:
+    values = (
+        _model_value(track, "title", "name", default=""),
+        _model_value(track, "genre", "category", default=""),
+        _model_value(track, "mood", default=""),
+        _model_value(track, "description", "short_description", default=""),
+        _model_value(track, "tags", default=""),
     )
 
-    value = getattr(
-        sales_model,
-        "value",
-        sales_model,
+    return " ".join(str(value) for value in values if value)
+
+
+def _safe_local_path(value: str) -> Optional[Path]:
+    raw = value.strip()
+
+    if not raw:
+        return None
+
+    if raw.startswith(("http://", "https://", "r2://", "s3://")):
+        return None
+
+    candidates = []
+
+    path = Path(raw)
+
+    if path.is_absolute():
+        candidates.append(path)
+
+    candidates.extend(
+        [
+            Path(".") / raw.lstrip("/"),
+            Path("app") / raw.lstrip("/"),
+            Path("uploads") / raw.lstrip("/"),
+            Path("media") / raw.lstrip("/"),
+            Path("static") / raw.lstrip("/"),
+        ]
     )
 
-    return str(
-        value or ""
-    ).strip().lower()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+
+            if resolved.exists() and resolved.is_file():
+                return resolved
+        except Exception:
+            continue
+
+    return None
 
 
 def _query_catalog(
@@ -244,23 +305,7 @@ def _query_catalog(
     min_price: Optional[float],
     max_price: Optional[float],
 ):
-    query = (
-        db.query(Track)
-        .options(
-            joinedload(
-                Track.creator_profile
-            )
-        )
-        .outerjoin(
-            Profile,
-            Track.creator_profile_id
-            == Profile.id,
-        )
-    )
-
-    # --------------------------------------------------------------
-    # SEARCH
-    # --------------------------------------------------------------
+    query = db.query(Track)
 
     if search:
         like = f"%{search}%"
@@ -268,170 +313,92 @@ def _query_catalog(
 
         for field_name in (
             "title",
+            "name",
             "genre",
+            "mood",
             "description",
+            "short_description",
             "tags",
             "slug",
         ):
-            field = getattr(
-                Track,
-                field_name,
-                None,
-            )
+            field = getattr(Track, field_name, None)
 
             if field is not None:
-                conditions.append(
-                    field.ilike(like)
-                )
-
-        # Search producer/stage name too.
-        profile_stage_name = getattr(
-            Profile,
-            "stage_name",
-            None,
-        )
-
-        profile_slug = getattr(
-            Profile,
-            "slug",
-            None,
-        )
-
-        if profile_stage_name is not None:
-            conditions.append(
-                profile_stage_name.ilike(like)
-            )
-
-        if profile_slug is not None:
-            conditions.append(
-                profile_slug.ilike(like)
-            )
+                conditions.append(field.ilike(like))
 
         if conditions:
-            query = query.filter(
-                or_(*conditions)
-            )
-
-    # --------------------------------------------------------------
-    # GENRE
-    # --------------------------------------------------------------
+            query = query.filter(or_(*conditions))
 
     if genre:
-        field = getattr(
-            Track,
-            "genre",
-            None,
-        )
+        field = getattr(Track, "genre", None)
 
         if field is not None:
-            query = query.filter(
-                field.ilike(
-                    f"%{genre}%"
-                )
-            )
+            query = query.filter(field.ilike(f"%{genre}%"))
 
-    # --------------------------------------------------------------
-    # MOOD
-    # --------------------------------------------------------------
-
-    # Kept for compatibility with the existing marketplace.
-    # If the current/future schema exposes a mood column,
-    # this filter automatically becomes active.
     if mood:
-        field = getattr(
-            Track,
-            "mood",
-            None,
-        )
+        field = getattr(Track, "mood", None)
 
         if field is not None:
-            query = query.filter(
-                field.ilike(
-                    f"%{mood}%"
-                )
-            )
-
-    # --------------------------------------------------------------
-    # PRICE
-    # --------------------------------------------------------------
+            query = query.filter(field.ilike(f"%{mood}%"))
 
     if min_price is not None:
-        field = getattr(
-            Track,
-            "price",
-            None,
-        )
+        field = getattr(Track, "price", None)
 
         if field is not None:
-            query = query.filter(
-                field >= min_price
-            )
+            query = query.filter(field >= min_price)
 
     if max_price is not None:
-        field = getattr(
-            Track,
-            "price",
-            None,
-        )
+        field = getattr(Track, "price", None)
 
         if field is not None:
-            query = query.filter(
-                field <= max_price
-            )
+            query = query.filter(field <= max_price)
 
-    # --------------------------------------------------------------
-    # PUBLISHED ONLY
-    # --------------------------------------------------------------
-
-    published_field = getattr(
-        Track,
+    for field_name in (
         "is_published",
-        None,
-    )
+        "published",
+        "is_public",
+        "active",
+    ):
+        field = getattr(Track, field_name, None)
 
-    if published_field is not None:
-        query = query.filter(
-            published_field.is_(True)
-        )
+        if field is not None:
+            query = query.filter(field.is_(True))
+            break
 
-    # --------------------------------------------------------------
-    # NEWEST FIRST
-    # --------------------------------------------------------------
-
-    created_field = getattr(
-        Track,
+    for field_name in (
         "created_at",
-        None,
-    )
+        "uploaded_at",
+        "id",
+    ):
+        field = getattr(Track, field_name, None)
 
-    if created_field is not None:
-        query = query.order_by(
-            created_field.desc()
-        )
-    else:
-        query = query.order_by(
-            Track.id.desc()
-        )
+        if field is not None:
+            query = query.order_by(field.desc())
+            break
 
     return query.all()
 
 
-def _build_catalog(
-    tracks: list[Track],
-) -> list[dict[str, Any]]:
-    catalog: list[dict[str, Any]] = []
-
-    for track in tracks:
-        title = str(
-            _model_value(
-                track,
-                "title",
-                "name",
-                default="Untitled Beat",
-            )
+def _catalog_item(track: Track) -> dict[str, Any]:
+    title = str(
+        _model_value(
+            track,
+            "title",
+            "name",
+            default="Untitled Beat",
         )
+    )
 
-        genre = str(
+    return {
+        "track": track,
+        "title": title,
+        "producer": _producer_name(track),
+        "producer_url": _producer_url(track),
+        "price": _track_price(track),
+        "artwork_url": _track_artwork_url(track),
+        "audio_url": _track_audio_url(track),
+        "url": _track_url(track),
+        "genre": str(
             _model_value(
                 track,
                 "genre",
@@ -439,18 +406,16 @@ def _build_catalog(
                 default="",
             )
             or ""
-        )
-
-        mood = str(
+        ),
+        "mood": str(
             _model_value(
                 track,
                 "mood",
                 default="",
             )
             or ""
-        )
-
-        bpm = str(
+        ),
+        "bpm": str(
             _model_value(
                 track,
                 "bpm",
@@ -458,9 +423,8 @@ def _build_catalog(
                 default="",
             )
             or ""
-        )
-
-        key = str(
+        ),
+        "key": str(
             _model_value(
                 track,
                 "key",
@@ -468,205 +432,20 @@ def _build_catalog(
                 default="",
             )
             or ""
-        )
-
-        catalog.append(
-            {
-                "track": track,
-                "title": title,
-                "producer": _producer_name(
-                    track
-                ),
-                "producer_url": _producer_url(
-                    track
-                ),
-                "price": _track_price(
-                    track
-                ),
-                "artwork_url": _track_artwork(
-                    track
-                ),
-                "audio_url": _track_audio(
-                    track
-                ),
-                "url": _track_url(
-                    track
-                ),
-                "genre": genre,
-                "mood": mood,
-                "bpm": bpm,
-                "key": key,
-                "description": str(
-                    _model_value(
-                        track,
-                        "description",
-                        "short_description",
-                        default="",
-                    )
-                    or ""
-                ),
-                "sales_model": _track_sales_model(
-                    track
-                ),
-            }
-        )
-
-    return catalog
-
-
-def _build_producer_directory(
-    tracks: list[Track],
-    limit: int = 8,
-) -> list[dict[str, Any]]:
-    grouped: dict[
-        str,
-        dict[str, Any]
-    ] = {}
-
-    for track in tracks:
-        profile = _producer_profile(
-            track
-        )
-
-        if profile is None:
-            continue
-
-        slug = _model_value(
-            profile,
-            "slug",
-            default=None,
-        )
-
-        if not slug:
-            continue
-
-        key = str(
+        ),
+        "description": str(
             _model_value(
-                profile,
-                "id",
-                default=slug,
+                track,
+                "description",
+                "short_description",
+                default="",
             )
-        )
-
-        if key not in grouped:
-            grouped[key] = {
-                "profile": profile,
-                "name": _producer_name(
-                    track
-                ),
-                "slug": str(slug),
-                "url": f"/store/{slug}",
-                "bio": str(
-                    _model_value(
-                        profile,
-                        "bio",
-                        default="",
-                    )
-                    or ""
-                ),
-                "avatar_url": _model_value(
-                    profile,
-                    "avatar_path",
-                    "avatar_url",
-                    default=None,
-                ),
-                "beat_count": 0,
-                "latest_track": track,
-                "latest_created_at": _model_value(
-                    track,
-                    "created_at",
-                    default=None,
-                ),
-            }
-
-        grouped[key][
-            "beat_count"
-        ] += 1
-
-        created_at = _model_value(
-            track,
-            "created_at",
-            default=None,
-        )
-
-        latest_created_at = grouped[key][
-            "latest_created_at"
-        ]
-
-        if (
-            created_at is not None
-            and (
-                latest_created_at is None
-                or created_at
-                > latest_created_at
-            )
-        ):
-            grouped[key][
-                "latest_created_at"
-            ] = created_at
-
-            grouped[key][
-                "latest_track"
-            ] = track
-
-    producers = list(
-        grouped.values()
-    )
-
-    producers.sort(
-        key=lambda item: (
-            item["beat_count"],
-            item["latest_created_at"]
-            or 0,
-            item["name"].lower(),
+            or ""
         ),
-        reverse=True,
-    )
-
-    return producers[:limit]
+    }
 
 
-def _marketplace_context(
-    request: Request,
-    current_user,
-    tracks: list[Track],
-    search: str,
-    genre: str,
-    mood: str,
-    min_price: Optional[float],
-    max_price: Optional[float],
-    page: int,
-    per_page: int,
-    title: str,
-    subtitle: str,
-    show_producers: bool = True,
-):
-    total = len(tracks)
-
-    total_pages = max(
-        1,
-        math.ceil(
-            total / per_page
-        ),
-    )
-
-    if page > total_pages:
-        page = total_pages
-
-    start = (
-        page - 1
-    ) * per_page
-
-    end = start + per_page
-
-    page_tracks = tracks[
-        start:end
-    ]
-
-    catalog = _build_catalog(
-        page_tracks
-    )
-
+def _catalog_filters(tracks: list[Track]) -> tuple[list[str], list[str]]:
     genres = sorted(
         {
             str(
@@ -707,141 +486,61 @@ def _marketplace_context(
         key=str.lower,
     )
 
-    producer_source = (
-        tracks
-        if show_producers
-        else []
-    )
+    return genres, moods
 
-    producers = (
-        _build_producer_directory(
-            producer_source
+
+def _find_track(
+    db: Session,
+    identifier: str,
+) -> Optional[Track]:
+    track = None
+
+    slug_field = getattr(Track, "slug", None)
+
+    if slug_field is not None:
+        try:
+            track = (
+                db.query(Track)
+                .filter(slug_field == identifier)
+                .first()
+            )
+        except Exception:
+            track = None
+
+    if track is not None:
+        return track
+
+    try:
+        track_id = int(identifier)
+    except (TypeError, ValueError):
+        return None
+
+    id_field = getattr(Track, "id", None)
+
+    if id_field is None:
+        return None
+
+    try:
+        return (
+            db.query(Track)
+            .filter(id_field == track_id)
+            .first()
         )
-    )
-
-    all_producers = (
-        _build_producer_directory(
-            producer_source,
-            limit=max(
-                8,
-                len(producer_source),
-            ),
-        )
-    )
-
-    return {
-        "request": request,
-        "current_user": current_user,
-        "user": current_user,
-        "current_year": 2026,
-
-        "tracks": page_tracks,
-        "beats": page_tracks,
-        "catalog": catalog,
-
-        "producers": producers,
-        "producer_count": len(
-            producers
-        ),
-        "total_producers": len(
-            all_producers
-        ),
-
-        "total": total,
-        "total_results": total,
-
-        "page": page,
-        "track_page": page,
-
-        "per_page": per_page,
-        "track_per_page": per_page,
-
-        "total_pages": total_pages,
-        "track_total_pages": total_pages,
-
-        "genres": genres,
-        "moods": moods,
-
-        "query": search,
-        "q": search,
-        "genre": genre,
-        "mood": mood,
-
-        "min_price": min_price,
-        "max_price": max_price,
-
-        "has_previous": page > 1,
-        "has_next": page < total_pages,
-
-        "previous_page": max(
-            1,
-            page - 1,
-        ),
-
-        "next_page": min(
-            total_pages,
-            page + 1,
-        ),
-
-        "catalog_start": (
-            0
-            if total == 0
-            else start + 1
-        ),
-
-        "catalog_end": min(
-            end,
-            total,
-        ),
-
-        "title": title,
-        "subtitle": subtitle,
-        "show_producers": show_producers,
-    }
+    except Exception:
+        return None
 
 
-# ======================================================================
-# BEAT MARKETPLACE
-# ======================================================================
-
-@router.get(
-    "/beats",
-    name="beats",
-)
+@router.get("/beats", name="beats")
 def beats_catalog(
     request: Request,
-    q: str = Query(
-        default="",
-        max_length=100,
-    ),
-    genre: str = Query(
-        default="",
-        max_length=60,
-    ),
-    mood: str = Query(
-        default="",
-        max_length=60,
-    ),
-    min_price: Optional[float] = Query(
-        default=None,
-        ge=0,
-    ),
-    max_price: Optional[float] = Query(
-        default=None,
-        ge=0,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    per_page: int = Query(
-        default=24,
-        ge=6,
-        le=48,
-    ),
-    current_user=Depends(
-        get_optional_user
-    ),
+    q: str = Query(default="", max_length=100),
+    genre: str = Query(default="", max_length=60),
+    mood: str = Query(default="", max_length=60),
+    min_price: Optional[float] = Query(default=None, ge=0),
+    max_price: Optional[float] = Query(default=None, ge=0),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=24, ge=6, le=48),
+    current_user=Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     search = q.strip()
@@ -861,68 +560,86 @@ def beats_catalog(
         tracks = [
             track
             for track in tracks
-            if _track_is_public(
-                track
-            )
+            if _track_is_public(track)
         ]
 
     except Exception:
         logger.exception(
-            "Unable to load BeatHub marketplace"
+            "Unable to load BeatHub beat catalog"
         )
-
         tracks = []
 
-    context = _marketplace_context(
-        request=request,
-        current_user=current_user,
-        tracks=tracks,
-        search=search,
-        genre=genre,
-        mood=mood,
-        min_price=min_price,
-        max_price=max_price,
-        page=page,
-        per_page=per_page,
-        title="Find your next sound.",
-        subtitle=(
-            "Discover beats from BeatHub producers, "
-            "explore their stores, preview available sounds "
-            "and choose the right license for your next release."
-        ),
+    total = len(tracks)
+
+    total_pages = max(
+        1,
+        math.ceil(total / per_page),
     )
+
+    if page > total_pages:
+        page = total_pages
+
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    page_tracks = tracks[start:end]
+
+    catalog = [
+        _catalog_item(track)
+        for track in page_tracks
+    ]
+
+    genres, moods = _catalog_filters(tracks)
 
     return templates.TemplateResponse(
         request,
         "beats.html",
-        context,
+        {
+            "request": request,
+            "current_user": current_user,
+            "user": current_user,
+            "current_year": 2026,
+            "tracks": page_tracks,
+            "beats": page_tracks,
+            "catalog": catalog,
+            "total": total,
+            "total_results": total,
+            "page": page,
+            "track_page": page,
+            "per_page": per_page,
+            "track_per_page": per_page,
+            "total_pages": total_pages,
+            "track_total_pages": total_pages,
+            "genres": genres,
+            "moods": moods,
+            "query": search,
+            "q": search,
+            "genre": genre,
+            "mood": mood,
+            "min_price": min_price,
+            "max_price": max_price,
+            "has_previous": page > 1,
+            "has_next": page < total_pages,
+            "previous_page": max(1, page - 1),
+            "next_page": min(total_pages, page + 1),
+            "catalog_start": (
+                0
+                if total == 0
+                else start + 1
+            ),
+            "catalog_end": min(end, total),
+            "title": "Beat Marketplace",
+        },
     )
 
 
-# ======================================================================
-# HOT PICKS
-# ======================================================================
-
-@router.get(
-    "/hot-picks"
-)
+@router.get("/hot-picks")
 def hot_picks(
     request: Request,
-    q: str = Query(
-        default="",
-        max_length=100,
-    ),
-    genre: str = Query(
-        default="",
-        max_length=60,
-    ),
-    mood: str = Query(
-        default="",
-        max_length=60,
-    ),
-    current_user=Depends(
-        get_optional_user
-    ),
+    q: str = Query(default="", max_length=100),
+    genre: str = Query(default="", max_length=60),
+    mood: str = Query(default="", max_length=60),
+    current_user=Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     search = q.strip()
@@ -931,68 +648,190 @@ def hot_picks(
 
     try:
         tracks = _query_catalog(
-            db=db,
-            search=search,
-            genre=genre,
-            mood=mood,
-            min_price=None,
-            max_price=None,
+            db,
+            search,
+            genre,
+            mood,
+            None,
+            None,
         )
 
         tracks = [
             track
             for track in tracks
-            if _track_is_public(
-                track
-            )
+            if _track_is_public(track)
         ][:12]
 
     except Exception:
         logger.exception(
             "Unable to load BeatHub hot picks"
         )
-
         tracks = []
 
-    context = _marketplace_context(
-        request=request,
-        current_user=current_user,
-        tracks=tracks,
-        search=search,
-        genre=genre,
-        mood=mood,
-        min_price=None,
-        max_price=None,
-        page=1,
-        per_page=12,
-        title="Hot Picks",
-        subtitle=(
-            "Freshly published BeatHub beats worth hearing "
-            "right now. Open a producer store to explore more."
-        ),
-    )
-
-    context["is_hot_picks"] = True
+    catalog = [
+        _catalog_item(track)
+        for track in tracks
+    ]
 
     return templates.TemplateResponse(
         request,
         "beats.html",
-        context,
+        {
+            "request": request,
+            "current_user": current_user,
+            "user": current_user,
+            "current_year": 2026,
+            "tracks": tracks,
+            "beats": tracks,
+            "catalog": catalog,
+            "total": len(tracks),
+            "total_results": len(tracks),
+            "page": 1,
+            "track_page": 1,
+            "per_page": 12,
+            "track_per_page": 12,
+            "total_pages": 1,
+            "track_total_pages": 1,
+            "genres": [],
+            "moods": [],
+            "query": search,
+            "q": search,
+            "genre": genre,
+            "mood": mood,
+            "min_price": None,
+            "max_price": None,
+            "has_previous": False,
+            "has_next": False,
+            "previous_page": 1,
+            "next_page": 1,
+            "catalog_start": (
+                1 if tracks else 0
+            ),
+            "catalog_end": len(tracks),
+            "title": "Hot Picks",
+        },
     )
 
 
-# ======================================================================
-# SESSIONS
-# ======================================================================
+@router.get(
+    "/track/{identifier}/artwork",
+    name="track_artwork",
+)
+def track_artwork(
+    identifier: str,
+    db: Session = Depends(get_db),
+):
+    track = _find_track(
+        db,
+        identifier,
+    )
+
+    if track is None:
+        return FileResponse(
+            "app/static/images/beat-placeholder.png",
+            media_type="image/png",
+        )
+
+    artwork = _track_artwork_path(track)
+
+    if not artwork:
+        placeholder = Path(
+            "app/static/images/beat-placeholder.png"
+        )
+
+        if placeholder.exists():
+            return FileResponse(
+                placeholder,
+                media_type="image/png",
+            )
+
+        return {
+            "detail": "Artwork not available"
+        }
+
+    local_path = _safe_local_path(artwork)
+
+    if local_path is None:
+        return {
+            "detail": "Artwork is externally hosted"
+        }
+
+    suffix = local_path.suffix.lower()
+
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".avif": "image/avif",
+    }
+
+    return FileResponse(
+        local_path,
+        media_type=media_types.get(
+            suffix,
+            "application/octet-stream",
+        ),
+    )
+
 
 @router.get(
-    "/sessions"
+    "/track/{identifier}/preview",
+    name="track_preview",
 )
+def track_preview(
+    identifier: str,
+    db: Session = Depends(get_db),
+):
+    track = _find_track(
+        db,
+        identifier,
+    )
+
+    if track is None:
+        return {
+            "detail": "Track not found"
+        }
+
+    audio = _track_audio(track)
+
+    if not audio:
+        return {
+            "detail": "Preview not available"
+        }
+
+    local_path = _safe_local_path(audio)
+
+    if local_path is not None:
+        suffix = local_path.suffix.lower()
+
+        media_types = {
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".m4a": "audio/mp4",
+            ".aac": "audio/aac",
+            ".ogg": "audio/ogg",
+            ".opus": "audio/opus",
+        }
+
+        return FileResponse(
+            local_path,
+            media_type=media_types.get(
+                suffix,
+                "application/octet-stream",
+            ),
+        )
+
+    return {
+        "url": audio
+    }
+
+
+@router.get("/sessions")
 def sessions_page(
     request: Request,
-    current_user=Depends(
-        get_optional_user
-    ),
+    current_user=Depends(get_optional_user),
 ):
     return templates.TemplateResponse(
         request,
