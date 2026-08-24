@@ -1,7 +1,26 @@
+"""
+BeatHub merchandise routes.
+
+Production-ready merchandise implementation.
+
+Features:
+- Creator merchandise dashboard
+- Merchandise creation
+- Public merchandise marketplace
+- Creator merchandise store
+- Individual merchandise pages
+- Local media compatibility
+- Cloudflare R2 compatibility
+- Automatic migration of existing local merchandise images to R2
+- Safe image URL generation
+- Existing merchandise database compatibility
+
+Existing Track, Album, Order, M-Pesa and withdrawal behaviour is untouched.
+"""
+
 from __future__ import annotations
 
 import os
-import threading
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -31,13 +50,15 @@ from app.services import mpesa
 from app.services.storage import (
     ALLOWED_IMAGE_EXT,
     UploadValidationError,
+    _r2_is_configured,
     _r2_client,
     _r2_bucket,
-    _r2_is_configured,
+    _parse_r2_path,
     media_url,
     r2_presigned_url,
     save_upload,
     save_upload_to_r2,
+    storage_exists,
 )
 from app.utils.deps import (
     get_optional_user,
@@ -46,9 +67,7 @@ from app.utils.deps import (
 )
 
 
-router = APIRouter(
-    tags=["merchandise"]
-)
+router = APIRouter(tags=["merchandise"])
 
 templates = Jinja2Templates(
     directory="app/templates"
@@ -60,172 +79,112 @@ MERCH_ORDER_TABLE = "beathub_merchandise_orders"
 MERCH_ORDER_NOTE_MAX = 300
 MERCH_MAX_QUANTITY = 20
 
-_SCHEMA_READY = False
-_SCHEMA_LOCK = threading.Lock()
 
-
-# ======================================================================
-# DATABASE SCHEMA
-# ======================================================================
-
-def ensure_merch_table(
-    db: Session,
-) -> None:
-    global _SCHEMA_READY
-
-    if _SCHEMA_READY:
-        return
-
-    with _SCHEMA_LOCK:
-        if _SCHEMA_READY:
-            return
-
-        db.execute(
-            text(
-                f"""
-                CREATE TABLE IF NOT EXISTS {MERCH_TABLE} (
-                    id VARCHAR(36) PRIMARY KEY,
-                    creator_profile_id VARCHAR(255) NOT NULL,
-                    name VARCHAR(160) NOT NULL,
-                    slug VARCHAR(220) NOT NULL UNIQUE,
-                    description TEXT,
-                    price NUMERIC(12, 2) NOT NULL,
-                    image_path TEXT NOT NULL,
-                    created_at TIMESTAMP NOT NULL
-                        DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-        )
-
-        db.execute(
-            text(
-                f"""
-                CREATE INDEX IF NOT EXISTS
-                idx_{MERCH_TABLE}_creator
-                ON {MERCH_TABLE}(creator_profile_id)
-                """
-            )
-        )
-
-        db.commit()
-
-        _SCHEMA_READY = True
-
-
-def ensure_merch_orders_table(
-    db: Session,
-) -> None:
-    global _SCHEMA_READY
-
-    if _SCHEMA_READY:
-        return
-
-    with _SCHEMA_LOCK:
-        if _SCHEMA_READY:
-            return
-
-        db.execute(
-            text(
-                f"""
-                CREATE TABLE IF NOT EXISTS {MERCH_TABLE} (
-                    id VARCHAR(36) PRIMARY KEY,
-                    creator_profile_id VARCHAR(255) NOT NULL,
-                    name VARCHAR(160) NOT NULL,
-                    slug VARCHAR(220) NOT NULL UNIQUE,
-                    description TEXT,
-                    price NUMERIC(12, 2) NOT NULL,
-                    image_path TEXT NOT NULL,
-                    created_at TIMESTAMP NOT NULL
-                        DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-        )
-
-        db.execute(
-            text(
-                f"""
-                CREATE INDEX IF NOT EXISTS
-                idx_{MERCH_TABLE}_creator
-                ON {MERCH_TABLE}(creator_profile_id)
-                """
-            )
-        )
-
-        db.execute(
-            text(
-                f"""
-                CREATE TABLE IF NOT EXISTS {MERCH_ORDER_TABLE} (
-                    id VARCHAR(36) PRIMARY KEY,
-                    product_id VARCHAR(36) NOT NULL,
-                    buyer_id VARCHAR(255) NOT NULL,
-                    quantity INTEGER NOT NULL DEFAULT 1,
-                    unit_price NUMERIC(12, 2) NOT NULL,
-                    total_amount NUMERIC(12, 2) NOT NULL,
-                    phone_number VARCHAR(32) NOT NULL,
-                    order_note VARCHAR(300),
-                    status VARCHAR(32) NOT NULL
-                        DEFAULT 'pending_payment',
-                    merchant_request_id VARCHAR(255),
-                    checkout_request_id VARCHAR(255) UNIQUE,
-                    mpesa_receipt VARCHAR(128),
-                    failure_reason VARCHAR(500),
-                    created_at TIMESTAMP NOT NULL
-                        DEFAULT CURRENT_TIMESTAMP,
-                    paid_at TIMESTAMP NULL
-                )
-                """
-            )
-        )
-
-        db.execute(
-            text(
-                f"""
-                CREATE INDEX IF NOT EXISTS
-                idx_{MERCH_ORDER_TABLE}_product
-                ON {MERCH_ORDER_TABLE}(product_id)
-                """
-            )
-        )
-
-        db.execute(
-            text(
-                f"""
-                CREATE INDEX IF NOT EXISTS
-                idx_{MERCH_ORDER_TABLE}_buyer
-                ON {MERCH_ORDER_TABLE}(buyer_id)
-                """
-            )
-        )
-
-        db.execute(
-            text(
-                f"""
-                CREATE INDEX IF NOT EXISTS
-                idx_{MERCH_ORDER_TABLE}_status
-                ON {MERCH_ORDER_TABLE}(status)
-                """
-            )
-        )
-
-        db.commit()
-
-        _SCHEMA_READY = True
-
-
-def ensure_merch_schema(
-    db: Session,
-    orders: bool = False,
-) -> None:
-    if orders:
-        ensure_merch_orders_table(db)
-    else:
-        ensure_merch_table(db)
 
 
 # ======================================================================
-# TEMPLATE CONTEXT
+# DATABASE COMPATIBILITY
+# ======================================================================
+
+def ensure_merch_table(db: Session) -> None:
+    """
+    Create the additive merchandise table when required.
+
+    Compatible with SQLite and PostgreSQL.
+    """
+
+    db.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {MERCH_TABLE} (
+                id VARCHAR(36) PRIMARY KEY,
+                creator_profile_id VARCHAR(255) NOT NULL,
+                name VARCHAR(160) NOT NULL,
+                slug VARCHAR(220) NOT NULL UNIQUE,
+                description TEXT,
+                price NUMERIC(12, 2) NOT NULL,
+                image_path TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+    db.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS
+            idx_{MERCH_TABLE}_creator
+            ON {MERCH_TABLE}(creator_profile_id)
+            """
+        )
+    )
+
+    db.commit()
+
+
+def ensure_merch_orders_table(db: Session) -> None:
+    """Create the additive physical-merchandise orders table."""
+
+    db.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {MERCH_ORDER_TABLE} (
+                id VARCHAR(36) PRIMARY KEY,
+                product_id VARCHAR(36) NOT NULL,
+                buyer_id VARCHAR(255) NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                unit_price NUMERIC(12, 2) NOT NULL,
+                total_amount NUMERIC(12, 2) NOT NULL,
+                phone_number VARCHAR(32) NOT NULL,
+                order_note VARCHAR(300),
+                status VARCHAR(32) NOT NULL DEFAULT 'pending_payment',
+                merchant_request_id VARCHAR(255),
+                checkout_request_id VARCHAR(255) UNIQUE,
+                mpesa_receipt VARCHAR(128),
+                failure_reason VARCHAR(500),
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                paid_at TIMESTAMP NULL
+            )
+            """
+        )
+    )
+
+    db.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS
+            idx_{MERCH_ORDER_TABLE}_product
+            ON {MERCH_ORDER_TABLE}(product_id)
+            """
+        )
+    )
+
+    db.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS
+            idx_{MERCH_ORDER_TABLE}_buyer
+            ON {MERCH_ORDER_TABLE}(buyer_id)
+            """
+        )
+    )
+
+    db.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS
+            idx_{MERCH_ORDER_TABLE}_status
+            ON {MERCH_ORDER_TABLE}(status)
+            """
+        )
+    )
+
+    db.commit()
+
+
+# ======================================================================
+# SHARED TEMPLATE CONTEXT
 # ======================================================================
 
 def _ctx(
@@ -251,9 +210,7 @@ def _ctx(
 # SLUG HELPERS
 # ======================================================================
 
-def _slugify(
-    value: str,
-) -> str:
+def _slugify(value: str) -> str:
     value = (
         value or ""
     ).strip().lower()
@@ -265,6 +222,7 @@ def _slugify(
         if char.isalnum():
             chars.append(char)
             previous_dash = False
+
         elif not previous_dash:
             chars.append("-")
             previous_dash = True
@@ -298,7 +256,9 @@ def _unique_merch_slug(
             LIMIT 1
             """
         ),
-        {"slug": slug},
+        {
+            "slug": slug,
+        },
     ).first():
 
         suffix_text = f"-{suffix}"
@@ -314,32 +274,34 @@ def _unique_merch_slug(
 
 
 # ======================================================================
-# LOCAL STORAGE
+# STORAGE HELPERS
 # ======================================================================
 
 def _local_media_root() -> Path:
-    configured = getattr(
-        settings,
-        "MEDIA_ROOT",
-        None,
-    )
+    """
+    Return the configured local media root.
+    """
 
-    if configured:
-        return Path(
-            str(configured)
-        ).expanduser().resolve()
-
-    return (
-        Path(__file__)
-        .resolve()
-        .parents[2]
-        / "media"
-    )
+    return Path(
+        str(
+            getattr(
+                settings,
+                "MEDIA_ROOT",
+                "media",
+            )
+        )
+    ).resolve()
 
 
 def _safe_local_path(
     stored_path: str,
 ) -> Optional[Path]:
+    """
+    Convert a stored local path into a safe filesystem path.
+
+    Prevents directory traversal.
+    """
+
     if not stored_path:
         return None
 
@@ -349,18 +311,13 @@ def _safe_local_path(
         .lstrip("/")
     )
 
-    if value.startswith(
-        "media/"
-    ):
+    if value.startswith("media/"):
         value = value[6:]
 
-    if value.startswith(
-        "static/"
-    ):
-        static_root = (
-            Path("static")
-            .resolve()
-        )
+    if value.startswith("static/"):
+        static_root = Path(
+            "static"
+        ).resolve()
 
         candidate = (
             Path(value)
@@ -376,10 +333,7 @@ def _safe_local_path(
 
         return candidate
 
-    media_root = (
-        _local_media_root()
-        .resolve()
-    )
+    media_root = _local_media_root()
 
     candidate = (
         media_root / value
@@ -396,8 +350,13 @@ def _safe_local_path(
 
 
 def _local_image_url(
+    request: Request,
     path: Optional[str],
 ) -> Optional[str]:
+    """
+    Return a browser URL for a local merchandise image.
+    """
+
     if not path:
         return None
 
@@ -407,38 +366,66 @@ def _local_image_url(
         .lstrip("/")
     )
 
-    if clean.startswith(
-        "media/"
-    ):
+    if clean.startswith("media/"):
         return f"/{clean}"
 
-    if clean.startswith(
-        "static/"
-    ):
+    if clean.startswith("static/"):
         return f"/{clean}"
 
     return f"/media/{clean}"
 
 
-# ======================================================================
-# IMAGE URL
-# ======================================================================
-
 def _is_r2_path(
     path: Optional[str],
 ) -> bool:
-    return bool(
+    if not path:
+        return False
+
+    return str(
         path
-        and str(path)
-        .strip()
-        .lower()
-        .startswith("r2://")
+    ).strip().lower().startswith(
+        "r2://"
     )
 
 
-def _image_url(
+def _r2_image_url(
     path: Optional[str],
 ) -> Optional[str]:
+    """
+    Generate a presigned R2 URL.
+
+    Returns None rather than breaking a page if R2
+    is temporarily unavailable.
+    """
+
+    if not path:
+        return None
+
+    try:
+        return r2_presigned_url(
+            path,
+            expires=3600,
+        )
+    except Exception:
+        return None
+
+
+def _image_url(
+    request: Request,
+    path: Optional[str],
+) -> Optional[str]:
+    """
+    Resolve any stored merchandise image into a browser URL.
+
+    Supported values:
+
+        r2://bucket/key
+        https://...
+        media/merch/file.jpg
+        merch/file.jpg
+        /media/merch/file.jpg
+    """
+
     if not path:
         return None
 
@@ -447,62 +434,56 @@ def _image_url(
     if not value:
         return None
 
-    if value.startswith(
-        "http://"
-    ) or value.startswith(
-        "https://"
+    # --------------------------------------------------------------
+    # Existing external URL
+    # --------------------------------------------------------------
+
+    if (
+        value.startswith("https://")
+        or value.startswith("http://")
     ):
         return value
 
+    # --------------------------------------------------------------
+    # R2 object
+    # --------------------------------------------------------------
+
     if _is_r2_path(value):
-        try:
-            url = r2_presigned_url(
-                value,
-                expires=3600,
-            )
 
-            if url:
-                return url
+        url = _r2_image_url(
+            value
+        )
 
-        except Exception:
-            pass
+        return url
 
-        return None
+    # --------------------------------------------------------------
+    # Local media
+    # --------------------------------------------------------------
 
     local_path = _safe_local_path(
         value
     )
 
     if local_path is not None:
+
         try:
             if (
                 local_path.exists()
                 and local_path.is_file()
             ):
                 return _local_image_url(
-                    value
+                    request,
+                    value,
                 )
         except Exception:
             pass
 
-    clean = (
-        value
-        .replace("\\", "/")
-        .lstrip("/")
-    )
-
-    if clean.startswith(
-        "media/"
-    ):
-        return f"/{clean}"
-
-    if clean.startswith(
-        "static/"
-    ):
-        return f"/{clean}"
+    # --------------------------------------------------------------
+    # Compatibility fallback
+    # --------------------------------------------------------------
 
     return media_url(
-        clean
+        value
     )
 
 
@@ -510,11 +491,21 @@ def _image_url(
 # R2 MIGRATION
 # ======================================================================
 
-def _migrate_local_image_to_r2(
+async def _migrate_local_image_to_r2(
     db: Session,
     product_id: str,
     image_path: Optional[str],
 ) -> Optional[str]:
+    """
+    Migrate an existing local merchandise image into R2.
+
+    This allows products created before the R2 merchandise
+    implementation to become persistent without requiring
+    the creator to upload the same image again.
+
+    If R2 is not configured, the original local path is preserved.
+    """
+
     if not image_path:
         return None
 
@@ -525,9 +516,11 @@ def _migrate_local_image_to_r2(
     if not value:
         return None
 
+    # Already R2.
     if _is_r2_path(value):
         return value
 
+    # R2 unavailable.
     try:
         if not _r2_is_configured():
             return value
@@ -547,16 +540,26 @@ def _migrate_local_image_to_r2(
             or not local_path.is_file()
         ):
             return value
+    except Exception:
+        return value
 
+    # --------------------------------------------------------------
+    # Read file.
+    # --------------------------------------------------------------
+
+    try:
         contents = (
             local_path.read_bytes()
         )
-
     except Exception:
         return value
 
     if not contents:
         return value
+
+    # --------------------------------------------------------------
+    # Determine extension/content type.
+    # --------------------------------------------------------------
 
     extension = (
         local_path.suffix
@@ -566,14 +569,26 @@ def _migrate_local_image_to_r2(
     if extension not in ALLOWED_IMAGE_EXT:
         return value
 
-    content_types = {
+    content_type_map = {
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".png": "image/png",
         ".webp": "image/webp",
     }
 
+    content_type = (
+        content_type_map.get(
+            extension,
+            "application/octet-stream",
+        )
+    )
+
+    # --------------------------------------------------------------
+    # Upload directly to R2.
+    # --------------------------------------------------------------
+
     try:
+
         bucket = _r2_bucket()
 
         if not bucket:
@@ -591,15 +606,16 @@ def _migrate_local_image_to_r2(
             Bucket=bucket,
             Key=key,
             Body=contents,
-            ContentType=content_types.get(
-                extension,
-                "application/octet-stream",
-            ),
+            ContentType=content_type,
         )
 
         r2_path = (
             f"r2://{bucket}/{key}"
         )
+
+        # ----------------------------------------------------------
+        # Update database.
+        # ----------------------------------------------------------
 
         db.execute(
             text(
@@ -625,37 +641,11 @@ def _migrate_local_image_to_r2(
 
 
 # ======================================================================
-# PRODUCT QUERIES
+# PRODUCT ROW HELPERS
 # ======================================================================
 
-def _load_merch_product(
-    db: Session,
-    slug: str,
-):
-    return db.execute(
-        text(
-            f"""
-            SELECT
-                id,
-                creator_profile_id,
-                name,
-                slug,
-                description,
-                price,
-                image_path,
-                created_at
-            FROM {MERCH_TABLE}
-            WHERE slug = :slug
-            LIMIT 1
-            """
-        ),
-        {
-            "slug": str(slug).strip()
-        },
-    ).mappings().first()
-
-
 def _rows_for_creator(
+    request: Request,
     db: Session,
     profile_id: str,
 ):
@@ -686,10 +676,12 @@ def _rows_for_creator(
     products = []
 
     for row in rows:
+
         item = dict(row)
 
         item["image_url"] = _image_url(
-            item.get("image_path")
+            request,
+            item.get("image_path"),
         )
 
         products.append(item)
@@ -698,6 +690,7 @@ def _rows_for_creator(
 
 
 def _all_public_rows(
+    request: Request,
     db: Session,
 ):
     rows = db.execute(
@@ -720,13 +713,16 @@ def _all_public_rows(
     ).mappings().all()
 
     profile_ids = {
-        str(row["creator_profile_id"])
+        str(
+            row["creator_profile_id"]
+        )
         for row in rows
     }
 
     profiles = {}
 
     if profile_ids:
+
         profile_rows = (
             db.query(Profile)
             .filter(
@@ -745,6 +741,7 @@ def _all_public_rows(
     products = []
 
     for row in rows:
+
         item = dict(row)
 
         owner = profiles.get(
@@ -755,10 +752,12 @@ def _all_public_rows(
             )
         )
 
-        item["creator_slug"] = getattr(
-            owner,
-            "slug",
-            None,
+        item["creator_slug"] = (
+            getattr(
+                owner,
+                "slug",
+                None,
+            )
         )
 
         item["creator_name"] = (
@@ -771,7 +770,8 @@ def _all_public_rows(
         )
 
         item["image_url"] = _image_url(
-            item.get("image_path")
+            request,
+            item.get("image_path"),
         )
 
         products.append(item)
@@ -780,7 +780,7 @@ def _all_public_rows(
 
 
 # ======================================================================
-# CREATOR MERCH DASHBOARD
+# CREATOR MERCHANDISE DASHBOARD
 # ======================================================================
 
 @router.get(
@@ -791,11 +791,6 @@ def merch_dashboard(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
-    )
-
     profile = getattr(
         user,
         "profile",
@@ -808,7 +803,13 @@ def merch_dashboard(
             detail="Creator profile missing.",
         )
 
+    ensure_merch_table(
+        db
+    )
+    ensure_merch_orders_table(db)
+
     products = _rows_for_creator(
+        request,
         db,
         str(profile.id),
     )
@@ -822,12 +823,99 @@ def merch_dashboard(
             profile=profile,
             products=products,
             product_count=len(products),
+            success=request.query_params.get("success"),
+            error=request.query_params.get("error"),
         ),
     )
 
 
 # ======================================================================
-# NEW MERCH
+# DELETE MERCHANDISE
+# ======================================================================
+
+@router.post("/dashboard/merch/{product_id}/delete")
+def merch_delete(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+):
+    """Delete only the signed-in creator's merchandise item."""
+    profile = getattr(user, "profile", None)
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Creator profile missing.")
+
+    ensure_merch_table(db)
+    ensure_merch_orders_table(db)
+
+    row = db.execute(
+        text(
+            f"""
+            SELECT id, creator_profile_id, name, image_path
+            FROM {MERCH_TABLE}
+            WHERE id = :id
+            LIMIT 1
+            """
+        ),
+        {"id": str(product_id)},
+    ).mappings().first()
+
+    if not row or str(row["creator_profile_id"]) != str(profile.id):
+        raise HTTPException(status_code=404, detail="Merchandise item not found.")
+
+    order_exists = db.execute(
+        text(
+            f"""
+            SELECT 1
+            FROM {MERCH_ORDER_TABLE}
+            WHERE product_id = :product_id
+            LIMIT 1
+            """
+        ),
+        {"product_id": str(product_id)},
+    ).first()
+
+    if order_exists:
+        return RedirectResponse(
+            url="/dashboard/merch?error=This merchandise item cannot be deleted because it already has an order.",
+            status_code=303,
+        )
+
+    image_path = row["image_path"]
+
+    try:
+        db.execute(
+            text(
+                f"DELETE FROM {MERCH_TABLE} WHERE id = :id AND creator_profile_id = :creator_profile_id"
+            ),
+            {"id": str(product_id), "creator_profile_id": str(profile.id)},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        value = str(image_path or "").strip()
+        if value.startswith(("r2://", "s3://")):
+            bucket, key = _parse_r2_path(value.replace("s3://", "r2://", 1))
+            if bucket and key:
+                _r2_client().delete_object(Bucket=bucket, Key=key)
+        else:
+            local = _safe_local_path(value)
+            if local and local.exists() and local.is_file():
+                local.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    return RedirectResponse(
+        url="/dashboard/merch?success=Merchandise%20deleted%20successfully.",
+        status_code=303,
+    )
+
+
+# ======================================================================
+# NEW MERCHANDISE PAGE
 # ======================================================================
 
 @router.get(
@@ -848,7 +936,7 @@ def merch_new_page(
 
 
 # ======================================================================
-# CREATE MERCH
+# CREATE MERCHANDISE
 # ======================================================================
 
 @router.post(
@@ -863,11 +951,6 @@ async def merch_create(
     price: str = Form(...),
     image: UploadFile = File(...),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
-    )
-
     profile = getattr(
         user,
         "profile",
@@ -879,6 +962,10 @@ async def merch_create(
             status_code=400,
             detail="Creator profile missing.",
         )
+
+    ensure_merch_table(
+        db
+    )
 
     name = (
         name or ""
@@ -892,9 +979,8 @@ async def merch_create(
         price or ""
     ).strip()
 
-    def error(
-        message: str,
-    ):
+    def error(message: str):
+
         return templates.TemplateResponse(
             request,
             "merchandise_new.html",
@@ -909,6 +995,10 @@ async def merch_create(
             status_code=400,
         )
 
+    # --------------------------------------------------------------
+    # Name
+    # --------------------------------------------------------------
+
     if not name:
         return error(
             "Product name is required."
@@ -919,15 +1009,24 @@ async def merch_create(
             "Product name is too long. Keep it under 160 characters."
         )
 
+    # --------------------------------------------------------------
+    # Description
+    # --------------------------------------------------------------
+
     if len(description) > 4000:
         return error(
             "Product description is too long. Keep it under 4,000 characters."
         )
 
+    # --------------------------------------------------------------
+    # Price
+    # --------------------------------------------------------------
+
     try:
         price_value = Decimal(
             price_raw
         )
+
     except (
         InvalidOperation,
         ValueError,
@@ -942,6 +1041,10 @@ async def merch_create(
             "Product price must be greater than zero."
         )
 
+    # --------------------------------------------------------------
+    # Image
+    # --------------------------------------------------------------
+
     if (
         image is None
         or not image.filename
@@ -950,9 +1053,13 @@ async def merch_create(
             "A product image is required."
         )
 
-    extension = Path(
-        image.filename
-    ).suffix.lower()
+    # Validate extension before touching storage.
+
+    extension = (
+        Path(
+            image.filename
+        ).suffix.lower()
+    )
 
     if extension not in ALLOWED_IMAGE_EXT:
         return error(
@@ -960,34 +1067,55 @@ async def merch_create(
             "Use JPG, JPEG, PNG or WEBP."
         )
 
+    # --------------------------------------------------------------
+    # Upload.
+    #
+    # Prefer R2 because Render's local filesystem is not
+    # persistent across deployments.
+    # --------------------------------------------------------------
+
     try:
+
         try:
             use_r2 = _r2_is_configured()
         except Exception:
             use_r2 = False
 
         if use_r2:
-            image_path = await save_upload_to_r2(
-                image,
-                "merch",
-                ALLOWED_IMAGE_EXT,
+
+            image_path = (
+                await save_upload_to_r2(
+                    image,
+                    "merch",
+                    ALLOWED_IMAGE_EXT,
+                )
             )
+
         else:
-            image_path = await save_upload(
-                image,
-                "merch",
-                ALLOWED_IMAGE_EXT,
+
+            image_path = (
+                await save_upload(
+                    image,
+                    "merch",
+                    ALLOWED_IMAGE_EXT,
+                )
             )
 
     except UploadValidationError as exc:
+
         return error(
             str(exc)
         )
 
     except Exception as exc:
+
         return error(
             f"Product image upload failed: {exc}"
         )
+
+    # --------------------------------------------------------------
+    # Product
+    # --------------------------------------------------------------
 
     product_id = str(
         uuid4()
@@ -999,6 +1127,7 @@ async def merch_create(
     )
 
     try:
+
         db.execute(
             text(
                 f"""
@@ -1041,7 +1170,9 @@ async def merch_create(
         db.commit()
 
     except Exception:
+
         db.rollback()
+
         raise
 
     return RedirectResponse(
@@ -1055,7 +1186,7 @@ async def merch_create(
 
 
 # ======================================================================
-# LEGACY LOCAL MERCH IMAGE
+# LOCAL MERCHANDISE IMAGE COMPATIBILITY ROUTE
 # ======================================================================
 
 @router.get(
@@ -1064,12 +1195,23 @@ async def merch_create(
 def merch_local_media(
     filename: str,
 ):
+    """
+    Serve legacy local merchandise images.
+
+    This exists for merchandise uploaded before R2 storage
+    was enabled.
+
+    R2-backed images never use this route.
+    """
+
     clean = (
         filename or ""
     ).replace(
         "\\",
         "/",
     ).lstrip("/")
+
+    # Never allow traversal.
 
     if (
         not clean
@@ -1082,7 +1224,6 @@ def merch_local_media(
 
     media_root = (
         _local_media_root()
-        .resolve()
     )
 
     file_path = (
@@ -1093,9 +1234,11 @@ def merch_local_media(
 
     try:
         file_path.relative_to(
-            media_root
+            media_root.resolve()
         )
+
     except ValueError:
+
         raise HTTPException(
             status_code=404,
             detail="Image not found.",
@@ -1116,7 +1259,7 @@ def merch_local_media(
 
 
 # ======================================================================
-# PUBLIC MERCH MARKETPLACE
+# PUBLIC MERCHANDISE MARKETPLACE
 # ======================================================================
 
 @router.get(
@@ -1129,13 +1272,14 @@ def merch_marketplace(
         get_optional_user
     ),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
+    ensure_merch_table(
+        db
     )
+    ensure_merch_orders_table(db)
 
     products = _all_public_rows(
-        db
+        request,
+        db,
     )
 
     return templates.TemplateResponse(
@@ -1154,14 +1298,11 @@ def merch_marketplace(
 
 
 # ======================================================================
-# CREATOR MERCH STORE
+# CREATOR MERCHANDISE STORE
 # ======================================================================
 
 @router.get(
     "/store/{slug}/merch"
-)
-@router.get(
-    "/creator/{slug}/merch"
 )
 def creator_merch_store(
     request: Request,
@@ -1171,19 +1312,10 @@ def creator_merch_store(
         get_optional_user
     ),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
-    )
-
-    clean_slug = (
-        slug or ""
-    ).strip().lower()
-
     profile = (
         db.query(Profile)
         .filter(
-            Profile.slug == clean_slug
+            Profile.slug == slug
         )
         .first()
     )
@@ -1194,7 +1326,13 @@ def creator_merch_store(
             detail="Creator store not found.",
         )
 
+    ensure_merch_table(
+        db
+    )
+    ensure_merch_orders_table(db)
+
     products = _rows_for_creator(
+        request,
         db,
         str(profile.id),
     )
@@ -1220,95 +1358,117 @@ def creator_merch_store(
 
 
 # ======================================================================
-# MERCH PURCHASE HELPERS
+# MERCHANDISE PURCHASE HELPERS
 # ======================================================================
 
-def _merch_public_base_url(
-    request: Request,
-) -> str:
+def _merch_public_base_url(request: Request) -> str:
     configured = str(
-        os.getenv(
-            "APP_BASE_URL",
-            "",
-        )
+        os.getenv("APP_BASE_URL", "")
     ).strip().rstrip("/")
 
     if configured:
         return configured
 
-    forwarded_proto = (
-        request.headers.get(
-            "x-forwarded-proto"
-        )
-        or ""
-    ).split(",")[0].strip()
-
-    forwarded_host = (
-        request.headers.get(
-            "x-forwarded-host"
-        )
-        or ""
-    ).split(",")[0].strip()
-
-    if forwarded_proto and forwarded_host:
-        return (
-            f"{forwarded_proto}"
-            f"://"
-            f"{forwarded_host}"
-        )
-
-    return str(
-        request.base_url
-    ).rstrip("/")
+    return str(request.base_url).rstrip("/")
 
 
-def _merch_callback_url(
-    request: Request,
-) -> str:
+def _merch_callback_url(request: Request) -> str:
     return (
-        _merch_public_base_url(
-            request
-        )
+        _merch_public_base_url(request)
         + "/mpesa/merchandise/callback"
     )
 
 
-def _normalize_merch_quantity(
-    value: str,
-) -> int:
+def _normalize_merch_quantity(value: str) -> int:
     try:
-        quantity = int(
-            str(
-                value or "1"
-            ).strip()
-        )
-    except (
-        TypeError,
-        ValueError,
-    ):
-        raise ValueError(
-            "Quantity must be a whole number."
-        )
+        quantity = int(str(value or "1").strip())
+    except (TypeError, ValueError):
+        raise ValueError("Quantity must be a whole number.")
 
-    if (
-        quantity < 1
-        or quantity > MERCH_MAX_QUANTITY
-    ):
+    if quantity < 1 or quantity > MERCH_MAX_QUANTITY:
         raise ValueError(
-            f"Quantity must be between "
-            f"1 and {MERCH_MAX_QUANTITY}."
+            f"Quantity must be between 1 and {MERCH_MAX_QUANTITY}."
         )
 
     return quantity
 
 
+def _load_merch_product(db: Session, slug: str):
+    return db.execute(
+        text(
+            f"""
+            SELECT
+                id,
+                creator_profile_id,
+                name,
+                slug,
+                description,
+                price,
+                image_path,
+                created_at
+            FROM {MERCH_TABLE}
+            WHERE slug = :slug
+            LIMIT 1
+            """
+        ),
+        {"slug": slug},
+    ).mappings().first()
+
+
+def _merch_order_context(
+    request: Request,
+    db: Session,
+    order_id: str,
+):
+    row = db.execute(
+        text(
+            f"""
+            SELECT
+                o.id,
+                o.product_id,
+                o.buyer_id,
+                o.quantity,
+                o.unit_price,
+                o.total_amount,
+                o.phone_number,
+                o.order_note,
+                o.status,
+                o.merchant_request_id,
+                o.checkout_request_id,
+                o.mpesa_receipt,
+                o.failure_reason,
+                o.created_at,
+                o.paid_at,
+                m.name AS product_name,
+                m.slug AS product_slug,
+                m.image_path,
+                m.description AS product_description
+            FROM {MERCH_ORDER_TABLE} o
+            JOIN {MERCH_TABLE} m
+                ON m.id = o.product_id
+            WHERE o.id = :id
+            LIMIT 1
+            """
+        ),
+        {"id": str(order_id)},
+    ).mappings().first()
+
+    if not row:
+        return None
+
+    item = dict(row)
+    item["image_url"] = _image_url(
+        request,
+        item.get("image_path"),
+    )
+    return item
+
+
 # ======================================================================
-# MERCH BUY
+# MERCHANDISE CHECKOUT
 # ======================================================================
 
-@router.post(
-    "/merch/{slug}/buy"
-)
+@router.post("/merch/{slug}/buy")
 async def buy_merchandise(
     slug: str,
     request: Request,
@@ -1318,15 +1478,10 @@ async def buy_merchandise(
     quantity: str = Form("1"),
     order_note: str = Form(""),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
-    )
+    ensure_merch_table(db)
+    ensure_merch_orders_table(db)
 
-    row = _load_merch_product(
-        db,
-        slug,
-    )
+    row = _load_merch_product(db, slug)
 
     if row is None:
         raise HTTPException(
@@ -1336,111 +1491,70 @@ async def buy_merchandise(
 
     creator_profile = (
         db.query(Profile)
-        .filter(
-            Profile.id
-            == str(
-                row[
-                    "creator_profile_id"
-                ]
-            )
-        )
+        .filter(Profile.id == str(row["creator_profile_id"]))
         .first()
     )
 
-    if (
-        creator_profile
-        and str(
-            creator_profile.user_id
-        )
-        == str(user.id)
-    ):
+    if creator_profile and str(creator_profile.user_id) == str(user.id):
         raise HTTPException(
             status_code=403,
-            detail=(
-                "You cannot purchase "
-                "your own merchandise."
-            ),
+            detail="You cannot purchase your own merchandise.",
         )
 
     try:
-        quantity_value = (
-            _normalize_merch_quantity(
-                quantity
-            )
-        )
+        quantity_value = _normalize_merch_quantity(quantity)
     except ValueError as exc:
         return RedirectResponse(
             url=(
-                f"/merch/{slug}"
-                f"?error={quote(str(exc))}"
+                f"/merch/{slug}?error="
+                + quote(str(exc))
             ),
             status_code=303,
         )
 
-    note = (
-        order_note or ""
-    ).strip()
+    note = (order_note or "").strip()
 
     if len(note) > MERCH_ORDER_NOTE_MAX:
         return RedirectResponse(
             url=(
-                f"/merch/{slug}"
-                f"?error="
-                f"{quote('Order note is too long. Keep it under ' + str(MERCH_ORDER_NOTE_MAX) + ' characters.')}"
+                f"/merch/{slug}?error="
+                + quote(
+                    "Order note is too long. Keep it under "
+                    f"{MERCH_ORDER_NOTE_MAX} characters."
+                )
             ),
             status_code=303,
         )
 
+    phone = (phone or "").strip()
+
     try:
-        normalized_phone = (
-            mpesa.normalize_phone(
-                phone
-            )
-        )
+        normalized_phone = mpesa.normalize_phone(phone)
     except Exception as exc:
         return RedirectResponse(
             url=(
-                f"/merch/{slug}"
-                f"?error={quote(str(exc))}"
+                f"/merch/{slug}?error="
+                + quote(str(exc))
             ),
             status_code=303,
         )
 
     try:
-        unit_price = Decimal(
-            str(
-                row["price"]
-            )
-        )
-
-        total_amount = (
-            unit_price
-            * Decimal(
-                quantity_value
-            )
-        )
-
+        unit_price = Decimal(str(row["price"]))
+        total_amount = unit_price * Decimal(quantity_value)
     except Exception:
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Merchandise price "
-                "could not be calculated."
-            ),
+            detail="Merchandise price could not be calculated.",
         )
 
     if total_amount <= Decimal("0"):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Merchandise price "
-                "must be greater than zero."
-            ),
+            detail="Merchandise price must be greater than zero.",
         )
 
-    order_id = str(
-        uuid4()
-    )
+    order_id = str(uuid4())
 
     try:
         db.execute(
@@ -1472,24 +1586,16 @@ async def buy_merchandise(
             ),
             {
                 "id": order_id,
-                "product_id": str(
-                    row["id"]
-                ),
-                "buyer_id": str(
-                    user.id
-                ),
+                "product_id": str(row["id"]),
+                "buyer_id": str(user.id),
                 "quantity": quantity_value,
                 "unit_price": unit_price,
                 "total_amount": total_amount,
                 "phone_number": normalized_phone,
-                "order_note": (
-                    note or None
-                ),
+                "order_note": note or None,
             },
         )
-
         db.commit()
-
     except Exception:
         db.rollback()
         raise
@@ -1500,11 +1606,8 @@ async def buy_merchandise(
             int(total_amount),
             f"M{order_id.replace('-', '')[:10]}",
             f"BeatHub {str(row['name'])[:10]}",
-            callback_url=_merch_callback_url(
-                request
-            ),
+            callback_url=_merch_callback_url(request),
         )
-
     except Exception as exc:
         db.execute(
             text(
@@ -1522,107 +1625,75 @@ async def buy_merchandise(
                 "id": order_id,
             },
         )
-
         db.commit()
 
         return RedirectResponse(
             url=(
-                f"/merch/{slug}"
-                f"?error="
-                f"{quote('M-Pesa could not be started. Please check the phone number and try again.')}"
+                f"/merch/{slug}?error="
+                + quote(
+                    "M-Pesa could not be started. Please check the "
+                    "phone number and try again."
+                )
             ),
             status_code=303,
         )
 
-    if not isinstance(
-        stk_response,
-        dict,
-    ):
+    if not isinstance(stk_response, dict):
         db.execute(
             text(
                 f"""
                 UPDATE {MERCH_ORDER_TABLE}
-                SET
-                    status = 'failed',
+                SET status = 'failed',
                     failure_reason = :reason
                 WHERE id = :id
                 """
             ),
             {
-                "reason": (
-                    "M-Pesa returned "
-                    "an invalid response."
-                ),
+                "reason": "M-Pesa returned an invalid response.",
                 "id": order_id,
             },
         )
-
         db.commit()
-
         return RedirectResponse(
             url=(
-                f"/merch/{slug}"
-                f"?error="
-                f"{quote('M-Pesa returned an invalid response.')}"
+                f"/merch/{slug}?error="
+                + quote("M-Pesa returned an invalid response.")
             ),
             status_code=303,
         )
 
-    checkout_request_id = (
-        stk_response.get(
-            "checkout_request_id"
-        )
-    )
-
-    merchant_request_id = (
-        stk_response.get(
-            "merchant_request_id"
-        )
-    )
+    checkout_request_id = stk_response.get("checkout_request_id")
+    merchant_request_id = stk_response.get("merchant_request_id")
 
     if not checkout_request_id:
         error_message = (
-            stk_response.get(
-                "errorMessage"
-            )
-            or stk_response.get(
-                "customer_message"
-            )
-            or (
-                "M-Pesa did not provide "
-                "a CheckoutRequestID."
-            )
+            stk_response.get("errorMessage")
+            or stk_response.get("customer_message")
+            or "M-Pesa did not provide a CheckoutRequestID."
         )
 
         db.execute(
             text(
                 f"""
                 UPDATE {MERCH_ORDER_TABLE}
-                SET
-                    status = 'failed',
+                SET status = 'failed',
                     failure_reason = :reason,
-                    merchant_request_id =
-                        :merchant_request_id
+                    merchant_request_id = :merchant_request_id
                 WHERE id = :id
                 """
             ),
             {
-                "reason": str(
-                    error_message
-                )[:500],
-                "merchant_request_id":
-                    merchant_request_id,
+                "reason": str(error_message)[:500],
+                "merchant_request_id": merchant_request_id,
                 "id": order_id,
             },
         )
-
         db.commit()
 
         return RedirectResponse(
             url=(
-                f"/merch/{slug}"
-                f"?error="
-                f"{quote(str(error_message))}"
+                f"/merch/{slug}?error="
+                + quote(str(error_message))
             ),
             status_code=303,
         )
@@ -1632,30 +1703,21 @@ async def buy_merchandise(
             f"""
             UPDATE {MERCH_ORDER_TABLE}
             SET
-                checkout_request_id =
-                    :checkout_request_id,
-                merchant_request_id =
-                    :merchant_request_id
+                checkout_request_id = :checkout_request_id,
+                merchant_request_id = :merchant_request_id
             WHERE id = :id
               AND status = 'pending_payment'
             """
         ),
         {
-            "checkout_request_id":
-                str(
-                    checkout_request_id
-                ),
-            "merchant_request_id":
-                merchant_request_id,
+            "checkout_request_id": str(checkout_request_id),
+            "merchant_request_id": merchant_request_id,
             "id": order_id,
         },
     )
-
     db.commit()
 
-    if stk_response.get(
-        "simulated"
-    ):
+    if stk_response.get("simulated"):
         db.execute(
             text(
                 f"""
@@ -1663,22 +1725,16 @@ async def buy_merchandise(
                 SET
                     status = 'paid',
                     paid_at = CURRENT_TIMESTAMP,
-                    mpesa_receipt =
-                        COALESCE(
-                            mpesa_receipt,
-                            :receipt
-                        )
+                    mpesa_receipt = COALESCE(mpesa_receipt, :receipt)
                 WHERE id = :id
                   AND status = 'pending_payment'
                 """
             ),
             {
-                "receipt":
-                    "MOCK-MERCH-PAYMENT",
+                "receipt": "MOCK-MERCH-PAYMENT",
                 "id": order_id,
             },
         )
-
         db.commit()
 
     return RedirectResponse(
@@ -1688,82 +1744,30 @@ async def buy_merchandise(
 
 
 # ======================================================================
-# MERCH ORDER STATUS
+# MERCHANDISE ORDER STATUS
 # ======================================================================
 
-@router.get(
-    "/merch/orders/{order_id}"
-)
+@router.get("/merch/orders/{order_id}")
 def merchandise_order_status(
     order_id: str,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    ensure_merch_schema(
+    ensure_merch_table(db)
+    ensure_merch_orders_table(db)
+
+    order = _merch_order_context(
+        request,
         db,
-        orders=True,
+        order_id,
     )
 
-    order = db.execute(
-        text(
-            f"""
-            SELECT
-                o.id,
-                o.product_id,
-                o.buyer_id,
-                o.quantity,
-                o.unit_price,
-                o.total_amount,
-                o.phone_number,
-                o.order_note,
-                o.status,
-                o.merchant_request_id,
-                o.checkout_request_id,
-                o.mpesa_receipt,
-                o.failure_reason,
-                o.created_at,
-                o.paid_at,
-                m.name AS product_name,
-                m.slug AS product_slug,
-                m.image_path,
-                m.description AS product_description
-            FROM {MERCH_ORDER_TABLE} o
-            JOIN {MERCH_TABLE} m
-                ON m.id = o.product_id
-            WHERE o.id = :id
-            LIMIT 1
-            """
-        ),
-        {
-            "id": str(
-                order_id
-            )
-        },
-    ).mappings().first()
-
-    if (
-        not order
-        or str(
-            order["buyer_id"]
-        )
-        != str(user.id)
-    ):
+    if not order or str(order["buyer_id"]) != str(user.id):
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Merchandise order "
-                "not found."
-            ),
+            detail="Merchandise order not found.",
         )
-
-    item = dict(order)
-
-    item["image_url"] = _image_url(
-        item.get(
-            "image_path"
-        )
-    )
 
     return templates.TemplateResponse(
         request,
@@ -1771,74 +1775,49 @@ def merchandise_order_status(
         _ctx(
             request,
             user,
-            order=item,
+            order=order,
             title="Merchandise Order",
         ),
     )
 
 
 # ======================================================================
-# MERCH M-PESA CALLBACK
+# MERCHANDISE M-PESA CALLBACK
 # ======================================================================
 
-@router.post(
-    "/mpesa/merchandise/callback"
-)
+@router.post("/mpesa/merchandise/callback")
 async def merchandise_mpesa_callback(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
-    )
+    """Process merchandise STK callbacks without touching beat/session payments."""
+
+    ensure_merch_orders_table(db)
 
     try:
         payload = await request.json()
     except Exception:
         return {
             "ResultCode": 1,
-            "ResultDesc":
-                "Invalid callback payload.",
+            "ResultDesc": "Invalid callback payload.",
         }
 
     stk = (
-        payload.get(
-            "Body",
-            {}
-        )
-        .get(
-            "stkCallback",
-            {}
-        )
+        payload.get("Body", {})
+        .get("stkCallback", {})
     )
 
-    checkout_request_id = (
-        stk.get(
-            "CheckoutRequestID"
-        )
-    )
+    checkout_request_id = stk.get("CheckoutRequestID")
 
     if not checkout_request_id:
         return {
             "ResultCode": 1,
-            "ResultDesc":
-                "Missing CheckoutRequestID.",
+            "ResultDesc": "Missing CheckoutRequestID.",
         }
 
     try:
-        success = (
-            int(
-                stk.get(
-                    "ResultCode"
-                )
-            )
-            == 0
-        )
-    except (
-        TypeError,
-        ValueError,
-    ):
+        success = int(stk.get("ResultCode")) == 0
+    except (TypeError, ValueError):
         success = False
 
     result_desc = str(
@@ -1849,100 +1828,64 @@ async def merchandise_mpesa_callback(
     )
 
     items = (
-        stk.get(
-            "CallbackMetadata",
-            {}
-        )
-        .get(
-            "Item",
-            []
-        )
+        stk.get("CallbackMetadata", {})
+        .get("Item", [])
     )
 
     metadata = {}
 
     for item in items:
-        if (
-            isinstance(
-                item,
-                dict,
-            )
-            and item.get("Name")
-        ):
-            metadata[
-                item["Name"]
-            ] = item.get(
-                "Value"
-            )
+        if isinstance(item, dict) and item.get("Name"):
+            metadata[item["Name"]] = item.get("Value")
 
     order = db.execute(
         text(
             f"""
-            SELECT
-                id,
-                status
+            SELECT id, status
             FROM {MERCH_ORDER_TABLE}
-            WHERE checkout_request_id =
-                :checkout_request_id
+            WHERE checkout_request_id = :checkout_request_id
             LIMIT 1
             """
         ),
         {
-            "checkout_request_id":
-                checkout_request_id
+            "checkout_request_id": checkout_request_id,
         },
     ).mappings().first()
 
     if not order:
         return {
             "ResultCode": 0,
-            "ResultDesc":
-                "Accepted",
+            "ResultDesc": "Accepted",
         }
 
-    if order["status"] != (
-        "pending_payment"
-    ):
+    if order["status"] != "pending_payment":
         return {
             "ResultCode": 0,
-            "ResultDesc":
-                "Already processed",
+            "ResultDesc": "Already processed",
         }
 
     if success:
-        receipt = (
-            str(
-                metadata.get(
-                    "MpesaReceiptNumber"
-                )
-            )
-            if metadata.get(
-                "MpesaReceiptNumber"
-            ) is not None
-            else None
-        )
-
         db.execute(
             text(
                 f"""
                 UPDATE {MERCH_ORDER_TABLE}
                 SET
                     status = 'paid',
-                    paid_at =
-                        CURRENT_TIMESTAMP,
-                    mpesa_receipt =
-                        :receipt
+                    paid_at = CURRENT_TIMESTAMP,
+                    mpesa_receipt = :receipt
                 WHERE id = :id
-                  AND status =
-                      'pending_payment'
+                  AND status = 'pending_payment'
                 """
             ),
             {
-                "receipt": receipt,
+                "receipt": (
+                    str(metadata.get("MpesaReceiptNumber"))
+                    if metadata.get("MpesaReceiptNumber") is not None
+                    else None
+                ),
                 "id": order["id"],
             },
         )
-
     else:
         db.execute(
             text(
@@ -1952,13 +1895,11 @@ async def merchandise_mpesa_callback(
                     status = 'failed',
                     failure_reason = :reason
                 WHERE id = :id
-                  AND status =
-                      'pending_payment'
+                  AND status = 'pending_payment'
                 """
             ),
             {
-                "reason":
-                    result_desc[:500],
+                "reason": result_desc[:500],
                 "id": order["id"],
             },
         )
@@ -1967,13 +1908,12 @@ async def merchandise_mpesa_callback(
 
     return {
         "ResultCode": 0,
-        "ResultDesc":
-            "Accepted",
+        "ResultDesc": "Accepted",
     }
 
 
 # ======================================================================
-# INDIVIDUAL MERCH PRODUCT
+# INDIVIDUAL MERCHANDISE PRODUCT
 # ======================================================================
 
 @router.get(
@@ -1987,53 +1927,71 @@ def merch_product(
         get_optional_user
     ),
 ):
-    ensure_merch_schema(
-        db,
-        orders=True,
+    ensure_merch_table(
+        db
     )
+    ensure_merch_orders_table(db)
 
-    row = _load_merch_product(
-        db,
-        slug,
-    )
+    row = db.execute(
+        text(
+            f"""
+            SELECT
+                id,
+                creator_profile_id,
+                name,
+                slug,
+                description,
+                price,
+                image_path,
+                created_at
+            FROM {MERCH_TABLE}
+            WHERE slug = :slug
+            LIMIT 1
+            """
+        ),
+        {
+            "slug": slug,
+        },
+    ).mappings().first()
 
     if row is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Merchandise item "
-                "not found."
-            ),
+            detail="Merchandise item not found.",
         )
 
     item = dict(row)
+
+    # --------------------------------------------------------------
+    # Existing local image migration.
+    #
+    # If R2 is configured and this is an old local image,
+    # move it into R2 automatically.
+    # --------------------------------------------------------------
 
     image_path = item.get(
         "image_path"
     )
 
-    if (
+    if image_path and not _is_r2_path(
         image_path
-        and not _is_r2_path(
-            image_path
-        )
     ):
-        migrated = (
+
+        migrated_path = (
             _migrate_local_image_to_r2(
                 db,
-                str(
-                    item["id"]
-                ),
+                str(item["id"]),
                 image_path,
             )
         )
 
-        if migrated:
-            image_path = migrated
-            item["image_path"] = migrated
+        if migrated_path:
+            image_path = migrated_path
+            item["image_path"] = migrated_path
 
     item["image_url"] = _image_url(
-        image_path
+        request,
+        image_path,
     )
 
     profile = (
@@ -2064,13 +2022,6 @@ def merch_product(
                 else None
             ),
             product_detail=True,
-            query_error=(
-                request.query_params.get(
-                    "error"
-                )
-                or ""
-            ).strip()
-            or None,
+            query_error=(request.query_params.get("error") or "").strip() or None,
         ),
     )
-
