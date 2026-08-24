@@ -2,412 +2,1173 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  >
 
-  <title>{{ title or 'Beats' }} | BeatHub</title>
+  <title>
+    {{ title or 'Beat Marketplace' }} | BeatHub
+  </title>
 
   <style>
     :root{
-      --bg:#09090b;
-      --panel:#121216;
-      --panel2:#18181e;
-      --text:#f7f7f8;
-      --muted:#a1a1aa;
-      --line:#27272f;
-      --accent:#ff3b81;
-      --accent2:#7c3aed;
-      --good:#22c55e;
+      --bg:#070707;
+      --bg-soft:#0b0b0b;
+      --panel:#101010;
+      --panel-2:#141414;
+      --panel-3:#181818;
+
+      --gold:#f4d35e;
+      --gold-strong:#d8ad27;
+      --gold-soft:#ffe58a;
+
+      --white:#f7f7f5;
+      --text:#e9e9e5;
+      --muted:#969696;
+      --muted-2:#696969;
+
+      --line:#292929;
+      --line-soft:#202020;
+
+      --green:#35c759;
+
+      --radius:18px;
+      --shadow:0 24px 70px rgba(0,0,0,.45);
     }
 
     *{
       box-sizing:border-box;
     }
 
+    html{
+      scroll-behavior:smooth;
+    }
+
     body{
       margin:0;
+      min-height:100vh;
+      color:var(--text);
       background:
         radial-gradient(
-          circle at top right,
-          #24112b 0,
-          #09090b 42%
+          circle at 8% 0%,
+          rgba(244,211,94,.055),
+          transparent 28%
+        ),
+        radial-gradient(
+          circle at 95% 12%,
+          rgba(244,211,94,.035),
+          transparent 26%
+        ),
+        linear-gradient(
+          180deg,
+          #080808 0%,
+          #060606 100%
         );
-      color:var(--text);
+
       font-family:
         Inter,
+        ui-sans-serif,
         system-ui,
         -apple-system,
         BlinkMacSystemFont,
         "Segoe UI",
         sans-serif;
-      min-height:100vh;
     }
 
     a{
-      text-decoration:none;
       color:inherit;
+      text-decoration:none;
     }
 
-    .nav{
+    button,
+    input,
+    select{
+      font:inherit;
+    }
+
+    /* ==============================================================
+       NAVIGATION
+       ============================================================== */
+
+    .site-nav{
       position:sticky;
       top:0;
-      z-index:20;
-      background:rgba(9,9,11,.88);
-      backdrop-filter:blur(16px);
-      border-bottom:1px solid var(--line);
+      z-index:100;
+
+      border-bottom:1px solid rgba(244,211,94,.12);
+
+      background:
+        rgba(7,7,7,.92);
+
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
     }
 
-    .navin{
-      max-width:1200px;
-      margin:auto;
-      padding:16px 20px;
+    .nav-inner{
+      width:min(1240px,calc(100% - 36px));
+      min-height:76px;
+      margin:0 auto;
+
       display:flex;
       align-items:center;
-      gap:24px;
+      gap:30px;
     }
 
     .brand{
-      font-weight:900;
-      letter-spacing:.08em;
+      display:inline-flex;
+      align-items:center;
+      gap:9px;
+
       font-size:20px;
-    }
-
-    .links{
-      display:flex;
-      gap:18px;
-      flex-wrap:wrap;
-      margin-left:auto;
-    }
-
-    .links a{
-      color:#d4d4d8;
-      font-weight:700;
-      font-size:14px;
-      transition:.2s ease;
-    }
-
-    .links a:hover{
-      color:white;
-    }
-
-    .wrap{
-      max-width:1200px;
-      margin:auto;
-      padding:42px 20px 70px;
-    }
-
-    .hero{
-      display:flex;
-      justify-content:space-between;
-      gap:24px;
-      align-items:end;
-      margin-bottom:26px;
-    }
-
-    .eyebrow{
-      color:#fb7185;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:.12em;
-      font-size:12px;
-    }
-
-    .hero h1{
-      font-size:clamp(34px,5vw,62px);
-      line-height:.98;
-      margin:8px 0 12px;
-    }
-
-    .hero p{
-      color:var(--muted);
-      margin:0;
-      max-width:650px;
-      line-height:1.6;
-    }
-
-    .count{
-      background:var(--panel);
-      border:1px solid var(--line);
-      padding:12px 16px;
-      border-radius:14px;
-      color:#d4d4d8;
-      font-weight:800;
+      font-weight:950;
+      letter-spacing:.08em;
       white-space:nowrap;
     }
 
-    .filters{
+    .brand-mark{
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      background:var(--gold);
+      box-shadow:
+        0 0 18px rgba(244,211,94,.55);
+    }
+
+    .brand-beat{
+      color:#fff;
+    }
+
+    .brand-hub{
+      color:var(--gold);
+    }
+
+    .nav-links{
+      margin-left:auto;
+
+      display:flex;
+      align-items:center;
+      gap:22px;
+      flex-wrap:wrap;
+    }
+
+    .nav-links a{
+      color:#bcbcbc;
+      font-size:13px;
+      font-weight:750;
+
+      transition:
+        color .18s ease;
+    }
+
+    .nav-links a:hover{
+      color:var(--gold);
+    }
+
+    .nav-links .active{
+      color:var(--gold);
+    }
+
+    /* ==============================================================
+       PAGE
+       ============================================================== */
+
+    .page{
+      width:min(1240px,calc(100% - 36px));
+      margin:0 auto;
+      padding:48px 0 80px;
+    }
+
+    /* ==============================================================
+       HERO
+       ============================================================== */
+
+    .hero{
+      position:relative;
+      overflow:hidden;
+
       display:grid;
-      grid-template-columns:2fr 1fr 1fr auto;
-      gap:10px;
-      background:rgba(18,18,22,.85);
-      border:1px solid var(--line);
-      padding:12px;
-      border-radius:18px;
-      margin-bottom:28px;
-    }
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:30px;
+      align-items:end;
 
-    .filters input,
-    .filters select{
-      width:100%;
-      background:#0f0f13;
-      color:white;
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:13px 14px;
-      outline:none;
-    }
+      padding:44px;
+      margin-bottom:22px;
 
-    .filters input:focus,
-    .filters select:focus{
-      border-color:#71717a;
-    }
+      border:1px solid rgba(244,211,94,.16);
+      border-radius:24px;
 
-    .btn{
-      border:0;
-      border-radius:12px;
-      padding:13px 18px;
       background:
+        radial-gradient(
+          circle at 86% 18%,
+          rgba(244,211,94,.09),
+          transparent 27%
+        ),
         linear-gradient(
           135deg,
-          var(--accent),
-          var(--accent2)
+          #11110f,
+          #0a0a0a
         );
-      color:white;
+
+      box-shadow:var(--shadow);
+    }
+
+    .hero::before{
+      content:"";
+      position:absolute;
+
+      width:380px;
+      height:380px;
+
+      right:-210px;
+      bottom:-250px;
+
+      border-radius:50%;
+
+      border:1px solid rgba(244,211,94,.12);
+    }
+
+    .hero-content{
+      position:relative;
+      z-index:1;
+    }
+
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+
+      color:var(--gold);
+
+      font-size:11px;
       font-weight:900;
-      cursor:pointer;
-      transition:.2s ease;
+
+      text-transform:uppercase;
+      letter-spacing:.15em;
     }
 
-    .btn:hover{
-      transform:translateY(-1px);
-      filter:brightness(1.08);
+    .eyebrow::before{
+      content:"";
+      width:7px;
+      height:7px;
+      border-radius:50%;
+      background:var(--gold);
+
+      box-shadow:
+        0 0 12px rgba(244,211,94,.5);
     }
 
-    .grid{
-      display:grid;
-      grid-template-columns:
-        repeat(4,minmax(0,1fr));
-      gap:18px;
+    .hero h1{
+      margin:13px 0 14px;
+
+      max-width:780px;
+
+      color:#f7f7f5;
+
+      font-size:
+        clamp(
+          38px,
+          5vw,
+          66px
+        );
+
+      line-height:.98;
+      letter-spacing:-.055em;
     }
 
-    .card{
+    .hero h1 span{
+      color:var(--gold);
+    }
+
+    .hero-copy{
+      max-width:700px;
+
+      margin:0;
+
+      color:#858585;
+
+      font-size:15px;
+      line-height:1.75;
+    }
+
+    .hero-stat{
+      position:relative;
+      z-index:1;
+
+      min-width:145px;
+
+      padding:18px 20px;
+
+      border:1px solid #2d2d2d;
+      border-radius:16px;
+
+      background:#0b0b0b;
+
+      text-align:left;
+    }
+
+    .hero-stat-label{
+      color:#777;
+      font-size:10px;
+      font-weight:850;
+      text-transform:uppercase;
+      letter-spacing:.13em;
+    }
+
+    .hero-stat-value{
+      margin-top:6px;
+
+      color:var(--gold);
+
+      font-size:27px;
+      font-weight:950;
+      letter-spacing:-.04em;
+    }
+
+    /* ==============================================================
+       SEARCH / FILTERS
+       ============================================================== */
+
+    .search-panel{
+      padding:14px;
+
+      margin-bottom:38px;
+
+      border:1px solid #242424;
+      border-radius:18px;
+
       background:
         linear-gradient(
           180deg,
-          #17171d,
-          #101014
+          #111,
+          #0c0c0c
         );
-      border:1px solid var(--line);
-      border-radius:20px;
-      overflow:hidden;
-      transition:
-        .2s transform,
-        .2s border-color,
-        .2s box-shadow;
-    }
 
-    .card:hover{
-      transform:translateY(-4px);
-      border-color:#444451;
       box-shadow:
-        0 18px 45px rgba(0,0,0,.3);
+        0 18px 50px rgba(0,0,0,.28);
     }
 
-    .art{
-      aspect-ratio:1/1;
+    .search-form{
+      display:grid;
+      grid-template-columns:
+        minmax(220px,2fr)
+        minmax(150px,1fr)
+        minmax(150px,1fr)
+        auto;
+
+      gap:10px;
+    }
+
+    .field{
+      position:relative;
+    }
+
+    .field input,
+    .field select{
+      width:100%;
+      min-height:50px;
+
+      padding:0 15px;
+
+      color:#eee;
+
+      border:1px solid #292929;
+      border-radius:12px;
+
+      outline:none;
+
+      background:#090909;
+
+      transition:
+        border-color .18s ease,
+        box-shadow .18s ease;
+    }
+
+    .field input::placeholder{
+      color:#666;
+    }
+
+    .field input:focus,
+    .field select:focus{
+      border-color:rgba(244,211,94,.55);
+
+      box-shadow:
+        0 0 0 3px
+        rgba(244,211,94,.07);
+    }
+
+    .field select{
+      cursor:pointer;
+    }
+
+    .field select option{
+      background:#111;
+      color:#fff;
+    }
+
+    .gold-button{
+      min-height:50px;
+
+      padding:0 24px;
+
+      border:1px solid #d7ae2e;
+      border-radius:12px;
+
+      color:#111;
+
       background:
         linear-gradient(
-          135deg,
-          #27272a,
-          #111113
+          180deg,
+          #ffe88a 0%,
+          #d8ad27 100%
         );
-      position:relative;
-      overflow:hidden;
+
+      font-weight:950;
+      letter-spacing:.01em;
+
+      cursor:pointer;
+
+      box-shadow:
+        0 12px 30px
+        rgba(216,173,39,.16);
+
+      transition:
+        transform .18s ease,
+        box-shadow .18s ease;
     }
 
-    .art img{
-      width:100%;
-      height:100%;
-      object-fit:cover;
+    .gold-button:hover{
+      transform:translateY(-1px);
+
+      box-shadow:
+        0 15px 36px
+        rgba(216,173,39,.24);
+    }
+
+    /* ==============================================================
+       PRODUCER DISCOVERY
+       ============================================================== */
+
+    .section{
+      margin-bottom:42px;
+    }
+
+    .section-heading{
+      display:flex;
+      justify-content:space-between;
+      align-items:end;
+      gap:20px;
+
+      margin-bottom:16px;
+    }
+
+    .section-heading h2{
+      margin:0;
+
+      color:#f4f4f2;
+
+      font-size:23px;
+      letter-spacing:-.025em;
+    }
+
+    .section-heading p{
+      margin:5px 0 0;
+
+      color:#707070;
+
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    .section-link{
+      color:var(--gold);
+      font-size:12px;
+      font-weight:850;
+    }
+
+    .producer-row{
+      display:grid;
+
+      grid-template-columns:
+        repeat(
+          auto-fit,
+          minmax(190px,1fr)
+        );
+
+      gap:12px;
+    }
+
+    .producer-card{
       display:block;
-      background:#111113;
+
+      padding:17px;
+
+      border:1px solid #272727;
+      border-radius:16px;
+
+      background:
+        linear-gradient(
+          145deg,
+          #141414,
+          #0d0d0d
+        );
+
+      transition:
+        transform .18s ease,
+        border-color .18s ease,
+        background .18s ease;
     }
 
-    .fallback{
-      height:100%;
+    .producer-card:hover{
+      transform:translateY(-3px);
+
+      border-color:
+        rgba(244,211,94,.42);
+
+      background:#151511;
+    }
+
+    .producer-card.selected{
+      border-color:
+        rgba(244,211,94,.7);
+
+      box-shadow:
+        0 0 0 1px
+        rgba(244,211,94,.08);
+    }
+
+    .producer-icon{
+      width:40px;
+      height:40px;
+
       display:grid;
       place-items:center;
-      font-size:44px;
-      font-weight:900;
-      color:#71717a;
+
+      margin-bottom:13px;
+
+      border-radius:12px;
+
+      color:var(--gold);
+
+      background:#1b1b18;
+
+      border:1px solid
+        rgba(244,211,94,.18);
+
+      font-size:14px;
+      font-weight:950;
     }
 
-    .play{
-      position:absolute;
-      right:12px;
-      bottom:12px;
-      width:44px;
-      height:44px;
-      border-radius:50%;
-      border:0;
-      background:white;
-      color:#111;
-      cursor:pointer;
-      font-size:18px;
-      box-shadow:
-        0 8px 25px rgba(0,0,0,.3);
-    }
+    .producer-name{
+      color:#eee;
 
-    .body{
-      padding:16px;
-    }
+      font-size:14px;
+      font-weight:850;
 
-    .title{
-      font-weight:900;
-      font-size:18px;
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
     }
 
-    .producer{
-      color:var(--muted);
-      font-size:13px;
+    .producer-count{
       margin-top:5px;
+
+      color:#696969;
+
+      font-size:11px;
+    }
+
+    /* ==============================================================
+       MARKETPLACE GRID
+       ============================================================== */
+
+    .market-grid{
+      display:grid;
+
+      grid-template-columns:
+        repeat(
+          4,
+          minmax(0,1fr)
+        );
+
+      gap:18px;
+    }
+
+    .beat-card{
+      overflow:hidden;
+
+      border:1px solid #252525;
+      border-radius:18px;
+
+      background:
+        linear-gradient(
+          180deg,
+          #151515,
+          #0e0e0e
+        );
+
+      transition:
+        transform .2s ease,
+        border-color .2s ease,
+        box-shadow .2s ease;
+    }
+
+    .beat-card:hover{
+      transform:translateY(-5px);
+
+      border-color:
+        rgba(244,211,94,.38);
+
+      box-shadow:
+        0 22px 55px
+        rgba(0,0,0,.42);
+    }
+
+    .artwork{
+      position:relative;
+
+      aspect-ratio:1/1;
+
+      overflow:hidden;
+
+      background:
+        radial-gradient(
+          circle at 50% 35%,
+          #28281f,
+          #10100f 58%,
+          #080808 100%
+        );
+    }
+
+    .artwork img{
+      width:100%;
+      height:100%;
+
+      display:block;
+
+      object-fit:cover;
+
+      transition:
+        transform .35s ease,
+        opacity .25s ease;
+    }
+
+    .beat-card:hover .artwork img{
+      transform:scale(1.035);
+    }
+
+    .artwork-fallback{
+      width:100%;
+      height:100%;
+
+      display:grid;
+      place-items:center;
+
+      position:relative;
+
+      color:#555;
+
+      background:
+        radial-gradient(
+          circle,
+          rgba(244,211,94,.08),
+          transparent 45%
+        );
+    }
+
+    .fallback-mark{
+      width:76px;
+      height:76px;
+
+      display:grid;
+      place-items:center;
+
+      border:1px solid
+        rgba(244,211,94,.25);
+
+      border-radius:50%;
+
+      color:var(--gold);
+
+      font-size:22px;
+      font-weight:950;
+
+      letter-spacing:.06em;
+    }
+
+    .artwork-top{
+      position:absolute;
+
+      top:12px;
+      left:12px;
+      right:12px;
+
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+    }
+
+    .status-pill{
+      padding:6px 9px;
+
+      border:1px solid
+        rgba(255,255,255,.12);
+
+      border-radius:999px;
+
+      background:
+        rgba(0,0,0,.66);
+
+      color:#ddd;
+
+      font-size:9px;
+      font-weight:850;
+
+      text-transform:uppercase;
+      letter-spacing:.08em;
+
+      backdrop-filter:blur(8px);
+    }
+
+    .play-button{
+      position:absolute;
+
+      right:12px;
+      bottom:12px;
+
+      width:46px;
+      height:46px;
+
+      display:grid;
+      place-items:center;
+
+      border:1px solid
+        rgba(244,211,94,.45);
+
+      border-radius:50%;
+
+      color:#111;
+
+      background:
+        linear-gradient(
+          180deg,
+          #ffe88a,
+          #d8ad27
+        );
+
+      cursor:pointer;
+
+      font-size:15px;
+      font-weight:950;
+
+      box-shadow:
+        0 12px 28px
+        rgba(0,0,0,.45);
+
+      transition:
+        transform .18s ease;
+    }
+
+    .play-button:hover{
+      transform:scale(1.06);
+    }
+
+    .card-body{
+      padding:17px;
+    }
+
+    .beat-title{
+      margin:0;
+
+      color:#f5f5f2;
+
+      font-size:16px;
+      font-weight:900;
+
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .producer-line{
+      margin-top:5px;
+
+      color:#858585;
+
+      font-size:12px;
+
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .producer-line strong{
+      color:#c5c5c5;
+      font-weight:750;
     }
 
     .meta{
       display:flex;
-      gap:7px;
       flex-wrap:wrap;
-      margin:12px 0;
+      gap:6px;
+
+      margin:13px 0 15px;
     }
 
     .pill{
-      font-size:11px;
-      color:#d4d4d8;
-      border:1px solid var(--line);
-      border-radius:999px;
       padding:5px 8px;
+
+      border:1px solid #292929;
+      border-radius:999px;
+
+      color:#898989;
+
+      background:#111;
+
+      font-size:9px;
+      font-weight:750;
     }
 
-    .bottom{
+    .card-bottom{
       display:flex;
+
       align-items:center;
       justify-content:space-between;
+
       gap:10px;
+    }
+
+    .price-label{
+      color:#666;
+
+      font-size:9px;
+      font-weight:800;
+
+      text-transform:uppercase;
+      letter-spacing:.08em;
     }
 
     .price{
-      font-size:18px;
+      margin-top:2px;
+
+      color:var(--gold);
+
+      font-size:17px;
+      font-weight:950;
+
+      letter-spacing:-.025em;
+    }
+
+    .view-button{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+
+      min-height:38px;
+
+      padding:0 13px;
+
+      border:1px solid #363636;
+      border-radius:10px;
+
+      color:#eee;
+
+      background:#191919;
+
+      font-size:11px;
+      font-weight:850;
+
+      transition:
+        border-color .18s ease,
+        color .18s ease,
+        background .18s ease;
+    }
+
+    .view-button:hover{
+      color:#111;
+
+      border-color:var(--gold);
+
+      background:var(--gold);
+    }
+
+    /* ==============================================================
+       EMPTY
+       ============================================================== */
+
+    .empty{
+      padding:70px 25px;
+
+      text-align:center;
+
+      border:1px dashed #303030;
+      border-radius:20px;
+
+      background:
+        linear-gradient(
+          145deg,
+          #111,
+          #0b0b0b
+        );
+    }
+
+    .empty-icon{
+      width:60px;
+      height:60px;
+
+      display:grid;
+      place-items:center;
+
+      margin:0 auto 18px;
+
+      border:1px solid
+        rgba(244,211,94,.22);
+
+      border-radius:50%;
+
+      color:var(--gold);
+
+      background:#151511;
+
       font-weight:950;
     }
 
-    .open{
-      font-size:13px;
-      font-weight:900;
-      color:white;
-      background:#24242b;
-      border:1px solid #34343d;
-      padding:9px 12px;
-      border-radius:10px;
-      transition:.2s ease;
-    }
-
-    .open:hover{
-      background:#303039;
-      border-color:#555563;
-    }
-
-    .empty{
-      padding:60px 20px;
-      text-align:center;
-      border:1px dashed #3f3f46;
-      border-radius:20px;
-      color:var(--muted);
-    }
-
     .empty h2{
-      color:white;
-      margin-bottom:8px;
+      margin:0 0 8px;
+
+      color:#eee;
+
+      font-size:22px;
     }
 
-    .pager{
+    .empty p{
+      max-width:500px;
+
+      margin:0 auto;
+
+      color:#707070;
+
+      line-height:1.6;
+      font-size:13px;
+    }
+
+    /* ==============================================================
+       PAGINATION
+       ============================================================== */
+
+    .pagination{
       display:flex;
       justify-content:center;
-      gap:10px;
-      margin-top:32px;
+      align-items:center;
+      gap:8px;
+
+      margin-top:35px;
     }
 
-    .pager a,
-    .pager span{
-      padding:10px 14px;
-      border:1px solid var(--line);
+    .pagination a,
+    .pagination span{
+      min-height:40px;
+
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+
+      padding:0 14px;
+
+      border:1px solid #292929;
       border-radius:10px;
-      background:var(--panel);
+
+      color:#a8a8a8;
+
+      background:#101010;
+
+      font-size:11px;
+      font-weight:800;
     }
 
-    footer{
-      max-width:1200px;
-      margin:auto;
-      padding:30px 20px;
-      color:#71717a;
-      border-top:1px solid var(--line);
+    .pagination a:hover{
+      color:var(--gold);
+
+      border-color:
+        rgba(244,211,94,.4);
     }
 
-    @media(max-width:950px){
-      .grid{
+    .pagination .current{
+      color:#111;
+
+      border-color:var(--gold);
+
+      background:var(--gold);
+    }
+
+    /* ==============================================================
+       FOOTER
+       ============================================================== */
+
+    .site-footer{
+      width:min(1240px,calc(100% - 36px));
+
+      margin:0 auto;
+
+      padding:26px 0 38px;
+
+      border-top:1px solid #1e1e1e;
+
+      color:#626262;
+
+      font-size:11px;
+      line-height:1.7;
+    }
+
+    .footer-brand{
+      color:#aaa;
+      font-weight:850;
+    }
+
+    .footer-brand span{
+      color:var(--gold);
+    }
+
+    /* ==============================================================
+       RESPONSIVE
+       ============================================================== */
+
+    @media(max-width:1050px){
+
+      .market-grid{
         grid-template-columns:
-          repeat(3,minmax(0,1fr));
+          repeat(
+            3,
+            minmax(0,1fr)
+          );
       }
 
-      .filters{
-        grid-template-columns:1fr 1fr;
+      .search-form{
+        grid-template-columns:
+          1fr 1fr;
       }
 
-      .hero{
-        align-items:start;
-        flex-direction:column;
+      .search-form .search-main{
+        grid-column:1 / -1;
+      }
+
+      .search-form .gold-button{
+        width:100%;
       }
     }
 
-    @media(max-width:650px){
-      .links{
+    @media(max-width:760px){
+
+      .nav-inner{
+        width:min(
+          100% - 28px,
+          1240px
+        );
+
+        min-height:68px;
+      }
+
+      .nav-links{
         display:none;
       }
 
-      .navin{
-        justify-content:space-between;
+      .page{
+        width:min(
+          100% - 28px,
+          1240px
+        );
+
+        padding-top:25px;
       }
 
-      .grid{
+      .hero{
+        grid-template-columns:1fr;
+
+        padding:30px 24px;
+      }
+
+      .hero-stat{
+        width:100%;
+      }
+
+      .producer-row{
         grid-template-columns:
-          repeat(2,minmax(0,1fr));
+          repeat(
+            2,
+            minmax(0,1fr)
+          );
+      }
+
+      .market-grid{
+        grid-template-columns:
+          repeat(
+            2,
+            minmax(0,1fr)
+          );
+
         gap:12px;
       }
 
-      .wrap{
-        padding:28px 14px 50px;
-      }
-
-      .filters{
-        grid-template-columns:1fr;
-      }
-
-      .hero h1{
-        font-size:42px;
-      }
-
-      .body{
+      .card-body{
         padding:13px;
+      }
+
+      .beat-title{
+        font-size:14px;
       }
 
       .price{
         font-size:15px;
       }
 
-      .open{
-        font-size:12px;
-        padding:8px 10px;
+      .view-button{
+        padding:0 10px;
+        font-size:10px;
+      }
+    }
+
+    @media(max-width:520px){
+
+      .search-form{
+        grid-template-columns:1fr;
+      }
+
+      .search-form .search-main{
+        grid-column:auto;
+      }
+
+      .producer-row{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .market-grid{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .hero h1{
+        font-size:39px;
+      }
+
+      .hero-copy{
+        font-size:13px;
+      }
+
+      .section-heading{
+        align-items:start;
+        flex-direction:column;
+      }
+
+      .meta{
+        display:none;
+      }
+
+      .card-bottom{
+        align-items:flex-end;
+      }
+
+      .price{
+        font-size:14px;
       }
     }
   </style>
@@ -415,28 +1176,36 @@
 
 <body>
 
-<header class="nav">
-  <div class="navin">
+<header class="site-nav">
+
+  <div class="nav-inner">
 
     <a
-      class="brand"
       href="/"
+      class="brand"
+      aria-label="BeatHub home"
     >
-      BEATHUB
+      <span class="brand-mark"></span>
+      <span>
+        <span class="brand-beat">BEAT</span><span class="brand-hub">HUB</span>
+      </span>
     </a>
 
-    <nav class="links">
+    <nav class="nav-links">
 
-      <a href="/beats">
-        Beats
-      </a>
-
-      <a href="/sessions">
-        Sessions
+      <a
+        href="/beats"
+        class="active"
+      >
+        Marketplace
       </a>
 
       <a href="/hot-picks">
         Hot Picks
+      </a>
+
+      <a href="/sessions">
+        Sessions
       </a>
 
       <a href="/merch">
@@ -468,339 +1237,623 @@
     </nav>
 
   </div>
+
 </header>
 
 
-<main class="wrap">
+<main class="page">
+
+  <!-- ============================================================
+       HERO
+       ============================================================ -->
 
   <section class="hero">
 
-    <div>
+    <div class="hero-content">
 
       <div class="eyebrow">
-        Beat marketplace
+        BeatHub Marketplace
       </div>
 
       <h1>
-        {{ title or 'Find your next sound.' }}
+        Find your next
+        <span>sound.</span>
       </h1>
 
-      <p>
-        Discover fresh beats from BeatHub creators.
-        Preview, compare and open a beat in one click.
+      <p class="hero-copy">
+        Discover beats from BeatHub creators. Preview the sound,
+        explore producers, compare prices and open the beat that
+        feels right for your next record.
       </p>
 
     </div>
 
-    <div class="count">
-      {{ total or 0 }} beats
+    <div class="hero-stat">
+
+      <div class="hero-stat-label">
+        Available beats
+      </div>
+
+      <div class="hero-stat-value">
+        {{ total or 0 }}
+      </div>
+
     </div>
 
   </section>
 
 
-  <form
-    class="filters"
-    method="get"
-    action="/beats"
-  >
+  <!-- ============================================================
+       SEARCH
+       ============================================================ -->
 
-    <input
-      name="q"
-      value="{{ q or '' }}"
-      placeholder="Search beats, genres, moods..."
-      aria-label="Search"
+  <section class="search-panel">
+
+    <form
+      class="search-form"
+      method="get"
+      action="/beats"
     >
 
-    <select name="genre">
+      <div class="field search-main">
 
-      <option value="">
-        All genres
-      </option>
-
-      {% for item in genres or [] %}
-
-        <option
-          value="{{ item }}"
-          {% if genre == item %}
-            selected
-          {% endif %}
+        <input
+          type="search"
+          name="q"
+          value="{{ q or '' }}"
+          placeholder="Search beats, genres, moods, titles..."
+          autocomplete="off"
+          aria-label="Search BeatHub beats"
         >
-          {{ item }}
-        </option>
 
-      {% endfor %}
-
-    </select>
+      </div>
 
 
-    <select name="mood">
+      <div class="field">
 
-      <option value="">
-        All moods
-      </option>
-
-      {% for item in moods or [] %}
-
-        <option
-          value="{{ item }}"
-          {% if mood == item %}
-            selected
-          {% endif %}
+        <select
+          name="genre"
+          aria-label="Filter by genre"
         >
-          {{ item }}
-        </option>
 
-      {% endfor %}
+          <option value="">
+            All genres
+          </option>
 
-    </select>
+          {% for item in genres or [] %}
 
+            <option
+              value="{{ item }}"
+              {% if genre == item %}selected{% endif %}
+            >
+              {{ item }}
+            </option>
 
-    <button
-      class="btn"
-      type="submit"
-    >
-      Search
-    </button>
+          {% endfor %}
 
-  </form>
+        </select>
 
-
-  {% if catalog %}
-
-    <section class="grid">
-
-      {% for item in catalog %}
-
-        <article class="card">
-
-          <div class="art">
-
-            {% if item.artwork_url %}
-
-              <img
-                src="{{ item.artwork_url }}"
-                alt="{{ item.title }} artwork"
-                loading="lazy"
-                decoding="async"
-                onerror="this.style.display='none';this.nextElementSibling.style.display='grid';"
-              >
-
-              <div
-                class="fallback"
-                style="display:none;"
-              >
-                BH
-              </div>
-
-            {% else %}
-
-              <div class="fallback">
-                BH
-              </div>
-
-            {% endif %}
+      </div>
 
 
-            {% if item.audio_url %}
+      <div class="field">
 
-              <button
-                class="play"
-                type="button"
-                onclick="preview('{{ item.audio_url|e }}',this)"
-                aria-label="Preview {{ item.title }}"
-              >
-                ▶
-              </button>
+        <select
+          name="mood"
+          aria-label="Filter by mood"
+        >
 
-            {% endif %}
+          <option value="">
+            All moods
+          </option>
 
+          {% for item in moods or [] %}
+
+            <option
+              value="{{ item }}"
+              {% if mood == item %}selected{% endif %}
+            >
+              {{ item }}
+            </option>
+
+          {% endfor %}
+
+        </select>
+
+      </div>
+
+
+      <input
+        type="hidden"
+        name="producer"
+        value="{{ selected_producer or '' }}"
+      >
+
+
+      <button
+        class="gold-button"
+        type="submit"
+      >
+        SEARCH BEATS
+      </button>
+
+    </form>
+
+  </section>
+
+
+  <!-- ============================================================
+       PRODUCER DISCOVERY
+       ============================================================ -->
+
+  {% if producers %}
+
+    <section class="section">
+
+      <div class="section-heading">
+
+        <div>
+
+          <div class="eyebrow">
+            Discover creators
           </div>
 
+          <h2>
+            Browse by producer
+          </h2>
 
-          <div class="body">
+          <p>
+            Find a creator first, then explore the beats inside their
+            catalogue.
+          </p>
 
-            <div class="title">
-              {{ item.title }}
+        </div>
+
+      </div>
+
+
+      <div class="producer-row">
+
+        {% for producer in producers[:8] %}
+
+          <a
+            class="producer-card {% if selected_producer == producer.id %}selected{% endif %}"
+            href="/beats?producer={{ producer.id|urlencode }}"
+          >
+
+            <div class="producer-icon">
+              BH
             </div>
 
-            <div class="producer">
-              by {{ item.producer }}
+            <div class="producer-name">
+              {{ producer.name }}
             </div>
 
+            <div class="producer-count">
 
-            <div class="meta">
+              {{ producer.count }}
 
-              {% if item.genre %}
-
-                <span class="pill">
-                  {{ item.genre }}
-                </span>
-
-              {% endif %}
-
-
-              {% if item.mood %}
-
-                <span class="pill">
-                  {{ item.mood }}
-                </span>
-
-              {% endif %}
-
-
-              {% if item.bpm %}
-
-                <span class="pill">
-                  {{ item.bpm }} BPM
-                </span>
-
-              {% endif %}
-
-
-              {% if item.key %}
-
-                <span class="pill">
-                  {{ item.key }}
-                </span>
-
+              {% if producer.count == 1 %}
+                beat
+              {% else %}
+                beats
               {% endif %}
 
             </div>
 
+          </a>
 
-            <div class="bottom">
+        {% endfor %}
 
-              <div class="price">
-                KSh {{ '%.2f'|format(item.price or 0) }}
-              </div>
-
-              <a
-                class="open"
-                href="{{ item.url }}"
-              >
-                View beat
-              </a>
-
-            </div>
-
-          </div>
-
-        </article>
-
-      {% endfor %}
+      </div>
 
     </section>
 
-  {% else %}
-
-    <div class="empty">
-
-      <h2>
-        No beats found
-      </h2>
-
-      <p>
-        Try a different search or browse all published beats.
-      </p>
-
-    </div>
-
   {% endif %}
 
 
-  {% if total_pages and total_pages > 1 %}
+  <!-- ============================================================
+       BEAT COLLECTION
+       ============================================================ -->
 
-    <div class="pager">
+  <section class="section">
 
-      {% if has_previous %}
+    <div class="section-heading">
+
+      <div>
+
+        <div class="eyebrow">
+          {% if title %}
+            {{ title }}
+          {% else %}
+            Marketplace
+          {% endif %}
+        </div>
+
+        <h2>
+          {% if selected_producer %}
+            Producer catalogue
+          {% elif q or genre or mood %}
+            Search results
+          {% else %}
+            Fresh from BeatHub creators
+          {% endif %}
+        </h2>
+
+        <p>
+          Preview a beat and open its full page to choose your license.
+        </p>
+
+      </div>
+
+      {% if q or genre or mood or selected_producer %}
 
         <a
-          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ previous_page }}"
+          href="/beats"
+          class="section-link"
         >
-          Previous
+          Clear filters
         </a>
 
       {% endif %}
 
-
-      <span>
-        Page {{ page }} of {{ total_pages }}
-      </span>
+    </div>
 
 
-      {% if has_next %}
+    {% if catalog %}
 
-        <a
-          href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&page={{ next_page }}"
-        >
-          Next
-        </a>
+      <section class="market-grid">
+
+        {% for item in catalog %}
+
+          <article class="beat-card">
+
+            <!-- ARTWORK -->
+
+            <div class="artwork">
+
+              {% if item.artwork_url %}
+
+                <img
+                  src="{{ item.artwork_url }}"
+                  alt="{{ item.title }} artwork"
+                  loading="lazy"
+                  onerror="this.style.display='none';this.nextElementSibling.style.display='grid';"
+                >
+
+                <div
+                  class="artwork-fallback"
+                  style="display:none;"
+                >
+                  <div class="fallback-mark">
+                    BH
+                  </div>
+                </div>
+
+              {% else %}
+
+                <div class="artwork-fallback">
+
+                  <div class="fallback-mark">
+                    BH
+                  </div>
+
+                </div>
+
+              {% endif %}
+
+
+              <div class="artwork-top">
+
+                <span class="status-pill">
+                  BeatHub
+                </span>
+
+              </div>
+
+
+              {% if item.audio_url %}
+
+                <button
+                  class="play-button"
+                  type="button"
+                  data-audio="{{ item.audio_url|e }}"
+                  onclick="previewBeat(this)"
+                  aria-label="Preview {{ item.title }}"
+                >
+                  ▶
+                </button>
+
+              {% endif %}
+
+            </div>
+
+
+            <!-- CARD BODY -->
+
+            <div class="card-body">
+
+              <h3 class="beat-title">
+                {{ item.title }}
+              </h3>
+
+
+              <div class="producer-line">
+
+                by
+
+                <strong>
+                  {{ item.producer }}
+                </strong>
+
+              </div>
+
+
+              <div class="meta">
+
+                {% if item.genre %}
+
+                  <span class="pill">
+                    {{ item.genre }}
+                  </span>
+
+                {% endif %}
+
+
+                {% if item.mood %}
+
+                  <span class="pill">
+                    {{ item.mood }}
+                  </span>
+
+                {% endif %}
+
+
+                {% if item.bpm %}
+
+                  <span class="pill">
+                    {{ item.bpm }} BPM
+                  </span>
+
+                {% endif %}
+
+
+                {% if item.key %}
+
+                  <span class="pill">
+                    {{ item.key }}
+                  </span>
+
+                {% endif %}
+
+              </div>
+
+
+              <div class="card-bottom">
+
+                <div>
+
+                  <div class="price-label">
+                    From
+                  </div>
+
+                  <div class="price">
+                    KSh {{ '%.2f'|format(item.price or 0) }}
+                  </div>
+
+                </div>
+
+
+                <a
+                  href="{{ item.url }}"
+                  class="view-button"
+                >
+                  VIEW BEAT
+                </a>
+
+              </div>
+
+            </div>
+
+          </article>
+
+        {% endfor %}
+
+      </section>
+
+
+      <!-- ========================================================
+           PAGINATION
+           ======================================================== -->
+
+      {% if total_pages and total_pages > 1 %}
+
+        <div class="pagination">
+
+          {% if has_previous %}
+
+            <a
+              href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&producer={{ selected_producer|urlencode }}&page={{ previous_page }}"
+            >
+              ← Previous
+            </a>
+
+          {% endif %}
+
+
+          <span class="current">
+            Page {{ page }} of {{ total_pages }}
+          </span>
+
+
+          {% if has_next %}
+
+            <a
+              href="/beats?q={{ q|urlencode }}&genre={{ genre|urlencode }}&mood={{ mood|urlencode }}&producer={{ selected_producer|urlencode }}&page={{ next_page }}"
+            >
+              Next →
+            </a>
+
+          {% endif %}
+
+        </div>
 
       {% endif %}
 
-    </div>
 
-  {% endif %}
+    {% else %}
+
+      <!-- ========================================================
+           EMPTY STATE
+           ======================================================== -->
+
+      <div class="empty">
+
+        <div class="empty-icon">
+          BH
+        </div>
+
+        <h2>
+          No beats found
+        </h2>
+
+        <p>
+          We couldn't find beats matching those filters.
+          Try another search or browse the full BeatHub marketplace.
+        </p>
+
+        <div style="margin-top:22px;">
+
+          <a
+            href="/beats"
+            class="gold-button"
+            style="
+              display:inline-flex;
+              align-items:center;
+              justify-content:center;
+              min-height:46px;
+            "
+          >
+            BROWSE ALL BEATS
+          </a>
+
+        </div>
+
+      </div>
+
+    {% endif %}
+
+  </section>
 
 </main>
 
 
-<footer>
-  © {{ current_year or 2026 }} BeatHub.
-  All rights reserved.
+<footer class="site-footer">
+
+  <span class="footer-brand">
+    Beat<span>Hub</span>
+  </span>
+
+  — The home of cool beats.
+
+  <br>
+
+  Built for artists, producers and the sound of tomorrow.
+
+  <br><br>
+
+  © {{ current_year or 2026 }} BeatHub. All rights reserved.
+
 </footer>
 
 
 <script>
-  let audio = null;
+  let activeAudio = null;
   let activeButton = null;
 
-  function preview(url, btn) {
 
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audio = null;
+  function stopPreview() {
+
+    if (activeAudio) {
+      activeAudio.pause();
+
+      activeAudio.currentTime = 0;
+
+      activeAudio = null;
     }
 
-    document
-      .querySelectorAll(".play")
-      .forEach(function(button) {
-        button.textContent = "▶";
-      });
-
-    if (activeButton === btn) {
+    if (activeButton) {
+      activeButton.textContent = "▶";
       activeButton = null;
+    }
+  }
+
+
+  function previewBeat(button) {
+
+    const url = button.dataset.audio;
+
+    if (!url) {
       return;
     }
 
-    audio = new Audio(url);
-    activeButton = btn;
 
-    audio
+    if (
+      activeAudio &&
+      activeButton === button
+    ) {
+      stopPreview();
+      return;
+    }
+
+
+    stopPreview();
+
+
+    activeAudio = new Audio(url);
+
+    activeAudio.preload = "none";
+
+    activeButton = button;
+
+
+    activeAudio.addEventListener(
+      "ended",
+      function () {
+        stopPreview();
+      }
+    );
+
+
+    activeAudio.addEventListener(
+      "error",
+      function () {
+        stopPreview();
+      }
+    );
+
+
+    activeAudio
       .play()
-      .then(function() {
-        btn.textContent = "❚❚";
+      .then(function () {
+
+        button.textContent = "❚❚";
+
       })
-      .catch(function() {
-        btn.textContent = "▶";
-        audio = null;
-        activeButton = null;
+      .catch(function () {
+
+        stopPreview();
+
       });
-
-    audio.onended = function() {
-      btn.textContent = "▶";
-      audio = null;
-      activeButton = null;
-    };
-
-    audio.onerror = function() {
-      btn.textContent = "▶";
-      audio = null;
-      activeButton = null;
-    };
   }
+
+
+  window.addEventListener(
+    "beforeunload",
+    function () {
+      stopPreview();
+    }
+  );
 </script>
 
 </body>
