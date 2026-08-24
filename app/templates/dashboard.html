@@ -5,726 +5,1157 @@
 {% block content %}
 
 <style>
+/* ============================================================
+   BEATHUB CREATOR STUDIO — PREMIUM DASHBOARD
+   Visual upgrade only. Existing dashboard routes/variables kept.
+   ============================================================ */
+
+.creator-dashboard {
+    --gold: #f5c84b;
+    --gold-bright: #ffe58a;
+    --gold-soft: rgba(245, 200, 75, .14);
+    --gold-border: rgba(245, 200, 75, .28);
+
+    max-width: 1450px;
+    margin: 0 auto;
+    padding: 18px 0 70px;
+    color: #f5f5f5;
+}
+
+/* ============================================================
+   GLOBAL
+   ============================================================ */
+
+.creator-dashboard *,
+.creator-dashboard *::before,
+.creator-dashboard *::after {
+    box-sizing: border-box;
+}
+
+.creator-dashboard a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-section {
+    margin-bottom: 30px;
+}
+
+/* ============================================================
+   ALERTS
+   ============================================================ */
+
+.dashboard-message {
+    margin-bottom: 20px;
+    padding: 14px 17px;
+    border-radius: 14px;
+    font-size: 13px;
+    font-weight: 700;
+    backdrop-filter: blur(12px);
+}
+
+.dashboard-message.success {
+    border: 1px solid rgba(34, 197, 94, .35);
+    background: rgba(5, 46, 22, .72);
+    color: #bbf7d0;
+}
+
+.dashboard-message.error {
+    border: 1px solid rgba(239, 68, 68, .35);
+    background: rgba(69, 10, 10, .72);
+    color: #fecaca;
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+
+.dashboard-hero {
+    position: relative;
+    min-height: 310px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 35px;
+    padding: 42px;
+    margin-bottom: 30px;
+    overflow: hidden;
+
+    border: 1px solid rgba(245, 200, 75, .20);
+    border-radius: 28px;
+
+    background:
+        radial-gradient(
+            circle at 88% 10%,
+            rgba(245, 200, 75, .20),
+            transparent 25%
+        ),
+        radial-gradient(
+            circle at 72% 100%,
+            rgba(245, 200, 75, .08),
+            transparent 30%
+        ),
+        linear-gradient(
+            135deg,
+            #151515 0%,
+            #0b0b0b 52%,
+            #10100d 100%
+        );
+
+    box-shadow:
+        0 30px 80px rgba(0, 0, 0, .34),
+        inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.dashboard-hero::before {
+    content: "";
+    position: absolute;
+    width: 480px;
+    height: 480px;
+    right: -170px;
+    top: -280px;
+    border-radius: 50%;
+    border: 1px solid rgba(245, 200, 75, .13);
+    box-shadow:
+        0 0 0 40px rgba(245, 200, 75, .025),
+        0 0 0 80px rgba(245, 200, 75, .018);
+    pointer-events: none;
+}
+
+.dashboard-hero::after {
+    content: "";
+    position: absolute;
+    left: -120px;
+    bottom: -190px;
+    width: 420px;
+    height: 420px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.05);
+    pointer-events: none;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 780px;
+}
+
+.hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 17px;
+    padding: 8px 13px;
+    border: 1px solid var(--gold-border);
+    border-radius: 999px;
+    background: rgba(245, 200, 75, .07);
+    color: var(--gold-bright);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.hero-eyebrow::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 13px rgba(245, 200, 75, .8);
+}
+
+.dashboard-hero h1 {
+    margin: 0;
+    max-width: 800px;
+    font-size: clamp(36px, 5vw, 64px);
+    line-height: .98;
+    letter-spacing: -.055em;
+    font-weight: 900;
+    color: #fff;
+}
+
+.dashboard-hero h1::first-letter {
+    color: #fff;
+}
+
+.dashboard-hero p {
+    margin: 18px 0 0;
+    max-width: 680px;
+    color: #949494;
+    font-size: 14px;
+    line-height: 1.75;
+}
+
+.hero-actions {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.hero-actions a,
+.withdraw-btn {
+    text-decoration: none;
+}
+
+.creator-dashboard .btn {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 850;
+    transition:
+        transform .18s ease,
+        box-shadow .18s ease,
+        border-color .18s ease,
+        background .18s ease;
+}
+
+.creator-dashboard .btn-primary {
+    background: linear-gradient(
+        135deg,
+        #ffe58a,
+        #d5a91f
+    );
+    color: #111;
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow:
+        0 12px 30px rgba(245, 200, 75, .17);
+}
+
+.creator-dashboard .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 16px 36px rgba(245, 200, 75, .25);
+}
+
+.creator-dashboard .btn-outline {
+    border: 1px solid rgba(255,255,255,.15);
+    background: rgba(255,255,255,.035);
+    color: #eee;
+}
+
+.creator-dashboard .btn-outline:hover {
+    transform: translateY(-2px);
+    border-color: var(--gold-border);
+    background: rgba(245,200,75,.07);
+    color: var(--gold-bright);
+}
+
+/* ============================================================
+   SECTION HEADINGS
+   ============================================================ */
+
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.section-heading h2 {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 850;
+    letter-spacing: -.025em;
+}
+
+.section-heading p {
+    margin: 5px 0 0;
+    color: #717171;
+    font-size: 12px;
+}
+
+.section-link {
+    color: #cfcfcf;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.section-link:hover {
+    color: var(--gold-bright);
+}
+
+/* ============================================================
+   PERFORMANCE
+   ============================================================ */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.stat-card {
+    position: relative;
+    min-height: 155px;
+    padding: 22px;
+    overflow: hidden;
+
+    border: 1px solid #242424;
+    border-radius: 19px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(255,255,255,.035),
+            rgba(255,255,255,.012)
+        );
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.025),
+        0 12px 30px rgba(0,0,0,.16);
+
+    transition:
+        transform .18s ease,
+        border-color .18s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(245,200,75,.20);
+}
+
+.stat-card::before {
+    content: "";
+    position: absolute;
+    width: 110px;
+    height: 110px;
+    right: -45px;
+    top: -45px;
+    border-radius: 50%;
+    border: 1px solid rgba(245,200,75,.10);
+}
+
+.stat-card.balance {
+    border-color: var(--gold-border);
+    background:
+        radial-gradient(
+            circle at 100% 0%,
+            rgba(245,200,75,.14),
+            transparent 38%
+        ),
+        linear-gradient(
+            145deg,
+            #17150d,
+            #10100e
+        );
+}
+
+.stat-label {
+    position: relative;
+    z-index: 1;
+    color: #969696;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.stat-value {
+    position: relative;
+    z-index: 1;
+    margin-top: 15px;
+    color: #fff;
+    font-size: 29px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -.045em;
+}
+
+.stat-card.balance .stat-value {
+    color: var(--gold-bright);
+    font-size: 31px;
+}
+
+.stat-sub {
+    position: relative;
+    z-index: 1;
+    margin-top: 10px;
+    color: #626262;
+    font-size: 11px;
+}
+
+/* ============================================================
+   CREATOR TOOLS
+   ============================================================ */
+
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.action-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    min-height: 92px;
+    padding: 17px;
+
+    color: inherit;
+    text-decoration: none;
+
+    border: 1px solid #252525;
+    border-radius: 17px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(255,255,255,.035),
+            rgba(255,255,255,.012)
+        );
+
+    transition:
+        transform .18s ease,
+        border-color .18s ease,
+        background .18s ease;
+}
+
+.action-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--gold-border);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(245,200,75,.07),
+            rgba(255,255,255,.018)
+        );
+}
+
+.action-icon {
+    width: 45px;
+    height: 45px;
+    flex: 0 0 45px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid rgba(245,200,75,.15);
+    border-radius: 13px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(245,200,75,.12),
+            rgba(255,255,255,.035)
+        );
+
+    font-size: 19px;
+}
+
+.action-card strong {
+    display: block;
+    color: #f1f1f1;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.action-card span {
+    display: block;
+    margin-top: 5px;
+    color: #626262;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+/* ============================================================
+   MAIN COLUMNS
+   ============================================================ */
+
+.dashboard-columns {
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1.55fr)
+        minmax(320px, .85fr);
+    gap: 20px;
+    align-items: start;
+}
+
+/* ============================================================
+   GENERIC PANELS
+   ============================================================ */
+
+.panel,
+.earnings-card,
+.store-card,
+.content-card {
+    border: 1px solid #252525;
+    background:
+        linear-gradient(
+            145deg,
+            rgba(255,255,255,.035),
+            rgba(255,255,255,.012)
+        );
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.025),
+        0 14px 35px rgba(0,0,0,.14);
+}
+
+.panel {
+    border-radius: 19px;
+    overflow: hidden;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    padding: 20px 22px;
+    border-bottom: 1px solid #252525;
+}
+
+.panel-header h2 {
+    margin: 0;
+    color: #f1f1f1;
+    font-size: 16px;
+    font-weight: 850;
+}
+
+.panel-header p {
+    margin: 4px 0 0;
+    color: #616161;
+    font-size: 11px;
+}
+
+.panel-body {
+    padding: 22px;
+}
+
+/* ============================================================
+   EARNINGS
+   ============================================================ */
+
+.earnings-card {
+    position: relative;
+    padding: 25px;
+    border-radius: 20px;
+    overflow: hidden;
+
+    background:
+        radial-gradient(
+            circle at 95% 5%,
+            rgba(245,200,75,.14),
+            transparent 28%
+        ),
+        linear-gradient(
+            145deg,
+            #17150e,
+            #101010
+        );
+}
+
+.earnings-card::after {
+    content: "";
+    position: absolute;
+    right: -100px;
+    top: -100px;
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    border: 1px solid rgba(245,200,75,.08);
+    pointer-events: none;
+}
+
+.earnings-top {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.earnings-top h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 850;
+}
+
+.earnings-balance {
+    margin-top: 13px;
+    color: var(--gold-bright);
+    font-size: 40px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -.055em;
+}
+
+.earnings-label {
+    margin-top: 8px;
+    color: #686868;
+    font-size: 11px;
+}
+
+.withdraw-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 43px;
+    padding: 0 17px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 11px;
+    background: linear-gradient(135deg,#ffe58a,#d5a91f);
+    color: #101010;
+    font-size: 12px;
+    font-weight: 900;
+    white-space: nowrap;
+    box-shadow: 0 10px 24px rgba(245,200,75,.13);
+}
+
+.withdraw-btn:hover {
+    transform: translateY(-1px);
+}
+
+.earnings-breakdown {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.earning-item {
+    padding: 14px;
+    border: 1px solid #292929;
+    border-radius: 13px;
+    background: rgba(0,0,0,.22);
+}
+
+.earning-item span {
+    display: block;
+    color: #666;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.earning-item strong {
+    display: block;
+    margin-top: 6px;
+    color: #eee;
+    font-size: 14px;
+    font-weight: 850;
+}
+
+/* ============================================================
+   RECENT SALES
+   ============================================================ */
+
+.recent-table-wrap {
+    overflow-x: auto;
+}
+
+.recent-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.recent-table th,
+.recent-table td {
+    padding: 14px 18px;
+    text-align: left;
+    border-bottom: 1px solid #242424;
+    white-space: nowrap;
+}
+
+.recent-table th {
+    color: #5e5e5e;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+}
+
+.recent-table td {
+    color: #cfcfcf;
+    font-size: 12px;
+}
+
+.recent-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.order-title {
+    color: #fff;
+    font-weight: 800;
+}
+
+.order-date {
+    margin-top: 3px;
+    color: #5f5f5f;
+    font-size: 10px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 9px;
+    border: 1px solid rgba(34,197,94,.20);
+    border-radius: 999px;
+    background: rgba(20,83,45,.5);
+    color: #bbf7d0;
+    font-size: 9px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+/* ============================================================
+   WITHDRAWALS
+   ============================================================ */
+
+.withdrawals-panel {
+    margin-top: 20px;
+}
+
+.withdrawal-row {
+    display: grid;
+    grid-template-columns:
+        1.2fr
+        1fr
+        1fr
+        .8fr;
+    gap: 15px;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #242424;
+}
+
+.withdrawal-row:last-child {
+    border-bottom: 0;
+}
+
+.withdrawal-label {
+    color: #575757;
+    font-size: 9px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.withdrawal-value {
+    margin-top: 4px;
+    color: #ddd;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.badge {
+    display: inline-flex;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: #272727;
+    color: #ccc;
+    font-size: 9px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.badge.pending {
+    background: rgba(113,63,18,.55);
+    color: #fde68a;
+}
+
+.badge.approved,
+.badge.processing {
+    background: rgba(30,58,95,.6);
+    color: #bfdbfe;
+}
+
+.badge.paid {
+    background: rgba(20,83,45,.6);
+    color: #bbf7d0;
+}
+
+.badge.rejected {
+    background: rgba(127,29,29,.6);
+    color: #fecaca;
+}
+
+/* ============================================================
+   PUBLIC STORE
+   ============================================================ */
+
+.store-card {
+    position: relative;
+    padding: 25px;
+    border-radius: 20px;
+    overflow: hidden;
+
+    background:
+        radial-gradient(
+            circle at 100% 0%,
+            rgba(245,200,75,.14),
+            transparent 32%
+        ),
+        linear-gradient(
+            145deg,
+            #16140d,
+            #101010
+        );
+}
+
+.store-card::before {
+    content: "";
+    position: absolute;
+    right: -70px;
+    bottom: -110px;
+    width: 240px;
+    height: 240px;
+    border-radius: 50%;
+    border: 1px solid rgba(245,200,75,.08);
+}
+
+.store-card h2 {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 9px;
+    font-size: 20px;
+    font-weight: 900;
+}
+
+.store-card p {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    color: #888;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.store-url-box {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 8px;
+    margin-top: 19px;
+}
+
+.store-url {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 13px;
+    border: 1px solid #333;
+    border-radius: 10px;
+    background: #080808;
+    color: #ccc;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.copy-store {
+    border: 1px solid var(--gold-border);
+    border-radius: 10px;
+    padding: 0 15px;
+    background: rgba(245,200,75,.09);
+    color: var(--gold-bright);
+    font-size: 11px;
+    font-weight: 850;
+    cursor: pointer;
+    transition: .18s ease;
+}
+
+.copy-store:hover {
+    background: rgba(245,200,75,.16);
+}
+
+.social-links {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.social-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 11px;
+    border: 1px solid #333;
+    border-radius: 9px;
+    color: #c8c8c8;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.social-link:hover {
+    border-color: var(--gold-border);
+    background: rgba(245,200,75,.06);
+    color: var(--gold-bright);
+}
+
+/* ============================================================
+   CATALOG
+   ============================================================ */
+
+.content-overview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.content-card {
+    position: relative;
+    padding: 20px;
+    border-radius: 17px;
+    overflow: hidden;
+}
+
+.content-card:hover {
+    border-color: rgba(245,200,75,.18);
+}
+
+.content-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.content-card h3 {
+    margin: 0;
+    color: #eee;
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.content-card-top > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(245,200,75,.08);
+    border: 1px solid rgba(245,200,75,.13);
+}
+
+.content-number {
+    margin-top: 16px;
+    color: var(--gold-bright);
+    font-size: 32px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -.04em;
+}
+
+.content-card p {
+    margin: 6px 0 0;
+    color: #5f5f5f;
+    font-size: 10px;
+}
+
+.content-card a {
+    display: inline-block;
+    margin-top: 16px;
+    color: #c9c9c9;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.content-card a:hover {
+    color: var(--gold-bright);
+}
+
+/* ============================================================
+   EMPTY STATES
+   ============================================================ */
+
+.empty-state {
+    padding: 36px 20px;
+    text-align: center;
+    color: #626262;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.empty-state strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #ccc;
+    font-size: 13px;
+}
+
+/* ============================================================
+   AUDIO / CREATOR DETAIL
+   Decorative waveform in dashboard hero
+   ============================================================ */
+
+.creator-wave {
+    position: absolute;
+    right: 38px;
+    top: 38px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 80px;
+    opacity: .58;
+    pointer-events: none;
+}
+
+.creator-wave span {
+    display: block;
+    width: 4px;
+    min-height: 9px;
+    border-radius: 99px;
+    background: var(--gold);
+    box-shadow: 0 0 10px rgba(245,200,75,.24);
+    animation: creatorWave 1.25s ease-in-out infinite;
+}
+
+.creator-wave span:nth-child(1) { height: 20px; animation-delay: -.9s; }
+.creator-wave span:nth-child(2) { height: 42px; animation-delay: -.7s; }
+.creator-wave span:nth-child(3) { height: 29px; animation-delay: -.5s; }
+.creator-wave span:nth-child(4) { height: 57px; animation-delay: -.3s; }
+.creator-wave span:nth-child(5) { height: 34px; animation-delay: -.1s; }
+.creator-wave span:nth-child(6) { height: 68px; animation-delay: -.8s; }
+.creator-wave span:nth-child(7) { height: 45px; animation-delay: -.6s; }
+.creator-wave span:nth-child(8) { height: 26px; animation-delay: -.4s; }
+.creator-wave span:nth-child(9) { height: 55px; animation-delay: -.2s; }
+.creator-wave span:nth-child(10) { height: 31px; animation-delay: 0s; }
+.creator-wave span:nth-child(11) { height: 46px; animation-delay: -.75s; }
+.creator-wave span:nth-child(12) { height: 20px; animation-delay: -.35s; }
+
+@keyframes creatorWave {
+    0%, 100% {
+        transform: scaleY(.65);
+        opacity: .55;
+    }
+
+    50% {
+        transform: scaleY(1.08);
+        opacity: 1;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1250px) {
+    .quick-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1100px) {
     .creator-dashboard {
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 10px 0 50px;
-    }
-
-    .dashboard-hero {
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 30px;
-        padding: 34px;
-        margin-bottom: 28px;
-        border: 1px solid #27272a;
-        border-radius: 22px;
-        background:
-            radial-gradient(
-                circle at 85% 15%,
-                rgba(255, 255, 255, .08),
-                transparent 30%
-            ),
-            linear-gradient(
-                135deg,
-                #18181b 0%,
-                #0f0f11 100%
-            );
-    }
-
-    .dashboard-hero::after {
-        content: "";
-        position: absolute;
-        width: 240px;
-        height: 240px;
-        right: -80px;
-        bottom: -130px;
-        border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, .08);
-        pointer-events: none;
-    }
-
-    .hero-content {
-        position: relative;
-        z-index: 1;
-    }
-
-    .hero-eyebrow {
-        margin: 0 0 8px;
-        color: #a1a1aa;
-        font-size: 13px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .12em;
-    }
-
-    .dashboard-hero h1 {
-        margin: 0;
-        font-size: clamp(28px, 4vw, 46px);
-        line-height: 1.05;
-        letter-spacing: -.04em;
-    }
-
-    .dashboard-hero p {
-        margin: 12px 0 0;
-        max-width: 650px;
-        color: #a1a1aa;
-        line-height: 1.6;
-    }
-
-    .hero-actions {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-
-    .hero-actions a {
-        text-decoration: none;
-    }
-
-    .dashboard-section {
-        margin-bottom: 28px;
-    }
-
-    .section-heading {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 15px;
-        margin-bottom: 14px;
-    }
-
-    .section-heading h2 {
-        margin: 0;
-        font-size: 20px;
-    }
-
-    .section-heading p {
-        margin: 4px 0 0;
-        color: #71717a;
-        font-size: 13px;
-    }
-
-    .section-link {
-        color: #d4d4d8;
-        text-decoration: none;
-        font-size: 13px;
-        font-weight: 700;
-    }
-
-    .section-link:hover {
-        color: #fff;
+        padding-left: 14px;
+        padding-right: 14px;
     }
 
     .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 16px;
-    }
-
-    .stat-card {
-        position: relative;
-        min-height: 150px;
-        padding: 22px;
-        border: 1px solid #27272a;
-        border-radius: 18px;
-        background: #111113;
-        overflow: hidden;
-    }
-
-    .stat-card::after {
-        content: "";
-        position: absolute;
-        width: 90px;
-        height: 90px;
-        right: -35px;
-        top: -35px;
-        border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, .06);
-    }
-
-    .stat-label {
-        position: relative;
-        z-index: 1;
-        color: #a1a1aa;
-        font-size: 13px;
-        font-weight: 600;
-    }
-
-    .stat-value {
-        position: relative;
-        z-index: 1;
-        margin-top: 15px;
-        font-size: 30px;
-        font-weight: 800;
-        letter-spacing: -.03em;
-    }
-
-    .stat-sub {
-        position: relative;
-        z-index: 1;
-        margin-top: 8px;
-        color: #71717a;
-        font-size: 12px;
-    }
-
-    .stat-card.balance {
-        border-color: #3f3f46;
-        background: linear-gradient(
-            145deg,
-            #18181b,
-            #101012
-        );
-    }
-
-    .stat-card.balance .stat-value {
-        font-size: 34px;
-    }
-
-    .quick-actions {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
-    }
-
-    .action-card {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        min-height: 88px;
-        padding: 18px;
-        color: inherit;
-        text-decoration: none;
-        border: 1px solid #27272a;
-        border-radius: 16px;
-        background: #111113;
-        transition:
-            transform .18s ease,
-            border-color .18s ease,
-            background .18s ease;
-    }
-
-    .action-card:hover {
-        transform: translateY(-2px);
-        border-color: #52525b;
-        background: #18181b;
-    }
-
-    .action-icon {
-        width: 44px;
-        height: 44px;
-        flex: 0 0 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        background: #27272a;
-        font-size: 20px;
-    }
-
-    .action-card strong {
-        display: block;
-        font-size: 14px;
-    }
-
-    .action-card span {
-        display: block;
-        margin-top: 4px;
-        color: #71717a;
-        font-size: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .dashboard-columns {
-        display: grid;
-        grid-template-columns:
-            minmax(0, 1.55fr)
-            minmax(320px, .85fr);
-        gap: 20px;
-        align-items: start;
+        grid-template-columns: 1fr;
     }
 
-    .panel {
-        border: 1px solid #27272a;
-        border-radius: 18px;
-        background: #111113;
-        overflow: hidden;
+    .quick-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .panel-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 15px;
-        padding: 20px 22px;
-        border-bottom: 1px solid #27272a;
+    .creator-wave {
+        right: 28px;
+        top: 28px;
+        opacity: .35;
+    }
+}
+
+@media (max-width: 700px) {
+    .creator-dashboard {
+        padding-top: 5px;
+        padding-bottom: 45px;
     }
 
-    .panel-header h2 {
-        margin: 0;
-        font-size: 17px;
+    .dashboard-hero {
+        min-height: auto;
+        padding: 27px 22px;
+        flex-direction: column;
+        align-items: flex-start;
+        border-radius: 22px;
     }
 
-    .panel-header p {
-        margin: 4px 0 0;
-        color: #71717a;
-        font-size: 12px;
+    .dashboard-hero h1 {
+        font-size: 38px;
     }
 
-    .panel-body {
-        padding: 22px;
+    .hero-actions {
+        width: 100%;
     }
 
-    .store-card {
-        position: relative;
-        padding: 24px;
-        border: 1px solid #27272a;
-        border-radius: 18px;
-        background:
-            radial-gradient(
-                circle at 100% 0%,
-                rgba(255, 255, 255, .06),
-                transparent 35%
-            ),
-            #111113;
-        overflow: hidden;
-    }
-
-    .store-card h2 {
-        margin: 0 0 8px;
-        font-size: 20px;
-    }
-
-    .store-card p {
-        margin: 0;
-        color: #a1a1aa;
-        line-height: 1.5;
-        font-size: 13px;
-    }
-
-    .store-url-box {
-        display: flex;
-        gap: 8px;
-        margin-top: 18px;
-    }
-
-    .store-url {
+    .hero-actions a {
         flex: 1;
-        min-width: 0;
-        padding: 12px 13px;
-        border: 1px solid #3f3f46;
-        border-radius: 10px;
-        background: #09090b;
-        color: #d4d4d8;
-        font-size: 12px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
 
-    .copy-store {
-        border: 1px solid #3f3f46;
-        border-radius: 10px;
-        padding: 0 14px;
-        background: #27272a;
-        color: #fff;
-        font-weight: 700;
-        cursor: pointer;
+    .creator-wave {
+        display: none;
     }
 
-    .copy-store:hover {
-        background: #3f3f46;
-    }
-
-    .earnings-card {
-        padding: 24px;
-        border: 1px solid #27272a;
-        border-radius: 18px;
-        background: #111113;
+    .stats-grid,
+    .quick-actions,
+    .content-overview {
+        grid-template-columns: 1fr;
     }
 
     .earnings-top {
-        display: flex;
-        justify-content: space-between;
-        gap: 20px;
-        align-items: flex-start;
-    }
-
-    .earnings-top h2 {
-        margin: 0;
-        font-size: 17px;
-    }
-
-    .earnings-balance {
-        margin-top: 12px;
-        font-size: 38px;
-        font-weight: 850;
-        letter-spacing: -.04em;
-    }
-
-    .earnings-label {
-        color: #71717a;
-        font-size: 12px;
+        flex-direction: column;
     }
 
     .withdraw-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 42px;
-        padding: 0 15px;
-        border-radius: 10px;
-        background: #fff;
-        color: #09090b;
-        text-decoration: none;
-        font-size: 13px;
-        font-weight: 800;
-        white-space: nowrap;
-    }
-
-    .withdraw-btn:hover {
-        opacity: .9;
+        width: 100%;
     }
 
     .earnings-breakdown {
-        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .store-url-box {
+        flex-direction: column;
+    }
+
+    .copy-store {
+        min-height: 42px;
+    }
+
+    .withdrawal-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 22px;
-    }
-
-    .earning-item {
-        padding: 14px;
-        border: 1px solid #27272a;
-        border-radius: 12px;
-        background: #09090b;
-    }
-
-    .earning-item span {
-        display: block;
-        color: #71717a;
-        font-size: 11px;
-    }
-
-    .earning-item strong {
-        display: block;
-        margin-top: 5px;
-        font-size: 15px;
-    }
-
-    .recent-table-wrap {
-        overflow-x: auto;
-    }
-
-    .recent-table {
-        width: 100%;
-        border-collapse: collapse;
     }
 
     .recent-table th,
     .recent-table td {
-        padding: 14px 18px;
-        text-align: left;
-        border-bottom: 1px solid #27272a;
-        white-space: nowrap;
+        padding: 12px 13px;
     }
-
-    .recent-table th {
-        color: #71717a;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .06em;
-    }
-
-    .recent-table td {
-        color: #d4d4d8;
-        font-size: 13px;
-    }
-
-    .recent-table tr:last-child td {
-        border-bottom: 0;
-    }
-
-    .order-title {
-        color: #fff;
-        font-weight: 700;
-    }
-
-    .order-date {
-        margin-top: 3px;
-        color: #71717a;
-        font-size: 11px;
-    }
-
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 5px 9px;
-        border-radius: 999px;
-        background: #14532d;
-        color: #bbf7d0;
-        font-size: 11px;
-        font-weight: 800;
-    }
-
-    .empty-state {
-        padding: 35px 20px;
-        text-align: center;
-        color: #71717a;
-    }
-
-    .empty-state strong {
-        display: block;
-        margin-bottom: 6px;
-        color: #d4d4d8;
-    }
-
-    .content-overview {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-    }
-
-    .content-card {
-        padding: 20px;
-        border: 1px solid #27272a;
-        border-radius: 16px;
-        background: #111113;
-    }
-
-    .content-card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .content-card h3 {
-        margin: 0;
-        font-size: 15px;
-    }
-
-    .content-number {
-        margin-top: 12px;
-        font-size: 30px;
-        font-weight: 800;
-    }
-
-    .content-card p {
-        margin: 4px 0 0;
-        color: #71717a;
-        font-size: 12px;
-    }
-
-    .content-card a {
-        display: inline-block;
-        margin-top: 16px;
-        color: #d4d4d8;
-        text-decoration: none;
-        font-size: 12px;
-        font-weight: 700;
-    }
-
-    .content-card a:hover {
-        color: #fff;
-    }
-
-    .social-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 9px;
-        margin-top: 18px;
-    }
-
-    .social-link {
-        display: inline-flex;
-        align-items: center;
-        padding: 9px 12px;
-        border: 1px solid #3f3f46;
-        border-radius: 9px;
-        color: #d4d4d8;
-        text-decoration: none;
-        font-size: 12px;
-        font-weight: 700;
-    }
-
-    .social-link:hover {
-        background: #27272a;
-        color: #fff;
-    }
-
-    .withdrawals-panel {
-        margin-top: 20px;
-    }
-
-    .withdrawal-row {
-        display: grid;
-        grid-template-columns:
-            1.2fr
-            1fr
-            1fr
-            .8fr;
-        gap: 15px;
-        align-items: center;
-        padding: 14px 20px;
-        border-bottom: 1px solid #27272a;
-    }
-
-    .withdrawal-row:last-child {
-        border-bottom: 0;
-    }
-
-    .withdrawal-label {
-        color: #71717a;
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: .06em;
-    }
-
-    .withdrawal-value {
-        margin-top: 4px;
-        color: #e4e4e7;
-        font-size: 13px;
-        font-weight: 700;
-    }
-
-    .badge {
-        display: inline-flex;
-        padding: 5px 9px;
-        border-radius: 999px;
-        background: #27272a;
-        color: #d4d4d8;
-        font-size: 10px;
-        font-weight: 800;
-        text-transform: uppercase;
-    }
-
-    .badge.pending {
-        background: #713f12;
-        color: #fde68a;
-    }
-
-    .badge.approved,
-    .badge.processing {
-        background: #1e3a5f;
-        color: #bfdbfe;
-    }
-
-    .badge.paid {
-        background: #14532d;
-        color: #bbf7d0;
-    }
-
-    .badge.rejected {
-        background: #7f1d1d;
-        color: #fecaca;
-    }
-
-    /* --------------------------------------------------------
-       SUCCESS / ERROR MESSAGES
-       -------------------------------------------------------- */
-
-    .dashboard-message {
-        margin-bottom: 20px;
-        padding: 13px 16px;
-        border-radius: 12px;
-        font-size: 13px;
-        font-weight: 600;
-    }
-
-    .dashboard-message.success {
-        border: 1px solid #166534;
-        background: #052e16;
-        color: #bbf7d0;
-    }
-
-    .dashboard-message.error {
-        border: 1px solid #991b1b;
-        background: #450a0a;
-        color: #fecaca;
-    }
-
-    @media (max-width: 1100px) {
-        .stats-grid {
-            grid-template-columns: repeat(
-                2,
-                minmax(0, 1fr)
-            );
-        }
-
-        .quick-actions {
-            grid-template-columns: repeat(
-                2,
-                minmax(0, 1fr)
-            );
-        }
-
-        .dashboard-columns {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    @media (max-width: 700px) {
-        .creator-dashboard {
-            padding-top: 0;
-        }
-
-        .dashboard-hero {
-            padding: 24px;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .hero-actions {
-            width: 100%;
-        }
-
-        .hero-actions a {
-            flex: 1;
-        }
-
-        .stats-grid,
-        .quick-actions,
-        .content-overview {
-            grid-template-columns: 1fr;
-        }
-
-        .earnings-top {
-            flex-direction: column;
-        }
-
-        .withdraw-btn {
-            width: 100%;
-        }
-
-        .store-url-box {
-            flex-direction: column;
-        }
-
-        .copy-store {
-            min-height: 42px;
-        }
-
-        .withdrawal-row {
-            grid-template-columns:
-                repeat(
-                    2,
-                    minmax(0, 1fr)
-                );
-        }
-    }
+}
 </style>
 
 <div class="creator-dashboard">
 
-    <!-- =====================================================
-         QUERY MESSAGES
-         ===================================================== -->
+    <!-- ======================================================
+         ALERTS
+         ====================================================== -->
 
     {% if success %}
         <div class="dashboard-message success">
@@ -739,11 +1170,26 @@
     {% endif %}
 
 
-    <!-- =====================================================
+    <!-- ======================================================
          HERO
-         ===================================================== -->
+         ====================================================== -->
 
     <section class="dashboard-hero">
+
+        <div class="creator-wave" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
 
         <div class="hero-content">
 
@@ -756,8 +1202,9 @@
             </h1>
 
             <p>
-                Manage your beats, tracks, albums, sales and creator
-                earnings from one place.
+                Your music. Your catalog. Your business.
+                Manage beats, tracks, albums, merchandise,
+                sales and creator earnings from one premium workspace.
             </p>
 
         </div>
@@ -783,9 +1230,9 @@
     </section>
 
 
-    <!-- =====================================================
-         EARNINGS / PERFORMANCE
-         ===================================================== -->
+    <!-- ======================================================
+         PERFORMANCE
+         ====================================================== -->
 
     <section class="dashboard-section">
 
@@ -875,9 +1322,9 @@
     </section>
 
 
-    <!-- =====================================================
-         QUICK ACTIONS
-         ===================================================== -->
+    <!-- ======================================================
+         CREATOR TOOLS
+         ====================================================== -->
 
     <section class="dashboard-section">
 
@@ -893,13 +1340,13 @@
 
         </div>
 
+
         <div class="quick-actions">
 
             <a
                 href="/dashboard/upload"
                 class="action-card"
             >
-
                 <div class="action-icon">
                     🎵
                 </div>
@@ -911,7 +1358,6 @@
                         Add new music to your catalog
                     </span>
                 </div>
-
             </a>
 
 
@@ -919,7 +1365,6 @@
                 href="/dashboard/albums/new"
                 class="action-card"
             >
-
                 <div class="action-icon">
                     💿
                 </div>
@@ -931,7 +1376,6 @@
                         Package tracks into an album
                     </span>
                 </div>
-
             </a>
 
 
@@ -939,7 +1383,6 @@
                 href="/dashboard/merch"
                 class="action-card"
             >
-
                 <div class="action-icon">
                     👕
                 </div>
@@ -951,7 +1394,6 @@
                         Add products to your creator brand
                     </span>
                 </div>
-
             </a>
 
 
@@ -963,7 +1405,6 @@
                     rel="noopener noreferrer"
                     class="action-card"
                 >
-
                     <div class="action-icon">
                         🛍️
                     </div>
@@ -975,7 +1416,6 @@
                             See what your customers see
                         </span>
                     </div>
-
                 </a>
 
             {% else %}
@@ -984,7 +1424,6 @@
                     href="/dashboard"
                     class="action-card"
                 >
-
                     <div class="action-icon">
                         🛍️
                     </div>
@@ -996,7 +1435,6 @@
                             Store link will appear here
                         </span>
                     </div>
-
                 </a>
 
             {% endif %}
@@ -1006,7 +1444,6 @@
                 href="/dashboard/withdraw"
                 class="action-card"
             >
-
                 <div class="action-icon">
                     💰
                 </div>
@@ -1018,7 +1455,6 @@
                         Request an M-Pesa payout
                     </span>
                 </div>
-
             </a>
 
         </div>
@@ -1026,20 +1462,19 @@
     </section>
 
 
-    <!-- =====================================================
-         MAIN TWO-COLUMN AREA
-         ===================================================== -->
+    <!-- ======================================================
+         MAIN CONTENT
+         ====================================================== -->
 
     <div class="dashboard-columns">
 
-
-        <!-- =================================================
+        <!-- ==================================================
              LEFT COLUMN
-             ================================================= -->
+             ================================================== -->
 
         <div>
 
-            <!-- Earnings -->
+            <!-- EARNINGS -->
 
             <div class="earnings-card">
 
@@ -1074,7 +1509,6 @@
                 <div class="earnings-breakdown">
 
                     <div class="earning-item">
-
                         <span>
                             Gross Revenue
                         </span>
@@ -1082,12 +1516,10 @@
                         <strong>
                             KSh {{ "%.2f"|format(gross_revenue|float) }}
                         </strong>
-
                     </div>
 
 
                     <div class="earning-item">
-
                         <span>
                             Platform Commission
                         </span>
@@ -1095,12 +1527,10 @@
                         <strong>
                             KSh {{ "%.2f"|format(platform_commission|float) }}
                         </strong>
-
                     </div>
 
 
                     <div class="earning-item">
-
                         <span>
                             Net Earnings
                         </span>
@@ -1108,12 +1538,10 @@
                         <strong>
                             KSh {{ "%.2f"|format(net_earnings|float) }}
                         </strong>
-
                     </div>
 
 
                     <div class="earning-item">
-
                         <span>
                             Pending Withdrawal
                         </span>
@@ -1121,7 +1549,6 @@
                         <strong>
                             KSh {{ "%.2f"|format(pending_withdrawal|float) }}
                         </strong>
-
                     </div>
 
                 </div>
@@ -1129,7 +1556,7 @@
             </div>
 
 
-            <!-- Recent Sales -->
+            <!-- RECENT SALES -->
 
             <div
                 class="panel"
@@ -1139,7 +1566,6 @@
                 <div class="panel-header">
 
                     <div>
-
                         <h2>
                             Recent Sales
                         </h2>
@@ -1147,7 +1573,6 @@
                         <p>
                             Your latest completed orders.
                         </p>
-
                     </div>
 
                 </div>
@@ -1170,6 +1595,7 @@
                                 </tr>
 
                             </thead>
+
 
                             <tbody>
 
@@ -1196,7 +1622,6 @@
 
                                                 {% elif order.created_at %}
                                                     {{ order.created_at.strftime("%d %b %Y %H:%M") }}
-
                                                 {% endif %}
 
                                             </div>
@@ -1220,11 +1645,9 @@
 
 
                                         <td>
-
                                             <span class="status-badge">
                                                 Completed
                                             </span>
-
                                         </td>
 
                                     </tr>
@@ -1255,7 +1678,7 @@
             </div>
 
 
-            <!-- Withdrawal History -->
+            <!-- WITHDRAWAL HISTORY -->
 
             <div class="panel withdrawals-panel">
 
@@ -1371,13 +1794,13 @@
         </div>
 
 
-        <!-- =================================================
+        <!-- ==================================================
              RIGHT COLUMN
-             ================================================= -->
+             ================================================== -->
 
         <div>
 
-            <!-- Public Store -->
+            <!-- PUBLIC STORE -->
 
             <div class="store-card">
 
@@ -1398,7 +1821,9 @@
                         <div
                             class="store-url"
                             id="creatorStoreUrl"
-                        >{{ store_url }}</div>
+                        >
+                            {{ store_url }}
+                        </div>
 
 
                         <button
@@ -1467,7 +1892,7 @@
             </div>
 
 
-            <!-- Catalog -->
+            <!-- CATALOG -->
 
             <div
                 class="dashboard-section"
@@ -1561,7 +1986,7 @@
             </div>
 
 
-            <!-- Revenue Summary -->
+            <!-- REVENUE SUMMARY -->
 
             <div class="panel">
 
@@ -1657,9 +2082,7 @@
 
 <script>
 function copyStoreUrl() {
-    const element = document.getElementById(
-        "creatorStoreUrl"
-    );
+    const element = document.getElementById("creatorStoreUrl");
 
     if (!element) {
         return;
@@ -1671,36 +2094,28 @@ function copyStoreUrl() {
         ? path
         : window.location.origin + path;
 
+    const button = document.querySelector(".copy-store");
+
+    function copied() {
+        if (!button) {
+            return;
+        }
+
+        const original = button.textContent;
+
+        button.textContent = "Copied!";
+
+        setTimeout(function () {
+            button.textContent = original;
+        }, 1800);
+    }
+
     if (
         navigator.clipboard &&
         navigator.clipboard.writeText
     ) {
         navigator.clipboard.writeText(fullUrl)
-            .then(function () {
-
-                const button =
-                    document.querySelector(
-                        ".copy-store"
-                    );
-
-                if (!button) {
-                    return;
-                }
-
-                const original =
-                    button.textContent;
-
-                button.textContent =
-                    "Copied!";
-
-                setTimeout(
-                    function () {
-                        button.textContent =
-                            original;
-                    },
-                    1800
-                );
-            })
+            .then(copied)
             .catch(function () {
                 window.prompt(
                     "Copy your BeatHub store URL:",
@@ -1708,12 +2123,13 @@ function copyStoreUrl() {
                 );
             });
 
-    } else {
-        window.prompt(
-            "Copy your BeatHub store URL:",
-            fullUrl
-        );
+        return;
     }
+
+    window.prompt(
+        "Copy your BeatHub store URL:",
+        fullUrl
+    );
 }
 </script>
 
