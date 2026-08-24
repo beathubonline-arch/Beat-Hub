@@ -153,9 +153,7 @@
         const allRows = rows.querySelectorAll(".track-row");
         allRows.forEach(function (row, index) {
             const title = row.querySelector(".row-title");
-            if (title) {
-                title.textContent = "Track " + (index + 1);
-            }
+            if (title) title.textContent = "Track " + (index + 1);
         });
     }
 
@@ -175,14 +173,9 @@
 
     window.removeTrackRow = function (button) {
         const row = button.closest(".track-row");
-        if (row) {
-            row.remove();
-        }
+        if (row) row.remove();
 
-        if (!rows.querySelector(".track-row")) {
-            addTrackRow();
-        }
-
+        if (!rows.querySelector(".track-row")) addTrackRow();
         renumberRows();
     };
 
@@ -196,13 +189,15 @@
             return;
         }
 
-        const file = input.files[0];
         const formData = new FormData();
-        formData.append("audio_file", file);
+        formData.append("audio_file", input.files[0]);
 
         if (status) status.textContent = "Analyzing BPM…";
         if (help) help.textContent = "BeatHub is analyzing the audio tempo.";
-        if (bpmInput) bpmInput.disabled = true;
+        // IMPORTANT: disabled form controls are NOT submitted by browsers.
+        // Use readonly while analysis is running so the detected/manual BPM
+        // remains part of the final POST /dashboard/upload payload.
+        if (bpmInput) bpmInput.readOnly = true;
 
         try {
             const response = await fetch("/dashboard/analyze-bpm", {
@@ -216,18 +211,17 @@
             if (data.ok && data.bpm) {
                 if (bpmInput) {
                     bpmInput.value = data.bpm;
-                    bpmInput.disabled = false;
+                    bpmInput.readOnly = false;
                 }
-
                 if (status) status.textContent = "✓ BPM detected";
                 if (help) help.textContent = "Detected BPM: " + data.bpm + ". You can edit it if needed.";
             } else {
-                if (bpmInput) bpmInput.disabled = false;
+                if (bpmInput) bpmInput.readOnly = false;
                 if (status) status.textContent = "Could not detect";
                 if (help) help.textContent = (data.error || "Enter the BPM manually if known.");
             }
         } catch (error) {
-            if (bpmInput) bpmInput.disabled = false;
+            if (bpmInput) bpmInput.readOnly = false;
             if (status) status.textContent = "Detection unavailable";
             if (help) help.textContent = "You can enter the BPM manually. Upload will still work.";
         }
