@@ -28,6 +28,10 @@ from app.services.storage import (
     ALLOWED_IMAGE_EXT,
     UploadValidationError,
     save_upload,
+    save_upload_to_r2,
+    _r2_is_configured,
+    _r2_client,
+    _parse_r2_path,
 )
 from app.utils.deps import require_creator
 from app.utils.text import unique_slug
@@ -612,11 +616,18 @@ async def upload_submit(
             else:
                 sales_model = SalesModel.NON_EXCLUSIVE
 
-            audio_path = await save_upload(
-                audio_file,
-                "audio",
-                ALLOWED_AUDIO_EXT,
-            )
+            if _r2_is_configured():
+                audio_path = await save_upload_to_r2(
+                    audio_file,
+                    "audio",
+                    ALLOWED_AUDIO_EXT,
+                )
+            else:
+                audio_path = await save_upload(
+                    audio_file,
+                    "audio",
+                    ALLOWED_AUDIO_EXT,
+                )
 
             cover_path = None
 
@@ -626,11 +637,18 @@ async def upload_submit(
                 and cover_files[i] is not None
                 and cover_files[i].filename
             ):
-                cover_path = await save_upload(
-                    cover_files[i],
-                    "covers",
-                    ALLOWED_IMAGE_EXT,
-                )
+                if _r2_is_configured():
+                    cover_path = await save_upload_to_r2(
+                        cover_files[i],
+                        "covers",
+                        ALLOWED_IMAGE_EXT,
+                    )
+                else:
+                    cover_path = await save_upload(
+                        cover_files[i],
+                        "covers",
+                        ALLOWED_IMAGE_EXT,
+                    )
 
             slug = unique_slug(
                 db,
@@ -688,6 +706,76 @@ async def upload_submit(
             " ",
             "%20",
         ),
+        status_code=303,
+    )
+
+
+# ============================================================
+# DELETE TRACK
+# ============================================================
+
+@router.post("/dashboard/tracks/{track_id}/delete")
+def delete_track(
+    track_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_creator),
+):
+    """Delete a creator's unsold track and its stored media."""
+    profile = getattr(user, "profile", None)
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Creator profile missing.")
+
+    track = (
+        db.query(Track)
+        .filter(
+            Track.id == track_id,
+            Track.creator_profile_id == profile.id,
+        )
+        .first()
+    )
+    if track is None:
+        raise HTTPException(status_code=404, detail="Track not found.")
+
+    if bool(getattr(track, "is_sold", False)):
+        return RedirectResponse(
+            url="/dashboard?error=Sold tracks cannot be deleted because buyers may still have active rights.",
+            status_code=303,
+        )
+
+    audio_path = getattr(track, "audio_file_path", None)
+    cover_path = getattr(track, "cover_art_path", None)
+
+    try:
+        # Remove album relationships first so deletion does not break albums.
+        db.query(AlbumTrack).filter(AlbumTrack.track_id == track.id).delete(synchronize_session=False)
+        db.delete(track)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    # Storage cleanup is deliberately best-effort: the database record is
+    # already gone and a stale object must never make deletion fail.
+    for stored in (audio_path, cover_path):
+        try:
+            if not stored:
+                continue
+            value = str(stored).strip()
+            if value.startswith(("r2://", "s3://")):
+                bucket, key = _parse_r2_path(value.replace("s3://", "r2://", 1))
+                if bucket and key:
+                    _r2_client().delete_object(Bucket=bucket, Key=key)
+            else:
+                from app.services.storage import _resolve_local_path
+                local = _resolve_local_path(value)
+                if local and local.exists() and local.is_file():
+                    local.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    return RedirectResponse(
+        url="/dashboard?success=Track%20deleted%20successfully.",
         status_code=303,
     )
 
