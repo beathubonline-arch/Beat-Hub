@@ -4,110 +4,854 @@
 
 {% block content %}
 
-<section style="padding:30px 0; max-width:600px;">
+<style>
+    /* =========================================================
+       BEATHUB — CREATE ALBUM
+       Dark studio aesthetic inspired by BeatHub login
+       ========================================================= */
 
-  <h1 style="font-size:28px;">
-    Create Album
-  </h1>
+    .album-page {
+        position: relative;
+        min-height: calc(100vh - 100px);
+        padding: 40px 0 70px;
+        overflow: hidden;
+    }
 
-  {% if error %}
-    <div class="alert alert-error">
-      {{ error }}
-    </div>
-  {% endif %}
+    /* Background atmosphere */
 
-  <form
-    action="/dashboard/albums/new"
-    method="post"
-    enctype="multipart/form-data"
-  >
+    .album-page::before {
+        content: "";
+        position: fixed;
+        width: 620px;
+        height: 620px;
+        top: -220px;
+        right: -180px;
+        border-radius: 50%;
+        background:
+            radial-gradient(
+                circle,
+                rgba(212, 169, 43, 0.11) 0%,
+                rgba(212, 169, 43, 0.045) 28%,
+                transparent 68%
+            );
+        pointer-events: none;
+        z-index: 0;
+    }
 
-    <div class="field">
-      <label>Album Title</label>
-      <input
-        type="text"
-        name="title"
-        required
-      >
-    </div>
+    .album-page::after {
+        content: "";
+        position: fixed;
+        width: 500px;
+        height: 500px;
+        left: -250px;
+        bottom: -240px;
+        border-radius: 50%;
+        border: 1px solid rgba(212, 169, 43, 0.08);
+        box-shadow:
+            0 0 100px rgba(212, 169, 43, 0.035);
+        pointer-events: none;
+        z-index: 0;
+    }
 
-    <div class="field">
-      <label>Description</label>
-      <textarea
-        name="description"
-        rows="3"
-      ></textarea>
-    </div>
+    .album-container {
+        position: relative;
+        z-index: 1;
+        width: min(100%, 900px);
+        margin: 0 auto;
+    }
 
-    <div class="field">
-      <label>Genre</label>
-      <input
-        type="text"
-        name="genre"
-      >
-    </div>
+    /* =========================================================
+       HEADER
+       ========================================================= */
 
-    <div class="field">
-      <label>Artwork</label>
-      <input
-        type="file"
-        name="artwork"
-        accept=".jpg,.jpeg,.png,.webp"
-      >
-    </div>
+    .album-header {
+        margin-bottom: 24px;
+    }
 
-    <div class="field">
+    .album-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 13px;
+        margin-bottom: 14px;
+        border: 1px solid rgba(212, 169, 43, 0.30);
+        border-radius: 999px;
+        background: rgba(212, 169, 43, 0.055);
+        color: #f2d36b;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+    }
 
-      <label>Select Tracks</label>
+    .album-eyebrow::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #e5bd3d;
+        box-shadow: 0 0 10px rgba(229, 189, 61, .65);
+    }
 
-      {% for track in tracks %}
+    .album-header h1 {
+        margin: 0;
+        color: #f8f8f8;
+        font-size: clamp(30px, 5vw, 46px);
+        line-height: 1.04;
+        letter-spacing: -.045em;
+    }
 
-        <div class="checkbox-row">
+    .album-header h1 span {
+        color: #e6c44f;
+    }
 
-          <input
-            type="checkbox"
-            id="t{{ loop.index }}"
-            name="track_ids"
-            value="{{ track.id }}"
-          >
+    .album-header p {
+        max-width: 650px;
+        margin: 12px 0 0;
+        color: #85858c;
+        font-size: 14px;
+        line-height: 1.65;
+    }
 
-          <label
-            for="t{{ loop.index }}"
-            style="margin:0;text-transform:none;"
-          >
-            {{ track.title }}
-          </label>
+    /* =========================================================
+       MAIN CARD
+       ========================================================= */
+
+    .album-card {
+        position: relative;
+        padding: 30px;
+        border: 1px solid #29291f;
+        border-radius: 22px;
+        background:
+            radial-gradient(
+                circle at 90% 0%,
+                rgba(255, 210, 70, 0.055),
+                transparent 30%
+            ),
+            linear-gradient(
+                145deg,
+                rgba(24, 24, 21, .98),
+                rgba(11, 11, 10, .99)
+            );
+        box-shadow:
+            0 25px 70px rgba(0, 0, 0, .30),
+            inset 0 1px 0 rgba(255, 255, 255, .025);
+    }
+
+    .album-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 7%;
+        right: 7%;
+        height: 1px;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(225, 190, 69, .40),
+            transparent
+        );
+        pointer-events: none;
+    }
+
+    /* =========================================================
+       FORM GRID
+       ========================================================= */
+
+    .album-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+    }
+
+    .album-form-grid .full-width {
+        grid-column: 1 / -1;
+    }
+
+    .album-field {
+        margin-bottom: 0;
+    }
+
+    .album-field label,
+    .track-section-label {
+        display: block;
+        margin-bottom: 8px;
+        color: #d9d9d4;
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: .02em;
+    }
+
+    .required-mark {
+        color: #e3bd3e;
+        margin-left: 3px;
+    }
+
+    .album-field input[type="text"],
+    .album-field textarea,
+    .album-field input[type="file"] {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #30302b;
+        border-radius: 11px;
+        background: #0b0b0a;
+        color: #f1f1ed;
+        outline: none;
+        transition:
+            border-color .18s ease,
+            box-shadow .18s ease,
+            background .18s ease;
+    }
+
+    .album-field input[type="text"] {
+        min-height: 48px;
+        padding: 0 14px;
+    }
+
+    .album-field textarea {
+        min-height: 120px;
+        padding: 13px 14px;
+        resize: vertical;
+        line-height: 1.55;
+    }
+
+    .album-field input[type="file"] {
+        min-height: 48px;
+        padding: 11px 12px;
+        font-size: 12px;
+        color: #999991;
+    }
+
+    .album-field input[type="file"]::file-selector-button {
+        margin-right: 10px;
+        padding: 8px 12px;
+        border: 1px solid #4b421f;
+        border-radius: 8px;
+        background: #1b180d;
+        color: #e6c34e;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+
+    .album-field input[type="text"]::placeholder,
+    .album-field textarea::placeholder {
+        color: #55554f;
+    }
+
+    .album-field input[type="text"]:focus,
+    .album-field textarea:focus,
+    .album-field input[type="file"]:focus {
+        border-color: #b99425;
+        background: #0d0d0b;
+        box-shadow:
+            0 0 0 3px rgba(212, 169, 43, .08),
+            0 0 24px rgba(212, 169, 43, .035);
+    }
+
+    .field-help {
+        margin-top: 7px;
+        color: #66665f;
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    /* =========================================================
+       TRACK SELECTION
+       ========================================================= */
+
+    .track-selection {
+        margin-top: 26px;
+        padding-top: 25px;
+        border-top: 1px solid #272720;
+    }
+
+    .track-selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 15px;
+        margin-bottom: 14px;
+    }
+
+    .track-selection-title {
+        margin: 0;
+        color: #f0f0eb;
+        font-size: 16px;
+        font-weight: 800;
+    }
+
+    .track-selection-subtitle {
+        margin: 5px 0 0;
+        color: #6f6f68;
+        font-size: 11px;
+    }
+
+    .track-count {
+        padding: 6px 10px;
+        border: 1px solid #363329;
+        border-radius: 999px;
+        background: #12120f;
+        color: #c9a936;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        white-space: nowrap;
+    }
+
+    .tracks-list {
+        display: grid;
+        gap: 9px;
+    }
+
+    .track-option {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        min-height: 58px;
+        padding: 11px 14px;
+        border: 1px solid #292923;
+        border-radius: 12px;
+        background: #0d0d0c;
+        cursor: pointer;
+        transition:
+            border-color .18s ease,
+            background .18s ease,
+            transform .18s ease;
+    }
+
+    .track-option:hover {
+        border-color: #4b421f;
+        background: #11110e;
+        transform: translateY(-1px);
+    }
+
+    .track-option:has(input:checked) {
+        border-color: rgba(212, 169, 43, .55);
+        background:
+            linear-gradient(
+                90deg,
+                rgba(212, 169, 43, .08),
+                rgba(212, 169, 43, .025)
+            );
+        box-shadow:
+            inset 3px 0 0 #cda936;
+    }
+
+    .track-option input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 18px;
+        margin: 0;
+        accent-color: #d4aa2d;
+        cursor: pointer;
+    }
+
+    .track-info {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .track-title {
+        display: block;
+        overflow: hidden;
+        color: #e7e7e2;
+        font-size: 13px;
+        font-weight: 750;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .track-meta {
+        display: block;
+        margin-top: 3px;
+        color: #65655e;
+        font-size: 10px;
+    }
+
+    .track-number {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 28px;
+        border: 1px solid #292923;
+        border-radius: 8px;
+        background: #141410;
+        color: #77776f;
+        font-size: 10px;
+        font-weight: 800;
+    }
+
+    /* =========================================================
+       EMPTY TRACK STATE
+       ========================================================= */
+
+    .no-tracks {
+        padding: 28px 20px;
+        border: 1px dashed #39372d;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, .012);
+        text-align: center;
+    }
+
+    .no-tracks-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 12px;
+        border: 1px solid #3a3421;
+        border-radius: 14px;
+        background: #15130d;
+        font-size: 20px;
+    }
+
+    .no-tracks strong {
+        display: block;
+        color: #dcdcd5;
+        font-size: 14px;
+    }
+
+    .no-tracks p {
+        max-width: 420px;
+        margin: 7px auto 16px;
+        color: #696961;
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
+    .upload-track-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 14px;
+        border: 1px solid #5a491c;
+        border-radius: 9px;
+        background: #18150b;
+        color: #e3bf46;
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 800;
+        transition: background .18s ease;
+    }
+
+    .upload-track-link:hover {
+        background: #24200f;
+    }
+
+    /* =========================================================
+       FORM ACTIONS
+       ========================================================= */
+
+    .album-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-top: 28px;
+        padding-top: 23px;
+        border-top: 1px solid #272720;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0 13px;
+        color: #85857e;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+        border-radius: 9px;
+        transition:
+            color .18s ease,
+            background .18s ease;
+    }
+
+    .back-link:hover {
+        color: #dddcd5;
+        background: #151512;
+    }
+
+    .create-album-btn {
+        min-height: 48px;
+        padding: 0 25px;
+        border: 0;
+        border-radius: 10px;
+        background:
+            linear-gradient(
+                135deg,
+                #f0d36b,
+                #c99f25
+            );
+        color: #17130a;
+        box-shadow:
+            0 10px 28px rgba(212, 169, 43, .14);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: .02em;
+        cursor: pointer;
+        transition:
+            transform .18s ease,
+            box-shadow .18s ease,
+            filter .18s ease;
+    }
+
+    .create-album-btn:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.04);
+        box-shadow:
+            0 13px 34px rgba(212, 169, 43, .20);
+    }
+
+    .create-album-btn:active {
+        transform: translateY(0);
+    }
+
+    /* =========================================================
+       ERROR
+       ========================================================= */
+
+    .album-error {
+        margin-bottom: 20px;
+        padding: 13px 15px;
+        border: 1px solid #702525;
+        border-radius: 11px;
+        background: #260d0d;
+        color: #f3b5b5;
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.5;
+    }
+
+    /* =========================================================
+       RESPONSIVE
+       ========================================================= */
+
+    @media (max-width: 700px) {
+
+        .album-page {
+            padding: 25px 0 50px;
+        }
+
+        .album-card {
+            padding: 21px 17px;
+            border-radius: 17px;
+        }
+
+        .album-form-grid {
+            grid-template-columns: 1fr;
+            gap: 17px;
+        }
+
+        .album-form-grid .full-width {
+            grid-column: auto;
+        }
+
+        .track-selection-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .album-actions {
+            align-items: stretch;
+            flex-direction: column-reverse;
+        }
+
+        .back-link,
+        .create-album-btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+
+<div class="album-page">
+
+    <div class="album-container">
+
+        <!-- =====================================================
+             PAGE HEADER
+             ===================================================== -->
+
+        <header class="album-header">
+
+            <div class="album-eyebrow">
+                BeatHub Creator Studio
+            </div>
+
+            <h1>
+                Create your <span>album.</span>
+            </h1>
+
+            <p>
+                Bring your tracks together into a professional album
+                that your audience can discover and purchase through
+                your BeatHub store.
+            </p>
+
+        </header>
+
+
+        <!-- =====================================================
+             ERROR MESSAGE
+             ===================================================== -->
+
+        {% if error %}
+
+            <div class="album-error">
+                {{ error }}
+            </div>
+
+        {% endif %}
+
+
+        <!-- =====================================================
+             ALBUM FORM
+             ===================================================== -->
+
+        <div class="album-card">
+
+            <form
+                action="/dashboard/albums/new"
+                method="post"
+                enctype="multipart/form-data"
+            >
+
+                <!-- =================================================
+                     BASIC ALBUM INFORMATION
+                     ================================================= -->
+
+                <div class="album-form-grid">
+
+                    <div class="album-field full-width">
+
+                        <label for="album-title">
+                            Album Title
+                            <span class="required-mark">*</span>
+                        </label>
+
+                        <input
+                            id="album-title"
+                            type="text"
+                            name="title"
+                            placeholder="Enter your album title"
+                            required
+                            autocomplete="off"
+                        >
+
+                        <div class="field-help">
+                            Choose a clear title that represents the sound
+                            and identity of this album.
+                        </div>
+
+                    </div>
+
+
+                    <div class="album-field full-width">
+
+                        <label for="album-description">
+                            Description
+                        </label>
+
+                        <textarea
+                            id="album-description"
+                            name="description"
+                            rows="4"
+                            placeholder="Tell listeners what this album is about..."
+                        ></textarea>
+
+                    </div>
+
+
+                    <div class="album-field">
+
+                        <label for="album-genre">
+                            Genre
+                        </label>
+
+                        <input
+                            id="album-genre"
+                            type="text"
+                            name="genre"
+                            placeholder="e.g. Afrobeats, Hip Hop, R&B"
+                            autocomplete="off"
+                        >
+
+                    </div>
+
+
+                    <div class="album-field">
+
+                        <label for="album-artwork">
+                            Album Artwork
+                        </label>
+
+                        <input
+                            id="album-artwork"
+                            type="file"
+                            name="artwork"
+                            accept=".jpg,.jpeg,.png,.webp"
+                        >
+
+                        <div class="field-help">
+                            JPG, PNG or WebP recommended.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- =================================================
+                     TRACK SELECTION
+                     ================================================= -->
+
+                <div class="track-selection">
+
+                    <div class="track-selection-header">
+
+                        <div>
+
+                            <h2 class="track-selection-title">
+                                Select tracks
+                            </h2>
+
+                            <p class="track-selection-subtitle">
+                                Choose the tracks you want included in this album.
+                            </p>
+
+                        </div>
+
+                        {% if tracks %}
+
+                            <div class="track-count">
+                                {{ tracks|length }} track{% if tracks|length != 1 %}s{% endif %} available
+                            </div>
+
+                        {% endif %}
+
+                    </div>
+
+
+                    {% if tracks %}
+
+                        <div class="tracks-list">
+
+                            {% for track in tracks %}
+
+                                <label
+                                    class="track-option"
+                                    for="track-{{ track.id }}"
+                                >
+
+                                    <div class="track-number">
+                                        {{ loop.index }}
+                                    </div>
+
+                                    <input
+                                        type="checkbox"
+                                        id="track-{{ track.id }}"
+                                        name="track_ids"
+                                        value="{{ track.id }}"
+                                    >
+
+                                    <div class="track-info">
+
+                                        <span class="track-title">
+                                            {{ track.title }}
+                                        </span>
+
+                                        <span class="track-meta">
+
+                                            {% if track.genre %}
+                                                {{ track.genre }}
+                                            {% else %}
+                                                Beat / Track
+                                            {% endif %}
+
+                                            {% if track.price is defined %}
+                                                · KSh {{ "%.2f"|format(track.price|float) }}
+                                            {% endif %}
+
+                                        </span>
+
+                                    </div>
+
+                                </label>
+
+                            {% endfor %}
+
+                        </div>
+
+                    {% else %}
+
+                        <div class="no-tracks">
+
+                            <div class="no-tracks-icon">
+                                🎵
+                            </div>
+
+                            <strong>
+                                No tracks available yet
+                            </strong>
+
+                            <p>
+                                Upload at least one beat or track before
+                                creating an album. Your uploaded tracks
+                                will appear here for selection.
+                            </p>
+
+                            <a
+                                href="/dashboard/upload"
+                                class="upload-track-link"
+                            >
+                                + Upload a Track
+                            </a>
+
+                        </div>
+
+                    {% endif %}
+
+
+                    <!-- =================================================
+                         FORM ACTIONS
+                         ================================================= -->
+
+                    <div class="album-actions">
+
+                        <a
+                            href="/dashboard"
+                            class="back-link"
+                        >
+                            ← Back to Dashboard
+                        </a>
+
+                        <button
+                            type="submit"
+                            class="create-album-btn"
+                            {% if not tracks %}disabled{% endif %}
+                        >
+                            Create Album
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </form>
 
         </div>
 
-      {% else %}
-
-        <p class="sub">
-
-          You need to upload tracks before creating an album.
-
-          <a
-            href="/dashboard/upload"
-            style="color:var(--gold);"
-          >
-            Upload a track
-          </a>
-
-        </p>
-
-      {% endfor %}
-
     </div>
 
-    <button
-      type="submit"
-      class="btn btn-primary btn-block"
-    >
-      Create Album
-    </button>
-
-  </form>
-
-</section>
+</div>
 
 {% endblock %}
