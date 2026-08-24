@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -52,6 +53,7 @@ def ctx(
 def _local_media_path(
     stored_path: str,
 ) -> Optional[Path]:
+
     value = str(
         stored_path or ""
     ).strip()
@@ -59,7 +61,6 @@ def _local_media_path(
     if not value:
         return None
 
-    # Cloud/R2 paths are not served by this local route.
     if value.startswith(
         (
             "http://",
@@ -177,6 +178,7 @@ def _media_content_type(
 def _serve_local_media(
     stored_path: str,
 ):
+
     path = _local_media_path(
         stored_path
     )
@@ -304,65 +306,126 @@ def terms(
 # PUBLIC CREATOR STORE
 #
 # PRIMARY:
-#
 #     /store/{slug}
 #
-# EXAMPLE:
-#
-#     /store/mr-mapema
-#
 # COMPATIBILITY:
-#
 #     /creator/{slug}
 #     /profile/{slug}
-#
 # ======================================================================
+
+
+def _normalize_public_slug(
+    value: str,
+) -> str:
+
+    value = str(
+        value or ""
+    ).strip().lower()
+
+    if not value:
+        return ""
+
+    result = []
+
+    previous_dash = False
+
+    for character in value:
+
+        if (
+            character.isalnum()
+            or character == "_"
+        ):
+
+            result.append(
+                character
+            )
+            previous_dash = False
+
+        elif character in (
+            "-",
+            " ",
+            ".",
+        ):
+
+            if not previous_dash:
+                result.append("-")
+
+            previous_dash = True
+
+    return "".join(
+        result
+    ).strip("-")
+
+
+def _profile_has_column(
+    column_name: str,
+) -> bool:
+
+    try:
+
+        return column_name in {
+            attribute.key
+            for attribute
+            in Profile.__mapper__.attrs
+        }
+
+    except Exception:
+
+        return False
+
+
+def _user_has_column(
+    column_name: str,
+) -> bool:
+
+    try:
+
+        return column_name in {
+            attribute.key
+            for attribute
+            in User.__mapper__.attrs
+        }
+
+    except Exception:
+
+        return False
+
 
 def _find_public_profile(
     db: Session,
     slug: str,
 ) -> Optional[Profile]:
 
-    clean_slug = (
-        str(slug or "")
-        .strip()
-        .lower()
-    )
+    requested = str(
+        slug or ""
+    ).strip()
 
-    if not clean_slug:
+    if not requested:
         return None
 
-    # --------------------------------------------------------------
-    # Primary lookup: exact public profile slug.
-    # --------------------------------------------------------------
-
-    profile = (
-        db.query(Profile)
-        .filter(
-            Profile.slug == clean_slug
-        )
-        .first()
+    clean_slug = (
+        requested.lower()
     )
 
-    if profile:
-        return profile
+    normalized_slug = (
+        _normalize_public_slug(
+            requested
+        )
+    )
 
     # --------------------------------------------------------------
-    # Compatibility lookup.
-    #
-    # Older accounts/deployments may contain a slug with different
-    # capitalization. This gives existing creator stores a safer
-    # compatibility path without changing their stored slug.
+    # 1. Exact stored slug
     # --------------------------------------------------------------
 
-    try:
+    if _profile_has_column(
+        "slug"
+    ):
 
         profile = (
             db.query(Profile)
             .filter(
-                Profile.slug.ilike(
-                    clean_slug
-                )
+                Profile.slug
+                == clean_slug
             )
             .first()
         )
@@ -370,7 +433,288 @@ def _find_public_profile(
         if profile:
             return profile
 
+        # ----------------------------------------------------------
+        # 2. Case-insensitive slug
+        # ----------------------------------------------------------
+
+        try:
+
+            profile = (
+                db.query(Profile)
+                .filter(
+                    Profile.slug.ilike(
+                        clean_slug
+                    )
+                )
+                .first()
+            )
+
+            if profile:
+                return profile
+
+        except Exception:
+
+            pass
+
+        # ----------------------------------------------------------
+        # 3. Normalized slug comparison
+        #
+        # This catches things such as:
+        #
+        # Mr Mapema
+        # mr_mapema
+        # mr-mapema
+        #
+        # when the stored slug differs slightly.
+        # ----------------------------------------------------------
+
+        try:
+
+            profiles = (
+                db.query(Profile)
+                .all()
+            )
+
+            for profile in profiles:
+
+                stored_slug = getattr(
+                    profile,
+                    "slug",
+                    None,
+                )
+
+                if not stored_slug:
+                    continue
+
+                if (
+                    _normalize_public_slug(
+                        stored_slug
+                    )
+                    == normalized_slug
+                ):
+                    return profile
+
+        except Exception:
+
+            pass
+
+    # --------------------------------------------------------------
+    # 4. Stage name fallback
+    #
+    # This is important for existing BeatHub accounts whose profile
+    # slug was not generated/stored correctly.
+    # --------------------------------------------------------------
+
+    for field_name in (
+        "stage_name",
+        "display_name",
+        "name",
+    ):
+
+        if not _profile_has_column(
+            field_name
+        ):
+            continue
+
+        try:
+
+            column = getattr(
+                Profile,
+                field_name,
+            )
+
+            profile = (
+                db.query(Profile)
+                .filter(
+                    column.ilike(
+                        requested
+                    )
+                )
+                .first()
+            )
+
+            if profile:
+                return profile
+
+        except Exception:
+
+            pass
+
+        # Normalized stage-name fallback.
+
+        try:
+
+            profiles = (
+                db.query(Profile)
+                .all()
+            )
+
+            for profile in profiles:
+
+                value = getattr(
+                    profile,
+                    field_name,
+                    None,
+                )
+
+                if not value:
+                    continue
+
+                if (
+                    _normalize_public_slug(
+                        value
+                    )
+                    == normalized_slug
+                ):
+                    return profile
+
+        except Exception:
+
+            pass
+
+    # --------------------------------------------------------------
+    # 5. Username fallback
+    #
+    # Existing users may have their public identity stored on User
+    # instead of Profile.
+    # --------------------------------------------------------------
+
+    if _profile_has_column(
+        "user_id"
+    ):
+
+        try:
+
+            user_query = (
+                db.query(
+                    User,
+                    Profile,
+                )
+                .join(
+                    Profile,
+                    Profile.user_id
+                    == User.id,
+                )
+            )
+
+            for field_name in (
+                "username",
+                "name",
+                "email",
+            ):
+
+                if not _user_has_column(
+                    field_name
+                ):
+                    continue
+
+                try:
+
+                    column = getattr(
+                        User,
+                        field_name,
+                    )
+
+                    result = (
+                        user_query
+                        .filter(
+                            column.ilike(
+                                requested
+                            )
+                        )
+                        .first()
+                    )
+
+                    if result:
+
+                        return result[1]
+
+                except Exception:
+
+                    continue
+
+            # Normalized username fallback.
+
+            try:
+
+                rows = (
+                    user_query.all()
+                )
+
+                for user, profile in rows:
+
+                    for field_name in (
+                        "username",
+                        "name",
+                        "email",
+                    ):
+
+                        value = getattr(
+                            user,
+                            field_name,
+                            None,
+                        )
+
+                        if not value:
+                            continue
+
+                        if (
+                            _normalize_public_slug(
+                                value
+                            )
+                            == normalized_slug
+                        ):
+                            return profile
+
+            except Exception:
+
+                pass
+
+        except Exception:
+
+            pass
+
+    return None
+
+
+def _get_public_artwork_url(
+    stored_path,
+) -> Optional[str]:
+
+    if not stored_path:
+        return None
+
+    value = str(
+        stored_path
+    ).strip()
+
+    if not value:
+        return None
+
+    # Already a usable public URL.
+    if value.startswith(
+        (
+            "http://",
+            "https://",
+        )
+    ):
+        return value
+
+    try:
+
+        from app.services.storage import (
+            r2_presigned_url,
+        )
+
+        url = r2_presigned_url(
+            value
+        )
+
+        if url:
+            return url
+
     except Exception:
+
         pass
 
     return None
@@ -397,9 +741,22 @@ def _public_creator_store(
             ),
         )
 
-    # --------------------------------------------------------------
+    # ==============================================================
+    # CREATOR
+    # ==============================================================
+
+    creator = getattr(
+        profile,
+        "user",
+        None,
+    )
+
+    if creator is None:
+        creator = profile
+
+    # ==============================================================
     # PUBLIC TRACKS
-    # --------------------------------------------------------------
+    # ==============================================================
 
     tracks = list(
         getattr(
@@ -415,7 +772,7 @@ def _public_creator_store(
     for track in tracks:
 
         # ----------------------------------------------------------
-        # Only published tracks are public.
+        # Published only
         # ----------------------------------------------------------
 
         if not getattr(
@@ -426,7 +783,7 @@ def _public_creator_store(
             continue
 
         # ----------------------------------------------------------
-        # Exclusive tracks that have already been sold are hidden.
+        # Hide sold exclusive tracks
         # ----------------------------------------------------------
 
         sales_model = getattr(
@@ -459,46 +816,40 @@ def _public_creator_store(
             continue
 
         # ----------------------------------------------------------
-        # Preserve existing artwork behaviour.
-        #
-        # We first try R2 because current BeatHub storage can use
-        # Cloudflare R2. If that is unavailable, the template can
-        # fall back to its normal artwork handling.
+        # Artwork URL
         # ----------------------------------------------------------
 
-        try:
+        cover_path = getattr(
+            track,
+            "cover_art_path",
+            None,
+        )
 
-            cover_path = getattr(
-                track,
-                "cover_art_path",
-                None,
+        artwork_url = (
+            _get_public_artwork_url(
+                cover_path
             )
+        )
 
-            if cover_path:
+        if artwork_url:
 
-                from app.services.storage import (
-                    r2_presigned_url,
-                )
+            try:
 
                 track.cover_art_url = (
-                    r2_presigned_url(
-                        cover_path
-                    )
+                    artwork_url
                 )
 
-        except Exception:
+            except Exception:
 
-            # Do not break the public store just because an artwork
-            # URL cannot be generated.
-            pass
+                pass
 
         public_tracks.append(
             track
         )
 
-    # --------------------------------------------------------------
+    # ==============================================================
     # PUBLIC ALBUMS
-    # --------------------------------------------------------------
+    # ==============================================================
 
     albums = list(
         getattr(
@@ -520,65 +871,99 @@ def _public_creator_store(
         ):
             continue
 
-        try:
+        artwork_path = getattr(
+            album,
+            "artwork_path",
+            None,
+        )
 
-            artwork_path = getattr(
-                album,
-                "artwork_path",
-                None,
+        artwork_url = (
+            _get_public_artwork_url(
+                artwork_path
             )
+        )
 
-            if artwork_path:
+        if artwork_url:
 
-                from app.services.storage import (
-                    r2_presigned_url,
-                )
+            try:
 
                 album.artwork_url = (
-                    r2_presigned_url(
-                        artwork_path
-                    )
+                    artwork_url
                 )
 
-        except Exception:
+            except Exception:
 
-            pass
+                pass
 
         public_albums.append(
             album
         )
 
-    # --------------------------------------------------------------
-    # PUBLIC CREATOR
+    # ==============================================================
+    # PUBLIC CREATOR PHOTO
     #
-    # profile is deliberately passed as creator as well because
-    # existing templates use both names in different places.
-    # --------------------------------------------------------------
+    # Support the profile-photo fields that have appeared across
+    # BeatHub versions without forcing a database migration.
+    # ==============================================================
 
-    creator = getattr(
+    profile_photo_url = None
+
+    for field_name in (
+        "photo_url",
+        "profile_photo_url",
+        "avatar_url",
+        "image_url",
+        "profile_image_url",
+    ):
+
+        value = getattr(
+            profile,
+            field_name,
+            None,
+        )
+
+        if value:
+
+            profile_photo_url = (
+                _get_public_artwork_url(
+                    value
+                )
+                or str(value)
+            )
+
+            if profile_photo_url:
+                break
+
+    # ==============================================================
+    # PUBLIC STORE URL
+    # ==============================================================
+
+    canonical_slug = getattr(
         profile,
-        "user",
+        "slug",
         None,
     )
 
-    if creator is None:
-        creator = profile
-
-    # --------------------------------------------------------------
-    # CANONICAL STORE URL
-    # --------------------------------------------------------------
+    if not canonical_slug:
+        canonical_slug = (
+            _normalize_public_slug(
+                requested
+            )
+        )
 
     store_url = (
         str(
             request.base_url
         ).rstrip("/")
         + "/store/"
-        + str(profile.slug)
+        + str(
+            canonical_slug
+        )
     )
 
-    # --------------------------------------------------------------
+    # ==============================================================
     # TEMPLATE
-    # --------------------------------------------------------------
+    # ==============================================================
 
     return templates.TemplateResponse(
         request,
@@ -593,21 +978,28 @@ def _public_creator_store(
             tracks=public_tracks,
             albums=public_albums,
 
+            profile_photo_url=(
+                profile_photo_url
+            ),
+
             store_url=store_url,
+
             store_path=(
                 "/store/"
-                + str(profile.slug)
+                + str(
+                    canonical_slug
+                )
             ),
 
             profile_slug=str(
-                profile.slug
+                canonical_slug
             ),
         ),
     )
 
 
 # ======================================================================
-# PRIMARY PUBLIC STORE ROUTE
+# PRIMARY PUBLIC STORE
 # ======================================================================
 
 @router.get(
@@ -632,7 +1024,7 @@ def public_store(
 
 
 # ======================================================================
-# CREATOR URL COMPATIBILITY
+# CREATOR COMPATIBILITY
 # ======================================================================
 
 @router.get(
@@ -657,7 +1049,7 @@ def creator_store(
 
 
 # ======================================================================
-# PROFILE URL COMPATIBILITY
+# PROFILE COMPATIBILITY
 # ======================================================================
 
 @router.get(
@@ -1067,8 +1459,6 @@ def account_settings(
 
 # ======================================================================
 # LOCAL MEDIA COMPATIBILITY
-#
-# Only files inside MEDIA_ROOT may be served.
 # ======================================================================
 
 @router.get(
@@ -1186,4 +1576,3 @@ def healthz_compat():
     return {
         "status": "ok",
     }
-    
