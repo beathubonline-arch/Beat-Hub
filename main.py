@@ -1,5 +1,7 @@
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -50,13 +52,8 @@ app = FastAPI(
 @app.middleware("http")
 async def homepage_motion_assets(request: Request, call_next):
     response = await call_next(request)
-
-    # Keep the homepage motion layer isolated from the global stylesheet.
-    # The explicit Link response also avoids changing the standalone home
-    # template or any other page.
     if request.url.path == "/" and response.headers.get("content-type", "").startswith("text/html"):
         response.headers["Link"] = "</static/css/home-animation.css?v=2>; rel=stylesheet"
-
     return response
 
 
@@ -157,9 +154,6 @@ def public_track_preview(slug: str, db: Session = Depends(get_db)):
     raise HTTPException(status_code=404, detail="Preview audio is not available.")
 
 
-# The creator-store router must be registered before pages.router because
-# pages.router also contains legacy /store/{slug} and /profile/{slug}
-# handlers. This guarantees one authenticated owner-aware implementation.
 app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
@@ -272,6 +266,26 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 async def startup_event():
     logger.info("BeatHub application started.")
     logger.info("Storage backend: %s", getattr(settings, "MEDIA_STORAGE", "local"))
+
+    # Production safety: Render starts the service directly with uvicorn.
+    # Run Alembic here so PostgreSQL schema changes cannot be forgotten.
+    # This is idempotent: an already-up-to-date database is a no-op.
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if result.returncode != 0:
+            logger.error("Alembic migration failed (exit %s): %s", result.returncode, result.stderr.strip())
+            raise RuntimeError("Database migration failed during application startup.")
+        logger.info("Alembic database migration completed: %s", result.stdout.strip() or "already up to date")
+    except Exception:
+        logger.exception("Database migration failed. Application startup aborted to prevent schema/code mismatch.")
+        raise
 
 
 @app.on_event("shutdown")
