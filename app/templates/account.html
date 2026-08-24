@@ -2,34 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>BeatHub | Your Studio</title>
+    <title>BeatHub | Artist Studio</title>
 
     <meta
         name="description"
-        content="Your BeatHub artist studio — discover beats, manage purchases and build your sound."
+        content="Your BeatHub artist studio. Discover beats, manage purchases and build your sound."
     >
 
     <style>
         :root {
             --bg: #070707;
-            --bg-soft: #0d0d0d;
-            --panel: #111111;
-            --panel-hover: #161616;
+            --bg-soft: #0b0b0c;
+            --panel: #111112;
+            --panel-2: #151516;
+
             --gold: #d4af37;
             --gold-light: #f0d477;
-            --gold-soft: rgba(212, 175, 55, 0.12);
-            --gold-border: rgba(212, 175, 55, 0.28);
-            --text: #f5f5f5;
-            --muted: #999999;
-            --muted-light: #c1c1c1;
+            --gold-soft: rgba(212,175,55,0.11);
+            --gold-border: rgba(212,175,55,0.28);
+
+            --text: #f6f6f6;
+            --muted: #929292;
+            --muted-light: #c5c5c5;
+
             --border: rgba(255,255,255,0.08);
-            --danger: #ff6b6b;
-            --success: #68d391;
+
+            --green: #69d391;
+            --green-soft: rgba(105,211,145,0.10);
+
+            --shadow:
+                0 30px 80px rgba(0,0,0,0.40);
         }
 
         * {
@@ -44,25 +52,29 @@
 
         body {
             min-height: 100vh;
+
             background:
                 radial-gradient(
-                    circle at 80% 0%,
-                    rgba(212,175,55,0.10),
-                    transparent 30%
+                    circle at 82% 0%,
+                    rgba(212,175,55,0.11),
+                    transparent 31%
                 ),
                 radial-gradient(
-                    circle at 0% 40%,
+                    circle at 0% 42%,
                     rgba(212,175,55,0.045),
-                    transparent 30%
+                    transparent 29%
                 ),
                 var(--bg);
+
             color: var(--text);
+
             font-family:
                 Inter,
                 -apple-system,
                 BlinkMacSystemFont,
                 "Segoe UI",
                 sans-serif;
+
             line-height: 1.5;
         }
 
@@ -71,55 +83,69 @@
             text-decoration: none;
         }
 
-        button,
-        a {
-            -webkit-tap-highlight-color: transparent;
+        button {
+            font: inherit;
         }
 
-        /* ==========================================================
+        /* ======================================================
            NAVIGATION
-        ========================================================== */
+        ====================================================== */
 
         .topbar {
             position: sticky;
             top: 0;
             z-index: 100;
+
             height: 72px;
+
             display: flex;
             align-items: center;
             justify-content: space-between;
+
             padding: 0 5%;
-            background: rgba(7,7,7,0.92);
+
+            background: rgba(7,7,7,0.90);
+
             backdrop-filter: blur(18px);
-            border-bottom: 1px solid var(--border);
+
+            border-bottom:
+                1px solid var(--border);
         }
 
         .brand {
             display: flex;
             align-items: center;
             gap: 11px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
+
             font-size: 21px;
+            font-weight: 850;
+            letter-spacing: -0.5px;
         }
 
         .brand-mark {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
+            width: 36px;
+            height: 36px;
+
             display: grid;
             place-items: center;
+
+            border-radius: 11px;
+
             background:
                 linear-gradient(
                     145deg,
                     var(--gold-light),
                     var(--gold)
                 );
-            color: #090909;
-            font-size: 16px;
-            font-weight: 900;
+
+            color: #080808;
+
+            font-size: 17px;
+            font-weight: 950;
+
             box-shadow:
-                0 6px 25px rgba(212,175,55,0.18);
+                0 8px 28px
+                rgba(212,175,55,0.18);
         }
 
         .brand span {
@@ -129,163 +155,197 @@
         .nav-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .nav-link {
-            color: var(--muted-light);
             padding: 9px 13px;
+
             border-radius: 9px;
-            font-size: 14px;
-            transition: 0.2s ease;
+
+            color: var(--muted-light);
+
+            font-size: 13px;
+            font-weight: 700;
+
+            transition:
+                color .2s ease,
+                background .2s ease,
+                transform .2s ease;
         }
 
         .nav-link:hover {
             color: var(--gold-light);
             background: var(--gold-soft);
+            transform: translateY(-1px);
         }
 
         .logout-form {
-            margin: 0;
+            margin-left: 4px;
         }
 
         .logout-button {
-            border: 1px solid var(--border);
+            border:
+                1px solid var(--border);
+
             background: transparent;
+
             color: var(--muted);
+
             padding: 9px 13px;
+
             border-radius: 9px;
+
             cursor: pointer;
-            font-size: 14px;
-            transition: 0.2s ease;
+
+            font-size: 13px;
+            font-weight: 700;
+
+            transition: .2s ease;
         }
 
         .logout-button:hover {
-            border-color: var(--gold-border);
             color: var(--gold-light);
+            border-color: var(--gold-border);
+            background: var(--gold-soft);
         }
 
-        /* ==========================================================
-           MAIN
-        ========================================================== */
+        /* ======================================================
+           PAGE
+        ====================================================== */
 
         .page {
             width: min(1180px, 92%);
             margin: 0 auto;
-            padding: 55px 0 70px;
+
+            padding:
+                48px 0 70px;
         }
 
-        /* ==========================================================
-           FLASH MESSAGES
-        ========================================================== */
-
-        .alert {
-            margin-bottom: 28px;
-            padding: 14px 17px;
-            border-radius: 12px;
-            font-size: 14px;
-            border: 1px solid;
-        }
-
-        .alert-success {
-            color: var(--success);
-            background: rgba(104,211,145,0.08);
-            border-color: rgba(104,211,145,0.22);
-        }
-
-        .alert-error {
-            color: var(--danger);
-            background: rgba(255,107,107,0.08);
-            border-color: rgba(255,107,107,0.22);
-        }
-
-        /* ==========================================================
+        /* ======================================================
            HERO
-        ========================================================== */
+        ====================================================== */
 
         .hero {
             position: relative;
             overflow: hidden;
-            min-height: 335px;
+
+            min-height: 355px;
+
             display: flex;
             align-items: flex-end;
-            padding: 48px;
-            border: 1px solid var(--gold-border);
+
+            padding: 50px;
+
+            border:
+                1px solid var(--gold-border);
+
             border-radius: 26px;
+
             background:
                 linear-gradient(
                     135deg,
-                    rgba(212,175,55,0.10),
+                    rgba(212,175,55,0.11),
                     transparent 42%
                 ),
                 linear-gradient(
                     180deg,
-                    rgba(255,255,255,0.025),
+                    rgba(255,255,255,0.028),
                     rgba(255,255,255,0.008)
                 ),
                 #0b0b0b;
-            box-shadow:
-                0 30px 80px rgba(0,0,0,0.38),
-                inset 0 1px 0 rgba(255,255,255,0.025);
+
+            box-shadow: var(--shadow);
         }
 
         .hero::before {
             content: "";
+
             position: absolute;
-            width: 430px;
-            height: 430px;
-            right: -130px;
-            top: -190px;
+
+            width: 440px;
+            height: 440px;
+
+            right: -135px;
+            top: -205px;
+
             border-radius: 50%;
-            border: 1px solid rgba(212,175,55,0.12);
+
+            border:
+                1px solid
+                rgba(212,175,55,0.13);
+
             box-shadow:
-                0 0 0 45px rgba(212,175,55,0.018),
-                0 0 0 90px rgba(212,175,55,0.012);
+                0 0 0 45px
+                rgba(212,175,55,0.018),
+
+                0 0 0 90px
+                rgba(212,175,55,0.012);
         }
 
         .hero::after {
             content: "BEATHUB";
+
             position: absolute;
-            right: 35px;
-            bottom: 25px;
-            color: rgba(212,175,55,0.035);
+
+            right: 32px;
+            bottom: 24px;
+
+            color:
+                rgba(212,175,55,0.035);
+
             font-size: 70px;
-            font-weight: 900;
+            font-weight: 950;
+
             letter-spacing: 8px;
+
             pointer-events: none;
         }
 
         .hero-content {
             position: relative;
             z-index: 2;
-            max-width: 690px;
+
+            max-width: 720px;
         }
 
         .eyebrow {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 17px;
+
+            margin-bottom: 15px;
+
             color: var(--gold-light);
+
             font-size: 11px;
-            font-weight: 800;
+            font-weight: 850;
+
             letter-spacing: 2px;
             text-transform: uppercase;
         }
 
         .eyebrow::before {
             content: "";
+
             width: 24px;
             height: 1px;
-            background: var(--gold);
+
+            background:
+                var(--gold);
         }
 
         .hero h1 {
-            font-size: clamp(36px, 5vw, 64px);
-            line-height: 1.03;
-            letter-spacing: -2.8px;
+            font-size:
+                clamp(38px, 5vw, 66px);
+
+            line-height: 1.02;
+
+            letter-spacing: -3px;
+
             margin-bottom: 16px;
-            font-weight: 850;
+
+            font-weight: 900;
         }
 
         .hero h1 span {
@@ -293,35 +353,41 @@
         }
 
         .hero p {
-            max-width: 610px;
+            max-width: 650px;
+
             color: var(--muted-light);
+
             font-size: 16px;
             line-height: 1.7;
         }
 
         .hero-actions {
-            position: relative;
-            z-index: 5;
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
+
             margin-top: 28px;
         }
 
         .button {
+            min-height: 48px;
+
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 9px;
-            min-height: 48px;
+
             padding: 0 21px;
+
             border-radius: 11px;
+
             font-size: 14px;
-            font-weight: 800;
+            font-weight: 850;
+
             transition:
-                transform 0.2s ease,
-                box-shadow 0.2s ease,
-                background 0.2s ease;
+                transform .2s ease,
+                box-shadow .2s ease,
+                background .2s ease;
         }
 
         .button:hover {
@@ -330,34 +396,108 @@
 
         .button-primary {
             color: #090909;
+
             background:
                 linear-gradient(
                     135deg,
                     var(--gold-light),
                     var(--gold)
                 );
+
             box-shadow:
-                0 12px 30px rgba(212,175,55,0.16);
+                0 12px 30px
+                rgba(212,175,55,0.16);
         }
 
         .button-primary:hover {
             box-shadow:
-                0 16px 38px rgba(212,175,55,0.24);
+                0 17px 38px
+                rgba(212,175,55,0.25);
         }
 
         .button-secondary {
             color: var(--gold-light);
-            border: 1px solid var(--gold-border);
-            background: rgba(212,175,55,0.055);
+
+            border:
+                1px solid var(--gold-border);
+
+            background:
+                rgba(212,175,55,0.055);
         }
 
         .button-secondary:hover {
-            background: var(--gold-soft);
+            background:
+                var(--gold-soft);
         }
 
-        /* ==========================================================
-           SECTION
-        ========================================================== */
+        /* ======================================================
+           STATS
+        ====================================================== */
+
+        .stats {
+            display: grid;
+
+            grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+
+            gap: 14px;
+
+            margin-top: 22px;
+        }
+
+        .stat {
+            padding: 22px;
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 17px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    rgba(255,255,255,0.035),
+                    rgba(255,255,255,0.012)
+                );
+
+            transition:
+                transform .2s ease,
+                border-color .2s ease;
+        }
+
+        .stat:hover {
+            transform: translateY(-3px);
+            border-color: var(--gold-border);
+        }
+
+        .stat-label {
+            color: var(--muted);
+
+            font-size: 11px;
+            font-weight: 800;
+
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            margin-top: 7px;
+
+            color: var(--text);
+
+            font-size: 27px;
+            font-weight: 900;
+
+            letter-spacing: -1px;
+        }
+
+        .stat-value.gold {
+            color: var(--gold-light);
+        }
+
+        /* ======================================================
+           SECTIONS
+        ====================================================== */
 
         .section {
             margin-top: 42px;
@@ -365,65 +505,84 @@
 
         .section-heading {
             display: flex;
+
             align-items: flex-end;
             justify-content: space-between;
+
             gap: 20px;
+
             margin-bottom: 18px;
         }
 
         .section-heading h2 {
             font-size: 23px;
-            letter-spacing: -0.7px;
+            letter-spacing: -.7px;
         }
 
         .section-heading p {
             margin-top: 4px;
+
             color: var(--muted);
+
             font-size: 13px;
         }
 
         .section-link {
             color: var(--gold-light);
+
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 800;
         }
 
-        /* ==========================================================
-           ACTION CARDS
-        ========================================================== */
+        /* ======================================================
+           ACTION GRID
+        ====================================================== */
 
         .action-grid {
             display: grid;
+
             grid-template-columns:
                 repeat(4, minmax(0, 1fr));
+
             gap: 14px;
         }
 
         .action-card {
             position: relative;
-            min-height: 170px;
             overflow: hidden;
+
+            min-height: 175px;
+
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+
             padding: 22px;
-            border: 1px solid var(--border);
+
+            border:
+                1px solid var(--border);
+
             border-radius: 17px;
+
             background:
                 linear-gradient(
                     145deg,
                     rgba(255,255,255,0.035),
                     rgba(255,255,255,0.012)
                 );
+
             transition:
-                border-color 0.2s ease,
-                transform 0.2s ease,
-                background 0.2s ease;
+                border-color .2s ease,
+                transform .2s ease,
+                background .2s ease;
         }
 
         .action-card:hover {
             transform: translateY(-4px);
-            border-color: var(--gold-border);
+
+            border-color:
+                var(--gold-border);
+
             background:
                 linear-gradient(
                     145deg,
@@ -433,60 +592,86 @@
         }
 
         .action-icon {
-            width: 43px;
-            height: 43px;
+            width: 44px;
+            height: 44px;
+
             display: grid;
             place-items: center;
+
             border-radius: 12px;
+
             color: var(--gold-light);
-            background: var(--gold-soft);
-            border: 1px solid var(--gold-border);
-            font-size: 18px;
+
+            background:
+                var(--gold-soft);
+
+            border:
+                1px solid var(--gold-border);
+
+            font-size: 19px;
         }
 
         .action-card h3 {
-            margin-top: 18px;
+            margin-top: 17px;
+
             font-size: 16px;
+            font-weight: 850;
         }
 
         .action-card p {
-            margin-top: 4px;
+            margin-top: 5px;
+
             color: var(--muted);
+
             font-size: 12px;
-            line-height: 1.55;
+            line-height: 1.6;
         }
 
         .action-arrow {
             position: absolute;
+
             right: 20px;
-            bottom: 20px;
+            bottom: 19px;
+
             color: var(--gold);
-            font-size: 17px;
+
+            font-size: 18px;
         }
 
-        /* ==========================================================
+        /* ======================================================
            DISCOVERY
-        ========================================================== */
+        ====================================================== */
 
         .discovery {
             display: grid;
+
             grid-template-columns:
-                1.4fr 1fr;
+                1.35fr 1fr;
+
             gap: 16px;
         }
 
         .discovery-card {
-            min-height: 220px;
             position: relative;
             overflow: hidden;
+
+            min-height: 235px;
+
+            padding: 29px;
+
+            border:
+                1px solid var(--border);
+
             border-radius: 19px;
-            padding: 28px;
-            border: 1px solid var(--border);
-            background: var(--panel);
+
+            background:
+                var(--panel);
         }
 
         .discovery-card.featured {
-            border-color: var(--gold-border);
+            border-color:
+                var(--gold-border);
+
             background:
                 radial-gradient(
                     circle at 85% 20%,
@@ -497,43 +682,61 @@
         }
 
         .discovery-card h3 {
-            font-size: 24px;
-            letter-spacing: -0.8px;
-            max-width: 380px;
+            max-width: 430px;
+
+            font-size: 25px;
+
+            letter-spacing: -.8px;
         }
 
         .discovery-card p {
-            max-width: 440px;
+            max-width: 480px;
+
             margin-top: 10px;
+
             color: var(--muted);
+
             font-size: 14px;
+
             line-height: 1.65;
         }
 
         .discovery-button {
             display: inline-flex;
+
             margin-top: 22px;
+
             color: var(--gold-light);
+
             font-size: 13px;
-            font-weight: 800;
+            font-weight: 850;
         }
 
         .sound-lines {
             position: absolute;
-            right: 35px;
+
+            right: 34px;
             bottom: 25px;
-            height: 80px;
+
+            height: 82px;
+
             display: flex;
             align-items: center;
+
             gap: 5px;
-            opacity: 0.35;
+
+            opacity: .32;
         }
 
         .sound-lines span {
             display: block;
+
             width: 4px;
+
             border-radius: 4px;
-            background: var(--gold);
+
+            background:
+                var(--gold);
         }
 
         .sound-lines span:nth-child(1) {
@@ -571,106 +774,224 @@
         .genre-list {
             display: flex;
             flex-wrap: wrap;
+
             gap: 9px;
+
             margin-top: 20px;
         }
 
         .genre {
+            min-height: 36px;
+
             display: inline-flex;
             align-items: center;
-            min-height: 36px;
+
             padding: 0 13px;
+
+            border:
+                1px solid var(--border);
+
             border-radius: 9px;
-            border: 1px solid var(--border);
+
             color: var(--muted-light);
-            background: rgba(255,255,255,0.025);
+
+            background:
+                rgba(255,255,255,0.025);
+
             font-size: 12px;
-            font-weight: 700;
-            transition: 0.2s ease;
+            font-weight: 750;
+
+            transition: .2s ease;
         }
 
         .genre:hover {
             color: var(--gold-light);
-            border-color: var(--gold-border);
-            background: var(--gold-soft);
+
+            border-color:
+                var(--gold-border);
+
+            background:
+                var(--gold-soft);
         }
 
-        /* ==========================================================
-           ACCOUNT INFO
-        ========================================================== */
+        /* ======================================================
+           RECENT PURCHASES
+        ====================================================== */
+
+        .purchase-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .purchase {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 18px;
+
+            padding: 18px;
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 14px;
+
+            background:
+                rgba(255,255,255,0.018);
+        }
+
+        .purchase-main {
+            min-width: 0;
+        }
+
+        .purchase-title {
+            font-size: 15px;
+            font-weight: 850;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .purchase-meta {
+            margin-top: 4px;
+
+            color: var(--muted);
+
+            font-size: 12px;
+        }
+
+        .purchase-price {
+            color: var(--gold-light);
+
+            font-size: 14px;
+            font-weight: 850;
+
+            white-space: nowrap;
+        }
+
+        .empty {
+            padding: 30px;
+
+            border:
+                1px dashed
+                rgba(255,255,255,0.13);
+
+            border-radius: 16px;
+
+            text-align: center;
+
+            color: var(--muted);
+        }
+
+        /* ======================================================
+           ACCOUNT BAR
+        ====================================================== */
 
         .account-bar {
             margin-top: 42px;
+
             padding: 20px 22px;
+
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: space-between;
+
             gap: 20px;
-            border: 1px solid var(--border);
+
+            border:
+                1px solid var(--border);
+
             border-radius: 15px;
-            background: rgba(255,255,255,0.018);
+
+            background:
+                rgba(255,255,255,0.018);
         }
 
         .account-info {
             display: flex;
             align-items: center;
+
             gap: 13px;
         }
 
         .avatar {
-            width: 45px;
-            height: 45px;
-            border-radius: 50%;
+            width: 46px;
+            height: 46px;
+
+            flex: 0 0 auto;
+
             display: grid;
             place-items: center;
+
+            border-radius: 50%;
+
             background:
                 linear-gradient(
                     145deg,
                     var(--gold-light),
                     var(--gold)
                 );
+
             color: #080808;
+
             font-size: 16px;
-            font-weight: 900;
+            font-weight: 950;
         }
 
         .account-info strong {
             display: block;
+
             font-size: 14px;
         }
 
         .account-info span {
             display: block;
-            color: var(--muted);
+
             margin-top: 2px;
+
+            color: var(--muted);
+
             font-size: 12px;
         }
 
         .account-note {
             color: var(--muted);
+
             font-size: 12px;
+
             text-align: right;
         }
 
-        /* ==========================================================
+        /* ======================================================
            FOOTER
-        ========================================================== */
+        ====================================================== */
 
         footer {
             width: min(1180px, 92%);
+
             margin: 0 auto;
-            padding: 25px 0 35px;
-            border-top: 1px solid var(--border);
+
+            padding:
+                25px 0 35px;
+
+            border-top:
+                1px solid var(--border);
+
             color: #666;
+
             font-size: 12px;
+
             text-align: center;
         }
 
-        /* ==========================================================
+        /* ======================================================
            RESPONSIVE
-        ========================================================== */
+        ====================================================== */
 
-        @media (max-width: 900px) {
+        @media (max-width: 950px) {
             .action-grid {
                 grid-template-columns:
                     repeat(2, minmax(0, 1fr));
@@ -681,7 +1002,7 @@
             }
         }
 
-        @media (max-width: 650px) {
+        @media (max-width: 700px) {
             .topbar {
                 height: 64px;
                 padding: 0 4%;
@@ -710,17 +1031,16 @@
                 font-size: 14px;
             }
 
-            .hero::after {
-                font-size: 38px;
-                right: -5px;
-            }
-
             .hero-actions {
                 flex-direction: column;
             }
 
             .button {
                 width: 100%;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
             }
 
             .action-grid {
@@ -731,8 +1051,13 @@
                 min-height: 145px;
             }
 
-            .section {
-                margin-top: 32px;
+            .purchase {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .purchase-price {
+                align-self: flex-start;
             }
 
             .account-bar {
@@ -749,13 +1074,12 @@
 
 <body>
 
-<!-- ==============================================================
-     TOP NAVIGATION
-================================================================ -->
-
 <header class="topbar">
 
-    <a href="/beats" class="brand">
+    <a
+        href="/beats"
+        class="brand"
+    >
         <div class="brand-mark">B</div>
         Beat<span>Hub</span>
     </a>
@@ -803,26 +1127,9 @@
 
 <main class="page">
 
-    <!-- ==========================================================
-         FLASH MESSAGES
-    =========================================================== -->
-
-    {% if success %}
-        <div class="alert alert-success">
-            {{ success }}
-        </div>
-    {% endif %}
-
-    {% if error %}
-        <div class="alert alert-error">
-            {{ error }}
-        </div>
-    {% endif %}
-
-
-    <!-- ==========================================================
+    <!-- ====================================================
          HERO
-    =========================================================== -->
+    ===================================================== -->
 
     <section class="hero">
 
@@ -835,11 +1142,10 @@
             <h1>
                 Welcome back,
                 <span>
-                    {% if current_user %}
-                        {{ current_user.profile.stage_name
-                           if current_user.profile
-                           and current_user.profile.stage_name
-                           else "Artist" }}
+                    {% if current_user and current_user.profile %}
+                        {{ current_user.profile.stage_name or current_user.username or "Artist" }}
+                    {% elif current_user and current_user.username %}
+                        {{ current_user.username }}
                     {% else %}
                         Artist
                     {% endif %}
@@ -847,10 +1153,10 @@
             </h1>
 
             <p>
-                Your creative space is ready.
-                Discover your next beat, revisit your purchases,
-                connect with producers, and keep your music journey
-                moving forward.
+                Your BeatHub creative space is ready.
+                Discover producers, explore fresh beats,
+                manage your purchases and keep your next
+                record moving.
             </p>
 
             <div class="hero-actions">
@@ -878,28 +1184,77 @@
     </section>
 
 
-    <!-- ==========================================================
-         QUICK ACTIONS
-    =========================================================== -->
+    <!-- ====================================================
+         STATS
+    ===================================================== -->
+
+    <section class="stats">
+
+        <div class="stat">
+
+            <div class="stat-label">
+                Purchased Beats
+            </div>
+
+            <div class="stat-value">
+                {{ purchase_count or 0 }}
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="stat-label">
+                Total Spent
+            </div>
+
+            <div class="stat-value gold">
+                KSh {{ '%.2f'|format(total_spent or 0) }}
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="stat-label">
+                Pending Orders
+            </div>
+
+            <div class="stat-value">
+                {{ pending_count or 0 }}
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ====================================================
+         YOUR STUDIO
+    ===================================================== -->
 
     <section class="section">
 
         <div class="section-heading">
 
             <div>
-                <h2>Your Studio</h2>
+
+                <h2>
+                    Your Studio
+                </h2>
 
                 <p>
                     Everything you need to move your music forward.
                 </p>
+
             </div>
 
         </div>
 
 
         <div class="action-grid">
-
-            <!-- BROWSE -->
 
             <a
                 href="/beats"
@@ -930,8 +1285,6 @@
             </a>
 
 
-            <!-- PURCHASES -->
-
             <a
                 href="/purchases"
                 class="action-card"
@@ -948,8 +1301,8 @@
                     </h3>
 
                     <p>
-                        Access beats and licenses you have
-                        already purchased.
+                        View your purchased licenses and
+                        access music you already own.
                     </p>
 
                 </div>
@@ -960,8 +1313,6 @@
 
             </a>
 
-
-            <!-- DASHBOARD -->
 
             <a
                 href="/dashboard"
@@ -979,8 +1330,8 @@
                     </h3>
 
                     <p>
-                        Manage your BeatHub account,
-                        activity and creative workspace.
+                        Return to your main BeatHub workspace
+                        and manage your account.
                     </p>
 
                 </div>
@@ -991,8 +1342,6 @@
 
             </a>
 
-
-            <!-- PRODUCERS -->
 
             <a
                 href="/search"
@@ -1010,8 +1359,8 @@
                     </h3>
 
                     <p>
-                        Discover producers, sounds and
-                        creative partners across BeatHub.
+                        Search BeatHub for producers,
+                        sounds and new creative connections.
                     </p>
 
                 </div>
@@ -1027,20 +1376,24 @@
     </section>
 
 
-    <!-- ==========================================================
+    <!-- ====================================================
          DISCOVERY
-    =========================================================== -->
+    ===================================================== -->
 
     <section class="section">
 
         <div class="section-heading">
 
             <div>
-                <h2>Start Creating</h2>
+
+                <h2>
+                    Start Creating
+                </h2>
 
                 <p>
                     Find the sound that fits your next idea.
                 </p>
+
             </div>
 
             <a
@@ -1055,19 +1408,19 @@
 
         <div class="discovery">
 
-            <!-- FEATURED DISCOVERY -->
-
             <div class="discovery-card featured">
 
                 <h3>
-                    Your next record
-                    starts with the right beat.
+                    Your next record starts
+                    with the right beat.
                 </h3>
 
                 <p>
-                    Search BeatHub by sound, genre, producer
-                    or keyword. Preview tracks before you buy
-                    and discover new sounds every day.
+                    Search BeatHub by sound, genre,
+                    mood or keyword. Preview beats
+                    before you buy and discover new
+                    sounds from producers across the
+                    platform.
                 </p>
 
                 <a
@@ -1077,7 +1430,10 @@
                     Enter the Beat Marketplace →
                 </a>
 
-                <div class="sound-lines" aria-hidden="true">
+                <div
+                    class="sound-lines"
+                    aria-hidden="true"
+                >
                     <span></span>
                     <span></span>
                     <span></span>
@@ -1091,8 +1447,6 @@
             </div>
 
 
-            <!-- GENRES -->
-
             <div class="discovery-card">
 
                 <h3>
@@ -1100,8 +1454,8 @@
                 </h3>
 
                 <p>
-                    Jump straight into a style and start
-                    discovering beats.
+                    Jump straight into a style and
+                    start discovering beats.
                 </p>
 
                 <div class="genre-list">
@@ -1121,10 +1475,10 @@
                     </a>
 
                     <a
-                        href="/beats?genre=R&B"
+                        href="/beats?genre=R%26B"
                         class="genre"
                     >
-                        R&B
+                        R&amp;B
                     </a>
 
                     <a
@@ -1164,9 +1518,140 @@
     </section>
 
 
-    <!-- ==========================================================
-         ACCOUNT INFORMATION
-    =========================================================== -->
+    <!-- ====================================================
+         RECENT PURCHASES
+    ===================================================== -->
+
+    <section class="section">
+
+        <div class="section-heading">
+
+            <div>
+
+                <h2>
+                    Recent Purchases
+                </h2>
+
+                <p>
+                    Your latest completed BeatHub purchases.
+                </p>
+
+            </div>
+
+            <a
+                href="/purchases"
+                class="section-link"
+            >
+                View all →
+            </a>
+
+        </div>
+
+
+        {% if completed_orders %}
+
+            <div class="purchase-list">
+
+                {% for order in completed_orders[:5] %}
+
+                    <div class="purchase">
+
+                        <div class="purchase-main">
+
+                            <div class="purchase-title">
+
+                                {% if order.track %}
+                                    {{ order.track.title }}
+                                {% elif order.album %}
+                                    {{ order.album.title }}
+                                {% else %}
+                                    BeatHub Purchase
+                                {% endif %}
+
+                            </div>
+
+                            <div class="purchase-meta">
+
+                                Order
+                                {{ order.order_number }}
+
+                                {% if order.completed_at %}
+                                    ·
+                                    {{ order.completed_at.strftime('%d %b %Y') }}
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="purchase-price">
+
+                            KSh
+                            {{
+                                '%.2f'|format(
+                                    order.gross_amount or 0
+                                )
+                            }}
+
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div class="empty">
+
+                <div
+                    style="
+                        font-size:34px;
+                        margin-bottom:8px;
+                    "
+                >
+                    ♫
+                </div>
+
+                <strong
+                    style="
+                        display:block;
+                        color:#f5f5f5;
+                        font-size:16px;
+                        margin-bottom:5px;
+                    "
+                >
+                    Your next purchase starts here.
+                </strong>
+
+                <span>
+                    Explore the marketplace and find
+                    the beat for your next record.
+                </span>
+
+                <div style="margin-top:18px;">
+
+                    <a
+                        href="/beats"
+                        class="button button-primary"
+                    >
+                        Browse Beats
+                    </a>
+
+                </div>
+
+            </div>
+
+        {% endif %}
+
+    </section>
+
+
+    <!-- ====================================================
+         ACCOUNT
+    ===================================================== -->
 
     <section class="account-bar">
 
@@ -1174,26 +1659,45 @@
 
             <div class="avatar">
 
-                {% if current_user and current_user.profile %}
+                {% if current_user and current_user.profile and current_user.profile.stage_name %}
+
                     {{
                         current_user.profile.stage_name
                         | first
                         | upper
                     }}
+
+                {% elif current_user and current_user.username %}
+
+                    {{
+                        current_user.username
+                        | first
+                        | upper
+                    }}
+
                 {% else %}
+
                     A
+
                 {% endif %}
 
             </div>
 
+
             <div>
 
                 <strong>
+
                     {% if current_user %}
+
                         {{ current_user.email }}
+
                     {% else %}
+
                         Your BeatHub Account
+
                     {% endif %}
+
                 </strong>
 
                 <span>
@@ -1214,12 +1718,8 @@
 </main>
 
 
-<!-- ==============================================================
-     FOOTER
-================================================================ -->
-
 <footer>
-    © {{ current_year }} BeatHub.
+    © {{ current_year or 2026 }} BeatHub.
     Built for artists and producers.
 </footer>
 
