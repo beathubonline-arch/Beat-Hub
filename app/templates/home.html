@@ -1,17 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>BeatHub — The Home of Cool Beats</title>
 
     <meta
         name="description"
-        content="BeatHub is the home of cool beats. Discover beats, connect with producers, book sessions and build your sound."
+        content="BeatHub is the home of cool beats. Discover beats, connect with producers, book sessions, shop BeatHub merch and build your sound."
     >
 
     <style>
+
         :root {
             --bg: #08070d;
             --bg-soft: #0d0b14;
@@ -40,18 +47,22 @@
             --radius-sm: 12px;
         }
 
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
 
+
         html {
             scroll-behavior: smooth;
         }
 
+
         body {
             min-height: 100vh;
+
             background:
                 radial-gradient(
                     circle at 15% 10%,
@@ -79,15 +90,18 @@
             line-height: 1.5;
         }
 
+
         a {
             color: inherit;
             text-decoration: none;
         }
 
+
         button,
         input {
             font: inherit;
         }
+
 
         /* =========================================================
            TOP COLOR STRIPE
@@ -110,6 +124,7 @@
                 );
         }
 
+
         /* =========================================================
            NAVIGATION
         ========================================================= */
@@ -128,6 +143,7 @@
             border-bottom: 1px solid var(--border);
         }
 
+
         .nav {
             width: min(1160px, calc(100% - 40px));
             margin: 0 auto;
@@ -141,6 +157,7 @@
             gap: 28px;
         }
 
+
         .brand {
             display: inline-flex;
             align-items: center;
@@ -150,6 +167,7 @@
             font-weight: 950;
             letter-spacing: -.7px;
         }
+
 
         .brand-mark {
             width: 34px;
@@ -176,38 +194,45 @@
                 0 8px 25px rgba(255,184,0,.18);
         }
 
+
         .brand-text span {
             color: var(--gold);
         }
+
 
         .nav-links {
             display: flex;
             align-items: center;
             justify-content: center;
 
-            gap: 30px;
+            gap: 26px;
 
             color: #bcb5ca;
             font-size: 14px;
             font-weight: 600;
         }
 
+
         .nav-links a {
             position: relative;
+
             transition:
                 color .2s ease,
                 transform .2s ease;
         }
+
 
         .nav-links a:hover {
             color: var(--white);
             transform: translateY(-1px);
         }
 
+
         .nav-links a::after {
             content: "";
 
             position: absolute;
+
             left: 0;
             right: 0;
             bottom: -8px;
@@ -222,15 +247,49 @@
             transition: transform .2s ease;
         }
 
+
         .nav-links a:hover::after {
             transform: scaleX(1);
         }
+
+
+        /* Merch special navigation link */
+
+        .nav-links .merch-link {
+            color: var(--gold);
+            font-weight: 800;
+        }
+
+
+        .nav-links .merch-link::before {
+            content: "NEW";
+
+            position: absolute;
+
+            top: -17px;
+            right: -8px;
+
+            padding: 2px 5px;
+
+            border-radius: 999px;
+
+            background: var(--gold);
+
+            color: #09070b;
+
+            font-size: 7px;
+            font-weight: 1000;
+
+            letter-spacing: .5px;
+        }
+
 
         .nav-actions {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
 
         .btn {
             min-height: 44px;
@@ -257,19 +316,23 @@
                 border-color .2s ease;
         }
 
+
         .btn:hover {
             transform: translateY(-2px);
         }
+
 
         .btn-outline {
             background: rgba(255,255,255,.015);
             color: var(--white);
         }
 
+
         .btn-outline:hover {
             border-color: rgba(255,255,255,.2);
             background: rgba(255,255,255,.04);
         }
+
 
         .btn-gold {
             border-color: transparent;
@@ -287,10 +350,107 @@
                 0 12px 30px rgba(255,184,0,.14);
         }
 
+
         .btn-gold:hover {
             box-shadow:
                 0 16px 38px rgba(255,184,0,.23);
         }
+
+
+        .btn-merch {
+            border-color: rgba(255,184,0,.35);
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(255,184,0,.12),
+                    rgba(255,140,0,.06)
+                );
+
+            color: var(--gold);
+
+            box-shadow:
+                0 10px 30px rgba(255,184,0,.07);
+        }
+
+
+        .btn-merch:hover {
+            border-color: var(--gold);
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(255,184,0,.18),
+                    rgba(255,140,0,.10)
+                );
+
+            box-shadow:
+                0 14px 35px rgba(255,184,0,.15);
+        }
+
+
+        /* =========================================================
+           MOBILE NAVIGATION
+        ========================================================= */
+
+        .mobile-nav {
+            display: none;
+
+            width: min(1160px, calc(100% - 28px));
+
+            margin: 0 auto;
+
+            padding: 10px 0 14px;
+
+            gap: 8px;
+
+            overflow-x: auto;
+
+            scrollbar-width: none;
+        }
+
+
+        .mobile-nav::-webkit-scrollbar {
+            display: none;
+        }
+
+
+        .mobile-nav a {
+            flex-shrink: 0;
+
+            padding: 8px 13px;
+
+            border: 1px solid var(--border);
+
+            border-radius: 999px;
+
+            background: rgba(255,255,255,.025);
+
+            color: var(--muted);
+
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+
+        .mobile-nav a:hover {
+            color: var(--white);
+
+            border-color:
+                rgba(255,255,255,.18);
+        }
+
+
+        .mobile-nav .mobile-merch {
+            color: var(--gold);
+
+            border-color:
+                rgba(255,184,0,.3);
+
+            background:
+                rgba(255,184,0,.07);
+        }
+
 
         /* =========================================================
            HERO
@@ -316,6 +476,7 @@
             padding: 78px 0 70px;
         }
 
+
         .hero::before {
             content: "";
 
@@ -337,10 +498,12 @@
             pointer-events: none;
         }
 
+
         .hero-copy {
             position: relative;
             z-index: 2;
         }
+
 
         .eyebrow {
             display: inline-flex;
@@ -358,6 +521,7 @@
             text-transform: uppercase;
         }
 
+
         .eyebrow::before {
             content: "";
 
@@ -366,6 +530,7 @@
 
             background: var(--gold);
         }
+
 
         .hero h1 {
             max-width: 760px;
@@ -384,13 +549,16 @@
             font-weight: 1000;
         }
 
+
         .hero h1 .gold {
             color: var(--gold);
         }
 
+
         .hero h1 .teal {
             color: var(--teal);
         }
+
 
         .hero-description {
             max-width: 600px;
@@ -403,9 +571,11 @@
             line-height: 1.8;
         }
 
+
         .hero-description strong {
             color: var(--white);
         }
+
 
         .hero-actions {
             display: flex;
@@ -416,10 +586,12 @@
             margin-top: 32px;
         }
 
+
         .hero-actions .btn {
             min-height: 50px;
             padding: 0 24px;
         }
+
 
         .hero-note {
             margin-top: 18px;
@@ -428,6 +600,49 @@
 
             font-size: 12px;
         }
+
+
+        /* =========================================================
+           HERO MERCH BUTTON
+        ========================================================= */
+
+        .hero-merch {
+            position: relative;
+
+            margin-top: 14px;
+
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+
+            color: var(--gold);
+
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+
+        .hero-merch-icon {
+            width: 27px;
+            height: 27px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 8px;
+
+            background:
+                rgba(255,184,0,.1);
+
+            border: 1px solid
+                rgba(255,184,0,.22);
+        }
+
+
+        .hero-merch:hover {
+            color: var(--gold-soft);
+        }
+
 
         /* =========================================================
            HERO VISUAL
@@ -442,6 +657,7 @@
             align-items: center;
             justify-content: center;
         }
+
 
         .studio-card {
             position: relative;
@@ -468,6 +684,7 @@
             transform: rotate(2deg);
         }
 
+
         .studio-card::before {
             content: "";
 
@@ -488,6 +705,7 @@
             z-index: -1;
         }
 
+
         .studio-top {
             display: flex;
             align-items: center;
@@ -495,6 +713,7 @@
 
             margin-bottom: 22px;
         }
+
 
         .studio-label {
             color: var(--muted);
@@ -505,6 +724,7 @@
             letter-spacing: 2px;
             text-transform: uppercase;
         }
+
 
         .live-pill {
             display: inline-flex;
@@ -526,6 +746,7 @@
             letter-spacing: 1px;
         }
 
+
         .live-dot {
             width: 7px;
             height: 7px;
@@ -537,6 +758,7 @@
             box-shadow:
                 0 0 0 5px rgba(24,213,170,.08);
         }
+
 
         .vinyl {
             position: relative;
@@ -563,6 +785,7 @@
                 0 25px 45px rgba(0,0,0,.55);
         }
 
+
         .vinyl::before {
             content: "";
 
@@ -582,6 +805,7 @@
             box-shadow:
                 0 0 35px rgba(255,184,0,.2);
         }
+
 
         .vinyl::after {
             content: "";
@@ -603,6 +827,7 @@
             border: 5px solid #ffbd00;
         }
 
+
         .waveform {
             display: flex;
             align-items: center;
@@ -621,19 +846,22 @@
             border: 1px solid var(--border);
         }
 
+
         .waveform span {
             width: 4px;
 
             border-radius: 999px;
 
-            background: linear-gradient(
-                to top,
-                var(--gold),
-                var(--teal)
-            );
+            background:
+                linear-gradient(
+                    to top,
+                    var(--gold),
+                    var(--teal)
+                );
 
             opacity: .85;
         }
+
 
         .waveform span:nth-child(1) { height: 18px; }
         .waveform span:nth-child(2) { height: 31px; }
@@ -653,6 +881,7 @@
         .waveform span:nth-child(16) { height: 44px; }
         .waveform span:nth-child(17) { height: 22px; }
 
+
         .floating-card {
             position: absolute;
 
@@ -670,15 +899,18 @@
             box-shadow: var(--shadow);
         }
 
+
         .floating-card.one {
             left: -20px;
             top: 45px;
         }
 
+
         .floating-card.two {
             right: -15px;
             bottom: 55px;
         }
+
 
         .floating-title {
             color: var(--muted);
@@ -690,6 +922,7 @@
             text-transform: uppercase;
         }
 
+
         .floating-value {
             margin-top: 4px;
 
@@ -697,13 +930,16 @@
             font-weight: 950;
         }
 
+
         .floating-value.gold {
             color: var(--gold);
         }
 
+
         .floating-value.teal {
             color: var(--teal);
         }
+
 
         /* =========================================================
            SEARCH
@@ -731,6 +967,7 @@
                 0 25px 70px rgba(0,0,0,.22);
         }
 
+
         .search-heading {
             display: flex;
             align-items: center;
@@ -743,14 +980,17 @@
             padding: 0 4px;
         }
 
+
         .search-heading strong {
             font-size: 14px;
         }
+
 
         .search-heading span {
             color: var(--muted-2);
             font-size: 12px;
         }
+
 
         .search-form {
             display: grid;
@@ -758,6 +998,7 @@
 
             gap: 10px;
         }
+
 
         .search-input {
             width: 100%;
@@ -779,9 +1020,11 @@
             font-size: 14px;
         }
 
+
         .search-input::placeholder {
             color: #6f687c;
         }
+
 
         .search-input:focus {
             border-color: rgba(255,184,0,.5);
@@ -789,6 +1032,7 @@
             box-shadow:
                 0 0 0 4px rgba(255,184,0,.06);
         }
+
 
         .search-button {
             height: 54px;
@@ -813,6 +1057,7 @@
             cursor: pointer;
         }
 
+
         /* =========================================================
            SECTION
         ========================================================= */
@@ -825,6 +1070,7 @@
             padding: 82px 0;
         }
 
+
         .section-header {
             display: flex;
             align-items: end;
@@ -835,6 +1081,7 @@
             margin-bottom: 30px;
         }
 
+
         .section-kicker {
             color: var(--gold);
 
@@ -844,6 +1091,7 @@
             letter-spacing: 3px;
             text-transform: uppercase;
         }
+
 
         .section-title {
             margin-top: 7px;
@@ -856,6 +1104,7 @@
             font-weight: 950;
         }
 
+
         .section-description {
             max-width: 570px;
 
@@ -866,6 +1115,7 @@
             font-size: 14px;
         }
 
+
         .text-link {
             color: var(--gold);
 
@@ -875,9 +1125,11 @@
             white-space: nowrap;
         }
 
+
         .text-link:hover {
             color: var(--gold-soft);
         }
+
 
         /* =========================================================
            FEATURE CARDS
@@ -889,6 +1141,7 @@
 
             gap: 16px;
         }
+
 
         .feature-card {
             position: relative;
@@ -915,6 +1168,7 @@
                 box-shadow .25s ease;
         }
 
+
         .feature-card:hover {
             transform: translateY(-5px);
 
@@ -925,6 +1179,7 @@
                 0 25px 55px rgba(0,0,0,.28);
         }
 
+
         .feature-number {
             color: rgba(255,184,0,.25);
 
@@ -933,6 +1188,7 @@
 
             font-weight: 1000;
         }
+
 
         .feature-icon {
             width: 48px;
@@ -954,12 +1210,14 @@
             font-weight: 900;
         }
 
+
         .feature-card h3 {
             margin-top: 17px;
 
             font-size: 18px;
             font-weight: 900;
         }
+
 
         .feature-card p {
             margin-top: 8px;
@@ -969,6 +1227,261 @@
             font-size: 13px;
             line-height: 1.7;
         }
+
+
+        /* =========================================================
+           MERCH FEATURE
+        ========================================================= */
+
+        .merch-section {
+            padding-top: 20px;
+        }
+
+
+        .merch-card {
+            position: relative;
+            overflow: hidden;
+
+            padding: 38px;
+
+            border: 1px solid rgba(255,184,0,.25);
+
+            border-radius: 24px;
+
+            background:
+                radial-gradient(
+                    circle at 85% 20%,
+                    rgba(255,184,0,.14),
+                    transparent 30%
+                ),
+                radial-gradient(
+                    circle at 15% 90%,
+                    rgba(24,213,170,.08),
+                    transparent 30%
+                ),
+                linear-gradient(
+                    135deg,
+                    #18121f,
+                    #0c0911
+                );
+
+            box-shadow: var(--shadow);
+        }
+
+
+        .merch-card::before {
+            content: "";
+
+            position: absolute;
+
+            width: 300px;
+            height: 300px;
+
+            right: -100px;
+            top: -120px;
+
+            border-radius: 50%;
+
+            border: 1px solid
+                rgba(255,184,0,.12);
+
+            box-shadow:
+                0 0 0 35px rgba(255,184,0,.025),
+                0 0 0 70px rgba(255,184,0,.018);
+
+            pointer-events: none;
+        }
+
+
+        .merch-grid {
+            position: relative;
+            z-index: 2;
+
+            display: grid;
+
+            grid-template-columns:
+                1.25fr .75fr;
+
+            gap: 40px;
+
+            align-items: center;
+        }
+
+
+        .merch-kicker {
+            color: var(--gold);
+
+            font-size: 11px;
+            font-weight: 900;
+
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+
+        .merch-card h2 {
+            margin-top: 8px;
+
+            font-size: 40px;
+
+            line-height: 1.05;
+
+            letter-spacing: -1.5px;
+
+            font-weight: 1000;
+        }
+
+
+        .merch-card h2 span {
+            color: var(--gold);
+        }
+
+
+        .merch-card p {
+            max-width: 620px;
+
+            margin-top: 14px;
+
+            color: var(--muted);
+
+            font-size: 14px;
+
+            line-height: 1.8;
+        }
+
+
+        .merch-actions {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 10px;
+
+            margin-top: 24px;
+        }
+
+
+        .merch-preview {
+            min-height: 230px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            position: relative;
+        }
+
+
+        .shirt {
+            position: relative;
+
+            width: 165px;
+            height: 175px;
+
+            border-radius:
+                22px 22px 12px 12px;
+
+            background:
+                linear-gradient(
+                    145deg,
+                    #25202c,
+                    #100d15
+                );
+
+            border: 1px solid
+                rgba(255,255,255,.1);
+
+            box-shadow:
+                0 30px 60px rgba(0,0,0,.45);
+
+            transform: rotate(-4deg);
+        }
+
+
+        .shirt::before {
+            content: "";
+
+            position: absolute;
+
+            left: 50%;
+            top: -1px;
+
+            transform:
+                translateX(-50%);
+
+            width: 55px;
+            height: 28px;
+
+            border-radius:
+                0 0 25px 25px;
+
+            background: #0b0910;
+
+            border:
+                1px solid
+                rgba(255,255,255,.08);
+
+            border-top: 0;
+        }
+
+
+        .shirt::after {
+            content: "BEAT\nHUB";
+
+            white-space: pre;
+
+            position: absolute;
+
+            left: 50%;
+            top: 67px;
+
+            transform:
+                translateX(-50%)
+                rotate(4deg);
+
+            text-align: center;
+
+            color: var(--gold);
+
+            font-size: 19px;
+
+            line-height: .95;
+
+            font-weight: 1000;
+
+            letter-spacing: -1px;
+        }
+
+
+        .merch-badge {
+            position: absolute;
+
+            right: 30px;
+            bottom: 25px;
+
+            padding: 10px 13px;
+
+            border-radius: 12px;
+
+            background:
+                rgba(24,213,170,.1);
+
+            border:
+                1px solid
+                rgba(24,213,170,.2);
+
+            color: var(--teal);
+
+            font-size: 10px;
+
+            font-weight: 900;
+
+            letter-spacing: 1px;
+
+            text-transform: uppercase;
+        }
+
 
         /* =========================================================
            MARKETPLACE STRIP
@@ -996,17 +1509,22 @@
             box-shadow: var(--shadow);
         }
 
+
         .marketplace-grid {
             display: grid;
-            grid-template-columns: 1.2fr .8fr;
+
+            grid-template-columns:
+                1.2fr .8fr;
 
             gap: 35px;
 
             align-items: center;
         }
 
+
         .marketplace h2 {
             font-size: 38px;
+
             line-height: 1.05;
 
             letter-spacing: -1.5px;
@@ -1014,9 +1532,11 @@
             font-weight: 950;
         }
 
+
         .marketplace h2 span {
             color: var(--gold);
         }
+
 
         .marketplace p {
             max-width: 650px;
@@ -1026,11 +1546,14 @@
             color: var(--muted);
 
             font-size: 14px;
+
             line-height: 1.8;
         }
 
+
         .marketplace-actions {
             display: flex;
+
             flex-wrap: wrap;
 
             gap: 10px;
@@ -1038,12 +1561,16 @@
             margin-top: 24px;
         }
 
+
         .marketplace-stats {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+
+            grid-template-columns:
+                repeat(2, 1fr);
 
             gap: 10px;
         }
+
 
         .market-stat {
             padding: 20px;
@@ -1056,12 +1583,14 @@
                 rgba(0,0,0,.2);
         }
 
+
         .market-stat strong {
             display: block;
 
             font-size: 24px;
             font-weight: 950;
         }
+
 
         .market-stat span {
             display: block;
@@ -1071,9 +1600,12 @@
             color: var(--muted-2);
 
             font-size: 11px;
+
             text-transform: uppercase;
+
             letter-spacing: 1px;
         }
+
 
         /* =========================================================
            PRODUCER CTA
@@ -1082,6 +1614,7 @@
         .producer-section {
             padding-top: 25px;
         }
+
 
         .producer-card {
             position: relative;
@@ -1099,11 +1632,13 @@
                     #0c1312
                 );
 
-            border: 1px solid rgba(255,184,0,.2);
+            border: 1px solid
+                rgba(255,184,0,.2);
 
             box-shadow:
                 0 35px 90px rgba(0,0,0,.35);
         }
+
 
         .producer-card::after {
             content: "";
@@ -1126,16 +1661,20 @@
                 );
         }
 
+
         .producer-card-content {
             position: relative;
+
             z-index: 2;
 
             max-width: 720px;
         }
 
+
         .producer-card .section-kicker {
             color: var(--teal);
         }
+
 
         .producer-card h2 {
             margin-top: 9px;
@@ -1154,9 +1693,11 @@
             font-weight: 1000;
         }
 
+
         .producer-card h2 span {
             color: var(--gold);
         }
+
 
         .producer-card p {
             max-width: 650px;
@@ -1166,8 +1707,19 @@
             color: #aaa3b8;
 
             font-size: 15px;
+
             line-height: 1.8;
         }
+
+
+        /* =========================================================
+           SESSIONS
+        ========================================================= */
+
+        .sessions-merch-link {
+            color: var(--gold);
+        }
+
 
         /* =========================================================
            FINAL CTA
@@ -1179,9 +1731,11 @@
             padding: 80px 20px 100px;
         }
 
+
         .final-cta .eyebrow {
             justify-content: center;
         }
+
 
         .final-cta h2 {
             max-width: 760px;
@@ -1202,9 +1756,11 @@
             font-weight: 1000;
         }
 
+
         .final-cta h2 span {
             color: var(--gold);
         }
+
 
         .final-cta p {
             max-width: 620px;
@@ -1216,15 +1772,19 @@
             font-size: 15px;
         }
 
+
         .final-actions {
             display: flex;
+
             justify-content: center;
+
             flex-wrap: wrap;
 
             gap: 11px;
 
             margin-top: 28px;
         }
+
 
         /* =========================================================
            FOOTER
@@ -1236,6 +1796,7 @@
             background: #06050a;
         }
 
+
         .footer-inner {
             width: min(1160px, calc(100% - 40px));
 
@@ -1244,25 +1805,32 @@
             padding: 42px 0;
 
             display: grid;
-            grid-template-columns: 1.5fr 1fr 1fr 1fr;
+
+            grid-template-columns:
+                1.5fr 1fr 1fr 1fr;
 
             gap: 35px;
         }
+
 
         .footer-brand {
             max-width: 330px;
         }
 
+
         .footer-brand .brand {
             margin-bottom: 14px;
         }
+
 
         .footer-brand p {
             color: var(--muted-2);
 
             font-size: 13px;
+
             line-height: 1.7;
         }
+
 
         .footer-column h4 {
             margin-bottom: 14px;
@@ -1270,11 +1838,14 @@
             color: var(--white);
 
             font-size: 12px;
+
             font-weight: 900;
 
             text-transform: uppercase;
+
             letter-spacing: 1.5px;
         }
+
 
         .footer-column a {
             display: block;
@@ -1285,12 +1856,21 @@
 
             font-size: 13px;
 
-            transition: color .2s ease;
+            transition:
+                color .2s ease;
         }
+
 
         .footer-column a:hover {
             color: var(--gold);
         }
+
+
+        .footer-column .footer-merch {
+            color: var(--gold);
+            font-weight: 800;
+        }
+
 
         .footer-bottom {
             width: min(1160px, calc(100% - 40px));
@@ -1302,7 +1882,9 @@
             border-top: 1px solid var(--border);
 
             display: flex;
+
             justify-content: space-between;
+
             gap: 20px;
 
             color: #625c6c;
@@ -1310,9 +1892,26 @@
             font-size: 11px;
         }
 
+
         /* =========================================================
            MOBILE
         ========================================================= */
+
+        @media (max-width: 1050px) {
+
+            .nav-links {
+                gap: 18px;
+            }
+
+            .nav {
+                gap: 18px;
+            }
+
+            .nav-links .merch-link::before {
+                display: none;
+            }
+        }
+
 
         @media (max-width: 900px) {
 
@@ -1320,9 +1919,16 @@
                 min-height: 72px;
             }
 
+
             .nav-links {
                 display: none;
             }
+
+
+            .mobile-nav {
+                display: flex;
+            }
+
 
             .hero {
                 grid-template-columns: 1fr;
@@ -1332,157 +1938,274 @@
                 padding-top: 60px;
             }
 
+
             .hero-visual {
                 min-height: 390px;
             }
+
 
             .studio-card {
                 transform: none;
             }
 
+
             .features {
                 grid-template-columns: 1fr;
             }
+
 
             .marketplace-grid {
                 grid-template-columns: 1fr;
             }
 
+
+            .merch-grid {
+                grid-template-columns: 1fr;
+            }
+
+
+            .merch-preview {
+                min-height: 200px;
+            }
+
+
             .footer-inner {
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns:
+                    1fr 1fr;
             }
         }
+
 
         @media (max-width: 600px) {
 
             .nav {
-                width: min(100% - 28px, 1160px);
+                width:
+                    min(
+                        100% - 28px,
+                        1160px
+                    );
             }
+
 
             .brand {
                 font-size: 20px;
             }
+
 
             .brand-mark {
                 width: 31px;
                 height: 31px;
             }
 
+
+            .nav-actions {
+                gap: 6px;
+            }
+
+
             .nav-actions .btn {
                 padding: 0 13px;
+
                 min-height: 40px;
+
                 font-size: 12px;
             }
+
+
+            .mobile-nav {
+                width:
+                    min(
+                        100% - 28px,
+                        1160px
+                    );
+            }
+
 
             .hero,
             .section,
             .search-section {
-                width: min(100% - 28px, 1160px);
+                width:
+                    min(
+                        100% - 28px,
+                        1160px
+                    );
             }
+
 
             .hero {
                 padding-top: 48px;
                 padding-bottom: 45px;
             }
 
+
             .hero h1 {
                 font-size: 48px;
                 letter-spacing: -2.5px;
             }
 
+
             .hero-description {
                 font-size: 15px;
             }
+
 
             .hero-actions {
                 flex-direction: column;
                 align-items: stretch;
             }
 
+
             .hero-actions .btn {
                 width: 100%;
             }
+
+
+            .hero-merch {
+                align-self: center;
+            }
+
 
             .hero-visual {
                 min-height: 340px;
             }
 
+
             .studio-card {
                 padding: 18px;
             }
+
 
             .vinyl {
                 width: 180px;
                 height: 180px;
             }
 
+
             .floating-card.one {
                 left: -5px;
                 top: 30px;
             }
+
 
             .floating-card.two {
                 right: -5px;
                 bottom: 25px;
             }
 
+
             .search-form {
                 grid-template-columns: 1fr;
             }
+
 
             .search-button {
                 width: 100%;
             }
 
+
             .section {
                 padding: 55px 0;
             }
+
 
             .section-title {
                 font-size: 29px;
             }
 
+
             .section-header {
                 align-items: flex-start;
+
                 flex-direction: column;
             }
+
 
             .marketplace {
                 padding: 25px;
             }
 
+
             .marketplace h2 {
                 font-size: 32px;
             }
 
+
             .marketplace-stats {
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns:
+                    1fr 1fr;
             }
+
+
+            .merch-card {
+                padding: 25px;
+            }
+
+
+            .merch-card h2 {
+                font-size: 32px;
+            }
+
+
+            .merch-actions {
+                flex-direction: column;
+            }
+
+
+            .merch-actions .btn {
+                width: 100%;
+            }
+
 
             .producer-card {
                 padding: 40px 25px;
             }
 
+
             .producer-card h2 {
                 font-size: 39px;
             }
 
+
             .final-cta {
-                padding: 55px 14px 70px;
+                padding:
+                    55px 14px 70px;
             }
+
+
+            .final-actions {
+                flex-direction: column;
+
+                align-items: stretch;
+
+                max-width: 400px;
+
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+
+            .final-actions .btn {
+                width: 100%;
+            }
+
 
             .footer-inner {
                 grid-template-columns: 1fr;
             }
 
+
             .footer-bottom {
                 flex-direction: column;
             }
         }
+
     </style>
+
 </head>
 
+
 <body>
+
 
     <!-- =========================================================
          TOP STRIPE
@@ -1499,9 +2222,15 @@
 
         <nav class="nav">
 
-            <a href="/" class="brand" aria-label="BeatHub home">
+            <a
+                href="/"
+                class="brand"
+                aria-label="BeatHub home"
+            >
 
-                <span class="brand-mark">B</span>
+                <span class="brand-mark">
+                    B
+                </span>
 
                 <span class="brand-text">
                     BEAT<span>HUB</span>
@@ -1509,6 +2238,8 @@
 
             </a>
 
+
+            <!-- Desktop Navigation -->
 
             <div class="nav-links">
 
@@ -1522,6 +2253,13 @@
 
                 <a href="/hot-picks">
                     Hot Picks
+                </a>
+
+                <a
+                    href="/merch"
+                    class="merch-link"
+                >
+                    Merch
                 </a>
 
                 <a href="/terms">
@@ -1571,6 +2309,36 @@
 
         </nav>
 
+
+        <!-- Mobile Navigation -->
+
+        <div class="mobile-nav">
+
+            <a href="/beats">
+                🎵 Beats
+            </a>
+
+            <a href="/sessions">
+                🎙 Sessions
+            </a>
+
+            <a href="/hot-picks">
+                🔥 Hot Picks
+            </a>
+
+            <a
+                href="/merch"
+                class="mobile-merch"
+            >
+                🛍 Merch
+            </a>
+
+            <a href="/terms">
+                Terms
+            </a>
+
+        </div>
+
     </header>
 
 
@@ -1590,19 +2358,36 @@
 
 
                 <h1>
+
                     SELL THE
-                    <span class="gold">SOUND.</span>
+
+                    <span class="gold">
+                        SOUND.
+                    </span>
+
                     <br>
+
                     KEEP YOUR
-                    <span class="teal">FLOW.</span>
+
+                    <span class="teal">
+                        FLOW.
+                    </span>
+
                 </h1>
 
 
                 <p class="hero-description">
-                    Discover <strong>fresh beats</strong>,
+
+                    Discover
+                    <strong>
+                        fresh beats
+                    </strong>,
+
                     connect with talented producers,
                     book creative sessions,
+                    shop official BeatHub merch,
                     and build the sound that makes you different.
+
                 </p>
 
 
@@ -1615,6 +2400,7 @@
                         Create Your BeatHub Account
                     </a>
 
+
                     <a
                         href="/beats"
                         class="btn btn-outline"
@@ -1623,6 +2409,22 @@
                     </a>
 
                 </div>
+
+
+                <a
+                    href="/merch"
+                    class="hero-merch"
+                >
+
+                    <span class="hero-merch-icon">
+                        🛍
+                    </span>
+
+                    <span>
+                        Shop official BeatHub Merch →
+                    </span>
+
+                </a>
 
 
                 <div class="hero-note">
@@ -1660,8 +2462,11 @@
                         </div>
 
                         <div class="live-pill">
+
                             <span class="live-dot"></span>
+
                             LIVE
+
                         </div>
 
                     </div>
@@ -1745,6 +2550,7 @@
                     autocomplete="off"
                 >
 
+
                 <button
                     type="submit"
                     class="search-button"
@@ -1776,11 +2582,16 @@
                     </h2>
 
                     <p class="section-description">
-                        One place to discover beats, meet producers,
-                        book sessions and take your music further.
+
+                        One place to discover beats,
+                        meet producers, book sessions,
+                        shop BeatHub merch and take your
+                        music further.
+
                     </p>
 
                 </div>
+
 
                 <a
                     href="/beats"
@@ -1793,6 +2604,7 @@
 
 
             <div class="features">
+
 
                 <article class="feature-card">
 
@@ -1809,9 +2621,11 @@
                     </h3>
 
                     <p>
+
                         Find the sound that fits your next record.
                         Explore beats from producers building the
                         next generation of music.
+
                     </p>
 
                 </article>
@@ -1832,9 +2646,11 @@
                     </h3>
 
                     <p>
+
                         Discover producers, explore their stores
                         and connect directly with the people behind
                         the sound.
+
                     </p>
 
                 </article>
@@ -1855,12 +2671,88 @@
                     </h3>
 
                     <p>
+
                         From beats and tracks to creative sessions,
                         BeatHub gives artists and creators a place
                         to turn ideas into music.
+
                     </p>
 
                 </article>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             MERCH
+        ====================================================== -->
+
+        <section class="section merch-section">
+
+            <div class="merch-card">
+
+                <div class="merch-grid">
+
+                    <div>
+
+                        <div class="merch-kicker">
+                            OFFICIAL BEATHUB MERCH
+                        </div>
+
+
+                        <h2>
+                            Wear the
+                            <span>sound.</span>
+                        </h2>
+
+
+                        <p>
+
+                            Rep BeatHub beyond the studio.
+                            Shop official BeatHub clothing,
+                            accessories and culture-driven merch
+                            made for artists, producers and everyone
+                            who lives the music.
+
+                        </p>
+
+
+                        <div class="merch-actions">
+
+                            <a
+                                href="/merch"
+                                class="btn btn-gold"
+                            >
+                                Shop BeatHub Merch
+                            </a>
+
+
+                            <a
+                                href="/merch"
+                                class="btn btn-outline"
+                            >
+                                View Collection →
+                            </a>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="merch-preview">
+
+                        <div class="shirt"></div>
+
+
+                        <div class="merch-badge">
+                            OFFICIAL
+                        </div>
+
+                    </div>
+
+                </div>
 
             </div>
 
@@ -1883,18 +2775,25 @@
                             THE MARKETPLACE
                         </div>
 
+
                         <h2>
+
                             Your next
                             <span>hit</span>
                             starts here.
+
                         </h2>
 
+
                         <p>
+
                             Browse a growing world of beats and tracks
                             created for artists who refuse to sound ordinary.
                             Find your vibe, listen, choose your license,
                             and keep creating.
+
                         </p>
+
 
                         <div class="marketplace-actions">
 
@@ -1905,11 +2804,20 @@
                                 Explore Beats
                             </a>
 
+
                             <a
                                 href="/hot-picks"
                                 class="btn btn-outline"
                             >
                                 See Hot Picks
+                            </a>
+
+
+                            <a
+                                href="/merch"
+                                class="btn btn-merch"
+                            >
+                                Shop Merch
                             </a>
 
                         </div>
@@ -1919,9 +2827,12 @@
 
                     <div class="marketplace-stats">
 
+
                         <div class="market-stat">
 
-                            <strong>01</strong>
+                            <strong>
+                                01
+                            </strong>
 
                             <span>
                                 Discover
@@ -1932,7 +2843,9 @@
 
                         <div class="market-stat">
 
-                            <strong>02</strong>
+                            <strong>
+                                02
+                            </strong>
 
                             <span>
                                 Connect
@@ -1943,7 +2856,9 @@
 
                         <div class="market-stat">
 
-                            <strong>03</strong>
+                            <strong>
+                                03
+                            </strong>
 
                             <span>
                                 Create
@@ -1954,7 +2869,9 @@
 
                         <div class="market-stat">
 
-                            <strong>04</strong>
+                            <strong>
+                                04
+                            </strong>
 
                             <span>
                                 Release
@@ -1985,17 +2902,24 @@
                         ARE YOU A PRODUCER?
                     </div>
 
+
                     <h2>
+
                         Turn your sound into
                         <span>your brand.</span>
+
                     </h2>
 
+
                     <p>
+
                         Create your BeatHub producer account,
                         upload your beats, build your public store
                         and share your unique store link with your fans,
                         artists and community.
+
                     </p>
+
 
                     <div class="marketplace-actions">
 
@@ -2006,11 +2930,20 @@
                             Create Producer Account
                         </a>
 
+
                         <a
                             href="/login"
                             class="btn btn-outline"
                         >
                             Producer Login
+                        </a>
+
+
+                        <a
+                            href="/merch"
+                            class="btn btn-merch"
+                        >
+                            Shop BeatHub Merch
                         </a>
 
                     </div>
@@ -2036,17 +2969,22 @@
                         MORE THAN BEATS
                     </div>
 
+
                     <h2 class="section-title">
                         Create together.
                     </h2>
 
+
                     <p class="section-description">
+
                         Looking for a producer, studio session or
                         creative collaboration? BeatHub helps connect
                         the people behind the music.
+
                     </p>
 
                 </div>
+
 
                 <a
                     href="/sessions"
@@ -2059,6 +2997,7 @@
 
 
             <div class="features">
+
 
                 <article class="feature-card">
 
@@ -2075,9 +3014,11 @@
                     </h3>
 
                     <p>
+
                         Find creative opportunities and connect with
                         producers and music professionals for your next
                         project.
+
                     </p>
 
                 </article>
@@ -2098,9 +3039,11 @@
                     </h3>
 
                     <p>
+
                         Producers get a public BeatHub store that can
                         be shared directly with artists, fans and
                         followers.
+
                     </p>
 
                 </article>
@@ -2121,8 +3064,10 @@
                     </h3>
 
                     <p>
+
                         Put your sound in front of artists who are
                         actively searching for their next beat.
+
                     </p>
 
                 </article>
@@ -2142,15 +3087,22 @@
                 THE HOME OF COOL BEATS
             </div>
 
+
             <h2>
+
                 Your sound deserves
                 a <span>home.</span>
+
             </h2>
 
+
             <p>
-                Join BeatHub and discover a better way to find,
-                create and share music.
+
+                Join BeatHub, discover your next sound,
+                shop the culture and build your music.
+
             </p>
+
 
             <div class="final-actions">
 
@@ -2161,11 +3113,20 @@
                     Join BeatHub
                 </a>
 
+
                 <a
                     href="/beats"
                     class="btn btn-outline"
                 >
                     Explore Beats
+                </a>
+
+
+                <a
+                    href="/merch"
+                    class="btn btn-merch"
+                >
+                    🛍 Shop BeatHub Merch
                 </a>
 
             </div>
@@ -2183,6 +3144,7 @@
 
         <div class="footer-inner">
 
+
             <div class="footer-brand">
 
                 <a
@@ -2194,16 +3156,20 @@
                         B
                     </span>
 
+
                     <span class="brand-text">
                         BEAT<span>HUB</span>
                     </span>
 
                 </a>
 
+
                 <p>
+
                     BeatHub — the home of cool beats.
-                    Discover sounds, connect with creators
-                    and build your music.
+                    Discover sounds, connect with creators,
+                    shop official merch and build your music.
+
                 </p>
 
             </div>
@@ -2215,16 +3181,27 @@
                     Discover
                 </h4>
 
+
                 <a href="/beats">
                     Beats
                 </a>
+
 
                 <a href="/hot-picks">
                     Hot Picks
                 </a>
 
+
                 <a href="/sessions">
                     Sessions
+                </a>
+
+
+                <a
+                    href="/merch"
+                    class="footer-merch"
+                >
+                    Merch
                 </a>
 
             </div>
@@ -2236,16 +3213,27 @@
                     BeatHub
                 </h4>
 
+
                 <a href="/signup">
                     Create Account
                 </a>
+
 
                 <a href="/login">
                     Login
                 </a>
 
+
                 <a href="/terms">
                     Terms
+                </a>
+
+
+                <a
+                    href="/merch"
+                    class="footer-merch"
+                >
+                    Official Merch
                 </a>
 
             </div>
@@ -2257,16 +3245,27 @@
                     Producers
                 </h4>
 
+
                 <a href="/signup?role=creator">
                     Sell Your Beats
                 </a>
+
 
                 <a href="/dashboard">
                     Producer Dashboard
                 </a>
 
+
                 <a href="/signup?role=creator">
                     Create Your Store
+                </a>
+
+
+                <a
+                    href="/merch"
+                    class="footer-merch"
+                >
+                    Rep BeatHub
                 </a>
 
             </div>
@@ -2277,9 +3276,14 @@
         <div class="footer-bottom">
 
             <span>
-                © {{ current_year|default(2026) }} BeatHub.
+
+                ©
+                {{ current_year|default(2026) }}
+                BeatHub.
                 All rights reserved.
+
             </span>
+
 
             <span>
                 The home of cool beats.
@@ -2290,4 +3294,5 @@
     </footer>
 
 </body>
+
 </html>
