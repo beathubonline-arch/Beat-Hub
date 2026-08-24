@@ -23,6 +23,7 @@ from app.routers import (
     mpesa_callback,
     music,
     pages,
+    stripe_checkout,
 )
 from app.services.storage import media_url
 from app.utils.deps import require_admin, require_creator
@@ -250,6 +251,7 @@ app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
 app.include_router(mpesa_callback.router)
+app.include_router(stripe_checkout.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(merchandise.router)
