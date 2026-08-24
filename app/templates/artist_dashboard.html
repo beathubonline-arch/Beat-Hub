@@ -1,437 +1,96 @@
 {% extends "base.html" %}
 
-{% block title %}Artist Dashboard — BeatHub{% endblock %}
-
-{% block extra_head %}
-<style>
-  .artist-dashboard {
-    padding: 42px 0 78px;
-  }
-
-  .artist-shell {
-    max-width: 1120px;
-    margin: 0 auto;
-  }
-
-  .artist-header {
-    margin-bottom: 24px;
-  }
-
-  .artist-kicker {
-    color: var(--gold);
-    letter-spacing: 3px;
-    font-size: 11px;
-    font-weight: 900;
-    margin-bottom: 9px;
-  }
-
-  .artist-header h1 {
-    margin: 0 0 8px;
-    font-size: clamp(30px, 5vw, 44px);
-    line-height: 1.05;
-    letter-spacing: -1.2px;
-  }
-
-  .artist-header p {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 13px;
-    line-height: 1.65;
-  }
-
-  .market-cta {
-    position: relative;
-    overflow: hidden;
-    padding: 31px;
-    margin-bottom: 24px;
-    border: 1px solid rgba(245,180,0,.22);
-    border-radius: 16px;
-    background:
-      radial-gradient(circle at 88% 15%, rgba(245,180,0,.13), transparent 28%),
-      radial-gradient(circle at 12% 90%, rgba(239,63,106,.08), transparent 30%),
-      linear-gradient(145deg, rgba(28,20,36,.98), rgba(15,10,19,.98));
-    box-shadow: 0 22px 60px rgba(0,0,0,.22);
-  }
-
-  .market-cta-copy {
-    max-width: 700px;
-  }
-
-  .market-cta .eyebrow {
-    color: var(--gold);
-    margin-bottom: 9px;
-  }
-
-  .market-cta h2 {
-    margin: 0 0 9px;
-    font-size: clamp(24px, 4vw, 32px);
-    letter-spacing: -.8px;
-  }
-
-  .market-cta p {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 13px;
-    line-height: 1.7;
-  }
-
-  .market-cta-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 20px;
-  }
-
-  .artist-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 13px;
-    margin-bottom: 28px;
-  }
-
-  .artist-stat {
-    padding: 19px;
-    border: 1px solid var(--border);
-    border-radius: 13px;
-    background: linear-gradient(
-      145deg,
-      rgba(21,14,28,.92),
-      rgba(13,9,17,.92)
-    );
-  }
-
-  .artist-stat .label {
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 700;
-    margin-bottom: 7px;
-  }
-
-  .artist-stat .value {
-    color: var(--text);
-    font-size: 25px;
-    font-weight: 900;
-    letter-spacing: -.6px;
-  }
-
-  .artist-stat .gold {
-    color: var(--gold);
-  }
-
-  .artist-stat .teal {
-    color: var(--teal);
-  }
-
-  .quick-actions {
-    display: flex;
-    gap: 9px;
-    flex-wrap: wrap;
-    margin: 0 0 39px;
-  }
-
-  .artist-section-heading {
-    display: flex;
-    justify-content: space-between;
-    align-items: end;
-    gap: 15px;
-    flex-wrap: wrap;
-    margin-bottom: 17px;
-  }
-
-  .artist-section-heading h2 {
-    margin: 0;
-    font-size: 23px;
-    letter-spacing: -.4px;
-  }
-
-  .artist-section-heading p {
-    margin: 5px 0 0;
-    color: var(--text-muted);
-    font-size: 12px;
-  }
-
-  .purchase-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 15px;
-  }
-
-  .purchase-card {
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: linear-gradient(
-      145deg,
-      rgba(28,20,36,.95),
-      rgba(14,9,17,.95)
-    );
-  }
-
-  .purchase-art {
-    position: relative;
-    aspect-ratio: 1 / 1;
-    overflow: hidden;
-    background: #100b15;
-  }
-
-  .purchase-art img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: cover;
-  }
-
-  .purchase-art-fallback {
-    width: 100%;
-    height: 100%;
-    display: grid;
-    place-items: center;
-    background:
-      radial-gradient(
-        circle at 30% 25%,
-        rgba(239,63,106,.22),
-        transparent 30%
-      ),
-      radial-gradient(
-        circle at 75% 75%,
-        rgba(245,180,0,.18),
-        transparent 30%
-      );
-    color: #cfc3d6;
-    font-size: 42px;
-    font-weight: 900;
-  }
-
-  .purchase-content {
-    padding: 17px;
-  }
-
-  .purchase-eyebrow {
-    color: var(--gold);
-    font-size: 9px;
-    font-weight: 900;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-  }
-
-  .purchase-title {
-    margin: 5px 0 7px;
-    font-size: 18px;
-    line-height: 1.2;
-  }
-
-  .purchase-meta {
-    color: var(--text-muted);
-    font-size: 11px;
-    line-height: 1.65;
-  }
-
-  .license-row {
-    display: flex;
-    gap: 7px;
-    flex-wrap: wrap;
-    margin: 13px 0;
-  }
-
-  .license-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 5px 8px;
-    border-radius: 999px;
-    font-size: 9px;
-    font-weight: 900;
-    letter-spacing: .5px;
-  }
-
-  .license-exclusive {
-    border: 1px solid rgba(239,63,106,.28);
-    background: rgba(239,63,106,.07);
-    color: #ff8fa9;
-  }
-
-  .license-nonexclusive {
-    border: 1px solid rgba(31,209,163,.25);
-    background: rgba(31,209,163,.06);
-    color: #72e7c5;
-  }
-
-  .purchase-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .purchase-actions .btn {
-    font-size: 11px;
-    padding: 9px 12px;
-  }
-
-  .empty-purchases {
-    padding: 45px 22px;
-    text-align: center;
-    border: 1px dashed #3b3045;
-    border-radius: 14px;
-    background: rgba(21,14,28,.4);
-  }
-
-  .empty-icon {
-    width: 58px;
-    height: 58px;
-    display: grid;
-    place-items: center;
-    margin: 0 auto 13px;
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    color: var(--gold);
-    background: #120d17;
-    font-size: 23px;
-  }
-
-  .empty-purchases h2 {
-    margin: 0 0 8px;
-    font-size: 20px;
-  }
-
-  .empty-purchases p {
-    max-width: 560px;
-    margin: 0 auto 19px;
-    color: var(--text-muted);
-    font-size: 12px;
-    line-height: 1.7;
-  }
-
-  .account-card {
-    margin-top: 42px;
-    padding: 21px;
-    border: 1px solid var(--border);
-    border-radius: 13px;
-    background: rgba(21,14,28,.7);
-  }
-
-  .account-card .eyebrow {
-    color: var(--gold);
-  }
-
-  .account-email {
-    margin: 5px 0 7px;
-    font-size: 18px;
-  }
-
-  .account-card p {
-    margin: 0 0 16px;
-    color: var(--text-muted);
-    font-size: 12px;
-  }
-
-  @media (max-width: 850px) {
-    .purchase-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 650px) {
-    .artist-dashboard {
-      padding: 28px 0 55px;
-    }
-
-    .market-cta {
-      padding: 24px 20px;
-    }
-
-    .artist-stats {
-      grid-template-columns: 1fr;
-    }
-
-    .purchase-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>
+{% block title %}
+Artist Dashboard - BeatHub
 {% endblock %}
-
 
 {% block content %}
 
-<section class="artist-dashboard">
+<section style="padding:35px 0;">
 
-  <div class="artist-shell">
+  <div style="max-width:1100px;margin:0 auto;">
 
-    <!-- ==========================================================
-         HEADER
-    =========================================================== -->
+    <div style="margin-bottom:25px;">
 
-    <header class="artist-header">
-
-      <div class="artist-kicker">
+      <div class="eyebrow">
         ARTIST DASHBOARD
       </div>
 
-      <h1>
+      <h1 style="font-size:30px;margin:5px 0 8px;">
         Welcome back, {{ display_name }}
       </h1>
 
-      <p>
+      <p class="sub">
         Find beats, purchase licenses and download your music.
       </p>
 
-    </header>
+    </div>
 
 
-    <!-- ==========================================================
-         MARKETPLACE CTA
-    =========================================================== -->
+    <div
+      class="form-card"
+      style="
+        padding:28px;
+        margin-bottom:25px;
+        text-align:center;
+      "
+    >
 
-    <section class="market-cta">
+      <div class="eyebrow">
+        BEAT MARKETPLACE
+      </div>
 
-      <div class="market-cta-copy">
+      <h2 style="
+        font-size:27px;
+        margin:7px 0 10px;
+      ">
+        Looking for your next beat?
+      </h2>
 
-        <div class="eyebrow">
-          BEATHUB MARKETPLACE
-        </div>
+      <p
+        class="sub"
+        style="
+          max-width:650px;
+          margin:0 auto 20px;
+          line-height:1.6;
+        "
+      >
+        Browse beats from BeatHub producers, listen to available
+        tracks, choose your license and purchase securely with
+        M-Pesa.
+      </p>
 
-        <h2>
-          Find the producer. Find the sound. Make the record.
-        </h2>
+      <div
+        style="
+          display:flex;
+          justify-content:center;
+          gap:12px;
+          flex-wrap:wrap;
+        "
+      >
 
-        <p>
-          Browse BeatHub's producer marketplace, explore individual
-          producer stores, preview available beats, choose your license
-          and continue to secure M-Pesa checkout.
-        </p>
+        <a
+          href="/beats"
+          class="btn btn-primary"
+        >
+          Browse Beats &amp; Buy
+        </a>
 
-        <div class="market-cta-actions">
-
-          <a
-            href="/beats"
-            class="btn btn-primary"
-          >
-            Explore Marketplace
-          </a>
-
-          <a
-            href="/sessions"
-            class="btn btn-outline"
-          >
-            Browse Sessions
-          </a>
-
-        </div>
+        <a
+          href="/sessions"
+          class="btn btn-outline"
+        >
+          Browse Sessions
+        </a>
 
       </div>
 
-    </section>
+    </div>
 
 
-    <!-- ==========================================================
-         STATS
-    =========================================================== -->
+    <div class="dashboard-grid">
 
-    <section
-      class="artist-stats"
-      aria-label="Artist account statistics"
-    >
-
-      <div class="artist-stat">
+      <div class="stat-card">
 
         <div class="label">
           Purchased Beats
@@ -444,7 +103,7 @@
       </div>
 
 
-      <div class="artist-stat">
+      <div class="stat-card">
 
         <div class="label">
           Total Spent
@@ -457,7 +116,7 @@
       </div>
 
 
-      <div class="artist-stat">
+      <div class="stat-card">
 
         <div class="label">
           Downloads
@@ -469,14 +128,17 @@
 
       </div>
 
-    </section>
+    </div>
 
 
-    <!-- ==========================================================
-         QUICK ACTIONS
-    =========================================================== -->
-
-    <div class="quick-actions">
+    <div
+      style="
+        display:flex;
+        gap:12px;
+        flex-wrap:wrap;
+        margin:25px 0 40px;
+      "
+    >
 
       <a
         href="/beats"
@@ -495,21 +157,32 @@
     </div>
 
 
-    <!-- ==========================================================
-         PURCHASED BEATS
-    =========================================================== -->
+    <div style="margin-top:30px;">
 
-    <section>
-
-      <div class="artist-section-heading">
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          align-items:end;
+          gap:15px;
+          flex-wrap:wrap;
+          margin-bottom:18px;
+        "
+      >
 
         <div>
 
-          <h2>
+          <h2 style="
+            font-size:23px;
+            margin:0;
+          ">
             My Purchased Beats
           </h2>
 
-          <p>
+          <p
+            class="sub"
+            style="margin:5px 0 0;"
+          >
             Beats you have successfully purchased.
           </p>
 
@@ -527,184 +200,188 @@
 
       {% if purchases %}
 
-        <div class="purchase-grid">
+        <div class="dashboard-grid">
 
           {% for purchase in purchases %}
 
-            <article class="purchase-card">
+            <div
+              class="form-card"
+              style="padding:18px;"
+            >
 
-              <!-- COVER -->
+              {% if purchase.track %}
 
-              <div class="purchase-art">
+                {% if purchase.track.cover_art_path %}
 
-                {% if purchase.track
-                      and purchase.track.cover_art_url %}
-
-                  <img
-                    src="{{ purchase.track.cover_art_url }}"
-                    alt="{{ purchase.track.title }}"
-                    loading="lazy"
+                  <div
+                    style="
+                      width:100%;
+                      aspect-ratio:1/1;
+                      overflow:hidden;
+                      border-radius:14px;
+                      margin-bottom:14px;
+                      background:#111;
+                      border:1px solid rgba(255,255,255,.06);
+                    "
                   >
 
-                {% elif purchase.track
-                        and purchase.track.cover_art_path %}
+                    <img
+                      src="/track/{{ purchase.track.slug }}/artwork"
+                      alt="{{ purchase.track.title }}"
+                      loading="lazy"
+                      decoding="async"
+                      style="
+                        width:100%;
+                        height:100%;
+                        object-fit:cover;
+                        display:block;
+                      "
+                      onerror="this.style.display='none';"
+                    >
 
-                  <img
-                    src="{{ purchase.track.cover_art_path }}"
-                    alt="{{ purchase.track.title }}"
-                    loading="lazy"
-                  >
-
-                {% else %}
-
-                  <div class="purchase-art-fallback">
-                    BH
                   </div>
 
                 {% endif %}
 
-              </div>
 
+                <div class="eyebrow">
 
-              <div class="purchase-content">
+                  {{ purchase.track.genre or 'BEAT' }}
 
-                {% if purchase.track %}
+                  {% if purchase.track.bpm %}
 
-                  <div class="purchase-eyebrow">
-
-                    {{ purchase.track.genre or 'BEAT' }}
-
-                    {% if purchase.track.bpm %}
-                      · {{ purchase.track.bpm }} BPM
-                    {% endif %}
-
-                  </div>
-
-
-                  <h3 class="purchase-title">
-                    {{ purchase.track.title }}
-                  </h3>
-
-
-                  {% if purchase.creator_name %}
-
-                    <div class="purchase-meta">
-                      Producer:
-                      {{ purchase.creator_name }}
-                    </div>
+                    &middot;
+                    {{ purchase.track.bpm }} BPM
 
                   {% endif %}
 
-
-                  <div class="purchase-meta">
-                    Order:
-                    {{ purchase.order_number }}
-                  </div>
+                </div>
 
 
-                  <div class="purchase-meta">
-
-                    Purchased:
-
-                    {{
-                      purchase.completed_at.strftime(
-                        '%d %b %Y'
-                      )
-                      if purchase.completed_at
-                      else ''
-                    }}
-
-                  </div>
+                <h3 style="
+                  font-size:20px;
+                  margin:5px 0 8px;
+                ">
+                  {{ purchase.track.title }}
+                </h3>
 
 
-                  {% set sales_model =
-                    purchase.track.sales_model.value
-                    if purchase.track.sales_model.value is defined
-                    else purchase.track.sales_model
-                  %}
+                {% if purchase.creator_name %}
 
-
-                  <div class="license-row">
-
-                    {% if sales_model == "exclusive" %}
-
-                      <span
-                        class="
-                          license-badge
-                          license-exclusive
-                        "
-                      >
-                        EXCLUSIVE LICENSE
-                      </span>
-
-                    {% else %}
-
-                      <span
-                        class="
-                          license-badge
-                          license-nonexclusive
-                        "
-                      >
-                        NON-EXCLUSIVE LICENSE
-                      </span>
-
-                    {% endif %}
-
-                  </div>
-
-
-                  <div class="purchase-actions">
-
-                    <a
-                      href="/track/{{ purchase.track.slug }}"
-                      class="btn btn-outline"
-                    >
-                      View Beat
-                    </a>
-
-
-                    {% if purchase.download_url %}
-
-                      <a
-                        href="{{ purchase.download_url }}"
-                        class="btn btn-primary"
-                        target="_blank"
-                        rel="noopener"
-                        download
-                      >
-                        Download Beat
-                      </a>
-
-                    {% else %}
-
-                      <span
-                        class="btn btn-outline"
-                        style="opacity:.55;"
-                      >
-                        Download Unavailable
-                      </span>
-
-                    {% endif %}
-
-                  </div>
-
-
-                {% else %}
-
-                  <h3 class="purchase-title">
-                    Purchased Item
-                  </h3>
-
-                  <div class="purchase-meta">
-                    Order
-                    {{ purchase.order_number }}
-                  </div>
+                  <p
+                    class="sub"
+                    style="margin:4px 0;"
+                  >
+                    Producer:
+                    {{ purchase.creator_name }}
+                  </p>
 
                 {% endif %}
 
-              </div>
 
-            </article>
+                <p
+                  class="sub"
+                  style="margin:4px 0;"
+                >
+                  Order:
+                  {{ purchase.order_number }}
+                </p>
+
+
+                <p
+                  class="sub"
+                  style="margin:4px 0 14px;"
+                >
+                  Purchased:
+
+                  {{
+                    purchase.completed_at.strftime('%d %b %Y')
+                    if purchase.completed_at
+                    else ''
+                  }}
+                </p>
+
+
+                <div
+                  style="
+                    display:flex;
+                    gap:7px;
+                    flex-wrap:wrap;
+                    margin-bottom:15px;
+                  "
+                >
+
+                  {% if purchase.track.sales_model.value == "exclusive" %}
+
+                    <span class="badge badge-exclusive">
+                      EXCLUSIVE LICENSE
+                    </span>
+
+                  {% else %}
+
+                    <span class="badge badge-nonexclusive">
+                      NON-EXCLUSIVE LICENSE
+                    </span>
+
+                  {% endif %}
+
+                </div>
+
+
+                <div
+                  style="
+                    display:flex;
+                    gap:8px;
+                    flex-wrap:wrap;
+                  "
+                >
+
+                  <a
+                    href="/track/{{ purchase.track.slug }}"
+                    class="btn btn-outline"
+                  >
+                    View Beat
+                  </a>
+
+
+                  {% if purchase.download_url %}
+
+                    <a
+                      href="{{ purchase.download_url }}"
+                      class="btn btn-primary"
+                      target="_blank"
+                      rel="noopener"
+                      download
+                    >
+                      Download Beat
+                    </a>
+
+                  {% else %}
+
+                    <span
+                      class="btn btn-outline"
+                      style="opacity:.6;"
+                    >
+                      Download Unavailable
+                    </span>
+
+                  {% endif %}
+
+                </div>
+
+              {% else %}
+
+                <h3>
+                  Purchased Item
+                </h3>
+
+                <p class="sub">
+                  Order {{ purchase.order_number }}
+                </p>
+
+              {% endif %}
+
+            </div>
 
           {% endfor %}
 
@@ -713,59 +390,73 @@
 
       {% else %}
 
-        <!-- ======================================================
-             EMPTY PURCHASE STATE
-        ======================================================= -->
+        <div
+          class="form-card"
+          style="
+            padding:40px;
+            text-align:center;
+          "
+        >
 
-        <div class="empty-purchases">
-
-          <div class="empty-icon">
-            ♪
+          <div
+            style="
+              font-size:45px;
+              margin-bottom:10px;
+            "
+          >
+            🎵
           </div>
 
-          <h2>
+          <h2 style="margin:0 0 8px;">
             You haven't bought a beat yet
           </h2>
 
-          <p>
-            Your next record can start here. Explore BeatHub's
-            marketplace, discover producers and find the sound
-            that fits your idea.
+          <p
+            class="sub"
+            style="
+              max-width:550px;
+              margin:0 auto 20px;
+              line-height:1.6;
+            "
+          >
+            Explore BeatHub's marketplace and find the perfect
+            beat for your next song.
           </p>
 
           <a
             href="/beats"
             class="btn btn-primary"
           >
-            Explore Marketplace
+            Browse Beats &amp; Buy
           </a>
 
         </div>
 
       {% endif %}
 
-    </section>
+    </div>
 
 
-    <!-- ==========================================================
-         ACCOUNT
-    =========================================================== -->
-
-    <section class="account-card">
+    <div
+      class="form-card"
+      style="
+        margin-top:45px;
+        padding:25px;
+      "
+    >
 
       <div class="eyebrow">
         ACCOUNT
       </div>
 
-      <h2 class="account-email">
-        {{
-          user.email
-          if user is defined
-          else current_user.email
-        }}
+      <h2 style="
+        margin:5px 0 8px;
+        font-size:21px;
+      ">
+        {{ user.email if user is defined else current_user.email }}
       </h2>
 
-      <p>
+      <p class="sub">
         Your purchased music is connected to this BeatHub account.
       </p>
 
@@ -776,7 +467,7 @@
         Account Settings
       </a>
 
-    </section>
+    </div>
 
   </div>
 
