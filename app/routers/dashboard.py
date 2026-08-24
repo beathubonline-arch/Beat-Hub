@@ -11,7 +11,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -23,7 +23,6 @@ from app.models.music import Album, AlbumTrack, SalesModel, Track
 from app.models.order import Order, OrderStatus
 from app.models.profile import Profile
 from app.models.user import User
-from app.services.audio_analysis import BPMDetectionError, detect_bpm
 from app.services.storage import (
     ALLOWED_AUDIO_EXT,
     ALLOWED_IMAGE_EXT,
@@ -502,48 +501,6 @@ def upload_page(
 # UPLOAD TRACKS
 # ============================================================
 
-@router.post("/dashboard/analyze-bpm")
-async def analyze_bpm(
-    audio_file: UploadFile = File(...),
-    user: User = Depends(require_creator),
-):
-    """Analyze one uploaded audio file and return its detected BPM.
-
-    This endpoint is used by the upload page before the final upload.
-    The final upload route also performs server-side detection when the BPM
-    field is left blank, so the feature still works if JavaScript is disabled.
-    """
-    if not audio_file or not audio_file.filename:
-        return JSONResponse(
-            {"ok": False, "error": "Please choose an audio file."},
-            status_code=400,
-        )
-
-    try:
-        detected = detect_bpm(audio_file.file)
-    except BPMDetectionError as exc:
-        return JSONResponse(
-            {"ok": False, "error": str(exc)},
-            status_code=422,
-        )
-
-    if detected is None:
-        return JSONResponse(
-            {
-                "ok": False,
-                "error": "BeatHub could not confidently detect a BPM from this audio.",
-            },
-            status_code=422,
-        )
-
-    return JSONResponse(
-        {
-            "ok": True,
-            "bpm": detected,
-        }
-    )
-
-
 @router.post("/dashboard/upload")
 async def upload_submit(
     request: Request,
@@ -626,13 +583,6 @@ async def upload_submit(
                     return error(
                         f"BPM for '{title}' must be between 1 and 999."
                     )
-            else:
-                # Automatic BPM detection is the default. A creator can
-                # still override it by entering a BPM manually.
-                try:
-                    bpm_value = detect_bpm(audio_file.file)
-                except BPMDetectionError:
-                    bpm_value = None
 
             price_raw = (
                 prices[i].strip()
