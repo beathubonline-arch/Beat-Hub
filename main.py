@@ -51,10 +51,11 @@ app = FastAPI(
 async def homepage_motion_assets(request: Request, call_next):
     response = await call_next(request)
 
-    # The homepage is a standalone template, so load its motion layer
-    # without changing the existing page markup or global stylesheet.
+    # Keep the homepage motion layer isolated from the global stylesheet.
+    # The explicit Link response also avoids changing the standalone home
+    # template or any other page.
     if request.url.path == "/" and response.headers.get("content-type", "").startswith("text/html"):
-        response.headers["Link"] = "</static/css/home-animation.css>; rel=stylesheet"
+        response.headers["Link"] = "</static/css/home-animation.css?v=2>; rel=stylesheet"
 
     return response
 
@@ -156,7 +157,11 @@ def public_track_preview(slug: str, db: Session = Depends(get_db)):
     raise HTTPException(status_code=404, detail="Preview audio is not available.")
 
 
+# The creator-store router must be registered before pages.router because
+# pages.router also contains legacy /store/{slug} and /profile/{slug}
+# handlers. This guarantees one authenticated owner-aware implementation.
 app.include_router(auth.router)
+app.include_router(creator_store.router)
 app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
@@ -164,9 +169,6 @@ app.include_router(mpesa_callback.router)
 app.include_router(paystack_checkout.router)
 app.include_router(flutterwave_checkout.router)
 app.include_router(stripe_checkout.router)
-# This must be registered before the legacy dashboard creator-store route so
-# /creator/{slug} receives the authenticated user and can render owner view.
-app.include_router(creator_store.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(merchandise.router)
