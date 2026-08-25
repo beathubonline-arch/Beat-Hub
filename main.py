@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 from http.cookies import SimpleCookie
+from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -23,7 +24,9 @@ from app.routers import (
     music,
     pages,
     paystack_checkout,
+    payout_admin,
 )
+from app.services.payout_policy import PAYOUT_MINIMUM
 
 logger = logging.getLogger("beathub")
 BASE_DIR = Path(__file__).resolve().parent
@@ -133,13 +136,7 @@ class HomepageMotionMiddleware:
 
 
 class MerchandiseLoginRedirectMiddleware:
-    """Give logged-out merchandise buyers a real login flow instead of a raw 401.
-
-    This middleware runs before the merchandise router. It only touches the
-    POST purchase endpoint when the BeatHub session cookie is absent. Logged-in
-    customers continue through the existing canonical merchandise/Paystack
-    implementation unchanged.
-    """
+    """Give logged-out merchandise buyers a real login flow instead of a raw 401."""
 
     SESSION_COOKIE = "beathub_session"
 
@@ -171,8 +168,6 @@ class MerchandiseLoginRedirectMiddleware:
                 parts = [part for part in path.split("/") if part]
                 if len(parts) == 3 and not self._has_session_cookie(scope.get("headers", [])):
                     slug = parts[1]
-                    from urllib.parse import quote
-
                     next_url = f"/merch/{slug}"
                     location = (
                         f"/login?next={quote(next_url, safe='')}"
@@ -185,6 +180,58 @@ class MerchandiseLoginRedirectMiddleware:
         await self.app(scope, receive, send)
 
 
+class CreatorPayoutPolicyMiddleware:
+    """Enforce the creator withdrawal minimum without changing the existing route.
+
+    Requests may be submitted any day. They remain pending until the scheduled
+    Tuesday/Thursday payout cycle. The KSh 500 minimum is enforced server-side,
+    not only by the HTML form, so it cannot be bypassed by a crafted request.
+    """
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("method", "").upper() != "POST" or scope.get("path") != "/dashboard/withdraw":
+            await self.app(scope, receive, send)
+            return
+
+        body_chunks = []
+        while True:
+            message = await receive()
+            if message.get("type") != "http.request":
+                await self.app(scope, receive, send)
+                return
+            body_chunks.append(message.get("body", b""))
+            if not message.get("more_body", False):
+                break
+
+        body = b"".join(body_chunks)
+        try:
+            parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+            raw_amount = (parsed.get("amount") or [""])[0].strip()
+            amount = float(raw_amount)
+        except (ValueError, TypeError, UnicodeDecodeError):
+            amount = None
+
+        if amount is None or amount < PAYOUT_MINIMUM:
+            location = (
+                "/dashboard/withdraw?error="
+                + quote(f"The minimum creator withdrawal is KSh {PAYOUT_MINIMUM:,}.")
+            )
+            response = RedirectResponse(url=location, status_code=303)
+            await response(scope, receive, send)
+            return
+
+        sent = False
+
+        async def replay_receive():
+            nonlocal sent
+            if not sent:
+                sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        await self.app(scope, replay_receive, send)
+
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret(),
@@ -194,6 +241,7 @@ app.add_middleware(
     https_only=_session_https_only(),
 )
 app.add_middleware(MerchandiseLoginRedirectMiddleware)
+app.add_middleware(CreatorPayoutPolicyMiddleware)
 app.add_middleware(HomepageMotionMiddleware)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -234,5 +282,6 @@ app.include_router(checkout.router)
 app.include_router(paystack_checkout.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
+app.include_router(payout_admin.router)
 app.include_router(merchandise.router)
 app.include_router(merchandise_account.router)
