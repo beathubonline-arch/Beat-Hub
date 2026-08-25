@@ -90,7 +90,35 @@ def _complete_verified_payment(
     payment: PaymentTransaction,
     data: dict,
 ) -> bool:
-    """Apply a verified Paystack result exactly once."""
+    """Apply a verified Paystack result exactly once under a DB row lock."""
+
+    # Webhook and browser callback can arrive at the same time. Lock the
+    # payment and order rows so only one verifier can finalize the purchase.
+    locked_payment = (
+        db.query(PaymentTransaction)
+        .filter(PaymentTransaction.id == payment.id)
+        .with_for_update()
+        .one_or_none()
+    )
+    locked_order = (
+        db.query(Order)
+        .filter(Order.id == order.id)
+        .with_for_update()
+        .one_or_none()
+    )
+
+    if locked_payment is None or locked_order is None:
+        raise RuntimeError("Payment or order disappeared during verification.")
+
+    payment = locked_payment
+    order = locked_order
+
+    if (
+        payment.callback_processed
+        and payment.status == PaymentStatus.COMPLETED
+        and order.status == OrderStatus.COMPLETED
+    ):
+        return True
 
     if payment.status == PaymentStatus.COMPLETED and order.status == OrderStatus.COMPLETED:
         return True
