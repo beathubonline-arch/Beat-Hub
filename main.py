@@ -69,16 +69,19 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Attach the homepage motion stylesheet without touching the response body.
+    """Inject the homepage motion stylesheet safely into the HTML stream.
 
-    The previous implementation buffered and reconstructed the entire homepage
-    response. That was unnecessary and could interfere with Starlette's async
-    response streaming, producing `anext(): asynchronous generator is already
-    running`. A Link response header gives the browser the stylesheet directly
-    while leaving the ASGI response stream untouched.
+    The old implementation consumed the complete response body, then emitted a
+    second synthetic response. That can conflict with Starlette's asynchronous
+    response machinery and was the source of the observed
+    `anext(): asynchronous generator is already running` error.
+
+    This implementation keeps the original response status/headers, buffers only
+    the small prefix required to find </head>, injects one normal HTML link, and
+    then streams the original response unchanged.
     """
 
-    LINK_HEADER = b'</static/css/home-animation.css>; rel="stylesheet"'
+    LINK = b'<link rel="stylesheet" href="/static/css/home-animation.css" data-beathub-home-motion="1">'
 
     def __init__(self, app):
         self.app = app
@@ -88,25 +91,78 @@ class HomepageMotionMiddleware:
             await self.app(scope, receive, send)
             return
 
+        response_started = False
+        is_html = False
+        injected = False
+        buffer = bytearray()
+
         async def send_wrapper(message):
-            if message.get("type") == "http.response.start":
+            nonlocal response_started, is_html, injected, buffer
+
+            message_type = message.get("type")
+
+            if message_type == "http.response.start":
                 headers = list(message.get("headers", []))
+                content_type = ""
+                for key, value in headers:
+                    if key.lower() == b"content-type":
+                        content_type = value.decode("latin-1").lower()
+                        break
 
-                # Avoid duplicate stylesheet headers if another layer adds one.
-                has_motion_link = any(
-                    key.lower() == b"link" and b"home-animation.css" in value
-                    for key, value in headers
-                )
-                if not has_motion_link:
-                    headers.append((b"link", self.LINK_HEADER))
+                is_html = content_type.startswith("text/html")
+                response_started = True
 
-                # Keep an observable marker for production diagnostics.
-                headers.append((b"x-beathub-home-motion", b"loaded"))
+                # We may change the body length when injecting the link, so the
+                # original Content-Length must not be sent for this HTML response.
+                if is_html:
+                    headers = [
+                        (key, value)
+                        for key, value in headers
+                        if key.lower() != b"content-length"
+                    ]
+                    headers.append((b"x-beathub-home-motion", b"loaded"))
 
-                message = dict(message)
-                message["headers"] = headers
+                outgoing = dict(message)
+                outgoing["headers"] = headers
+                await send(outgoing)
+                return
 
-            await send(message)
+            if message_type != "http.response.body" or not is_html or injected:
+                await send(message)
+                return
+
+            chunk = bytes(message.get("body", b""))
+            more_body = bool(message.get("more_body", False))
+            buffer.extend(chunk)
+
+            marker = b"</head>"
+            lower_buffer = bytes(buffer).lower()
+            marker_index = lower_buffer.find(marker)
+
+            if marker_index >= 0:
+                insert_at = marker_index
+                body = bytes(buffer[:insert_at]) + self.LINK + bytes(buffer[insert_at:])
+                buffer.clear()
+                injected = True
+                await send({
+                    "type": "http.response.body",
+                    "body": body,
+                    "more_body": more_body,
+                })
+                return
+
+            # If the response has not ended, keep buffering until </head> is
+            # available. Homepage HTML is small and this buffer normally flushes
+            # on the first body event.
+            if not more_body:
+                await send({
+                    "type": "http.response.body",
+                    "body": bytes(buffer),
+                    "more_body": False,
+                })
+                buffer.clear()
+                injected = True
+                return
 
         await self.app(scope, receive, send_wrapper)
 
