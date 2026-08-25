@@ -6,6 +6,7 @@ This router intentionally contains no direct Safaricom/Daraja checkout.
 """
 
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.templating import Jinja2Templates
@@ -15,7 +16,7 @@ from app.database import get_db
 from app.models.music import SalesModel, Track
 from app.models.order import Order, OrderStatus
 from app.models.user import User
-from app.utils.deps import require_user
+from app.utils.deps import get_optional_user, require_user
 
 router = APIRouter(tags=["checkout"])
 templates = Jinja2Templates(directory="app/templates")
@@ -61,12 +62,21 @@ def checkout_page(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User | None = Depends(get_optional_user),
 ):
+    """Show checkout to signed-in buyers and provide a clean login handoff otherwise."""
     track = get_track(db, slug)
 
     if not track:
         raise HTTPException(status_code=404, detail="Track not found.")
+
+    # Do not expose a raw 401/JSON error when a visitor clicks Buy before
+    # logging in. Preserve the exact checkout URL so login can return them
+    # directly to this purchase page.
+    if user is None:
+        next_url = f"/checkout/track/{quote(slug, safe='')}"
+        message = quote("Please log in to purchase this beat. After you sign in, your checkout will continue automatically.")
+        return RedirectResponse(url=f"/login?next={quote(next_url, safe='')}&error={message}", status_code=303)
 
     profile = getattr(track, "creator_profile", None)
     creator_user_id = getattr(profile, "user_id", None)
