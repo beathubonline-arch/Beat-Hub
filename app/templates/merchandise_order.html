@@ -1,126 +1,41 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta
-        name="viewport"
-        content="width=device-width,initial-scale=1"
-    >
-
-    <title>
-        Merchandise Order · BeatHub
-    </title>
-
-    {% if order.status == 'pending_payment' and order.merchant_request_id and order.merchant_request_id.startswith('http') %}
-        <meta http-equiv="refresh" content="0;url={{ order.merchant_request_id }}">
-    {% elif order.status == 'pending_payment' %}
-        <meta http-equiv="refresh" content="5">
-    {% endif %}
-
-    <style>
-        :root {
-            color-scheme: dark;
-            --bg: #070709;
-            --panel: #111116;
-            --text: #f5f5f7;
-            --muted: #a7a7b2;
-            --line: #292932;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            background: linear-gradient(180deg,#070709,#0b0b0f);
-            color: var(--text);
-            font-family: Inter, system-ui, sans-serif;
-        }
-
-        .wrap { max-width: 760px; margin: auto; padding: 50px 20px; }
-        .brand { font-weight: 900; letter-spacing: .08em; }
-        .panel { margin-top: 25px; background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 26px; }
-        .image { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 18px; background: #17171d; display: block; }
-        .fallback { aspect-ratio: 16 / 9; border-radius: 18px; background: #17171d; display: flex; align-items: center; justify-content: center; font-size: 48px; }
-        .eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; color: #888894; font-weight: 800; margin-top: 30px; }
-        h1 { font-size: 36px; margin: 8px 0 12px; }
-        p { color: var(--muted); line-height: 1.65; }
-        .row { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-        .row:last-child { border-bottom: 0; }
-        .value { font-weight: 800; text-align: right; }
-        .status { display: inline-flex; padding: 8px 12px; border-radius: 999px; background: #1b1b21; font-weight: 900; font-size: 13px; }
-        .note { margin-top: 20px; padding: 16px; border-radius: 15px; background: #15151a; border: 1px solid var(--line); line-height: 1.6; }
-        .delivery { margin-top: 20px; padding: 16px; border-radius: 15px; background: #15151a; border: 1px solid var(--line); color: #c6c6cf; line-height: 1.6; }
-        .btn { display: inline-flex; margin-top: 20px; padding: 12px 17px; border-radius: 12px; background: #fff; color: #08080a; font-weight: 900; }
-        a { color: inherit; text-decoration: none; }
-        @media (max-width: 600px) { .wrap { padding: 30px 16px; } .panel { padding: 20px; } h1 { font-size: 30px; } .row { align-items: flex-start; } }
-    </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Merchandise Order · BeatHub</title>
+<style>
+:root{color-scheme:dark;--bg:#070709;--panel:#111116;--text:#f5f5f7;--muted:#a7a7b2;--line:#292932}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#070709,#0b0b0f);color:var(--text);font-family:Inter,system-ui,sans-serif}
+.wrap{max-width:760px;margin:auto;padding:50px 20px}.brand{font-weight:900;letter-spacing:.08em}.panel{margin-top:25px;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:26px}
+.image{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:18px;background:#17171d;display:block}.fallback{aspect-ratio:16/9;border-radius:18px;background:#17171d;display:flex;align-items:center;justify-content:center;font-size:48px}
+.eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:12px;color:#888894;font-weight:800;margin-top:30px}h1{font-size:36px;margin:8px 0 12px}p{color:var(--muted);line-height:1.65}.row{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--line)}.row:last-child{border-bottom:0}.value{font-weight:800;text-align:right}.status{display:inline-flex;padding:8px 12px;border-radius:999px;background:#1b1b21;font-weight:900;font-size:13px}.note,.delivery{margin-top:20px;padding:16px;border-radius:15px;background:#15151a;border:1px solid var(--line);line-height:1.6}.btn{display:inline-flex;margin-top:20px;padding:12px 17px;border-radius:12px;background:#fff;color:#08080a;font-weight:900}a{color:inherit;text-decoration:none}
+</style>
 </head>
-
-<body>
-<main class="wrap">
-    <a class="brand" href="/">BEATHUB</a>
-
-    <div class="eyebrow">Merchandise Order</div>
-
-    <div class="panel">
-        {% if order.image_url %}
-            <img class="image" src="{{ order.image_url }}" alt="{{ order.product_name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-            <div class="fallback" style="display:none">🛍️</div>
-        {% else %}
-            <div class="fallback">🛍️</div>
-        {% endif %}
-
-        <h1>{{ order.product_name }}</h1>
-
-        {% if order.status == 'pending_payment' %}
-            <span class="status">Continue to Paystack</span>
-            <p>
-                Your merchandise order is ready for payment. You are being
-                redirected to Paystack, where you can use an enabled Kenya
-                M-PESA or card payment method.
-            </p>
-        {% elif order.status == 'paid' %}
-            <span class="status">Payment received</span>
-            <p>
-                Your payment has been confirmed. Your physical merchandise
-                order is now queued for fulfilment.
-            </p>
-        {% elif order.status == 'failed' %}
-            <span class="status">Payment failed</span>
-            <p>{{ order.failure_reason or 'The payment was not completed.' }}</p>
-        {% else %}
-            <span class="status">{{ order.status|replace('_', ' ')|title }}</span>
-            <p>Your merchandise order is being processed.</p>
-        {% endif %}
-
-        <div class="row"><span>Quantity</span><span class="value">{{ order.quantity }}</span></div>
-        <div class="row"><span>Total</span><span class="value">KSh {{ '%.2f'|format(order.total_amount|float) }}</span></div>
-        <div class="row"><span>Order ID</span><span class="value">{{ order.id }}</span></div>
-
-        {% if order.mpesa_receipt %}
-            <div class="row"><span>Payment reference</span><span class="value">{{ order.mpesa_receipt }}</span></div>
-        {% endif %}
-
-        {% if order.order_note %}
-            <div class="note"><strong>Your order note</strong><br>{{ order.order_note }}</div>
-        {% endif %}
-
-        {% if order.status in ['paid','processing','shipped','delivered'] %}
-            <div class="delivery">
-                <strong>Delivery</strong><br><br>
-                Your physical merchandise is delivered separately from digital
-                purchases. Delivery time depends on your location and the
-                creator's fulfilment process.
-                <br><br>
-                Your order note, including details such as size, colour and
-                delivery instructions, has been saved with the order.
-            </div>
-        {% endif %}
-
-        <a class="btn" href="/merch/{{ order.product_slug }}">Back to product</a>
-    </div>
-</main>
-</body>
-</html>
+<body><main class="wrap"><a class="brand" href="/">BEATHUB</a><div class="eyebrow">Merchandise Order</div><div class="panel">
+{% if order.image_url %}<img class="image" src="{{ order.image_url }}" alt="{{ order.product_name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="fallback" style="display:none">🛍️</div>{% else %}<div class="fallback">🛍️</div>{% endif %}
+<h1>{{ order.product_name }}</h1>
+<div id="payment-status">
+{% if order.status == 'pending_payment' %}<span class="status">Confirming payment…</span><p id="payment-message">We are confirming your Paystack payment. This page will update automatically.</p>
+{% elif order.status == 'paid' %}<span class="status">Payment received</span><p id="payment-message">Your payment has been confirmed. Your physical merchandise order is queued for fulfilment.</p>
+{% elif order.status == 'failed' %}<span class="status">Payment failed</span><p id="payment-message">{{ order.failure_reason or 'The payment was not completed.' }}</p>
+{% else %}<span class="status">{{ order.status|replace('_',' ')|title }}</span><p id="payment-message">Your merchandise order is being processed.</p>{% endif %}
+</div>
+<div class="row"><span>Quantity</span><span class="value">{{ order.quantity }}</span></div><div class="row"><span>Total</span><span class="value">KSh {{ '%.2f'|format(order.total_amount|float) }}</span></div><div class="row"><span>Order ID</span><span class="value">{{ order.id }}</span></div>
+{% if order.mpesa_receipt %}<div class="row"><span>Payment reference</span><span class="value">{{ order.mpesa_receipt }}</span></div>{% endif %}
+{% if order.order_note %}<div class="note"><strong>Your order note</strong><br>{{ order.order_note }}</div>{% endif %}
+<div id="delivery" class="delivery" {% if order.status not in ['paid','processing','shipped','delivered'] %}style="display:none"{% endif %}><strong>Delivery</strong><br><br>Your physical merchandise is delivered separately from digital purchases. Delivery time depends on your location and the creator's fulfilment process.<br><br>Your order note has been saved with the order.</div>
+<a class="btn" href="/merch/{{ order.product_slug }}">Back to product</a>
+</div></main>
+<script>
+(function(){
+ const id={{ order.id|tojson }}; const statusUrl='/api/merch/orders/'+encodeURIComponent(id)+'/status';
+ const box=document.getElementById('payment-status'), msg=document.getElementById('payment-message'), delivery=document.getElementById('delivery'); let done=false, attempts=0;
+ function render(status){
+   if(status==='paid'){box.innerHTML='<span class="status">Payment received</span><p id="payment-message">Your payment has been confirmed. Your physical merchandise order is queued for fulfilment.</p>'; if(delivery)delivery.style.display='block'; return true;}
+   if(status==='failed'){box.innerHTML='<span class="status">Payment failed</span><p id="payment-message">The payment was not completed.</p>'; return true;}
+   return false;
+ }
+ async function poll(){if(done)return;attempts++;try{const r=await fetch(statusUrl,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});if(r.ok){const d=await r.json();done=render(String(d.status||''));}}catch(e){} if(!done&&attempts<40)setTimeout(poll,2000);}
+ if({{ 'true' if order.status == 'pending_payment' else 'false' }}) setTimeout(poll,500);
+})();
+</script></body></html>
