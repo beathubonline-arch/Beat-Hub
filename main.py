@@ -176,37 +176,36 @@ async def run_database_migrations() -> None:
     """Apply production schema migrations before accepting requests."""
     if engine.url.get_backend_name() == "sqlite":
         logger.info("SQLite detected; create_all is sufficient for local development.")
-        return
+    else:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
-
-    logger.info("Running Alembic database migrations before application startup.")
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=str(BASE_DIR),
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-
-    if result.stdout:
-        logger.info("Alembic output:\n%s", result.stdout.strip())
-    if result.stderr:
-        logger.warning("Alembic stderr:\n%s", result.stderr.strip())
-
-    if result.returncode != 0:
-        logger.error(
-            "Database migration failed with exit code %s. Application startup aborted.",
-            result.returncode,
+        logger.info("Running Alembic database migrations before application startup.")
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=str(BASE_DIR),
+            env=env,
+            capture_output=True,
+            text=True,
         )
-        raise RuntimeError("Database migration failed during application startup.")
 
-    logger.info("Database migrations completed successfully. Application startup may continue.")
+        if result.stdout:
+            logger.info("Alembic output:\n%s", result.stdout.strip())
+        if result.stderr:
+            logger.warning("Alembic stderr:\n%s", result.stderr.strip())
+
+        if result.returncode != 0:
+            logger.error(
+                "Database migration failed with exit code %s. Application startup aborted.",
+                result.returncode,
+            )
+            raise RuntimeError("Database migration failed during application startup.")
+
+        logger.info("Database migrations completed successfully. Application startup may continue.")
 
     # Merchandise used to perform schema reflection and CREATE/ALTER/INDEX work
-    # on every page request. The schema is now prepared once at startup; request
-    # handlers only perform their actual marketplace/order queries.
+    # on every page request. The schema is now prepared exactly once at startup;
+    # request handlers perform only their marketplace/order queries afterwards.
     from app.database import SessionLocal
     merch_db = SessionLocal()
     try:
