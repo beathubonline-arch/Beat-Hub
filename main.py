@@ -17,9 +17,18 @@ from app.config import settings
 from app.database import Base, engine, get_db
 from app.models.music import Track
 from app.routers import (
-    admin, auth, checkout, creator_store, dashboard, flutterwave_checkout,
-    merchandise, merchandise_account, mpesa_callback, music, pages,
-    paystack_checkout, stripe_checkout,
+    admin,
+    auth,
+    checkout,
+    creator_store,
+    dashboard,
+    flutterwave_checkout,
+    merchandise,
+    merchandise_account,
+    music,
+    pages,
+    paystack_checkout,
+    stripe_checkout,
 )
 from app.services.storage import media_url
 from app.utils.deps import require_admin, require_creator
@@ -98,7 +107,11 @@ def public_track_preview(slug: str, db: Session = Depends(get_db)):
     if not getattr(track, "is_published", False):
         raise HTTPException(status_code=404, detail="Preview not available.")
 
-    stored = str(getattr(track, "preview_file_path", None) or getattr(track, "audio_file_path", None) or "").strip()
+    stored = str(
+        getattr(track, "preview_file_path", None)
+        or getattr(track, "audio_file_path", None)
+        or ""
+    ).strip()
     if not stored:
         raise HTTPException(status_code=404, detail="Preview audio is not available.")
     if stored.startswith(("http://", "https://")):
@@ -133,14 +146,22 @@ def public_track_preview(slug: str, db: Session = Depends(get_db)):
             continue
         if candidate.is_file():
             media_type = {
-                ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
-                ".aac": "audio/aac", ".ogg": "audio/ogg", ".flac": "audio/flac",
+                ".mp3": "audio/mpeg",
+                ".wav": "audio/wav",
+                ".m4a": "audio/mp4",
+                ".aac": "audio/aac",
+                ".ogg": "audio/ogg",
+                ".flac": "audio/flac",
             }.get(candidate.suffix.lower(), "application/octet-stream")
             return FileResponse(
                 path=str(candidate),
                 media_type=media_type,
-                headers={"Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes"},
+                headers={
+                    "Cache-Control": "public, max-age=3600",
+                    "Accept-Ranges": "bytes",
+                },
             )
+
     raise HTTPException(status_code=404, detail="Preview audio is not available.")
 
 
@@ -149,7 +170,6 @@ app.include_router(creator_store.router)
 app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
-app.include_router(mpesa_callback.router)
 app.include_router(paystack_checkout.router)
 app.include_router(flutterwave_checkout.router)
 app.include_router(stripe_checkout.router)
@@ -160,7 +180,12 @@ app.include_router(merchandise_account.router)
 
 
 def _template_context(request: Request, current_user=None, **extra):
-    context = {"request": request, "current_user": current_user, "user": current_user, "current_year": 2026}
+    context = {
+        "request": request,
+        "current_user": current_user,
+        "user": current_user,
+        "current_year": 2026,
+    }
     context.update(extra)
     return context
 
@@ -213,31 +238,59 @@ def favicon_compatibility():
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 401:
-        return RedirectResponse(url="/login?error=Please%20log%20in%20to%20continue.", status_code=303)
+        return RedirectResponse(
+            url="/login?error=Please%20log%20in%20to%20continue.",
+            status_code=303,
+        )
     if exc.status_code == 403:
         template = "errors/403.html"
         if _template_exists(template):
-            return templates.TemplateResponse(request, template, _template_context(request, detail=exc.detail), status_code=403)
+            return templates.TemplateResponse(
+                request,
+                template,
+                _template_context(request, detail=exc.detail),
+                status_code=403,
+            )
         return Response(content="Access denied.", status_code=403, media_type="text/plain")
     if exc.status_code == 404:
         template = "errors/404.html"
         if _template_exists(template):
-            return templates.TemplateResponse(request, template, _template_context(request, detail=exc.detail), status_code=404)
+            return templates.TemplateResponse(
+                request,
+                template,
+                _template_context(request, detail=exc.detail),
+                status_code=404,
+            )
         return Response(content="Page not found.", status_code=404, media_type="text/plain")
     template = "errors/500.html"
     if _template_exists(template):
-        return templates.TemplateResponse(request, template, _template_context(request, detail=exc.detail), status_code=exc.status_code)
+        return templates.TemplateResponse(
+            request,
+            template,
+            _template_context(request, detail=exc.detail),
+            status_code=exc.status_code,
+        )
     return {"error": exc.detail, "status_code": exc.status_code}
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
+    logger.warning(
+        "Validation error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc.errors(),
+    )
     template = "errors/400.html"
     if _template_exists(template):
         return templates.TemplateResponse(
-            request, template,
-            _template_context(request, errors=exc.errors(), detail="Please check the information you entered."),
+            request,
+            template,
+            _template_context(
+                request,
+                errors=exc.errors(),
+                detail="Please check the information you entered.",
+            ),
             status_code=422,
         )
     return {"error": "Validation error", "details": exc.errors()}
@@ -245,28 +298,55 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled BeatHub error on %s %s", request.method, request.url.path)
+    logger.exception(
+        "Unhandled BeatHub error on %s %s",
+        request.method,
+        request.url.path,
+    )
     template = "errors/500.html"
     if _template_exists(template):
-        return templates.TemplateResponse(request, template, _template_context(request, detail=None), status_code=500)
+        return templates.TemplateResponse(
+            request,
+            template,
+            _template_context(request, detail=None),
+            status_code=500,
+        )
     return {"error": "Internal server error", "status_code": 500}
 
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("BeatHub application started.")
-    logger.info("Storage backend: %s", getattr(settings, "MEDIA_STORAGE", "local"))
+    logger.info(
+        "Storage backend: %s",
+        getattr(settings, "MEDIA_STORAGE", "local"),
+    )
     try:
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=120, check=False,
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
         )
         if result.returncode != 0:
-            logger.error("Alembic migration failed (exit %s): %s", result.returncode, result.stderr.strip())
-            raise RuntimeError("Database migration failed during application startup.")
-        logger.info("Alembic database migration completed: %s", result.stdout.strip() or "already up to date")
+            logger.error(
+                "Alembic migration failed (exit %s): %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+            raise RuntimeError(
+                "Database migration failed during application startup."
+            )
+        logger.info(
+            "Alembic database migration completed: %s",
+            result.stdout.strip() or "already up to date",
+        )
     except Exception:
-        logger.exception("Database migration failed. Application startup aborted to prevent schema/code mismatch.")
+        logger.exception(
+            "Database migration failed. Application startup aborted to prevent schema/code mismatch."
+        )
         raise
 
 
