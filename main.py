@@ -25,6 +25,7 @@ from app.routers import (
     music,
     pages,
     paystack_checkout,
+    paystack_merchandise,
     stripe_checkout,
 )
 from app.services.storage import media_url
@@ -98,9 +99,6 @@ except Exception:
 @app.on_event("startup")
 async def run_database_migrations() -> None:
     """Apply production schema migrations before accepting requests."""
-    # Fresh local SQLite databases are intentionally handled by create_all.
-    # Production PostgreSQL databases must pass through Alembic so payment
-    # schema changes are applied before Paystack can receive a transaction.
     if engine.url.get_backend_name() == "sqlite":
         logger.info("SQLite detected; create_all is sufficient for local development.")
         return
@@ -204,6 +202,7 @@ app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
 app.include_router(paystack_checkout.router)
+app.include_router(paystack_merchandise.router)
 app.include_router(stripe_checkout.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
