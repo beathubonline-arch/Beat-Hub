@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
@@ -181,38 +182,20 @@ class MerchandiseLoginRedirectMiddleware:
         await self.app(scope, receive, send)
 
 
-class CreatorPayoutPolicyMiddleware:
-    """Enforce the creator withdrawal minimum without changing the existing route.
+class CreatorPayoutPolicyMiddleware(BaseHTTPMiddleware):
+    """Enforce the creator withdrawal minimum without breaking ASGI startup.
 
     Requests may be submitted any day. They remain pending until the scheduled
     Tuesday/Thursday payout cycle. The KSh 500 minimum is enforced server-side,
-    not only by the HTML form, so it cannot be bypassed by a crafted request.
+    not only by the HTML form.
     """
 
-    def __init__(self, app):
-        self.app = app
+    async def dispatch(self, request, call_next):
+        if request.method != "POST" or request.url.path != "/dashboard/withdraw":
+            return await call_next(request)
 
-    async def __call__(self, scope, receive, send):
-        if (
-            scope.get("type") != "http"
-            or scope.get("method", "").upper() != "POST"
-            or scope.get("path") != "/dashboard/withdraw"
-        ):
-            await self.app(scope, receive, send)
-            return
-
-        body_chunks = []
-        while True:
-            message = await receive()
-            if message.get("type") != "http.request":
-                await self.app(scope, receive, send)
-                return
-            body_chunks.append(message.get("body", b""))
-            if not message.get("more_body", False):
-                break
-
-        body = b"".join(body_chunks)
         try:
+            body = await request.body()
             parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
             raw_amount = (parsed.get("amount") or [""])[0].strip()
             amount = Decimal(raw_amount)
@@ -221,24 +204,15 @@ class CreatorPayoutPolicyMiddleware:
             valid_amount = False
 
         if not valid_amount:
-            location = (
-                "/dashboard/withdraw?error="
-                + quote(f"The minimum creator withdrawal is KSh {PAYOUT_MINIMUM:,}.")
+            return RedirectResponse(
+                url=(
+                    "/dashboard/withdraw?error="
+                    + quote(f"The minimum creator withdrawal is KSh {PAYOUT_MINIMUM:,}.")
+                ),
+                status_code=303,
             )
-            response = RedirectResponse(url=location, status_code=303)
-            await response(scope, receive, send)
-            return
 
-        sent = False
-
-        async def replay_receive():
-            nonlocal sent
-            if not sent:
-                sent = True
-                return {"type": "http.request", "body": body, "more_body": False}
-            return {"type": "http.request", "body": b"", "more_body": False}
-
-        await self.app(scope, replay_receive, send)
+        return await call_next(request)
 
 
 app.add_middleware(
