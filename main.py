@@ -69,12 +69,16 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Add the homepage motion stylesheet without BaseHTTPMiddleware."""
+    """Attach the homepage motion stylesheet without touching the response body.
 
-    LINK = (
-        b'<link rel="stylesheet" href="/static/css/home-animation.css" '
-        b'data-beathub-home-motion="1">'
-    )
+    The previous implementation buffered and reconstructed the entire homepage
+    response. That was unnecessary and could interfere with Starlette's async
+    response streaming, producing `anext(): asynchronous generator is already
+    running`. A Link response header gives the browser the stylesheet directly
+    while leaving the ASGI response stream untouched.
+    """
+
+    LINK_HEADER = b'</static/css/home-animation.css>; rel="stylesheet"'
 
     def __init__(self, app):
         self.app = app
@@ -84,58 +88,23 @@ class HomepageMotionMiddleware:
             await self.app(scope, receive, send)
             return
 
-        started = False
-        content_type = ""
-        response_headers = []
-        body_chunks = []
-
         async def send_wrapper(message):
-            nonlocal started, content_type, response_headers
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
 
-            message_type = message.get("type")
+                # Avoid duplicate stylesheet headers if another layer adds one.
+                has_motion_link = any(
+                    key.lower() == b"link" and b"home-animation.css" in value
+                    for key, value in headers
+                )
+                if not has_motion_link:
+                    headers.append((b"link", self.LINK_HEADER))
 
-            if message_type == "http.response.start":
-                started = True
-                response_headers = list(message.get("headers", []))
-                for key, value in response_headers:
-                    if key.lower() == b"content-type":
-                        content_type = value.decode("latin-1").lower()
-                        break
-                return
+                # Keep an observable marker for production diagnostics.
+                headers.append((b"x-beathub-home-motion", b"loaded"))
 
-            if message_type == "http.response.body":
-                body_chunks.append(bytes(message.get("body", b"")))
-                if message.get("more_body", False):
-                    return
-
-                body = b"".join(body_chunks)
-
-                if (
-                    content_type.startswith("text/html")
-                    and b"</head>" in body
-                    and b'data-beathub-home-motion="1"' not in body
-                ):
-                    body = body.replace(b"</head>", self.LINK + b"</head>", 1)
-                    response_headers = [
-                        (key, value)
-                        for key, value in response_headers
-                        if key.lower() != b"content-length"
-                    ]
-                    response_headers.append((b"content-length", str(len(body)).encode("ascii")))
-                    response_headers.append((b"x-beathub-home-motion", b"loaded"))
-
-                if started:
-                    await send({
-                        "type": "http.response.start",
-                        "status": 200,
-                        "headers": response_headers,
-                    })
-                    await send({
-                        "type": "http.response.body",
-                        "body": body,
-                        "more_body": False,
-                    })
-                return
+                message = dict(message)
+                message["headers"] = headers
 
             await send(message)
 
