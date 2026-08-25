@@ -64,9 +64,22 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Safely inject the homepage animation stylesheet without touching an ASGI body generator."""
+    """Safely inject the homepage motion CSS without replaying an ASGI generator."""
 
-    LINK = b'<link rel="stylesheet" href="/static/css/home-animation.css?v=20260825" data-beathub-home-motion="1">'
+    LINK = (
+        b'<link rel="stylesheet" href="/static/css/home-animation.css?v=20260825" '
+        b'data-beathub-home-motion="1">'
+    )
+
+    # The vinyl animation is also embedded as a fallback. This means the ring
+    # does not depend on a second network request or a cached stylesheet.
+    INLINE = (
+        b'<style data-beathub-home-motion-inline="1">'
+        b'@keyframes beathub-vinyl-spin-inline{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}'
+        b'.vinyl{animation:beathub-vinyl-spin-inline 12s linear infinite !important;'
+        b'transform-origin:center center !important;will-change:transform}'
+        b'</style>'
+    )
 
     def __init__(self, app):
         self.app = app
@@ -102,12 +115,17 @@ class HomepageMotionMiddleware:
                 break
 
         body = b"".join(body_chunks)
-        if content_type.startswith("text/html") and b"data-beathub-home-motion=" not in body:
+        if content_type.startswith("text/html"):
             marker = b"</head>"
             marker_index = body.lower().find(marker)
-            if marker_index >= 0:
-                body = body[:marker_index] + self.LINK + body[marker_index:]
-                headers = [(key, value) for key, value in headers if key.lower() != b"content-length"]
+            if marker_index >= 0 and b"data-beathub-home-motion-inline=" not in body:
+                body = body[:marker_index] + self.LINK + self.INLINE + body[marker_index:]
+                headers = [
+                    (key, value)
+                    for key, value in headers
+                    if key.lower() != b"content-length"
+                ]
+                headers.append((b"cache-control", b"no-cache, no-store, must-revalidate"))
                 headers.append((b"x-beathub-home-motion", b"loaded"))
 
         start_message["headers"] = headers
@@ -129,8 +147,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # SQLAlchemy owns application-table creation for local SQLite development.
-# Production PostgreSQL schema changes are handled by Alembic outside the
-# request server startup. Never block Uvicorn's port binding on a migration.
+# Production PostgreSQL schema changes are handled by Alembic before deploy.
 try:
     Base.metadata.create_all(bind=engine)
 except Exception:
@@ -153,12 +170,18 @@ async def merchandise_legacy_alias():
     return RedirectResponse(url="/merch", status_code=307)
 
 
-# Database migrations deliberately do NOT run here.
-# Render must run `alembic upgrade head` as its Pre-Deploy Command, then start
-# this process with `uvicorn main:app --host 0.0.0.0 --port $PORT`.
-# This guarantees the web process binds its port immediately and prevents a
-# slow/locked PostgreSQL migration from causing Render's "No open ports"
-# deployment timeout.
+# Alembic is intentionally NOT executed by the web process. Render must run:
+#     alembic upgrade head
+# as its Pre-Deploy Command, followed by:
+#     uvicorn main:app --host 0.0.0.0 --port $PORT
+# This keeps PostgreSQL schema work out of the request path and prevents the
+# Render "No open ports" timeout.
+
+# Merchandise schema is now owned by Alembic migration 0010. The historical
+# request-time ensure_merch_tables() helper remains in the legacy router for
+# compatibility, but is disabled here so /merch never performs CREATE/ALTER/
+# INDEX/inspection work during a customer request.
+merchandise.ensure_merch_tables = lambda db: None
 
 # One canonical route implementation per feature.
 app.include_router(auth.router)
