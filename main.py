@@ -4,15 +4,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
-from app.database import Base, engine, get_db
-from app.models import *  # noqa: F401,F403 - ensure all SQLAlchemy models are registered
+from app.database import Base, engine
+from app.models import *  # noqa: F401,F403 - register all SQLAlchemy models
 from app.routers import (
     admin,
     auth,
@@ -24,8 +23,6 @@ from app.routers import (
     music,
     pages,
     paystack_checkout,
-    paystack_merchandise,
-    stripe_checkout,
 )
 
 logger = logging.getLogger("beathub")
@@ -47,15 +44,10 @@ app = FastAPI(
 async def homepage_motion_assets(request: Request, call_next):
     """Inline the homepage motion CSS into the actual HTML response.
 
-    The homepage is a standalone template, not a child of base.html. The old
-    implementation tried to mutate ``response.body`` from FastAPI's HTTP
-    middleware. ``call_next`` wraps endpoint responses in a streaming response,
-    so ``response.body`` is not guaranteed to exist. That is why the browser
-    never requested the animation stylesheet even though the file existed.
-
-    We now consume only the small HTML homepage response, inject the CSS as an
-    inline style block, and restore the response body iterator. No other route
-    or streaming response is touched.
+    The homepage is a standalone template. FastAPI's HTTP middleware wraps
+    endpoint responses in a streaming response, so mutating ``response.body``
+    is unreliable. We therefore rewrite only the small HTML response body
+    through its body iterator. No other route or media stream is touched.
     """
     response = await call_next(request)
 
@@ -71,13 +63,11 @@ async def homepage_motion_assets(request: Request, call_next):
         return response
 
     marker = b'<style id="beathub-home-motion">'
-    closing = b"</style>"
-    injection = marker + css + closing
+    injection = marker + css + b"</style>"
 
     async def rewritten_body():
         chunks = []
         body_iterator = getattr(response, "body_iterator", None)
-
         if body_iterator is not None:
             async for chunk in body_iterator:
                 chunks.append(bytes(chunk))
@@ -164,29 +154,20 @@ async def run_database_migrations() -> None:
         logger.warning("Alembic stderr:\n%s", result.stderr.strip())
 
     if result.returncode != 0:
-        logger.error(
-            "Database migration failed with exit code %s. Application startup aborted.",
-            result.returncode,
-        )
+        logger.error("Database migration failed with exit code %s. Application startup aborted.", result.returncode)
         raise RuntimeError("Database migration failed during application startup.")
 
     logger.info("Database migrations completed successfully. Application startup may continue.")
 
 
-# ----------------------------------------------------------------------
-# Canonical router registration
-# ----------------------------------------------------------------------
-# IMPORTANT: do not add endpoint aliases here unless they intentionally map
-# to an existing canonical handler. In particular, preview/download/payment
-# endpoints must have one implementation only.
+# One canonical route implementation per feature. Payment collection is
+# Paystack-only; beat and merchandise payments share the same callback/webhook.
 app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
 app.include_router(music.router)
 app.include_router(checkout.router)
 app.include_router(paystack_checkout.router)
-app.include_router(paystack_merchandise.router)
-app.include_router(stripe_checkout.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(merchandise.router)
