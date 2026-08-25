@@ -12,7 +12,9 @@
       <span class="badge badge-nonexclusive">NON-EXCLUSIVE LICENSE</span>
     {% endif %}
 
-    {% if error %}<div class="alert alert-error" style="margin-top:18px;">{{ error }}</div>{% endif %}
+    {% if error %}
+      <div class="alert alert-error" style="margin-top:18px;">{{ error }}</div>
+    {% endif %}
 
     <div style="margin-top:24px;display:grid;gap:14px;">
       <form action="/paystack/checkout/track/{{ track.slug }}" method="post">
@@ -31,29 +33,16 @@
             Paystack uses this for your payment receipt.
           </small>
         </div>
+
         <button type="submit" class="btn btn-primary btn-block">
           Pay with Paystack — M-Pesa / Card
         </button>
-      </form>
-
-      <div style="display:flex;align-items:center;gap:12px;color:#777;margin:2px 0;">
-        <span style="height:1px;background:rgba(255,255,255,.1);flex:1;"></span>
-        <span style="font-size:12px;">OR</span>
-        <span style="height:1px;background:rgba(255,255,255,.1);flex:1;"></span>
-      </div>
-
-      <form action="/checkout/track/{{ track.slug }}" method="post">
-        <div class="field">
-          <label>M-Pesa Phone Number</label>
-          <input type="tel" name="phone_number" placeholder="07XX XXX XXX" required>
-        </div>
-        <button type="submit" class="btn btn-block">Pay directly with M-Pesa</button>
       </form>
     </div>
 
     <p class="sub" style="margin-top:16px;">
       Paystack securely handles M-Pesa and card payments. BeatHub grants ownership
-      only after the payment is verified by the payment provider.
+      only after the payment is verified by Paystack.
     </p>
   </div>
 </div>
