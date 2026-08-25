@@ -4,8 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -13,7 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import Base, engine, get_db
-from app.models.music import Track
+from app.models import *  # noqa: F401,F403 - ensure all SQLAlchemy models are registered
 from app.routers import (
     admin,
     auth,
@@ -28,7 +27,6 @@ from app.routers import (
     paystack_merchandise,
     stripe_checkout,
 )
-from app.services.storage import media_url
 
 logger = logging.getLogger("beathub")
 BASE_DIR = Path(__file__).resolve().parent
@@ -47,28 +45,54 @@ app = FastAPI(
 
 @app.middleware("http")
 async def homepage_motion_assets(request: Request, call_next):
-    """Reliably attach the homepage animation stylesheet to the actual HTML response."""
+    """Inline the homepage motion CSS into the actual HTML response.
+
+    The homepage is a standalone template, not a child of base.html. The old
+    implementation tried to mutate ``response.body`` from FastAPI's HTTP
+    middleware. ``call_next`` wraps endpoint responses in a streaming response,
+    so ``response.body`` is not guaranteed to exist. That is why the browser
+    never requested the animation stylesheet even though the file existed.
+
+    We now consume only the small HTML homepage response, inject the CSS as an
+    inline style block, and restore the response body iterator. No other route
+    or streaming response is touched.
+    """
     response = await call_next(request)
 
     content_type = response.headers.get("content-type", "")
-    if request.url.path == "/" and content_type.startswith("text/html"):
-        css_href = b'<link rel="stylesheet" href="/static/css/home-animation.css?v=3">'
+    if request.url.path != "/" or not content_type.startswith("text/html"):
+        return response
 
-        # TemplateResponse is normally an HTMLResponse with an in-memory body.
-        # Injecting the stylesheet into <head> makes the animation work even when
-        # the homepage is a standalone template and does not extend base.html.
-        body = getattr(response, "body", None)
-        if isinstance(body, bytes) and b"</head>" in body and css_href not in body:
-            response.body = body.replace(
-                b"</head>",
-                css_href + b"</head>",
-                1,
-            )
-            response.headers["content-length"] = str(len(response.body))
+    css_path = STATIC_DIR / "css" / "home-animation.css"
+    try:
+        css = css_path.read_bytes()
+    except OSError:
+        logger.exception("Homepage animation stylesheet could not be read: %s", css_path)
+        return response
 
-        # Keep the HTTP Link header as a secondary loading path for browsers/CDNs.
-        response.headers["Link"] = '<' + "/static/css/home-animation.css?v=3" + '>; rel="stylesheet"'
+    marker = b'<style id="beathub-home-motion">'
+    closing = b"</style>"
+    injection = marker + css + closing
 
+    async def rewritten_body():
+        chunks = []
+        body_iterator = getattr(response, "body_iterator", None)
+
+        if body_iterator is not None:
+            async for chunk in body_iterator:
+                chunks.append(bytes(chunk))
+            body = b"".join(chunks)
+        else:
+            body = bytes(getattr(response, "body", b""))
+
+        if b"</head>" in body and marker not in body:
+            body = body.replace(b"</head>", injection + b"</head>", 1)
+            response.headers["content-length"] = str(len(body))
+            response.headers["X-BeatHub-Home-Motion"] = "loaded"
+
+        yield body
+
+    response.body_iterator = rewritten_body()
     return response
 
 
@@ -149,72 +173,12 @@ async def run_database_migrations() -> None:
     logger.info("Database migrations completed successfully. Application startup may continue.")
 
 
-@app.get("/track/{slug}/preview", include_in_schema=False)
-def public_track_preview(slug: str, db: Session = Depends(get_db)):
-    track = db.query(Track).filter(Track.slug == slug).first()
-    if not track:
-        raise HTTPException(status_code=404, detail="Track not found.")
-    if not getattr(track, "is_published", False):
-        raise HTTPException(status_code=404, detail="Preview not available.")
-
-    stored = str(
-        getattr(track, "preview_file_path", None)
-        or getattr(track, "audio_file_path", None)
-        or ""
-    ).strip()
-    if not stored:
-        raise HTTPException(status_code=404, detail="Preview audio is not available.")
-    if stored.startswith(("http://", "https://")):
-        return RedirectResponse(url=stored, status_code=307)
-    if stored.startswith(("r2://", "s3://")):
-        url = media_url(stored, expires=3600)
-        if not url:
-            raise HTTPException(status_code=404, detail="Preview audio is not available.")
-        return RedirectResponse(url=url, status_code=307)
-
-    value = stored.replace("\\", "/").lstrip("/")
-    media_root_value = getattr(settings, "MEDIA_ROOT", None) or "media"
-    media_root = Path(media_root_value).expanduser()
-    if not media_root.is_absolute():
-        media_root = Path.cwd() / media_root
-    media_root = media_root.resolve()
-
-    candidates = []
-    stored_path = Path(stored)
-    if stored_path.is_absolute():
-        candidates.append(stored_path.resolve())
-    else:
-        candidates.append((Path.cwd() / stored_path).resolve())
-        candidates.append((media_root / stored_path).resolve())
-        if value.startswith("media/"):
-            candidates.append((media_root / value[6:]).resolve())
-
-    for candidate in candidates:
-        try:
-            candidate.relative_to(media_root)
-        except ValueError:
-            continue
-        if candidate.is_file():
-            media_type = {
-                ".mp3": "audio/mpeg",
-                ".wav": "audio/wav",
-                ".m4a": "audio/mp4",
-                ".aac": "audio/aac",
-                ".ogg": "audio/ogg",
-                ".flac": "audio/flac",
-            }.get(candidate.suffix.lower(), "application/octet-stream")
-            return FileResponse(
-                path=str(candidate),
-                media_type=media_type,
-                headers={
-                    "Cache-Control": "public, max-age=3600",
-                    "Accept-Ranges": "bytes",
-                },
-            )
-
-    raise HTTPException(status_code=404, detail="Preview audio is not available.")
-
-
+# ----------------------------------------------------------------------
+# Canonical router registration
+# ----------------------------------------------------------------------
+# IMPORTANT: do not add endpoint aliases here unless they intentionally map
+# to an existing canonical handler. In particular, preview/download/payment
+# endpoints must have one implementation only.
 app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
