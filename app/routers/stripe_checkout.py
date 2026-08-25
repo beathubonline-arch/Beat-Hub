@@ -14,7 +14,7 @@ from app.models.music import SalesModel, Track
 from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
 from app.models.user import User
-from app.routers.mpesa_callback import complete_successful_payment
+from app.services.orders import finalize_order
 from app.services.pricing import calculate_split
 from app.utils.deps import require_user
 
@@ -78,6 +78,20 @@ def kes_to_usd_minor_units(kes_amount: Decimal) -> int:
 def stripe_error_message(exc: Exception) -> str:
     message = str(exc).strip()
     return message[:500] if message else "Stripe could not start the payment. Please try again."
+
+
+def complete_stripe_payment(db: Session, payment: PaymentTransaction, order: Order) -> None:
+    """Complete a Stripe payment without depending on the removed Daraja module."""
+    if payment.status == PaymentStatus.COMPLETED and order.status == OrderStatus.COMPLETED:
+        return
+
+    payment.status = PaymentStatus.COMPLETED
+    payment.result_code = 0
+    payment.result_description = "Stripe Checkout payment confirmed."
+    payment.callback_processed = True
+    payment.completed_at = datetime.utcnow()
+
+    finalize_order(db, order)
 
 
 @router.post("/checkout/track/{slug}")
@@ -309,13 +323,10 @@ async def stripe_webhook(
         db.add(payment)
         db.flush()
 
-    complete_successful_payment(
+    complete_stripe_payment(
         db=db,
         payment=payment,
         order=order,
-        metadata={},
-        result_code=0,
-        result_description="Stripe Checkout payment confirmed.",
     )
 
     return {"received": True}
