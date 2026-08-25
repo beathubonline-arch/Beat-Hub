@@ -68,19 +68,21 @@ class PaymentTransaction(Base):
         String(100), nullable=True, unique=True, index=True
     )
 
-    phone_number: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )
+    phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
 
-    amount: Mapped[Decimal] = mapped_column(
-        Numeric(12, 2), nullable=False
-    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 
+    # PostgreSQL production deployments previously had a native enum with
+    # incompatible labels. Keep this as a normal VARCHAR-backed SQLAlchemy
+    # enum and explicitly persist the enum VALUES (lowercase), not member
+    # names (PENDING/COMPLETED/FAILED).
     status: Mapped[PaymentStatus] = mapped_column(
         SAEnum(
             PaymentStatus,
             name="paymentstatus",
             native_enum=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            length=30,
         ),
         default=PaymentStatus.PENDING,
         nullable=False,
@@ -93,9 +95,6 @@ class PaymentTransaction(Base):
         String(500), nullable=True
     )
 
-    # Production already has this column as NOT NULL. Keep the ORM and
-    # PostgreSQL schema aligned and make new payment rows safely default to
-    # false until the provider callback/webhook has actually been processed.
     callback_processed: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -121,10 +120,7 @@ class PaymentTransaction(Base):
         nullable=False,
     )
 
-    order = relationship(
-        "Order",
-        back_populates="payment_transaction",
-    )
+    order = relationship("Order", back_populates="payment_transaction")
 
     def __repr__(self) -> str:
         return (
