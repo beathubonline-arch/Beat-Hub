@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.music import Album, Track
+from app.models.music import Track
 from app.models.order import License, Order, OrderStatus
 from app.models.profile import Profile
 from app.models.user import User
@@ -156,9 +156,8 @@ def account_downloads(request: Request, db: Session = Depends(get_db), current_u
     return templates.TemplateResponse(request, "account_downloads.html", ctx(request, current_user, licenses=licenses))
 
 
-# Canonical buyer download endpoint plus compatibility aliases used by older
-# order-status pages or cached links. All aliases execute the same ownership
-# check and the same R2/local-storage handling.
+# One implementation with two compatibility URLs. Old purchased links still
+# work, but there is no second download implementation to drift out of sync.
 @router.get("/download/track/{track_id}")
 @router.get("/account/download/{track_id}")
 def download_track(track_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
@@ -211,28 +210,6 @@ def account_orders(request: Request, db: Session = Depends(get_db), current_user
 @router.get("/account/settings")
 def account_settings(request: Request, current_user: User = Depends(require_user)):
     return templates.TemplateResponse(request, "account_settings.html", ctx(request, current_user))
-
-
-@router.get("/track/{slug}/preview")
-def track_preview(slug: str, db: Session = Depends(get_db)):
-    track = db.query(Track).filter(Track.slug == slug).first()
-    if not track:
-        raise HTTPException(status_code=404, detail="Track not found.")
-    if not getattr(track, "is_published", False):
-        raise HTTPException(status_code=404, detail="Preview not available.")
-    stored = str(getattr(track, "preview_file_path", None) or getattr(track, "audio_file_path", None) or "").strip()
-    if not stored:
-        raise HTTPException(status_code=404, detail="Preview audio is not available.")
-    if stored.lower().startswith(("http://", "https://")):
-        return RedirectResponse(url=stored, status_code=307)
-    if stored.lower().startswith(("r2://", "s3://")):
-        from app.services.storage import r2_presigned_url
-        normalized = stored if stored.lower().startswith("r2://") else "r2://" + stored[6:]
-        signed_url = r2_presigned_url(normalized, expires=max(60, int(getattr(settings, "R2_PUBLIC_URL_EXPIRES", 3600))))
-        if not signed_url:
-            raise HTTPException(status_code=503, detail="Preview audio is temporarily unavailable.")
-        return RedirectResponse(url=signed_url, status_code=307)
-    return _serve_local_media(stored)
 
 
 @router.get("/media/{media_path:path}", include_in_schema=False)
