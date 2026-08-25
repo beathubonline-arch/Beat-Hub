@@ -26,6 +26,13 @@ class Profile(Base):
     youtube_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     website_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
+    # Paystack marketplace settlement. The code is issued by Paystack after
+    # the producer's payout account has been registered/verified. It is kept
+    # nullable so existing producers and historical profiles remain valid.
+    paystack_subaccount_code: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, unique=True, index=True
+    )
+
     is_producer: Mapped[bool] = mapped_column(default=True)
     is_dj: Mapped[bool] = mapped_column(default=False)
     is_artist: Mapped[bool] = mapped_column(default=False)
