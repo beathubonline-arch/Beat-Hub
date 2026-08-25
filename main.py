@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
-from app.database import Base, SessionLocal, engine
+from app.database import Base, engine
 from app.models import *  # noqa: F401,F403
 from app.routers import (
     admin,
@@ -237,23 +237,6 @@ except Exception:
     raise
 
 
-# The production database has previously been seen with Alembic marked current
-# while the merchandise accounting columns were still absent.  Keep Alembic as
-# the canonical migration mechanism, but perform this idempotent startup repair
-# as a safety net so checkout can never reach an INSERT against an old merch
-# schema.  This runs once at application startup, never in the checkout path.
-try:
-    _startup_db = SessionLocal()
-    try:
-        merchandise.ensure_merch_tables(_startup_db)
-        logger.info("Merchandise payment schema verified at startup.")
-    finally:
-        _startup_db.close()
-except Exception:
-    logger.exception("Merchandise payment schema verification failed.")
-    raise
-
-
 @app.get("/healthz", include_in_schema=False)
 async def healthz_get():
     return JSONResponse({"status": "ok"})
@@ -269,9 +252,9 @@ async def merchandise_legacy_alias():
     return RedirectResponse(url="/merch", status_code=307)
 
 
-# Alembic remains the canonical production migration mechanism. The startup
-# schema verification above is intentionally idempotent and only repairs the
-# merchandise tables needed by the Paystack checkout.
+# Alembic remains the canonical production migration mechanism. Merchandise
+# schema repair is handled by the forward-only migration rather than blocking
+# application import/startup with database DDL.
 
 # One canonical route implementation per feature.
 app.include_router(auth.router)
