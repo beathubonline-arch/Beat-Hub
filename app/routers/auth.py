@@ -49,8 +49,6 @@ def dashboard_url_for_user(user: User) -> str:
     role = get_role_name(user)
     if role == "admin":
         return "/admin"
-    # Important compatibility: older producer accounts can have a buyer
-    # role while their profile is explicitly marked is_producer=True.
     profile = getattr(user, "profile", None)
     if role in {"creator", "producer"} or bool(profile and getattr(profile, "is_producer", False)):
         return "/dashboard"
@@ -173,6 +171,22 @@ def login_submit(
 ):
     next_url = _safe_next_url(request.query_params.get("next"))
 
+    # Some older links to protected purchase pages send the customer to the
+    # plain /login page without a `next` query parameter. Preserve the same-
+    # site referring merchandise page so a successful login never unexpectedly
+    # dumps the customer onto /dashboard or /account.
+    if not next_url:
+        referer = request.headers.get("referer") or ""
+        try:
+            parsed_referer = urlparse(referer)
+            if parsed_referer.netloc in {"", request.url.hostname}:
+                referred_path = parsed_referer.path or ""
+                if referred_path.startswith("/merch/") or referred_path.startswith("/store/"):
+                    query = f"?{parsed_referer.query}" if parsed_referer.query else ""
+                    next_url = _safe_next_url(referred_path + query)
+        except Exception:
+            next_url = ""
+
     def error(message: str):
         return templates.TemplateResponse(request, "login.html",
                                           base_context(request, error=message, next_url=next_url), status_code=401)
@@ -207,12 +221,10 @@ def login_submit(
         return error("This account has been deactivated. Contact support.")
 
     db.refresh(user)
-    # Force the one-to-one profile lookup before choosing the destination.
     profile = db.query(Profile).filter(Profile.user_id == str(user.id)).first()
     if profile is not None:
         user.profile = profile
 
-    # Repair a legacy producer account before issuing the next token.
     if profile is not None and getattr(profile, "is_producer", False) and get_role_name(user) not in {"creator", "producer"}:
         user.role = UserRole.CREATOR
         db.commit()
