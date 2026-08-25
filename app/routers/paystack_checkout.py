@@ -78,6 +78,7 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     if status != "success":
         payment.status = PaymentStatus.FAILED
         payment.result_description = f"Paystack transaction status: {status or 'unknown'}"
+        payment.callback_processed = True
         order.status = OrderStatus.FAILED
         db.commit()
         return False
@@ -89,6 +90,7 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     if currency != "KES" or actual != expected:
         payment.status = PaymentStatus.FAILED
         payment.result_description = "Paystack verification amount or currency mismatch."
+        payment.callback_processed = True
         order.status = OrderStatus.FAILED
         db.commit()
         return False
@@ -97,6 +99,7 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     payment.result_code = 0
     payment.result_description = "Paystack payment verified successfully."
     payment.completed_at = datetime.utcnow()
+    payment.callback_processed = True
 
     customer = data.get("customer") or {}
     phone = customer.get("phone")
@@ -145,9 +148,6 @@ async def paystack_checkout(
             303,
         )
 
-    # Paystack requires a syntactically valid email. Some existing BeatHub
-    # accounts may contain legacy/test values, so collect the actual receipt
-    # email at checkout rather than allowing Paystack to reject initialization.
     customer_email = (email or "").strip().lower()
     if not customer_email:
         customer_email = (getattr(user, "email", "") or "").strip().lower()
