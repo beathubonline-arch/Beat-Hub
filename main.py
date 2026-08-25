@@ -1,14 +1,11 @@
 import logging
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
@@ -67,7 +64,7 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Inject the homepage motion stylesheet in one safe ASGI response pass."""
+    """Safely inject the homepage animation stylesheet without touching an ASGI body generator."""
 
     LINK = b'<link rel="stylesheet" href="/static/css/home-animation.css?v=20260825" data-beathub-home-motion="1">'
 
@@ -131,6 +128,9 @@ app.add_middleware(HomepageMotionMiddleware)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# SQLAlchemy owns application-table creation for local SQLite development.
+# Production PostgreSQL schema changes are handled by Alembic outside the
+# request server startup. Never block Uvicorn's port binding on a migration.
 try:
     Base.metadata.create_all(bind=engine)
 except Exception:
@@ -153,60 +153,12 @@ async def merchandise_legacy_alias():
     return RedirectResponse(url="/merch", status_code=307)
 
 
-ALEMBIC_HEAD = "merch_schema_010"
-
-
-def _current_alembic_revision() -> str | None:
-    if engine.url.get_backend_name() == "sqlite":
-        return None
-    try:
-        with engine.connect() as connection:
-            row = connection.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).first()
-            return str(row[0]) if row else None
-    except Exception:
-        logger.warning("Could not read alembic_version; migrations will run.", exc_info=True)
-        return None
-
-
-@app.on_event("startup")
-async def run_database_migrations() -> None:
-    """Run Alembic only when the database is not already at the application head."""
-    if engine.url.get_backend_name() == "sqlite":
-        logger.info("SQLite detected; create_all is sufficient for local development.")
-        return
-
-    current_revision = _current_alembic_revision()
-    if current_revision == ALEMBIC_HEAD:
-        logger.info("Database schema already at Alembic head %s; skipping startup migration.", ALEMBIC_HEAD)
-        return
-
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
-    logger.info("Database schema revision is %s; migrating to %s.", current_revision or "unknown", ALEMBIC_HEAD)
-
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=str(BASE_DIR),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=45,
-        )
-    except subprocess.TimeoutExpired as exc:
-        logger.error("Database migration exceeded 45 seconds; startup aborted.")
-        raise RuntimeError("Database migration timed out during startup.") from exc
-
-    if result.stdout:
-        logger.info("Alembic output:\n%s", result.stdout.strip())
-    if result.stderr:
-        logger.warning("Alembic stderr:\n%s", result.stderr.strip())
-    if result.returncode != 0:
-        logger.error("Database migration failed with exit code %s.", result.returncode)
-        raise RuntimeError("Database migration failed during application startup.")
-
-    logger.info("Database migrations completed successfully.")
-
+# Database migrations deliberately do NOT run here.
+# Render must run `alembic upgrade head` as its Pre-Deploy Command, then start
+# this process with `uvicorn main:app --host 0.0.0.0 --port $PORT`.
+# This guarantees the web process binds its port immediately and prevents a
+# slow/locked PostgreSQL migration from causing Render's "No open ports"
+# deployment timeout.
 
 # One canonical route implementation per feature.
 app.include_router(auth.router)
