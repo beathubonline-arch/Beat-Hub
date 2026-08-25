@@ -189,8 +189,15 @@ class CreatorPayoutPolicyMiddleware:
     not only by the HTML form, so it cannot be bypassed by a crafted request.
     """
 
+    def __init__(self, app):
+        self.app = app
+
     async def __call__(self, scope, receive, send):
-        if scope.get("type") != "http" or scope.get("method", "").upper() != "POST" or scope.get("path") != "/dashboard/withdraw":
+        if (
+            scope.get("type") != "http"
+            or scope.get("method", "").upper() != "POST"
+            or scope.get("path") != "/dashboard/withdraw"
+        ):
             await self.app(scope, receive, send)
             return
 
