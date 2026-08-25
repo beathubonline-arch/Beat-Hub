@@ -12,7 +12,6 @@ from app.config import settings
 from app.database import get_db
 from app.models.music import Track
 from app.models.order import License, Order, OrderStatus
-from app.models.profile import Profile
 from app.models.user import User
 from app.services.search import run_search
 from app.services.r2_download import r2_download_url
@@ -104,28 +103,6 @@ def search(request: Request, q: str = "", db: Session = Depends(get_db), current
 @router.get("/terms")
 def terms(request: Request, current_user: Optional[User] = Depends(get_optional_user)):
     return templates.TemplateResponse(request, "terms.html", ctx(request, current_user))
-
-
-@router.get("/profile/{slug}")
-@router.get("/store/{slug}")
-def public_profile(request: Request, slug: str, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
-    profile = db.query(Profile).filter(Profile.slug == slug).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Creator profile not found.")
-    tracks = list(getattr(profile, "tracks", None) or [])
-    albums = list(getattr(profile, "albums", None) or [])
-    public_tracks = []
-    for track in tracks:
-        if not getattr(track, "is_published", True):
-            continue
-        sales_model = getattr(track, "sales_model", None)
-        sales_model_value = getattr(sales_model, "value", str(sales_model) if sales_model is not None else "")
-        if str(sales_model_value).lower() == "exclusive" and getattr(track, "is_sold", False):
-            continue
-        public_tracks.append(track)
-    public_albums = [album for album in albums if getattr(album, "is_published", True)]
-    creator = getattr(profile, "user", None)
-    return templates.TemplateResponse(request, "profile_detail.html", ctx(request, current_user, profile=profile, creator=creator, tracks=public_tracks, albums=public_albums))
 
 
 @router.get("/account")
