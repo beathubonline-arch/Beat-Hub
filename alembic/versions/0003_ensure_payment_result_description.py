@@ -1,11 +1,12 @@
-"""Ensure payment transaction result description exists.
+"""Final defensive payment schema compatibility migration.
 
 Revision ID: pay_result_desc_003
 Revises: pay_result_desc_002
 
-This is a defensive follow-up migration for production databases that may
-have been stamped at the previous payment migration while the column creation
-was interrupted during an earlier deployment.
+Some production databases may already be stamped at pay_result_desc_002 while
+still missing one of the columns required by the current PaymentTransaction
+model. This migration makes the schema converge safely without removing any
+existing production data.
 """
 
 from alembic import op
@@ -29,7 +30,13 @@ def upgrade() -> None:
             sa.Column("result_description", sa.String(length=500), nullable=True),
         )
 
+    if "completed_at" not in columns:
+        op.add_column(
+            "payment_transactions",
+            sa.Column("completed_at", sa.DateTime(), nullable=True),
+        )
+
 
 def downgrade() -> None:
-    # Intentionally do not remove this production compatibility column.
+    # Keep production payment-result columns intact on downgrade.
     pass
