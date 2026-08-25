@@ -97,12 +97,14 @@ except Exception:
 
 @app.on_event("startup")
 async def run_database_migrations() -> None:
-    """Apply production schema migrations before accepting requests.
+    """Apply production schema migrations before accepting requests."""
+    # Fresh local SQLite databases are intentionally handled by create_all.
+    # Production PostgreSQL databases must pass through Alembic so payment
+    # schema changes are applied before Paystack can receive a transaction.
+    if engine.url.get_backend_name() == "sqlite":
+        logger.info("SQLite detected; create_all is sufficient for local development.")
+        return
 
-    Render starts Uvicorn directly, so relying on a separate manual migration
-    command leaves PostgreSQL vulnerable to running older payment schemas.
-    Paystack must never write against a stale PaymentTransaction table.
-    """
     env = os.environ.copy()
     env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
 
