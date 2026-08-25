@@ -32,10 +32,6 @@ class Settings(BaseSettings):
     PAYSTACK_PUBLIC_KEY: str = ""
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
 
-    FLW_SECRET_KEY: str = ""
-    FLW_SECRET_HASH: str = ""
-    FLW_BASE_URL: str = "https://api.flutterwave.com"
-
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_KES_TO_USD_RATE: float = 0.0
