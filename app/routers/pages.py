@@ -142,7 +142,6 @@ def account(request: Request, db: Session = Depends(get_db), current_user: User 
     return templates.TemplateResponse(request, "account.html", ctx(request, current_user, profile=profile, completed_orders=completed_orders, pending_orders=pending_orders, purchase_count=len(completed_orders), total_spent=total_spent))
 
 
-# Keep both the canonical and legacy buyer-library URL valid.
 @router.get("/purchases")
 @router.get("/account/purchases")
 def account_purchases(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
@@ -150,7 +149,6 @@ def account_purchases(request: Request, db: Session = Depends(get_db), current_u
     return templates.TemplateResponse(request, "account_purchases.html", ctx(request, current_user, licenses=licenses))
 
 
-# Keep both the canonical and legacy downloads-library URL valid.
 @router.get("/downloads")
 @router.get("/account/downloads")
 def account_downloads(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
@@ -158,30 +156,50 @@ def account_downloads(request: Request, db: Session = Depends(get_db), current_u
     return templates.TemplateResponse(request, "account_downloads.html", ctx(request, current_user, licenses=licenses))
 
 
+# Canonical buyer download endpoint plus compatibility aliases used by older
+# order-status pages or cached links. All aliases execute the same ownership
+# check and the same R2/local-storage handling.
+@router.get("/download/track/{track_id}")
 @router.get("/account/download/{track_id}")
 def download_track(track_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
     license_record = db.query(License).filter(License.buyer_id == current_user.id, License.track_id == track_id).first()
     if not license_record:
         raise HTTPException(status_code=403, detail="You do not own this track.")
+
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found.")
+
     stored_path = getattr(track, "audio_file_path", None)
     if not stored_path:
         raise HTTPException(status_code=404, detail="The purchased audio file is currently unavailable.")
+
     stored_text = str(stored_path).strip()
     filename = _safe_download_filename(track, stored_text)
+
     if stored_text.lower().startswith(("r2://", "s3://")):
-        signed_url = r2_download_url(stored_text, filename, expires=max(60, int(getattr(settings, "R2_DOWNLOAD_URL_EXPIRES", 900))))
+        signed_url = r2_download_url(
+            stored_text,
+            filename,
+            expires=max(60, int(getattr(settings, "R2_DOWNLOAD_URL_EXPIRES", 900))),
+        )
         if not signed_url:
             raise HTTPException(status_code=503, detail="The purchased audio file is temporarily unavailable.")
         return RedirectResponse(url=signed_url, status_code=307)
+
     if stored_text.lower().startswith(("http://", "https://")):
         return RedirectResponse(url=stored_text, status_code=307)
+
     path = _local_media_path(stored_text)
     if not path:
         raise HTTPException(status_code=404, detail="The purchased audio file is currently unavailable.")
-    return FileResponse(path=str(path), media_type=_media_content_type(path), filename=filename, headers={"Cache-Control": "private, no-store"})
+
+    return FileResponse(
+        path=str(path),
+        media_type=_media_content_type(path),
+        filename=filename,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/account/orders")
