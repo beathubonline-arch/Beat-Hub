@@ -69,19 +69,16 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Inject the homepage motion stylesheet safely into the HTML stream.
+    """Inject the homepage motion stylesheet without touching other routes.
 
-    The old implementation consumed the complete response body, then emitted a
-    second synthetic response. That can conflict with Starlette's asynchronous
-    response machinery and was the source of the observed
-    `anext(): asynchronous generator is already running` error.
-
-    This implementation keeps the original response status/headers, buffers only
-    the small prefix required to find </head>, injects one normal HTML link, and
-    then streams the original response unchanged.
+    This is deliberately a pure ASGI middleware. It collects the small homepage
+    HTML response, injects one cache-busted stylesheet link, and emits exactly one
+    normal response body. It never iterates an endpoint's body generator from two
+    places and therefore avoids the `anext(): asynchronous generator is already
+    running` failure produced by the previous response-rewrite implementation.
     """
 
-    LINK = b'<link rel="stylesheet" href="/static/css/home-animation.css" data-beathub-home-motion="1">'
+    LINK = b'<link rel="stylesheet" href="/static/css/home-animation.css?v=20260825" data-beathub-home-motion="1">'
 
     def __init__(self, app):
         self.app = app
@@ -91,80 +88,51 @@ class HomepageMotionMiddleware:
             await self.app(scope, receive, send)
             return
 
-        response_started = False
-        is_html = False
-        injected = False
-        buffer = bytearray()
+        start_message = None
+        body_chunks = []
 
-        async def send_wrapper(message):
-            nonlocal response_started, is_html, injected, buffer
-
+        async def capture(message):
+            nonlocal start_message
             message_type = message.get("type")
-
             if message_type == "http.response.start":
-                headers = list(message.get("headers", []))
-                content_type = ""
-                for key, value in headers:
-                    if key.lower() == b"content-type":
-                        content_type = value.decode("latin-1").lower()
-                        break
-
-                is_html = content_type.startswith("text/html")
-                response_started = True
-
-                # We may change the body length when injecting the link, so the
-                # original Content-Length must not be sent for this HTML response.
-                if is_html:
-                    headers = [
-                        (key, value)
-                        for key, value in headers
-                        if key.lower() != b"content-length"
-                    ]
-                    headers.append((b"x-beathub-home-motion", b"loaded"))
-
-                outgoing = dict(message)
-                outgoing["headers"] = headers
-                await send(outgoing)
+                start_message = dict(message)
+                start_message["headers"] = list(message.get("headers", []))
                 return
-
-            if message_type != "http.response.body" or not is_html or injected:
-                await send(message)
+            if message_type == "http.response.body":
+                body_chunks.append(bytes(message.get("body", b"")))
                 return
+            await send(message)
 
-            chunk = bytes(message.get("body", b""))
-            more_body = bool(message.get("more_body", False))
-            buffer.extend(chunk)
+        await self.app(scope, receive, capture)
 
+        if start_message is None:
+            return
+
+        headers = list(start_message.get("headers", []))
+        content_type = ""
+        for key, value in headers:
+            if key.lower() == b"content-type":
+                content_type = value.decode("latin-1").lower()
+                break
+
+        body = b"".join(body_chunks)
+        is_html = content_type.startswith("text/html")
+
+        if is_html and b"data-beathub-home-motion=" not in body:
             marker = b"</head>"
-            lower_buffer = bytes(buffer).lower()
-            marker_index = lower_buffer.find(marker)
-
+            marker_index = body.lower().find(marker)
             if marker_index >= 0:
-                insert_at = marker_index
-                body = bytes(buffer[:insert_at]) + self.LINK + bytes(buffer[insert_at:])
-                buffer.clear()
-                injected = True
-                await send({
-                    "type": "http.response.body",
-                    "body": body,
-                    "more_body": more_body,
-                })
-                return
+                body = body[:marker_index] + self.LINK + body[marker_index:]
+                headers = [
+                    (key, value)
+                    for key, value in headers
+                    if key.lower() != b"content-length"
+                ]
+                headers.append((b"x-beathub-home-motion", b"loaded"))
 
-            # If the response has not ended, keep buffering until </head> is
-            # available. Homepage HTML is small and this buffer normally flushes
-            # on the first body event.
-            if not more_body:
-                await send({
-                    "type": "http.response.body",
-                    "body": bytes(buffer),
-                    "more_body": False,
-                })
-                buffer.clear()
-                injected = True
-                return
-
-        await self.app(scope, receive, send_wrapper)
+        start_message["headers"] = headers
+        await send(start_message)
+        await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
 app.add_middleware(
@@ -235,6 +203,18 @@ async def run_database_migrations() -> None:
         raise RuntimeError("Database migration failed during application startup.")
 
     logger.info("Database migrations completed successfully. Application startup may continue.")
+
+    # Merchandise used to perform schema reflection and CREATE/ALTER/INDEX work
+    # on every page request. The schema is now prepared once at startup; request
+    # handlers only perform their actual marketplace/order queries.
+    from app.database import SessionLocal
+    merch_db = SessionLocal()
+    try:
+        merchandise.ensure_merch_tables(merch_db)
+    finally:
+        merch_db.close()
+    merchandise.ensure_merch_tables = lambda db: None
+    logger.info("Merchandise schema prepared once at startup; per-request schema work disabled.")
 
 
 # One canonical route implementation per feature. Payment collection is
