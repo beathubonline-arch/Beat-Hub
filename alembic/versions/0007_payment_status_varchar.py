@@ -40,8 +40,17 @@ def upgrade() -> None:
             "payment_transactions.status is missing; refusing to normalize payment status."
         )
 
-    # PostgreSQL enum -> VARCHAR. The USING expression safely converts both
-    # native-enum labels and existing string values to lowercase text.
+    # Remove an old enum-typed default before changing the column type. A
+    # PostgreSQL enum default can otherwise block ALTER COLUMN TYPE.
+    op.execute(
+        sa.text(
+            "ALTER TABLE payment_transactions "
+            "ALTER COLUMN status DROP DEFAULT"
+        )
+    )
+
+    # PostgreSQL enum -> VARCHAR. The USING expression converts existing enum
+    # labels and existing string values to lowercase text.
     op.execute(
         sa.text(
             "ALTER TABLE payment_transactions "
@@ -62,6 +71,7 @@ def upgrade() -> None:
         "status",
         existing_type=sa.String(length=30),
         nullable=False,
+        server_default=sa.text("'pending'"),
     )
 
     final_status = next(
@@ -76,6 +86,12 @@ def upgrade() -> None:
         raise RuntimeError("Payment status verification failed: status column is missing.")
     if final_status.get("nullable") is not False:
         raise RuntimeError("Payment status verification failed: status must be NOT NULL.")
+
+    final_type = str(final_status.get("type", "")).lower()
+    if "character varying" not in final_type and "varchar" not in final_type:
+        raise RuntimeError(
+            "Payment status verification failed: status must be VARCHAR-backed."
+        )
 
 
 def downgrade() -> None:
