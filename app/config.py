@@ -1,5 +1,5 @@
-"""
-Central application configuration.
+"""Central application configuration.
+
 All values are sourced from environment variables / .env.
 """
 
@@ -26,19 +26,6 @@ class Settings(BaseSettings):
 
     PLATFORM_COMMISSION_PERCENT: float = 10.0
     PLATFORM_COMMISSION_RATE: float = 10.0
-
-    MPESA_ENVIRONMENT: str = "sandbox"
-    MPESA_CONSUMER_KEY: str = ""
-    MPESA_CONSUMER_SECRET: str = ""
-    MPESA_SHORTCODE: str = ""
-    MPESA_PASSKEY: str = ""
-    MPESA_CALLBACK_URL: str = ""
-
-    @property
-    def mpesa_base_url(self) -> str:
-        if self.MPESA_ENVIRONMENT.lower() == "production":
-            return "https://api.safaricom.co.ke"
-        return "https://sandbox.safaricom.co.ke"
 
     # Paystack — Kenya M-PESA + card checkout
     PAYSTACK_SECRET_KEY: str = ""
