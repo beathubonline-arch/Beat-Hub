@@ -3,6 +3,11 @@
 Paystack is the single customer payment gateway. It supports the enabled
 Kenya payment channels, including M-PESA and cards, while BeatHub performs
 server-side verification before granting ownership.
+
+Producer marketplace transactions use Paystack subaccounts when a producer
+has completed Paystack payout onboarding. The subaccount is configured so
+BeatHub receives exactly 10% and the producer receives 90%, while BeatHub also
+keeps its own immutable ledger split for accounting and reporting.
 """
 
 import hashlib
@@ -25,7 +30,7 @@ from app.models.payment import PaymentStatus, PaymentTransaction
 from app.models.music import SalesModel, Track
 from app.models.user import User
 from app.services.orders import finalize_order
-from app.services.pricing import calculate_split
+from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split
 from app.utils.deps import require_user
 
 router = APIRouter(tags=["paystack"])
@@ -77,9 +82,7 @@ def _verify_reference(reference: str) -> dict:
     payload = response.json()
 
     if not payload.get("status") or not isinstance(payload.get("data"), dict):
-        raise RuntimeError(
-            payload.get("message") or "Paystack verification failed."
-        )
+        raise RuntimeError(payload.get("message") or "Paystack verification failed.")
 
     return payload["data"]
 
@@ -91,9 +94,6 @@ def _complete_verified_payment(
     data: dict,
 ) -> bool:
     """Apply a verified Paystack result exactly once under a DB row lock."""
-
-    # Webhook and browser callback can arrive at the same time. Lock the
-    # payment and order rows so only one verifier can finalize the purchase.
     locked_payment = (
         db.query(PaymentTransaction)
         .filter(PaymentTransaction.id == payment.id)
@@ -126,9 +126,7 @@ def _complete_verified_payment(
     status = str(data.get("status", "")).lower()
     if status != "success":
         payment.status = PaymentStatus.FAILED
-        payment.result_description = (
-            f"Paystack transaction status: {status or 'unknown'}"
-        )
+        payment.result_description = f"Paystack transaction status: {status or 'unknown'}"
         payment.callback_processed = True
         order.status = OrderStatus.FAILED
         db.commit()
@@ -140,9 +138,7 @@ def _complete_verified_payment(
 
     if currency != "KES" or actual != expected:
         payment.status = PaymentStatus.FAILED
-        payment.result_description = (
-            "Paystack verification amount or currency mismatch."
-        )
+        payment.result_description = "Paystack verification amount or currency mismatch."
         payment.callback_processed = True
         order.status = OrderStatus.FAILED
         db.commit()
@@ -161,9 +157,6 @@ def _complete_verified_payment(
 
     result = finalize_order(db, order)
 
-    # If an exclusive item lost a race, the payment provider has still
-    # confirmed the charge. Keep the payment completed but leave the order
-    # rejected for refund/manual review rather than granting ownership twice.
     if result.status == OrderStatus.REJECTED:
         logger.warning(
             "Verified Paystack payment completed but order rejected: order=%s reason=%s",
@@ -184,10 +177,7 @@ async def paystack_checkout(
     user: User = Depends(require_user),
 ):
     if not settings.PAYSTACK_SECRET_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="Paystack is not configured yet.",
-        )
+        raise HTTPException(status_code=503, detail="Paystack is not configured yet.")
 
     track = db.query(Track).filter(Track.slug == slug).first()
     if not track:
@@ -208,10 +198,7 @@ async def paystack_checkout(
 
     price = Decimal(str(track.price))
     if price <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="This track has an invalid price.",
-        )
+        raise HTTPException(status_code=400, detail="This track has an invalid price.")
 
     if price < PAYSTACK_KES_MINIMUM:
         return RedirectResponse(
@@ -229,7 +216,11 @@ async def paystack_checkout(
             303,
         )
 
-    split = calculate_split(track.price)
+    # Server-authoritative marketplace split: exactly 10% BeatHub / 90% producer.
+    split = calculate_split(price)
+    if Decimal(str(split["commission_percent"])) != BEATHUB_COMMISSION_PERCENT:
+        raise HTTPException(status_code=500, detail="Invalid BeatHub commission configuration.")
+
     order = Order(
         id=str(uuid.uuid4()),
         order_number=f"BH{uuid.uuid4().hex[:10].upper()}",
@@ -237,16 +228,12 @@ async def paystack_checkout(
         track_id=track.id,
         album_id=None,
         sales_model_at_purchase=str(
-            getattr(
-                getattr(track, "sales_model", None),
-                "value",
-                track.sales_model,
-            )
+            getattr(getattr(track, "sales_model", None), "value", track.sales_model)
         ),
         gross_amount=Decimal(str(split["gross_amount"])),
         commission_amount=Decimal(str(split["commission_amount"])),
         net_amount=Decimal(str(split["net_amount"])),
-        commission_percent_at_purchase=Decimal(str(split["commission_percent"])),
+        commission_percent_at_purchase=Decimal("10.00"),
         status=OrderStatus.PENDING,
         phone_number="paystack",
     )
@@ -264,8 +251,20 @@ async def paystack_checkout(
             "beathub_order_id": order.id,
             "beathub_track_slug": track.slug,
             "buyer_id": user.id,
+            "beathub_commission_percent": "10.00",
+            "beathub_commission_amount": str(split["commission_amount"]),
+            "beathub_producer_amount": str(split["net_amount"]),
         },
     }
+
+    # When the producer has completed Paystack payout onboarding, attach the
+    # subaccount. Paystack's percentage_charge on that subaccount is configured
+    # to 10%, which means the main BeatHub account receives 10% and the producer
+    # receives 90%. Without a subaccount, BeatHub still records the exact 10/90
+    # split internally; no fake payout is claimed.
+    producer_subaccount = getattr(profile, "paystack_subaccount_code", None)
+    if producer_subaccount:
+        payload["subaccount"] = str(producer_subaccount)
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -278,10 +277,7 @@ async def paystack_checkout(
     except Exception:
         db.rollback()
         logger.exception("Paystack initialization failed for order %s", order.id)
-        raise HTTPException(
-            status_code=502,
-            detail="Paystack could not be reached. Please try again.",
-        )
+        raise HTTPException(status_code=502, detail="Paystack could not be reached. Please try again.")
 
     if response.status_code >= 400 or not data.get("status"):
         message = data.get("message") or "Paystack could not initialize checkout."
@@ -298,10 +294,7 @@ async def paystack_checkout(
     reference = data.get("data", {}).get("reference") or order.order_number
     if not authorization:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="Paystack did not return a checkout URL.",
-        )
+        raise HTTPException(status_code=400, detail="Paystack did not return a checkout URL.")
 
     payment = PaymentTransaction(
         order_id=order.id,
@@ -309,7 +302,11 @@ async def paystack_checkout(
         phone_number="paystack",
         amount=Decimal(str(order.gross_amount)),
         status=PaymentStatus.PENDING,
-        result_description="Paystack checkout initialized.",
+        result_description=(
+            "Paystack checkout initialized with 10% BeatHub / 90% producer split."
+            if producer_subaccount
+            else "Paystack checkout initialized; 10% BeatHub / 90% producer split recorded internally until producer Paystack subaccount is configured."
+        ),
     )
     db.add(payment)
     db.commit()
@@ -326,26 +323,17 @@ async def paystack_callback(
 ):
     reference = reference or trxref
     if not reference:
-        return RedirectResponse(
-            "/beats?error=Payment%20reference%20was%20missing.",
-            303,
-        )
+        return RedirectResponse("/beats?error=Payment%20reference%20was%20missing.", 303)
 
     payment = db.query(PaymentTransaction).filter(
         PaymentTransaction.checkout_request_id == reference
     ).first()
     if not payment:
-        return RedirectResponse(
-            "/beats?error=Payment%20record%20was%20not%20found.",
-            303,
-        )
+        return RedirectResponse("/beats?error=Payment%20record%20was%20not%20found.", 303)
 
     order = db.get(Order, payment.order_id)
     if not order:
-        return RedirectResponse(
-            "/beats?error=Order%20was%20not%20found.",
-            303,
-        )
+        return RedirectResponse("/beats?error=Order%20was%20not%20found.", 303)
 
     if payment.status != PaymentStatus.COMPLETED or order.status != OrderStatus.COMPLETED:
         try:
@@ -353,10 +341,7 @@ async def paystack_callback(
             _complete_verified_payment(db, order, payment, data)
         except Exception:
             db.rollback()
-            logger.exception(
-                "Paystack callback verification failed: %s",
-                reference,
-            )
+            logger.exception("Paystack callback verification failed: %s", reference)
             return RedirectResponse(
                 f"/orders/{order.id}/status?error=Payment%20verification%20failed.",
                 303,
@@ -379,18 +364,12 @@ async def paystack_webhook(
     ).hexdigest()
 
     if not signature or not hmac.compare_digest(signature, expected):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Paystack signature.",
-        )
+        raise HTTPException(status_code=401, detail="Invalid Paystack signature.")
 
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid webhook payload.",
-        )
+        raise HTTPException(status_code=400, detail="Invalid webhook payload.")
 
     if payload.get("event") != "charge.success":
         return {"status": True}
@@ -416,13 +395,7 @@ async def paystack_webhook(
             _complete_verified_payment(db, order, payment, verified)
         except Exception:
             db.rollback()
-            logger.exception(
-                "Paystack webhook verification failed: %s",
-                reference,
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="Verification failed.",
-            )
+            logger.exception("Paystack webhook verification failed: %s", reference)
+            raise HTTPException(status_code=500, detail="Verification failed.")
 
     return {"status": True}
