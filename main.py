@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -69,7 +69,7 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Add the homepage motion stylesheet without touching BaseHTTPMiddleware."""
+    """Add the homepage motion stylesheet without BaseHTTPMiddleware."""
 
     LINK = (
         b'<link rel="stylesheet" href="/static/css/home-animation.css" '
@@ -116,30 +116,25 @@ class HomepageMotionMiddleware:
                     and b'data-beathub-home-motion="1"' not in body
                 ):
                     body = body.replace(b"</head>", self.LINK + b"</head>", 1)
-
                     response_headers = [
                         (key, value)
                         for key, value in response_headers
                         if key.lower() != b"content-length"
                     ]
-                    response_headers.append(
-                        (b"content-length", str(len(body)).encode("ascii"))
-                    )
+                    response_headers.append((b"content-length", str(len(body)).encode("ascii")))
                     response_headers.append((b"x-beathub-home-motion", b"loaded"))
 
-                if not started:
-                    return
-
-                await send({
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": response_headers,
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": body,
-                    "more_body": False,
-                })
+                if started:
+                    await send({
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": response_headers,
+                    })
+                    await send({
+                        "type": "http.response.body",
+                        "body": body,
+                        "more_body": False,
+                    })
                 return
 
             await send(message)
@@ -167,10 +162,20 @@ except Exception:
     raise
 
 
-@app.api_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
-async def healthz():
-    """Render-compatible health endpoint supporting GET and HEAD."""
+@app.get("/healthz", include_in_schema=False)
+async def healthz_get():
     return JSONResponse({"status": "ok"})
+
+
+@app.head("/healthz", include_in_schema=False)
+async def healthz_head():
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/merchandise", include_in_schema=False)
+async def merchandise_legacy_alias():
+    """Compatibility URL for older navigation/bookmarks."""
+    return RedirectResponse(url="/merch", status_code=307)
 
 
 @app.on_event("startup")
