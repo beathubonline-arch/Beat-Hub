@@ -26,38 +26,29 @@
 }
 
 .vinyl {
-  animation: beathub-vinyl-spin 12s linear infinite;
-  transform-origin: center;
+  animation: beathub-vinyl-spin 12s linear infinite !important;
+  transform-origin: center center !important;
+  will-change: transform;
 }
 
 .studio-card {
-  animation: beathub-glow 4.5s ease-in-out infinite;
+  animation: beathub-glow 4.5s ease-in-out infinite !important;
 }
 
 .floating-card.one {
-  animation: beathub-float-left 4s ease-in-out infinite;
+  animation: beathub-float-left 4s ease-in-out infinite !important;
 }
 
 .floating-card.two {
-  animation: beathub-float-right 4.6s ease-in-out infinite;
+  animation: beathub-float-right 4.6s ease-in-out infinite !important;
 }
 
 .waveform span {
   transform-origin: center;
-  animation: beathub-pulse-wave 1.35s ease-in-out infinite;
+  animation: beathub-pulse-wave 1.35s ease-in-out infinite !important;
 }
 
 .waveform span:nth-child(2n) { animation-delay: -.2s; }
 .waveform span:nth-child(3n) { animation-delay: -.4s; }
 .waveform span:nth-child(4n) { animation-delay: -.6s; }
 .waveform span:nth-child(5n) { animation-delay: -.8s; }
-
-@media (prefers-reduced-motion: reduce) {
-  .vinyl,
-  .studio-card,
-  .floating-card.one,
-  .floating-card.two,
-  .waveform span {
-    animation: none !important;
-  }
-}
