@@ -68,6 +68,85 @@ def _session_https_only() -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+class HomepageMotionMiddleware:
+    """Add the homepage motion stylesheet without touching BaseHTTPMiddleware."""
+
+    LINK = (
+        b'<link rel="stylesheet" href="/static/css/home-animation.css" '
+        b'data-beathub-home-motion="1">'
+    )
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("path") != "/":
+            await self.app(scope, receive, send)
+            return
+
+        started = False
+        content_type = ""
+        response_headers = []
+        body_chunks = []
+
+        async def send_wrapper(message):
+            nonlocal started, content_type, response_headers
+
+            message_type = message.get("type")
+
+            if message_type == "http.response.start":
+                started = True
+                response_headers = list(message.get("headers", []))
+                for key, value in response_headers:
+                    if key.lower() == b"content-type":
+                        content_type = value.decode("latin-1").lower()
+                        break
+                return
+
+            if message_type == "http.response.body":
+                body_chunks.append(bytes(message.get("body", b"")))
+                if message.get("more_body", False):
+                    return
+
+                body = b"".join(body_chunks)
+
+                if (
+                    content_type.startswith("text/html")
+                    and b"</head>" in body
+                    and b'data-beathub-home-motion="1"' not in body
+                ):
+                    body = body.replace(b"</head>", self.LINK + b"</head>", 1)
+
+                    response_headers = [
+                        (key, value)
+                        for key, value in response_headers
+                        if key.lower() != b"content-length"
+                    ]
+                    response_headers.append(
+                        (b"content-length", str(len(body)).encode("ascii"))
+                    )
+                    response_headers.append((b"x-beathub-home-motion", b"loaded"))
+
+                if not started:
+                    return
+
+                await send({
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": response_headers,
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": body,
+                    "more_body": False,
+                })
+                return
+
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret(),
@@ -76,6 +155,7 @@ app.add_middleware(
     same_site="lax",
     https_only=_session_https_only(),
 )
+app.add_middleware(HomepageMotionMiddleware)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
