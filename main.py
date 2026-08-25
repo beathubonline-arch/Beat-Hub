@@ -5,12 +5,10 @@ import sys
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
@@ -30,7 +28,6 @@ from app.routers import (
     stripe_checkout,
 )
 from app.services.storage import media_url
-from app.utils.deps import require_admin, require_creator
 
 logger = logging.getLogger("beathub")
 BASE_DIR = Path(__file__).resolve().parent
@@ -96,6 +93,41 @@ try:
 except Exception:
     logger.exception("Database table initialization failed.")
     raise
+
+
+@app.on_event("startup")
+async def run_database_migrations() -> None:
+    """Apply production schema migrations before accepting requests.
+
+    Render starts Uvicorn directly, so relying on a separate manual migration
+    command leaves PostgreSQL vulnerable to running older payment schemas.
+    Paystack must never write against a stale PaymentTransaction table.
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+
+    logger.info("Running Alembic database migrations before application startup.")
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=str(BASE_DIR),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.stdout:
+        logger.info("Alembic output:\n%s", result.stdout.strip())
+    if result.stderr:
+        logger.warning("Alembic stderr:\n%s", result.stderr.strip())
+
+    if result.returncode != 0:
+        logger.error(
+            "Database migration failed with exit code %s. Application startup aborted.",
+            result.returncode,
+        )
+        raise RuntimeError("Database migration failed during application startup.")
+
+    logger.info("Database migrations completed successfully. Application startup may continue.")
 
 
 @app.get("/track/{slug}/preview", include_in_schema=False)
