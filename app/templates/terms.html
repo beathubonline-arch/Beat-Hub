@@ -1,15 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Terms & Conditions — BeatHub{% endblock %}
 {% block content %}
-<section style="padding: 50px 0; max-width: 760px;">
-  <h1 style="font-size: 34px;">Terms &amp; Conditions</h1>
-  <p class="sub" style="color: var(--text-muted); line-height: 1.7;">
-    By using BeatHub you agree to our marketplace rules: exclusive purchases grant
-    sole ownership and are removed from sale immediately upon confirmed payment;
-    non-exclusive licenses may be sold to multiple buyers. BeatHub retains a
-    platform commission on every completed sale, with the remainder credited to
-    the creator's available balance. Full legal terms should be finalized with
-    your own counsel before production launch.
-  </p>
+<section style="padding:50px 0 80px;max-width:860px;line-height:1.75;color:var(--text,#e9e9e9);">
+  <div style="display:inline-block;padding:7px 12px;border:1px solid rgba(212,175,55,.22);border-radius:999px;color:#e5ca61;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;">BeatHub Marketplace</div>
+  <h1 style="font-size:38px;letter-spacing:-.04em;margin:14px 0 8px;">Terms &amp; Conditions</h1>
+  <p style="color:var(--text-muted,#8c8c8c);">These terms explain the core rules for using BeatHub, including creator earnings and scheduled withdrawals.</p>
+
+  <h2 style="margin-top:36px;">1. Marketplace purchases</h2>
+  <p>By using BeatHub you agree to our marketplace rules. Exclusive purchases grant the applicable exclusive rights and are removed from sale after confirmed payment. Non-exclusive licenses may be sold to multiple buyers according to the license presented at checkout.</p>
+
+  <h2 style="margin-top:30px;">2. Creator earnings</h2>
+  <p>BeatHub retains its disclosed platform commission on completed sales. The remaining eligible amount is credited to the creator's account as earnings. A displayed balance may include funds that are pending, reserved or otherwise unavailable for withdrawal.</p>
+
+  <h2 style="margin-top:30px;">3. Creator withdrawals</h2>
+  <p>Creator withdrawals are not instant. BeatHub processes eligible, approved creator withdrawals on <strong>Tuesday and Thursday</strong>, using East Africa Time (EAT), with the scheduled payout window ending at <strong>6:00 PM EAT</strong>.</p>
+  <p>The minimum creator withdrawal is <strong>KSh 500</strong>. Requests below this amount are not accepted. A request submitted after the applicable payout-day cutoff is carried forward to the next scheduled payout cycle.</p>
+
+  <h2 style="margin-top:30px;">4. Review and approval</h2>
+  <p>Every creator withdrawal is subject to BeatHub's administrative review before payment. BeatHub may approve, hold or reject a request where the account, transaction history, available balance, M-Pesa destination, payment records or other information requires verification.</p>
+  <p>Approval means the request has passed BeatHub's review. The payout is considered completed only after BeatHub records the M-Pesa payment as paid and records the applicable payout reference.</p>
+
+  <h2 style="margin-top:30px;">5. M-Pesa details and payment processing</h2>
+  <p>Creators are responsible for providing a correct, active Kenyan M-Pesa number. BeatHub is not responsible for delays or failed delivery caused by incorrect recipient information, M-Pesa service interruptions, banking or telecommunications issues, or other circumstances outside BeatHub's reasonable control.</p>
+
+  <h2 style="margin-top:30px;">6. Refunds, disputes and reversals</h2>
+  <p>Where a sale, payment, refund, reversal or dispute may affect creator earnings, BeatHub may temporarily hold the related withdrawal while the transaction is reviewed. This is intended to protect creators, buyers and the platform from incorrect or duplicate payouts.</p>
+
+  <h2 style="margin-top:30px;">7. Changes to payout policy</h2>
+  <p>BeatHub may update payout schedules, minimums, processing procedures or other marketplace terms when reasonably necessary for security, operational, payment-provider or regulatory reasons. Material changes will be communicated through the platform or updated terms.</p>
+
+  <p style="margin-top:42px;color:#666;font-size:12px;">These platform terms are operational terms for BeatHub and should be reviewed with qualified legal counsel before production launch.</p>
 </section>
 {% endblock %}
