@@ -47,9 +47,28 @@ app = FastAPI(
 
 @app.middleware("http")
 async def homepage_motion_assets(request: Request, call_next):
+    """Reliably attach the homepage animation stylesheet to the actual HTML response."""
     response = await call_next(request)
-    if request.url.path == "/" and response.headers.get("content-type", "").startswith("text/html"):
-        response.headers["Link"] = "</static/css/home-animation.css?v=2>; rel=stylesheet"
+
+    content_type = response.headers.get("content-type", "")
+    if request.url.path == "/" and content_type.startswith("text/html"):
+        css_href = b'<link rel="stylesheet" href="/static/css/home-animation.css?v=3">'
+
+        # TemplateResponse is normally an HTMLResponse with an in-memory body.
+        # Injecting the stylesheet into <head> makes the animation work even when
+        # the homepage is a standalone template and does not extend base.html.
+        body = getattr(response, "body", None)
+        if isinstance(body, bytes) and b"</head>" in body and css_href not in body:
+            response.body = body.replace(
+                b"</head>",
+                css_href + b"</head>",
+                1,
+            )
+            response.headers["content-length"] = str(len(response.body))
+
+        # Keep the HTTP Link header as a secondary loading path for browsers/CDNs.
+        response.headers["Link"] = '<' + "/static/css/home-animation.css?v=3" + '>; rel="stylesheet"'
+
     return response
 
 
