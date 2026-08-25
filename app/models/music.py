@@ -35,97 +35,26 @@ class SalesModel(str, Enum):
 class Album(Base):
     __tablename__ = "albums"
 
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=lambda: str(uuid.uuid4()),
-    )
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    creator_profile_id = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    genre = Column(String(100), nullable=True)
+    artwork_path = Column(String(1000), nullable=True)
+    release_date = Column(DateTime, nullable=True)
+    is_published = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    creator_profile_id = Column(
-        String(36),
-        ForeignKey(
-            "profiles.id",
-            ondelete="CASCADE",
-        ),
-        nullable=False,
-        index=True,
-    )
-
-    title = Column(
-        String(255),
-        nullable=False,
-    )
-
-    slug = Column(
-        String(255),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-
-    description = Column(
-        Text,
-        nullable=True,
-    )
-
-    genre = Column(
-        String(100),
-        nullable=True,
-    )
-
-    artwork_path = Column(
-        String(1000),
-        nullable=True,
-    )
-
-    release_date = Column(
-        DateTime,
-        nullable=True,
-    )
-
-    is_published = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0",
-    )
-
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    updated_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
-
-    creator_profile = relationship(
-        "Profile",
-        foreign_keys=[creator_profile_id],
-    )
-
-    album_tracks = relationship(
-        "AlbumTrack",
-        back_populates="album",
-        cascade="all, delete-orphan",
-        order_by="AlbumTrack.position",
-    )
+    creator_profile = relationship("Profile", foreign_keys=[creator_profile_id])
+    album_tracks = relationship("AlbumTrack", back_populates="album", cascade="all, delete-orphan", order_by="AlbumTrack.position")
 
     @property
     def artwork_url(self):
-        value = getattr(
-            self,
-            "_artwork_url",
-            None,
-        )
-
+        value = getattr(self, "_artwork_url", None)
         if value:
             return value
-
         return self.artwork_path
 
     @artwork_url.setter
@@ -140,134 +69,41 @@ class Album(Base):
 class Track(Base):
     __tablename__ = "tracks"
 
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=lambda: str(uuid.uuid4()),
-    )
-
-    creator_profile_id = Column(
-        String(36),
-        ForeignKey(
-            "profiles.id",
-            ondelete="CASCADE",
-        ),
-        nullable=False,
-        index=True,
-    )
-
-    title = Column(
-        String(255),
-        nullable=False,
-    )
-
-    slug = Column(
-        String(255),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-
-    description = Column(
-        Text,
-        nullable=True,
-    )
-
-    genre = Column(
-        String(100),
-        nullable=True,
-    )
-
-    bpm = Column(
-        Integer,
-        nullable=True,
-    )
-
-    tags = Column(
-        Text,
-        nullable=True,
-    )
-
-    cover_art_path = Column(
-        String(1000),
-        nullable=True,
-    )
-
-    audio_file_path = Column(
-        String(1000),
-        nullable=False,
-    )
-
-    preview_file_path = Column(
-        String(1000),
-        nullable=True,
-    )
-
-    price = Column(
-        Numeric(12, 2),
-        nullable=False,
-        default=0,
-    )
-
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    creator_profile_id = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    genre = Column(String(100), nullable=True)
+    bpm = Column(Integer, nullable=True)
+    tags = Column(Text, nullable=True)
+    cover_art_path = Column(String(1000), nullable=True)
+    audio_file_path = Column(String(1000), nullable=False)
+    preview_file_path = Column(String(1000), nullable=True)
+    price = Column(Numeric(12, 2), nullable=False, default=0)
     sales_model = Column(
-        SAEnum(
-            SalesModel,
-            name="salesmodel",
-            native_enum=False,
-        ),
+        SAEnum(SalesModel, name="salesmodel", native_enum=False),
         nullable=False,
         default=SalesModel.NON_EXCLUSIVE,
     )
+    is_sold = Column(Boolean, nullable=False, default=False, server_default="0")
 
-    is_sold = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0",
-    )
+    # New uploads are immediately public. Existing tracks are not changed by
+    # this model default; only newly-created ORM Track rows receive True.
+    # The dashboard upload flow also sets this explicitly as a second guard.
+    is_published = Column(Boolean, nullable=False, default=True, server_default="1")
 
-    is_published = Column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="0",
-    )
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    updated_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
-
-    creator_profile = relationship(
-        "Profile",
-        foreign_keys=[creator_profile_id],
-    )
-
-    album_tracks = relationship(
-        "AlbumTrack",
-        back_populates="track",
-        cascade="all, delete-orphan",
-    )
+    creator_profile = relationship("Profile", foreign_keys=[creator_profile_id])
+    album_tracks = relationship("AlbumTrack", back_populates="track", cascade="all, delete-orphan")
 
     @property
     def cover_art_url(self):
-        value = getattr(
-            self,
-            "_cover_art_url",
-            None,
-        )
-
+        value = getattr(self, "_cover_art_url", None)
         if value:
             return value
-
         return self.cover_art_path
 
     @cover_art_url.setter
@@ -282,52 +118,12 @@ class Track(Base):
 class AlbumTrack(Base):
     __tablename__ = "album_tracks"
 
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=lambda: str(uuid.uuid4()),
-    )
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    album_id = Column(String(36), ForeignKey("albums.id", ondelete="CASCADE"), nullable=False, index=True)
+    track_id = Column(String(36), ForeignKey("tracks.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, nullable=False, default=0)
 
-    album_id = Column(
-        String(36),
-        ForeignKey(
-            "albums.id",
-            ondelete="CASCADE",
-        ),
-        nullable=False,
-        index=True,
-    )
+    album = relationship("Album", back_populates="album_tracks")
+    track = relationship("Track", back_populates="album_tracks")
 
-    track_id = Column(
-        String(36),
-        ForeignKey(
-            "tracks.id",
-            ondelete="CASCADE",
-        ),
-        nullable=False,
-        index=True,
-    )
-
-    position = Column(
-        Integer,
-        nullable=False,
-        default=0,
-    )
-
-    album = relationship(
-        "Album",
-        back_populates="album_tracks",
-    )
-
-    track = relationship(
-        "Track",
-        back_populates="album_tracks",
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "album_id",
-            "track_id",
-            name="uq_album_track",
-        ),
-    )
+    __table_args__ = (UniqueConstraint("album_id", "track_id", name="uq_album_track"),)
