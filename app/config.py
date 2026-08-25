@@ -18,23 +18,22 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_NAME: str = "BeatHub"
     SECRET_KEY: str = "change-me-in-production"
+    SESSION_SECRET: str = ""
     DATABASE_URL: str = "sqlite:///./beathub.db"
     BASE_URL: str = "http://localhost:8000"
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     JWT_ALGORITHM: str = "HS256"
 
+    # Immutable BeatHub marketplace rule: 10% platform / 90% creator.
     PLATFORM_COMMISSION_PERCENT: float = 10.0
     PLATFORM_COMMISSION_RATE: float = 10.0
 
-    # Paystack — Kenya M-PESA + card checkout
+    # Paystack — single customer payment gateway for Kenya.
+    # Paystack Checkout supports cards and Kenya M-PESA/mobile money.
     PAYSTACK_SECRET_KEY: str = ""
     PAYSTACK_PUBLIC_KEY: str = ""
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
-
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""
-    STRIPE_KES_TO_USD_RATE: float = 0.0
 
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
@@ -47,6 +46,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     MEDIA_STORAGE: str = "r2"
+    MEDIA_ROOT: str = "media"
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
