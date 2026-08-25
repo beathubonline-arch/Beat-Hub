@@ -87,7 +87,7 @@ except Exception:
     raise
 
 
-@app.get("/healthz", include_in_schema=False)
+@app.api_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
 async def healthz():
     """Render-compatible health endpoint supporting GET and HEAD."""
     return JSONResponse({"status": "ok"})
