@@ -1,5 +1,6 @@
 import logging
 import os
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, quote
@@ -207,11 +208,12 @@ class CreatorPayoutPolicyMiddleware:
         try:
             parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
             raw_amount = (parsed.get("amount") or [""])[0].strip()
-            amount = float(raw_amount)
-        except (ValueError, TypeError, UnicodeDecodeError):
-            amount = None
+            amount = Decimal(raw_amount)
+            valid_amount = amount.is_finite() and amount >= PAYOUT_MINIMUM
+        except (InvalidOperation, TypeError, UnicodeDecodeError):
+            valid_amount = False
 
-        if amount is None or amount < PAYOUT_MINIMUM:
+        if not valid_amount:
             location = (
                 "/dashboard/withdraw?error="
                 + quote(f"The minimum creator withdrawal is KSh {PAYOUT_MINIMUM:,}.")
