@@ -1,13 +1,9 @@
-"""Paystack checkout for BeatHub Kenya.
+"""Canonical Paystack checkout for BeatHub Kenya.
 
-Paystack is the single customer payment gateway. It supports the enabled
-Kenya payment channels, including M-PESA and cards, while BeatHub performs
-server-side verification before granting ownership.
-
-Producer marketplace transactions use Paystack subaccounts when a producer
-has completed Paystack payout onboarding. The subaccount is configured so
-BeatHub receives exactly 10% and the producer receives 90%, while BeatHub also
-keeps its own immutable ledger split for accounting and reporting.
+Paystack is the customer payment gateway for BeatHub. It provides the
+supported Kenya payment channels, including M-PESA and cards. BeatHub performs
+server-side verification before granting ownership or marking a merchandise
+order paid.
 """
 
 import hashlib
@@ -29,6 +25,7 @@ from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
 from app.models.music import SalesModel, Track
 from app.models.user import User
+from app.services.merchandise_payments import complete_merchandise_payment, find_merchandise_order_id
 from app.services.orders import finalize_order
 from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split
 from app.utils.deps import require_user
@@ -74,7 +71,7 @@ def _verify_reference(reference: str) -> dict:
         raise RuntimeError("PAYSTACK_SECRET_KEY is not configured.")
 
     response = httpx.get(
-        f"{settings.PAYSTACK_BASE_URL}/transaction/verify/{reference}",
+        f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/verify/{reference}",
         headers=_headers(),
         timeout=30,
     )
@@ -93,7 +90,7 @@ def _complete_verified_payment(
     payment: PaymentTransaction,
     data: dict,
 ) -> bool:
-    """Apply a verified Paystack result exactly once under a DB row lock."""
+    """Apply a verified Paystack track result exactly once under DB locks."""
     locked_payment = (
         db.query(PaymentTransaction)
         .filter(PaymentTransaction.id == payment.id)
@@ -206,17 +203,13 @@ async def paystack_checkout(
             303,
         )
 
-    customer_email = (email or "").strip().lower()
-    if not customer_email:
-        customer_email = (getattr(user, "email", "") or "").strip().lower()
-
+    customer_email = (email or "").strip().lower() or (getattr(user, "email", "") or "").strip().lower()
     if not EMAIL_RE.fullmatch(customer_email):
         return RedirectResponse(
             f"/checkout/track/{slug}?error=Please%20enter%20a%20valid%20email%20address%20for%20Paystack%20checkout.",
             303,
         )
 
-    # Server-authoritative marketplace split: exactly 10% BeatHub / 90% producer.
     split = calculate_split(price)
     if Decimal(str(split["commission_percent"])) != BEATHUB_COMMISSION_PERCENT:
         raise HTTPException(status_code=500, detail="Invalid BeatHub commission configuration.")
@@ -227,9 +220,7 @@ async def paystack_checkout(
         buyer_id=user.id,
         track_id=track.id,
         album_id=None,
-        sales_model_at_purchase=str(
-            getattr(getattr(track, "sales_model", None), "value", track.sales_model)
-        ),
+        sales_model_at_purchase=str(getattr(getattr(track, "sales_model", None), "value", track.sales_model)),
         gross_amount=Decimal(str(split["gross_amount"])),
         commission_amount=Decimal(str(split["commission_amount"])),
         net_amount=Decimal(str(split["net_amount"])),
@@ -247,6 +238,7 @@ async def paystack_checkout(
         "currency": "KES",
         "reference": order.order_number,
         "callback_url": callback_url,
+        "channels": ["card", "mobile_money"],
         "metadata": {
             "beathub_order_id": order.id,
             "beathub_track_slug": track.slug,
@@ -257,19 +249,15 @@ async def paystack_checkout(
         },
     }
 
-    # When the producer has completed Paystack payout onboarding, attach the
-    # subaccount. Paystack's percentage_charge on that subaccount is configured
-    # to 10%, which means the main BeatHub account receives 10% and the producer
-    # receives 90%. Without a subaccount, BeatHub still records the exact 10/90
-    # split internally; no fake payout is claimed.
     producer_subaccount = getattr(profile, "paystack_subaccount_code", None)
     if producer_subaccount:
         payload["subaccount"] = str(producer_subaccount)
+        payload["transaction_charge"] = _amount_kobo(split["commission_amount"])
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                f"{settings.PAYSTACK_BASE_URL}/transaction/initialize",
+                f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/initialize",
                 headers=_headers(),
                 json=payload,
             )
@@ -281,12 +269,7 @@ async def paystack_checkout(
 
     if response.status_code >= 400 or not data.get("status"):
         message = data.get("message") or "Paystack could not initialize checkout."
-        logger.error(
-            "Paystack initialization rejected: status=%s message=%s order=%s",
-            response.status_code,
-            message,
-            order.id,
-        )
+        logger.error("Paystack initialization rejected: status=%s message=%s order=%s", response.status_code, message, order.id)
         db.rollback()
         raise HTTPException(status_code=400, detail=message)
 
@@ -325,6 +308,24 @@ async def paystack_callback(
     if not reference:
         return RedirectResponse("/beats?error=Payment%20reference%20was%20missing.", 303)
 
+    # Merchandise and beat purchases now share this callback. Determine the
+    # merchandise order first because it has no PaymentTransaction row.
+    merch_order_id = find_merchandise_order_id(db, reference)
+    if merch_order_id:
+        try:
+            data = _verify_reference(reference)
+            paid = complete_merchandise_payment(db, merch_order_id, reference, data)
+        except Exception:
+            db.rollback()
+            logger.exception("Paystack merchandise callback verification failed: %s", reference)
+            return RedirectResponse(
+                f"/merch/orders/{merch_order_id}?error=Payment%20verification%20failed.",
+                303,
+            )
+        if paid:
+            return RedirectResponse(f"/merch/orders/{merch_order_id}", 303)
+        return RedirectResponse(f"/merch/orders/{merch_order_id}?error=Payment%20was%20not%20completed.", 303)
+
     payment = db.query(PaymentTransaction).filter(
         PaymentTransaction.checkout_request_id == reference
     ).first()
@@ -342,26 +343,17 @@ async def paystack_callback(
         except Exception:
             db.rollback()
             logger.exception("Paystack callback verification failed: %s", reference)
-            return RedirectResponse(
-                f"/orders/{order.id}/status?error=Payment%20verification%20failed.",
-                303,
-            )
+            return RedirectResponse(f"/orders/{order.id}/status?error=Payment%20verification%20failed.", 303)
 
     return RedirectResponse(f"/orders/{order.id}/status", 303)
 
 
 @router.post("/paystack/webhook")
-async def paystack_webhook(
-    request: Request,
-    db: Session = Depends(get_db),
-):
+async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
     raw_body = await request.body()
     signature = request.headers.get("x-paystack-signature", "")
-    expected = hmac.new(
-        settings.PAYSTACK_SECRET_KEY.encode("utf-8"),
-        raw_body,
-        hashlib.sha512,
-    ).hexdigest()
+    secret = settings.PAYSTACK_SECRET_KEY or ""
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
 
     if not signature or not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=401, detail="Invalid Paystack signature.")
@@ -377,6 +369,18 @@ async def paystack_webhook(
     data = payload.get("data") or {}
     reference = data.get("reference")
     if not reference:
+        return {"status": True}
+
+    metadata = data.get("metadata") or {}
+    merch_order_id = find_merchandise_order_id(db, reference, metadata)
+    if merch_order_id:
+        try:
+            verified = _verify_reference(reference)
+            complete_merchandise_payment(db, merch_order_id, reference, verified)
+        except Exception:
+            db.rollback()
+            logger.exception("Paystack merchandise webhook verification failed: %s", reference)
+            raise HTTPException(status_code=500, detail="Verification failed.")
         return {"status": True}
 
     payment = db.query(PaymentTransaction).filter(
