@@ -9,6 +9,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -85,12 +86,7 @@ def checkout_page(
         return templates.TemplateResponse(
             request,
             "checkout.html",
-            page_context(
-                request,
-                user,
-                track=track,
-                error="You cannot purchase your own track.",
-            ),
+            page_context(request, user, track=track, error="You cannot purchase your own track."),
             status_code=400,
         )
 
@@ -98,20 +94,11 @@ def checkout_page(
         return templates.TemplateResponse(
             request,
             "checkout.html",
-            page_context(
-                request,
-                user,
-                track=track,
-                error="This track is no longer available for purchase.",
-            ),
+            page_context(request, user, track=track, error="This track is no longer available for purchase."),
             status_code=400,
         )
 
-    return templates.TemplateResponse(
-        request,
-        "checkout.html",
-        page_context(request, user, track=track),
-    )
+    return templates.TemplateResponse(request, "checkout.html", page_context(request, user, track=track))
 
 
 @router.get("/orders/{order_id}/status")
@@ -126,11 +113,7 @@ def order_status_page(
     if not order or order.buyer_id != user.id:
         raise HTTPException(status_code=404, detail="Order not found.")
 
-    return templates.TemplateResponse(
-        request,
-        "order_status.html",
-        page_context(request, user, order=order),
-    )
+    return templates.TemplateResponse(request, "order_status.html", page_context(request, user, order=order))
 
 
 @router.get("/api/orders/{order_id}/status")
