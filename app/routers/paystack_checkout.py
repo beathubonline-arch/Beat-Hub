@@ -1,9 +1,14 @@
 """Canonical Paystack checkout for BeatHub Kenya.
 
-Paystack is the customer payment gateway for BeatHub. It provides the
-supported Kenya payment channels, including M-PESA and cards. BeatHub performs
-server-side verification before granting ownership or marking a merchandise
-order paid.
+Paystack is the single customer payment gateway for BeatHub. The customer
+pays through Paystack (for example card or Kenya mobile money/M-PESA).
+
+Important payment rule:
+- The signed Paystack webhook is authoritative for successful payments.
+- The browser callback is only a navigation mechanism and must not make the
+  customer wait for server-side settlement before showing the order page.
+- A callback still verifies an already-pending payment as a fallback, but the
+  verification is asynchronous and bounded.
 """
 
 import hashlib
@@ -48,48 +53,25 @@ def _amount_kobo(amount: Decimal) -> int:
     return int((amount * Decimal("100")).quantize(Decimal("1")))
 
 
-def _available(track: Track) -> bool:
-    if not track or not getattr(track, "is_published", False):
-        return False
-
-    model = getattr(
-        getattr(track, "sales_model", None),
-        "value",
-        getattr(track, "sales_model", ""),
-    )
-    model = str(model).lower()
-
-    if model == SalesModel.NON_EXCLUSIVE.value:
-        return True
-    if model == SalesModel.EXCLUSIVE.value:
-        return not bool(getattr(track, "is_sold", False))
-    return False
-
-
-def _verify_reference(reference: str) -> dict:
+async def _verify_reference(reference: str) -> dict:
+    """Verify a Paystack reference without blocking FastAPI's event loop."""
     if not settings.PAYSTACK_SECRET_KEY:
         raise RuntimeError("PAYSTACK_SECRET_KEY is not configured.")
 
-    response = httpx.get(
-        f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/verify/{reference}",
-        headers=_headers(),
-        timeout=30,
-    )
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+        response = await client.get(
+            f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/verify/{reference}",
+            headers=_headers(),
+        )
+
     response.raise_for_status()
     payload = response.json()
-
     if not payload.get("status") or not isinstance(payload.get("data"), dict):
         raise RuntimeError(payload.get("message") or "Paystack verification failed.")
-
     return payload["data"]
 
 
-def _complete_verified_payment(
-    db: Session,
-    order: Order,
-    payment: PaymentTransaction,
-    data: dict,
-) -> bool:
+def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransaction, data: dict) -> bool:
     """Apply a verified Paystack track result exactly once under DB locks."""
     locked_payment = (
         db.query(PaymentTransaction)
@@ -110,13 +92,8 @@ def _complete_verified_payment(
     payment = locked_payment
     order = locked_order
 
-    if (
-        payment.callback_processed
-        and payment.status == PaymentStatus.COMPLETED
-        and order.status == OrderStatus.COMPLETED
-    ):
+    if payment.callback_processed and payment.status == PaymentStatus.COMPLETED and order.status == OrderStatus.COMPLETED:
         return True
-
     if payment.status == PaymentStatus.COMPLETED and order.status == OrderStatus.COMPLETED:
         return True
 
@@ -153,16 +130,7 @@ def _complete_verified_payment(
         payment.phone_number = str(phone)[:20]
 
     result = finalize_order(db, order)
-
-    if result.status == OrderStatus.REJECTED:
-        logger.warning(
-            "Verified Paystack payment completed but order rejected: order=%s reason=%s",
-            order.id,
-            result.message,
-        )
-        return False
-
-    return True
+    return result.status == OrderStatus.COMPLETED
 
 
 @router.post("/paystack/checkout/track/{slug}")
@@ -179,36 +147,22 @@ async def paystack_checkout(
     track = db.query(Track).filter(Track.slug == slug).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found.")
-
     if not _available(track):
-        return RedirectResponse(
-            f"/track/{slug}?error=This%20track%20is%20no%20longer%20available%20for%20purchase.",
-            303,
-        )
+        return RedirectResponse(f"/track/{slug}?error=This%20track%20is%20no%20longer%20available%20for%20purchase.", 303)
 
     profile = getattr(track, "creator_profile", None)
     if getattr(profile, "user_id", None) == user.id:
-        return RedirectResponse(
-            f"/track/{slug}?error=You%20cannot%20purchase%20your%20own%20track.",
-            303,
-        )
+        return RedirectResponse(f"/track/{slug}?error=You%20cannot%20purchase%20your%20own%20track.", 303)
 
     price = Decimal(str(track.price))
     if price <= 0:
         raise HTTPException(status_code=400, detail="This track has an invalid price.")
-
     if price < PAYSTACK_KES_MINIMUM:
-        return RedirectResponse(
-            f"/checkout/track/{slug}?error=Paystack%20requires%20a%20minimum%20payment%20of%20KSh%203.00.",
-            303,
-        )
+        return RedirectResponse(f"/checkout/track/{slug}?error=Paystack%20requires%20a%20minimum%20payment%20of%20KSh%203.00.", 303)
 
     customer_email = (email or "").strip().lower() or (getattr(user, "email", "") or "").strip().lower()
     if not EMAIL_RE.fullmatch(customer_email):
-        return RedirectResponse(
-            f"/checkout/track/{slug}?error=Please%20enter%20a%20valid%20email%20address%20for%20Paystack%20checkout.",
-            303,
-        )
+        return RedirectResponse(f"/checkout/track/{slug}?error=Please%20enter%20a%20valid%20email%20address%20for%20Paystack%20checkout.", 303)
 
     split = calculate_split(price)
     if Decimal(str(split["commission_percent"])) != BEATHUB_COMMISSION_PERCENT:
@@ -255,7 +209,7 @@ async def paystack_checkout(
         payload["transaction_charge"] = _amount_kobo(split["commission_amount"])
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
             response = await client.post(
                 f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/initialize",
                 headers=_headers(),
@@ -269,7 +223,6 @@ async def paystack_checkout(
 
     if response.status_code >= 400 or not data.get("status"):
         message = data.get("message") or "Paystack could not initialize checkout."
-        logger.error("Paystack initialization rejected: status=%s message=%s order=%s", response.status_code, message, order.id)
         db.rollback()
         raise HTTPException(status_code=400, detail=message)
 
@@ -293,7 +246,6 @@ async def paystack_checkout(
     )
     db.add(payment)
     db.commit()
-
     return RedirectResponse(authorization, status_code=303)
 
 
@@ -308,23 +260,13 @@ async def paystack_callback(
     if not reference:
         return RedirectResponse("/beats?error=Payment%20reference%20was%20missing.", 303)
 
-    # Merchandise and beat purchases now share this callback. Determine the
-    # merchandise order first because it has no PaymentTransaction row.
+    # Do not make the buyer wait here. Paystack's signed webhook is the
+    # authoritative settlement path. The browser callback only takes the
+    # customer to the order page, where the normal status polling can update
+    # as soon as the webhook has completed the order.
     merch_order_id = find_merchandise_order_id(db, reference)
     if merch_order_id:
-        try:
-            data = _verify_reference(reference)
-            paid = complete_merchandise_payment(db, merch_order_id, reference, data)
-        except Exception:
-            db.rollback()
-            logger.exception("Paystack merchandise callback verification failed: %s", reference)
-            return RedirectResponse(
-                f"/merch/orders/{merch_order_id}?error=Payment%20verification%20failed.",
-                303,
-            )
-        if paid:
-            return RedirectResponse(f"/merch/orders/{merch_order_id}", 303)
-        return RedirectResponse(f"/merch/orders/{merch_order_id}?error=Payment%20was%20not%20completed.", 303)
+        return RedirectResponse(f"/merch/orders/{merch_order_id}", 303)
 
     payment = db.query(PaymentTransaction).filter(
         PaymentTransaction.checkout_request_id == reference
@@ -332,20 +274,7 @@ async def paystack_callback(
     if not payment:
         return RedirectResponse("/beats?error=Payment%20record%20was%20not%20found.", 303)
 
-    order = db.get(Order, payment.order_id)
-    if not order:
-        return RedirectResponse("/beats?error=Order%20was%20not%20found.", 303)
-
-    if payment.status != PaymentStatus.COMPLETED or order.status != OrderStatus.COMPLETED:
-        try:
-            data = _verify_reference(reference)
-            _complete_verified_payment(db, order, payment, data)
-        except Exception:
-            db.rollback()
-            logger.exception("Paystack callback verification failed: %s", reference)
-            return RedirectResponse(f"/orders/{order.id}/status?error=Payment%20verification%20failed.", 303)
-
-    return RedirectResponse(f"/orders/{order.id}/status", 303)
+    return RedirectResponse(f"/orders/{payment.order_id}/status", 303)
 
 
 @router.post("/paystack/webhook")
@@ -375,12 +304,13 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
     merch_order_id = find_merchandise_order_id(db, reference, metadata)
     if merch_order_id:
         try:
-            verified = _verify_reference(reference)
-            complete_merchandise_payment(db, merch_order_id, reference, verified)
+            # The webhook is cryptographically authenticated by Paystack.
+            # Validate amount/currency again in the shared settlement service.
+            complete_merchandise_payment(db, merch_order_id, reference, data)
         except Exception:
             db.rollback()
-            logger.exception("Paystack merchandise webhook verification failed: %s", reference)
-            raise HTTPException(status_code=500, detail="Verification failed.")
+            logger.exception("Paystack merchandise webhook settlement failed: %s", reference)
+            raise HTTPException(status_code=500, detail="Settlement failed.")
         return {"status": True}
 
     payment = db.query(PaymentTransaction).filter(
@@ -395,11 +325,10 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
 
     if payment.status != PaymentStatus.COMPLETED or order.status != OrderStatus.COMPLETED:
         try:
-            verified = _verify_reference(reference)
-            _complete_verified_payment(db, order, payment, verified)
+            _complete_verified_payment(db, order, payment, data)
         except Exception:
             db.rollback()
-            logger.exception("Paystack webhook verification failed: %s", reference)
-            raise HTTPException(status_code=500, detail="Verification failed.")
+            logger.exception("Paystack webhook settlement failed: %s", reference)
+            raise HTTPException(status_code=500, detail="Settlement failed.")
 
     return {"status": True}
