@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from http.cookies import SimpleCookie
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -71,8 +72,6 @@ class HomepageMotionMiddleware:
         b'data-beathub-home-motion="1">'
     )
 
-    # The vinyl animation is also embedded as a fallback. This means the ring
-    # does not depend on a second network request or a cached stylesheet.
     INLINE = (
         b'<style data-beathub-home-motion-inline="1">'
         b'@keyframes beathub-vinyl-spin-inline{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}'
@@ -133,6 +132,59 @@ class HomepageMotionMiddleware:
         await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
+class MerchandiseLoginRedirectMiddleware:
+    """Give logged-out merchandise buyers a real login flow instead of a raw 401.
+
+    This middleware runs before the merchandise router. It only touches the
+    POST purchase endpoint when the BeatHub session cookie is absent. Logged-in
+    customers continue through the existing canonical merchandise/Paystack
+    implementation unchanged.
+    """
+
+    SESSION_COOKIE = "beathub_session"
+
+    def __init__(self, app):
+        self.app = app
+
+    @staticmethod
+    def _has_session_cookie(headers) -> bool:
+        raw_cookie = ""
+        for key, value in headers:
+            if key.lower() == b"cookie":
+                raw_cookie = value.decode("latin-1", errors="ignore")
+                break
+        if not raw_cookie:
+            return False
+        cookie = SimpleCookie()
+        try:
+            cookie.load(raw_cookie)
+        except Exception:
+            return False
+        morsel = cookie.get(MerchandiseLoginRedirectMiddleware.SESSION_COOKIE)
+        return bool(morsel and morsel.value)
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            method = scope.get("method", "").upper()
+            path = scope.get("path", "")
+            if method == "POST" and path.startswith("/merch/") and path.endswith("/buy"):
+                parts = [part for part in path.split("/") if part]
+                if len(parts) == 3 and not self._has_session_cookie(scope.get("headers", [])):
+                    slug = parts[1]
+                    from urllib.parse import quote
+
+                    next_url = f"/merch/{slug}"
+                    location = (
+                        f"/login?next={quote(next_url, safe='')}"
+                        f"&error={quote('Please sign in to continue with your merchandise purchase.') }"
+                    )
+                    response = RedirectResponse(url=location, status_code=303)
+                    await response(scope, receive, send)
+                    return
+
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret(),
@@ -141,13 +193,12 @@ app.add_middleware(
     same_site="lax",
     https_only=_session_https_only(),
 )
+app.add_middleware(MerchandiseLoginRedirectMiddleware)
 app.add_middleware(HomepageMotionMiddleware)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# SQLAlchemy owns application-table creation for local SQLite development.
-# Production PostgreSQL schema changes are handled by Alembic before deploy.
 try:
     Base.metadata.create_all(bind=engine)
 except Exception:
@@ -170,17 +221,8 @@ async def merchandise_legacy_alias():
     return RedirectResponse(url="/merch", status_code=307)
 
 
-# Alembic is intentionally NOT executed by the web process. Render must run:
-#     alembic upgrade head
-# as its Pre-Deploy Command, followed by:
-#     uvicorn main:app --host 0.0.0.0 --port $PORT
-# This keeps PostgreSQL schema work out of the request path and prevents the
-# Render "No open ports" timeout.
-
-# Merchandise schema is now owned by Alembic migration 0010. The historical
-# request-time ensure_merch_tables() helper remains in the legacy router for
-# compatibility, but is disabled here so /merch never performs CREATE/ALTER/
-# INDEX/inspection work during a customer request.
+# Alembic runs as Render's Pre-Deploy command, not in the web request path.
+# This prevents PostgreSQL schema work from blocking port binding/startup.
 merchandise.ensure_merch_tables = lambda db: None
 
 # One canonical route implementation per feature.
