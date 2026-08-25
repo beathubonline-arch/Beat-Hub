@@ -8,11 +8,12 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import Base, engine
-from app.models import *  # noqa: F401,F403 - register all SQLAlchemy models
+from app.models import *  # noqa: F401,F403
 from app.routers import (
     admin,
     auth,
@@ -45,10 +46,7 @@ def _session_secret() -> str:
     value = os.getenv("SESSION_SECRET") or getattr(settings, "SESSION_SECRET", None)
     if value and str(value).strip():
         return str(value).strip()
-    logger.warning(
-        "SESSION_SECRET is not configured. Using a temporary development secret. "
-        "Set SESSION_SECRET in the production environment."
-    )
+    logger.warning("SESSION_SECRET is not configured. Set SESSION_SECRET in production.")
     return "beathub-development-session-secret-change-me"
 
 
@@ -69,14 +67,7 @@ def _session_https_only() -> bool:
 
 
 class HomepageMotionMiddleware:
-    """Inject the homepage motion stylesheet without touching other routes.
-
-    This is deliberately a pure ASGI middleware. It collects the small homepage
-    HTML response, injects one cache-busted stylesheet link, and emits exactly one
-    normal response body. It never iterates an endpoint's body generator from two
-    places and therefore avoids the `anext(): asynchronous generator is already
-    running` failure produced by the previous response-rewrite implementation.
-    """
+    """Inject the homepage motion stylesheet in one safe ASGI response pass."""
 
     LINK = b'<link rel="stylesheet" href="/static/css/home-animation.css?v=20260825" data-beathub-home-motion="1">'
 
@@ -97,14 +88,12 @@ class HomepageMotionMiddleware:
             if message_type == "http.response.start":
                 start_message = dict(message)
                 start_message["headers"] = list(message.get("headers", []))
-                return
-            if message_type == "http.response.body":
+            elif message_type == "http.response.body":
                 body_chunks.append(bytes(message.get("body", b"")))
-                return
-            await send(message)
+            else:
+                await send(message)
 
         await self.app(scope, receive, capture)
-
         if start_message is None:
             return
 
@@ -116,18 +105,12 @@ class HomepageMotionMiddleware:
                 break
 
         body = b"".join(body_chunks)
-        is_html = content_type.startswith("text/html")
-
-        if is_html and b"data-beathub-home-motion=" not in body:
+        if content_type.startswith("text/html") and b"data-beathub-home-motion=" not in body:
             marker = b"</head>"
             marker_index = body.lower().find(marker)
             if marker_index >= 0:
                 body = body[:marker_index] + self.LINK + body[marker_index:]
-                headers = [
-                    (key, value)
-                    for key, value in headers
-                    if key.lower() != b"content-length"
-                ]
+                headers = [(key, value) for key, value in headers if key.lower() != b"content-length"]
                 headers.append((b"x-beathub-home-motion", b"loaded"))
 
         start_message["headers"] = headers
@@ -167,57 +150,65 @@ async def healthz_head():
 
 @app.get("/merchandise", include_in_schema=False)
 async def merchandise_legacy_alias():
-    """Compatibility URL for older navigation/bookmarks."""
     return RedirectResponse(url="/merch", status_code=307)
+
+
+ALEMBIC_HEAD = "merch_schema_010"
+
+
+def _current_alembic_revision() -> str | None:
+    if engine.url.get_backend_name() == "sqlite":
+        return None
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).first()
+            return str(row[0]) if row else None
+    except Exception:
+        logger.warning("Could not read alembic_version; migrations will run.", exc_info=True)
+        return None
 
 
 @app.on_event("startup")
 async def run_database_migrations() -> None:
-    """Apply production schema migrations before accepting requests."""
+    """Run Alembic only when the database is not already at the application head."""
     if engine.url.get_backend_name() == "sqlite":
         logger.info("SQLite detected; create_all is sufficient for local development.")
-    else:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+        return
 
-        logger.info("Running Alembic database migrations before application startup.")
+    current_revision = _current_alembic_revision()
+    if current_revision == ALEMBIC_HEAD:
+        logger.info("Database schema already at Alembic head %s; skipping startup migration.", ALEMBIC_HEAD)
+        return
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(BASE_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    logger.info("Database schema revision is %s; migrating to %s.", current_revision or "unknown", ALEMBIC_HEAD)
+
+    try:
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=str(BASE_DIR),
             env=env,
             capture_output=True,
             text=True,
+            timeout=45,
         )
+    except subprocess.TimeoutExpired as exc:
+        logger.error("Database migration exceeded 45 seconds; startup aborted.")
+        raise RuntimeError("Database migration timed out during startup.") from exc
 
-        if result.stdout:
-            logger.info("Alembic output:\n%s", result.stdout.strip())
-        if result.stderr:
-            logger.warning("Alembic stderr:\n%s", result.stderr.strip())
+    if result.stdout:
+        logger.info("Alembic output:\n%s", result.stdout.strip())
+    if result.stderr:
+        logger.warning("Alembic stderr:\n%s", result.stderr.strip())
+    if result.returncode != 0:
+        logger.error("Database migration failed with exit code %s.", result.returncode)
+        raise RuntimeError("Database migration failed during application startup.")
 
-        if result.returncode != 0:
-            logger.error(
-                "Database migration failed with exit code %s. Application startup aborted.",
-                result.returncode,
-            )
-            raise RuntimeError("Database migration failed during application startup.")
-
-        logger.info("Database migrations completed successfully. Application startup may continue.")
-
-    # Merchandise used to perform schema reflection and CREATE/ALTER/INDEX work
-    # on every page request. The schema is now prepared exactly once at startup;
-    # request handlers perform only their marketplace/order queries afterwards.
-    from app.database import SessionLocal
-    merch_db = SessionLocal()
-    try:
-        merchandise.ensure_merch_tables(merch_db)
-    finally:
-        merch_db.close()
-    merchandise.ensure_merch_tables = lambda db: None
-    logger.info("Merchandise schema prepared once at startup; per-request schema work disabled.")
+    logger.info("Database migrations completed successfully.")
 
 
-# One canonical route implementation per feature. Payment collection is
-# Paystack-only; beat and merchandise payments share the same callback/webhook.
+# One canonical route implementation per feature.
 app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
