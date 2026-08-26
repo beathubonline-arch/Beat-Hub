@@ -25,37 +25,46 @@ body::before { content:"";position:fixed;inset:0;pointer-events:none;z-index:0;b
 .studio-card { background:linear-gradient(145deg,rgba(24,24,24,.97),rgba(8,8,8,.97)) !important;border-color:rgba(212,175,55,.30) !important; }
 .studio-card::before { background:linear-gradient(135deg,rgba(244,214,117,.25),transparent 35%,transparent 65%,rgba(212,175,55,.13)) !important; }
 
-/* Actual homepage hero record: keep the vinyl, then give it a single premium light beam. */
+/* Actual homepage hero record: keep the vinyl, with one unmistakable premium light beam. */
 .vinyl {
+    position:relative;
     animation:beathub-vinyl-spin 8s linear infinite !important;
     transform-origin:50% 50% !important;
     will-change:transform;
     outline:2px solid rgba(244,214,117,.78) !important;
     outline-offset:8px !important;
     box-shadow:0 0 0 11px rgba(212,175,55,.08),0 25px 45px rgba(0,0,0,.55),0 0 38px rgba(212,175,55,.14) !important;
-    background:
-        conic-gradient(from 0deg at 50% 50%,
-            transparent 0deg 358deg,
-            rgba(244,214,117,.18) 358.7deg,
-            rgba(255,255,255,.98) 359.35deg,
-            rgba(244,214,117,.34) 359.8deg,
-            transparent 360deg),
-        repeating-radial-gradient(circle at center,
-            #191621 0px,
-            #191621 3px,
-            #0b0910 4px,
-            #0b0910 7px) !important;
-    background-blend-mode:screen,normal !important;
+    background:repeating-radial-gradient(circle at center,#191621 0px,#191621 3px,#0b0910 4px,#0b0910 7px) !important;
 }
 
-/* Keep the record label/centre intact while the beam sweeps around with the disc. */
+/* Gold label with its center hole built into the label layer. */
 .vinyl::before {
     inset:25% !important;
     border-radius:50% !important;
-    background:linear-gradient(135deg,#f4d675,#d4af37,#9c7a16) !important;
+    background:
+        radial-gradient(circle at center,#0b0910 0 10px,#f4d675 11px 15px,transparent 16px),
+        linear-gradient(135deg,#f4d675,#d4af37,#9c7a16) !important;
     box-shadow:0 0 35px rgba(212,175,55,.22),0 0 8px rgba(244,214,117,.20) !important;
 }
-.vinyl::after { border-color:#f4d675 !important;box-shadow:0 0 18px rgba(244,214,117,.35),0 0 4px rgba(255,255,255,.45); }
+
+/* The visible beam: a crisp white-hot leading edge with a warm gold glow. Because
+   the vinyl itself rotates, this beam sweeps around the entire record. */
+.vinyl::after {
+    content:"" !important;
+    position:absolute !important;
+    left:50% !important;
+    top:50% !important;
+    width:46% !important;
+    height:4px !important;
+    transform:translateY(-50%) !important;
+    transform-origin:0 50% !important;
+    border-radius:999px !important;
+    background:linear-gradient(90deg,rgba(255,255,255,.98) 0%,rgba(244,214,117,.95) 18%,rgba(212,175,55,.48) 58%,transparent 100%) !important;
+    box-shadow:0 0 4px rgba(255,255,255,.95),0 0 10px rgba(244,214,117,.9),0 0 24px rgba(212,175,55,.62),0 0 42px rgba(212,175,55,.28) !important;
+    border:0 !important;
+    z-index:5 !important;
+    pointer-events:none !important;
+}
 
 .vinyl-ring,.hero-ring,.record-ring { animation:beathub-vinyl-spin 10s linear infinite !important;transform-origin:50% 50% !important;will-change:transform; }
 .studio-card { animation:beathub-glow 4.5s ease-in-out infinite !important; }
