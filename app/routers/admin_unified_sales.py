@@ -5,12 +5,11 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.ledger import WithdrawalRequest
-from app.models.order import Order, OrderStatus
+from app.models.order import Order
 from app.models.user import User
 from app.utils.deps import require_admin
 
@@ -101,7 +100,11 @@ def unified_sales(
             "created_at": row.get("paid_at") or row.get("created_at"),
         })
 
-    rows = sorted(music_rows + merch_rows, key=lambda item: item["created_at"] or datetime.min, reverse=True)
+    rows = sorted(
+        music_rows + merch_rows,
+        key=lambda item: item["created_at"] or datetime.min,
+        reverse=True,
+    )
     settled = [r for r in rows if r["status"] == "completed"]
     completed_music = [r for r in settled if r["type"] == "Beat"]
     completed_merch = [r for r in settled if r["type"] == "Merch"]
@@ -114,34 +117,10 @@ def unified_sales(
         "merch_count": len(completed_merch),
     }
     return templates.TemplateResponse(request, "admin/sales_unified.html", {
-        "request": request, "current_user": user,
-        "current_year": datetime.utcnow().year,
-        "rows": rows, "totals": totals, "status": normalized,
-    })
-
-
-@router.get("/withdrawals")
-def canonical_creator_withdrawals(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    """Enhanced creator payout page; this router is registered before legacy admin routes."""
-    withdrawals = db.query(WithdrawalRequest).order_by(WithdrawalRequest.created_at.desc()).all()
-    pending_raw = (
-        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
-        .filter(WithdrawalRequest.status == "pending")
-        .scalar()
-    )
-    completed = db.query(Order).filter(Order.status == OrderStatus.COMPLETED).all()
-    creator_earnings = sum((_dec(o.net_amount) for o in completed), Decimal("0"))
-    commission = sum((_dec(o.commission_amount) for o in completed), Decimal("0"))
-    return templates.TemplateResponse(request, "admin/withdrawals.html", {
         "request": request,
         "current_user": user,
         "current_year": datetime.utcnow().year,
-        "withdrawals": withdrawals,
-        "pending_withdrawal_amount": _dec(pending_raw),
-        "total_creator_earnings": creator_earnings,
-        "total_commission": commission,
+        "rows": rows,
+        "totals": totals,
+        "status": normalized,
     })
