@@ -53,6 +53,32 @@ def _amount_kobo(amount: Decimal) -> int:
     return int((amount * Decimal("100")).quantize(Decimal("1")))
 
 
+def _available(track: Track) -> bool:
+    """Return whether a track can currently be purchased.
+
+    Keep the purchase gate aligned with the public catalogue: a track must
+    be published, have a positive price, and must not already be sold when it
+    is an exclusive license. Non-exclusive tracks remain purchasable after
+    previous sales.
+    """
+    if not bool(getattr(track, "is_published", False)):
+        return False
+
+    try:
+        price = Decimal(str(getattr(track, "price", 0)))
+    except Exception:
+        return False
+    if price <= 0:
+        return False
+
+    sales_model = getattr(track, "sales_model", None)
+    sales_model_value = getattr(sales_model, "value", sales_model)
+    if str(sales_model_value).lower() == SalesModel.EXCLUSIVE.value:
+        return not bool(getattr(track, "is_sold", False))
+
+    return True
+
+
 async def _verify_reference(reference: str) -> dict:
     """Verify a Paystack reference without blocking FastAPI's event loop."""
     if not settings.PAYSTACK_SECRET_KEY:
@@ -260,10 +286,6 @@ async def paystack_callback(
     if not reference:
         return RedirectResponse("/beats?error=Payment%20reference%20was%20missing.", 303)
 
-    # Do not make the buyer wait here. Paystack's signed webhook is the
-    # authoritative settlement path. The browser callback only takes the
-    # customer to the order page, where the normal status polling can update
-    # as soon as the webhook has completed the order.
     merch_order_id = find_merchandise_order_id(db, reference)
     if merch_order_id:
         return RedirectResponse(f"/merch/orders/{merch_order_id}", 303)
@@ -304,8 +326,6 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
     merch_order_id = find_merchandise_order_id(db, reference, metadata)
     if merch_order_id:
         try:
-            # The webhook is cryptographically authenticated by Paystack.
-            # Validate amount/currency again in the shared settlement service.
             complete_merchandise_payment(db, merch_order_id, reference, data)
         except Exception:
             db.rollback()
