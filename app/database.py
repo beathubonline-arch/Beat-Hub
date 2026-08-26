@@ -15,15 +15,21 @@ engine_options = {
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 else:
-    # Reuse a small pool instead of opening a fresh PostgreSQL connection for
-    # every request. Keep the pool bounded so a single Render instance cannot
-    # exhaust the database connection limit.
+    # PostgreSQL is the production database. Keep the pool deliberately
+    # bounded so one Render instance cannot consume the whole database pool.
+    # LIFO reuse favors warm connections while pre_ping detects stale ones.
     engine_options.update(
         pool_size=5,
         max_overflow=5,
         pool_timeout=15,
         pool_recycle=1800,
+        pool_use_lifo=True,
     )
+    # Never allow one accidental long-running SQL statement to hold a pooled
+    # connection forever. This protects every route from a single stuck query.
+    connect_args = {
+        "options": "-c statement_timeout=30000 -c idle_in_transaction_session_timeout=30000"
+    }
 
 engine = create_engine(
     settings.DATABASE_URL,
