@@ -209,8 +209,3 @@ def dashboard_alias(current_user: User = Depends(require_user)):
     if role == "admin":
         return RedirectResponse(url="/admin", status_code=303)
     return RedirectResponse(url="/account", status_code=303)
-
-
-@router.get("/healthz", include_in_schema=False)
-def healthz_compat():
-    return {"status": "ok"}
