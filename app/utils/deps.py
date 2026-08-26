@@ -6,13 +6,12 @@ from typing import Optional
 import uuid
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.profile import Profile
 from app.models.user import User
-from app.models.user import UserRole
 from app.utils.security import decode_access_token
 from app.utils.text import unique_slug
 
@@ -104,23 +103,19 @@ def _load_creator_profile(db: Session, user: User) -> Optional[Profile]:
 
 
 def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
-    """Repair legacy/incomplete creator accounts without granting buyer accounts creator access.
+    """Create/repair the profile belonging to an already-authorized creator.
 
-    A user must already have the canonical creator role before this helper can
-    create a missing creator profile. This makes the repair safe while allowing
-    older producer accounts to regain dashboard access after migrations or
-    incomplete profile creation.
+    The database role is the authorization source of truth. This function is
+    intentionally unreachable for buyers, even if a buyer has a legacy profile
+    whose ``is_producer`` flag is true.
     """
-    if get_role_name(user) not in {"creator", "producer"}:
+    if get_role_name(user) != "creator":
         return None
 
     profile = _load_creator_profile(db, user)
     if profile is not None:
-        changed = False
         if not getattr(profile, "is_producer", False):
             profile.is_producer = True
-            changed = True
-        if changed:
             try:
                 db.commit()
                 db.refresh(profile)
@@ -128,12 +123,10 @@ def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
                 db.rollback()
         return profile
 
-    # Build a sensible legacy stage name from the account identity.
     email = str(getattr(user, "email", "") or "").strip()
     username = str(getattr(user, "username", "") or "").strip()
     local_part = email.split("@", 1)[0] if "@" in email else email
-    stage_name = username or local_part or "BeatHub Creator"
-    stage_name = stage_name[:120]
+    stage_name = (username or local_part or "BeatHub Creator")[:120]
 
     try:
         slug = unique_slug(db, Profile, stage_name, fallback_prefix="creator")
@@ -153,7 +146,6 @@ def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
             pass
         return profile
     except IntegrityError:
-        # Another request/process may have created the profile concurrently.
         db.rollback()
         profile = _load_creator_profile(db, user)
         if profile is not None:
@@ -172,63 +164,48 @@ def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
 
 
 def is_creator_user(db: Session, user: Optional[User]) -> bool:
-    if user is None:
-        return False
-    role = get_role_name(user)
-    if role in {"creator", "producer"}:
-        return True
-    profile = _load_creator_profile(db, user)
-    return bool(profile and getattr(profile, "is_producer", False))
+    """Return whether the database account is a creator.
+
+    Profile metadata is deliberately not used as an authorization grant.
+    """
+    return bool(user is not None and get_role_name(user) == "creator")
 
 
 def require_creator(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ) -> User:
-    """Require creator access and repair incomplete legacy creator accounts.
+    """Require creator access using the canonical database role.
 
-    Access is granted when the authenticated database account is a creator or
-    when an existing profile explicitly identifies the account as a producer.
-    Creator-role accounts with a missing profile are repaired automatically so
-    they do not get stuck at a 403 after signup/migration issues.
+    A buyer/customer can never gain creator access from profile metadata.
+    Creator profiles are repaired only after the account has already passed the
+    canonical ``role == creator`` authorization check.
     """
     role = get_role_name(user)
-    profile = _load_creator_profile(db, user)
 
-    # Canonical creator accounts are always eligible for the creator dashboard.
-    # Existing producer profiles remain supported for backward compatibility.
-    creator_allowed = (
-        role in {"creator", "producer"}
-        or bool(profile and getattr(profile, "is_producer", False))
-    )
-
-    if not creator_allowed:
+    if role != "creator":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Creator access required. Current account role: {role or 'unknown'}.",
         )
 
-    # Keep the database/profile state consistent. If an older account has a
-    # creator role but its profile is missing, create the profile instead of
-    # incorrectly rejecting the creator with a 403.
-    if role in {"creator", "producer"}:
-        if profile is None:
-            profile = _repair_creator_profile(db, user)
-        elif not getattr(profile, "is_producer", False):
-            try:
-                profile.is_producer = True
-                db.commit()
-                db.refresh(profile)
-            except Exception:
-                db.rollback()
+    profile = _load_creator_profile(db, user)
+    if profile is None:
+        profile = _repair_creator_profile(db, user)
 
-    # A creator dashboard requires a usable creator profile because the
-    # dashboard/store/upload code depends on profile.id and profile.slug.
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Creator profile could not be created. Please contact BeatHub support.",
         )
+
+    if not getattr(profile, "is_producer", False):
+        try:
+            profile.is_producer = True
+            db.commit()
+            db.refresh(profile)
+        except Exception:
+            db.rollback()
 
     try:
         user.profile = profile
