@@ -21,7 +21,6 @@ from app.utils.deps import (
     ADMIN_SESSION_SUBJECT,
     SESSION_COOKIE_NAME,
     get_role_name,
-    is_creator_user,
 )
 from app.utils.security import create_access_token, hash_password, verify_password
 
@@ -46,11 +45,11 @@ def slugify(value: str) -> str:
 
 
 def dashboard_url_for_user(user: User) -> str:
+    """Choose the post-login landing page from the canonical account role."""
     role = get_role_name(user)
     if role == "admin":
         return "/admin"
-    profile = getattr(user, "profile", None)
-    if role in {"creator", "producer"} or bool(profile and getattr(profile, "is_producer", False)):
+    if role == "creator":
         return "/dashboard"
     return "/account"
 
@@ -124,35 +123,58 @@ def signup_submit(
     if db.query(User).filter(User.email == email_norm).first():
         return error("An account with this email already exists.")
 
-    user = User(id=str(uuid.uuid4()), email=email_norm, hashed_password=hash_password(password),
-                role=user_role, is_active=True, is_verified=False)
+    user = User(
+        id=str(uuid.uuid4()),
+        email=email_norm,
+        hashed_password=hash_password(password),
+        role=user_role,
+        is_active=True,
+        is_verified=False,
+    )
     db.add(user)
+
+    # User + creator profile are one logical account. Keep them inside the
+    # same transaction so a failed profile insert can never leave a creator
+    # user without the profile required by the dashboard.
     try:
         db.flush()
-    except IntegrityError:
-        db.rollback()
-        return error("An account with this email already exists.")
 
-    base_slug = slugify(stage_name)
-    slug = base_slug
-    suffix = 1
-    while db.query(Profile).filter(Profile.slug == slug).first():
-        suffix += 1
-        slug = f"{base_slug}-{suffix}"
+        base_slug = slugify(stage_name)
+        slug = base_slug
+        suffix = 1
+        while db.query(Profile).filter(Profile.slug == slug).first():
+            suffix += 1
+            slug = f"{base_slug}-{suffix}"
 
-    db.add(Profile(id=str(uuid.uuid4()), user_id=user.id, stage_name=stage_name, slug=slug,
-                   is_producer=(user_role == UserRole.CREATOR)))
-    try:
+        db.add(
+            Profile(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                stage_name=stage_name,
+                slug=slug,
+                is_producer=(user_role == UserRole.CREATOR),
+            )
+        )
         db.commit()
     except IntegrityError:
+        db.rollback()
+        return error("Could not create account. Please try again.")
+    except Exception:
         db.rollback()
         return error("Could not create account. Please try again.")
 
     db.refresh(user)
     token = create_access_token(subject=user.id, extra_claims={"role": get_role_name(user)})
     response = RedirectResponse(url=f"{dashboard_url_for_user(user)}?success=Account created. Welcome to BeatHub!", status_code=303)
-    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE,
-                        samesite="lax", secure=False, path="/")
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
     return response
 
 
@@ -200,8 +222,12 @@ def login_submit(
             next_url = ""
 
     def error(message: str):
-        return templates.TemplateResponse(request, "login.html",
-                                          base_context(request, error=message, next_url=next_url), status_code=401)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            base_context(request, error=message, next_url=next_url),
+            status_code=401,
+        )
 
     identifier_raw = (identifier or "").strip()
     identifier_norm = identifier_raw.lower()
@@ -214,8 +240,15 @@ def login_submit(
     if verify_admin_credentials(identifier_raw, password):
         token = create_admin_session_token()
         response = RedirectResponse(url="/admin", status_code=303)
-        response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE,
-                            samesite="lax", secure=False, path="/")
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            max_age=COOKIE_MAX_AGE,
+            samesite="lax",
+            secure=False,
+            path="/",
+        )
         return response
 
     user = db.query(User).filter(User.email == identifier_norm).first()
@@ -233,20 +266,21 @@ def login_submit(
         return error("This account has been deactivated. Contact support.")
 
     db.refresh(user)
-    profile = db.query(Profile).filter(Profile.user_id == str(user.id)).first()
-    if profile is not None:
-        user.profile = profile
 
-    if profile is not None and getattr(profile, "is_producer", False) and get_role_name(user) not in {"creator", "producer"}:
-        user.role = UserRole.CREATOR
-        db.commit()
-        db.refresh(user)
-
+    # The database role is authoritative. A profile flag must never upgrade a
+    # buyer/customer into a creator during login.
     token = create_access_token(subject=user.id, extra_claims={"role": get_role_name(user)})
     destination = next_url or dashboard_url_for_user(user)
     response = RedirectResponse(url=destination, status_code=303)
-    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE,
-                        samesite="lax", secure=False, path="/")
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
     return response
 
 
@@ -281,8 +315,11 @@ def forgot_password_submit(request: Request, db: Session = Depends(get_db), emai
         user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
         db.commit()
         print(f"[BeatHub] Password reset link for {email_norm}: /reset-password?token={token}")
-    return templates.TemplateResponse(request, "forgot_password.html",
-                                      base_context(request, success="If an account exists for that email, a reset link has been sent."))
+    return templates.TemplateResponse(
+        request,
+        "forgot_password.html",
+        base_context(request, success="If an account exists for that email, a reset link has been sent."),
+    )
 
 
 @router.get("/reset-password")
@@ -303,13 +340,19 @@ def reset_password_submit(
     user = db.query(User).filter(User.reset_token == token).first()
     valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
     if not valid:
-        return templates.TemplateResponse(request, "reset_password.html",
-                                          base_context(request, token=token, valid=False,
-                                                       error="This reset link is invalid or has expired."), status_code=400)
+        return templates.TemplateResponse(
+            request,
+            "reset_password.html",
+            base_context(request, token=token, valid=False, error="This reset link is invalid or has expired."),
+            status_code=400,
+        )
     if len(password) < 8 or password != confirm_password:
-        return templates.TemplateResponse(request, "reset_password.html",
-                                          base_context(request, token=token, valid=True,
-                                                       error="Passwords must match and be at least 8 characters."), status_code=400)
+        return templates.TemplateResponse(
+            request,
+            "reset_password.html",
+            base_context(request, token=token, valid=True, error="Passwords must match and be at least 8 characters."),
+            status_code=400,
+        )
     user.hashed_password = hash_password(password)
     user.reset_token = None
     user.reset_token_expires = None
