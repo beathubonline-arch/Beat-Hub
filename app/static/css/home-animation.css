@@ -25,9 +25,38 @@ body::before { content:"";position:fixed;inset:0;pointer-events:none;z-index:0;b
 .studio-card { background:linear-gradient(145deg,rgba(24,24,24,.97),rgba(8,8,8,.97)) !important;border-color:rgba(212,175,55,.30) !important; }
 .studio-card::before { background:linear-gradient(135deg,rgba(244,214,117,.25),transparent 35%,transparent 65%,rgba(212,175,55,.13)) !important; }
 
-/* The actual homepage hero element is .vinyl. Make its outer ring unmistakable and continuously rotating. */
-.vinyl { animation:beathub-vinyl-spin 8s linear infinite !important;transform-origin:50% 50% !important;will-change:transform;outline:2px solid rgba(244,214,117,.78) !important;outline-offset:8px !important;box-shadow:0 0 0 11px rgba(212,175,55,.08),0 25px 45px rgba(0,0,0,.55),0 0 38px rgba(212,175,55,.14) !important; }
-.vinyl::after { border-color:#f4d675 !important;box-shadow:0 0 18px rgba(244,214,117,.35); }
+/* Actual homepage hero record: keep the vinyl, then give it a single premium light beam. */
+.vinyl {
+    animation:beathub-vinyl-spin 8s linear infinite !important;
+    transform-origin:50% 50% !important;
+    will-change:transform;
+    outline:2px solid rgba(244,214,117,.78) !important;
+    outline-offset:8px !important;
+    box-shadow:0 0 0 11px rgba(212,175,55,.08),0 25px 45px rgba(0,0,0,.55),0 0 38px rgba(212,175,55,.14) !important;
+    background:
+        conic-gradient(from 0deg at 50% 50%,
+            transparent 0deg 358deg,
+            rgba(244,214,117,.18) 358.7deg,
+            rgba(255,255,255,.98) 359.35deg,
+            rgba(244,214,117,.34) 359.8deg,
+            transparent 360deg),
+        repeating-radial-gradient(circle at center,
+            #191621 0px,
+            #191621 3px,
+            #0b0910 4px,
+            #0b0910 7px) !important;
+    background-blend-mode:screen,normal !important;
+}
+
+/* Keep the record label/centre intact while the beam sweeps around with the disc. */
+.vinyl::before {
+    inset:25% !important;
+    border-radius:50% !important;
+    background:linear-gradient(135deg,#f4d675,#d4af37,#9c7a16) !important;
+    box-shadow:0 0 35px rgba(212,175,55,.22),0 0 8px rgba(244,214,117,.20) !important;
+}
+.vinyl::after { border-color:#f4d675 !important;box-shadow:0 0 18px rgba(244,214,117,.35),0 0 4px rgba(255,255,255,.45); }
+
 .vinyl-ring,.hero-ring,.record-ring { animation:beathub-vinyl-spin 10s linear infinite !important;transform-origin:50% 50% !important;will-change:transform; }
 .studio-card { animation:beathub-glow 4.5s ease-in-out infinite !important; }
 .floating-card.one { animation:beathub-float-left 4s ease-in-out infinite !important; }
