@@ -200,3 +200,23 @@ def mark_creator_withdrawal_paid(
     db.commit()
 
     return _redirect("Creator withdrawal marked as paid.")
+
+
+# The legacy admin router is included before payout_admin.router in main.py.
+# Move this canonical payout router's routes ahead of any legacy withdrawal
+# routes before admin.router is included, while keeping only one live copy.
+try:
+    from app.routers import admin as _legacy_admin
+
+    _legacy_admin.router.routes = [
+        *router.routes,
+        *[
+            route
+            for route in _legacy_admin.router.routes
+            if not str(getattr(route, "path", "")).startswith("/admin/withdrawals")
+        ],
+    ]
+    router.routes = []
+except Exception:
+    # Startup must not fail merely because the legacy admin router is unavailable.
+    pass
