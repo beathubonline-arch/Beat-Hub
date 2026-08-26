@@ -5,10 +5,11 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.ledger import WithdrawalRequest
 from app.models.order import Order, OrderStatus
 from app.models.user import User
 from app.utils.deps import require_admin
@@ -28,12 +29,7 @@ def unified_sales(
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
-    """Unified BeatHub financial transaction ledger.
-
-    Combines completed/pending/failed music orders with merchandise orders
-    without modifying either source table. Financial totals include only
-    settled/completed transactions.
-    """
+    """Unified BeatHub financial transaction ledger."""
     normalized = (status or "").strip().lower()
     valid_statuses = {"completed", "pending", "failed", "rejected"}
     if normalized not in valid_statuses:
@@ -60,21 +56,11 @@ def unified_sales(
         })
 
     merch_sql = text("""
-        SELECT
-            o.id,
-            o.quantity,
-            o.total_amount,
-            o.commission_amount,
-            o.net_amount,
-            o.status,
-            o.payment_provider,
-            o.merchant_request_id,
-            o.checkout_request_id,
-            o.mpesa_receipt,
-            o.created_at,
-            o.paid_at,
-            p.name AS product_name,
-            u.email AS customer_email
+        SELECT o.id, o.quantity, o.total_amount, o.commission_amount,
+               o.net_amount, o.status, o.payment_provider,
+               o.merchant_request_id, o.checkout_request_id,
+               o.mpesa_receipt, o.created_at, o.paid_at,
+               p.name AS product_name, u.email AS customer_email
         FROM beathub_merchandise_orders o
         LEFT JOIN beathub_merchandise p ON p.id = o.product_id
         LEFT JOIN users u ON u.id = o.buyer_id
@@ -98,16 +84,9 @@ def unified_sales(
             display_status = "failed"
         else:
             display_status = raw_status or "pending"
-
         if normalized and display_status != normalized:
             continue
-
-        reference = (
-            row.get("mpesa_receipt")
-            or row.get("checkout_request_id")
-            or row.get("merchant_request_id")
-            or "—"
-        )
+        reference = row.get("mpesa_receipt") or row.get("checkout_request_id") or row.get("merchant_request_id") or "—"
         merch_rows.append({
             "type": "Merch",
             "id": str(row["id"]),
@@ -122,16 +101,10 @@ def unified_sales(
             "created_at": row.get("paid_at") or row.get("created_at"),
         })
 
-    rows = sorted(
-        music_rows + merch_rows,
-        key=lambda item: item["created_at"] or datetime.min,
-        reverse=True,
-    )
-
-    completed_music = [r for r in music_rows if r["status"] == "completed"]
-    completed_merch = [r for r in merch_rows if r["status"] == "completed"]
-    settled = completed_music + completed_merch
-
+    rows = sorted(music_rows + merch_rows, key=lambda item: item["created_at"] or datetime.min, reverse=True)
+    settled = [r for r in rows if r["status"] == "completed"]
+    completed_music = [r for r in settled if r["type"] == "Beat"]
+    completed_merch = [r for r in settled if r["type"] == "Merch"]
     totals = {
         "gross": sum((r["gross"] for r in settled), Decimal("0")),
         "commission": sum((r["commission"] for r in settled), Decimal("0")),
@@ -140,16 +113,35 @@ def unified_sales(
         "music_count": len(completed_music),
         "merch_count": len(completed_merch),
     }
+    return templates.TemplateResponse(request, "admin/sales_unified.html", {
+        "request": request, "current_user": user,
+        "current_year": datetime.utcnow().year,
+        "rows": rows, "totals": totals, "status": normalized,
+    })
 
-    return templates.TemplateResponse(
-        request,
-        "admin/sales_unified.html",
-        {
-            "request": request,
-            "current_user": user,
-            "current_year": datetime.utcnow().year,
-            "rows": rows,
-            "totals": totals,
-            "status": normalized,
-        },
+
+@router.get("/withdrawals")
+def canonical_creator_withdrawals(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Enhanced creator payout page; this router is registered before legacy admin routes."""
+    withdrawals = db.query(WithdrawalRequest).order_by(WithdrawalRequest.created_at.desc()).all()
+    pending_raw = (
+        db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0))
+        .filter(WithdrawalRequest.status == "pending")
+        .scalar()
     )
+    completed = db.query(Order).filter(Order.status == OrderStatus.COMPLETED).all()
+    creator_earnings = sum((_dec(o.net_amount) for o in completed), Decimal("0"))
+    commission = sum((_dec(o.commission_amount) for o in completed), Decimal("0"))
+    return templates.TemplateResponse(request, "admin/withdrawals.html", {
+        "request": request,
+        "current_user": user,
+        "current_year": datetime.utcnow().year,
+        "withdrawals": withdrawals,
+        "pending_withdrawal_amount": _dec(pending_raw),
+        "total_creator_earnings": creator_earnings,
+        "total_commission": commission,
+    })
