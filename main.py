@@ -230,11 +230,9 @@ app.add_middleware(HomepageMotionMiddleware)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception:
-    logger.exception("Database table initialization failed.")
-    raise
+# Production schema is managed exclusively by Alembic migrations.
+# Never run Base.metadata.create_all() while the web process is starting:
+# it can acquire PostgreSQL locks and make every new deploy wait unnecessarily.
 
 
 @app.get("/healthz", include_in_schema=False)
@@ -253,8 +251,7 @@ async def merchandise_legacy_alias():
 
 
 # Alembic remains the canonical production migration mechanism. Merchandise
-# schema repair is handled by the forward-only migration rather than blocking
-# application import/startup with database DDL.
+# schema repair is handled by forward-only migrations rather than application startup.
 
 # One canonical route implementation per feature.
 app.include_router(auth.router)
