@@ -52,37 +52,12 @@ def _ensure_column(db: Session, table: str, name: str, definition: str) -> None:
 
 
 def ensure_merch_tables(db: Session) -> None:
-    db.execute(text(f"""
-        CREATE TABLE IF NOT EXISTS {MERCH_TABLE} (
-            id VARCHAR(64) PRIMARY KEY, creator_profile_id VARCHAR(255) NOT NULL,
-            name VARCHAR(160) NOT NULL, slug VARCHAR(220) NOT NULL UNIQUE,
-            description TEXT, price NUMERIC(12,2) NOT NULL, image_path TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """))
-    db.execute(text(f"""
-        CREATE TABLE IF NOT EXISTS {MERCH_ORDER_TABLE} (
-            id VARCHAR(64) PRIMARY KEY, product_id VARCHAR(64) NOT NULL,
-            buyer_id VARCHAR(255) NOT NULL, quantity INTEGER NOT NULL DEFAULT 1,
-            unit_price NUMERIC(12,2) NOT NULL, total_amount NUMERIC(12,2) NOT NULL,
-            phone_number VARCHAR(32), order_note VARCHAR(300),
-            status VARCHAR(40) NOT NULL DEFAULT 'pending_payment',
-            merchant_request_id VARCHAR(255), checkout_request_id VARCHAR(255) UNIQUE,
-            mpesa_receipt VARCHAR(128), failure_reason VARCHAR(500),
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, paid_at TIMESTAMP NULL
-        )
-    """))
-    for name, definition in (
-        ("commission_amount", "NUMERIC(12,2) DEFAULT 0"),
-        ("net_amount", "NUMERIC(12,2) DEFAULT 0"),
-        ("commission_percent_at_purchase", "NUMERIC(6,2) DEFAULT 10"),
-        ("payment_provider", "VARCHAR(32) DEFAULT 'paystack'"),
-    ):
-        _ensure_column(db, MERCH_ORDER_TABLE, name, definition)
-    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{MERCH_TABLE}_creator ON {MERCH_TABLE}(creator_profile_id)"))
-    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{MERCH_ORDER_TABLE}_buyer ON {MERCH_ORDER_TABLE}(buyer_id)"))
-    db.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{MERCH_ORDER_TABLE}_status ON {MERCH_ORDER_TABLE}(status)"))
-    db.commit()
+    """Legacy compatibility hook.
+
+    Merchandise schema is managed by Alembic migrations 0010-0012.
+    Never run DDL, schema inspection, or commits during a customer request.
+    """
+    return None
 
 
 def _slugify(value: str) -> str:
