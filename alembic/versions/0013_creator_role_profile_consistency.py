@@ -6,6 +6,11 @@ Revises: merch_repair_012
 This migration repairs legitimate creator accounts that were left without a
 Profile during earlier signup/migration states. It never promotes buyers and
 does not use profile metadata to grant creator authorization.
+
+PostgreSQL note: SQLAlchemy's ``Enum(UserRole)`` persists the Python enum
+member names (VISITOR, BUYER, CREATOR, ADMIN) by default. The migration must
+therefore compare against ``'CREATOR'`` rather than the Python enum value
+string ``'creator'``.
 """
 
 import re
@@ -28,6 +33,10 @@ def _slug_base(value: str) -> str:
 def upgrade() -> None:
     bind = op.get_bind()
 
+    # IMPORTANT: app.models.user.UserRole is declared with SQLAlchemy Enum,
+    # which persists enum MEMBER NAMES by default. Therefore PostgreSQL stores
+    # CREATOR, not the Python enum value "creator".
+    #
     # Only accounts whose canonical database role is creator are eligible for
     # repair. A profile flag is never consulted as an authorization source.
     rows = bind.execute(
@@ -36,7 +45,7 @@ def upgrade() -> None:
             SELECT u.id, u.email, u.username
             FROM users AS u
             LEFT JOIN profiles AS p ON p.user_id = u.id
-            WHERE u.role = 'creator' AND p.id IS NULL
+            WHERE u.role = 'CREATOR' AND p.id IS NULL
             ORDER BY u.created_at ASC, u.id ASC
             """
         )
@@ -85,7 +94,7 @@ def upgrade() -> None:
             SET is_producer = TRUE
             FROM users AS u
             WHERE p.user_id = u.id
-              AND u.role = 'creator'
+              AND u.role = 'CREATOR'
               AND COALESCE(p.is_producer, FALSE) = FALSE
             """
         )
