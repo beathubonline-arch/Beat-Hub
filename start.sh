@@ -7,7 +7,10 @@ set -euo pipefail
 # Do NOT use `python -m alembic`: Alembic is a package without an
 # `alembic.__main__` module in this installation. Calling Alembic through
 # its Python API works reliably even when the console script is not on PATH.
-echo "[BeatHub] Running Alembic migrations..."
+#
+# Production deployment marker: force Render to rebuild from the current
+# canonical main branch so stale application revisions cannot remain active.
+echo "[BeatHub] Running Alembic migrations from canonical main revision..."
 python - <<'PY'
 from alembic import command
 from alembic.config import Config
