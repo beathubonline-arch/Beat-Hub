@@ -36,7 +36,6 @@ def _get_user_from_subject(db: Session, subject: str) -> Optional[User]:
 def _get_token_from_request(request: Request, cookie_token: Optional[str]) -> Optional[str]:
     if cookie_token and cookie_token.strip():
         return cookie_token.strip()
-
     authorization = request.headers.get("Authorization", "").strip()
     if authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
@@ -64,11 +63,9 @@ def get_optional_user(
     payload = _decode_token(token)
     if not payload:
         return None
-
     subject = payload.get("sub") or payload.get("user_id") or payload.get("id")
     if not subject or str(subject) == ADMIN_SESSION_SUBJECT:
         return None
-
     user = _get_user_from_subject(db, str(subject))
     if user is None or not getattr(user, "is_active", True):
         return None
@@ -77,21 +74,19 @@ def get_optional_user(
 
 def require_user(user: Optional[User] = Depends(get_optional_user)) -> User:
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You must be logged in.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="You must be logged in.", headers={"WWW-Authenticate": "Bearer"})
     return user
 
 
 def _load_creator_profile(db: Session, user: User) -> Optional[Profile]:
-    """Always verify the profile directly against this user's user_id."""
+    """Load the creator profile once and attach it to the authenticated user."""
+    cached = getattr(user, "profile", None)
+    if cached is not None and str(getattr(cached, "user_id", "")) == str(user.id):
+        return cached
     try:
         profile = db.query(Profile).filter(Profile.user_id == str(user.id)).first()
     except Exception:
         return None
-
     if profile is not None:
         try:
             user.profile = profile
@@ -101,35 +96,23 @@ def _load_creator_profile(db: Session, user: User) -> Optional[Profile]:
 
 
 def is_creator_user(db: Session, user: Optional[User]) -> bool:
-    """Single source of truth for creator/producer authorization."""
     if user is None:
         return False
-
     role = get_role_name(user)
     if role in {"creator", "producer"}:
         return True
-
     profile = _load_creator_profile(db, user)
     return bool(profile and getattr(profile, "is_producer", False))
 
 
-def require_creator(
-    user: User = Depends(require_user),
-    db: Session = Depends(get_db),
-) -> User:
-    """Require a real creator/producer account, including legacy profiles."""
+def require_creator(user: User = Depends(require_user), db: Session = Depends(get_db)) -> User:
+    """Require creator access with only one profile lookup per request."""
     role = get_role_name(user)
     profile = _load_creator_profile(db, user)
+    creator_allowed = role in {"creator", "producer"} or bool(profile and getattr(profile, "is_producer", False))
+    if not creator_allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Creator access required. Current account role: {role or 'unknown'}.")
 
-    if not is_creator_user(db, user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Creator access required. Current account role: {role or 'unknown'}.",
-        )
-
-    # Repair the common legacy mismatch: the profile says producer but the
-    # user row still says buyer. This is safe because the profile belongs to
-    # this exact authenticated user and is explicitly marked is_producer.
     if profile is not None and getattr(profile, "is_producer", False) and role not in {"creator", "producer"}:
         try:
             from app.models.user import UserRole
@@ -138,14 +121,9 @@ def require_creator(
             db.refresh(user)
         except Exception:
             db.rollback()
-            # Authorization is still valid from the producer profile.
 
     if profile is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Creator profile is missing. Please contact BeatHub support.",
-        )
-
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Creator profile is missing. Please contact BeatHub support.")
     try:
         user.profile = profile
     except Exception:
@@ -160,26 +138,15 @@ def require_buyer(user: User = Depends(require_user)) -> User:
     return user
 
 
-def require_admin(
-    request: Request,
-    db: Session = Depends(get_db),
-    beathub_session: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
-):
+def require_admin(request: Request, db: Session = Depends(get_db), beathub_session: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME)):
     token = _get_token_from_request(request, beathub_session)
     payload = _decode_token(token)
     if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Administrator session is invalid or expired.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Administrator session is invalid or expired.", headers={"WWW-Authenticate": "Bearer"})
     subject = payload.get("sub") or payload.get("user_id") or payload.get("id")
     payload_role = str(payload.get("role", "")).strip().lower()
-
     if str(subject) == ADMIN_SESSION_SUBJECT and (payload_role == "admin" or payload.get("admin") is True):
         return payload
-
     if subject:
         user = _get_user_from_subject(db, str(subject))
         if user is not None:
@@ -187,7 +154,6 @@ def require_admin(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator account is inactive.")
             if get_role_name(user) == "admin":
                 return user
-
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required.")
 
 
