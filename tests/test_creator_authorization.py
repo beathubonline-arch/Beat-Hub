@@ -9,6 +9,8 @@ from app.utils import deps
 
 
 class CreatorAuthorizationTests(unittest.TestCase):
+    """Security regression tests: buyers never inherit creator privileges."""
+
     def test_buyer_cannot_use_producer_profile_to_enter_dashboard(self):
         buyer = SimpleNamespace(id="buyer-1", role="buyer", profile=None)
         legacy_producer_profile = SimpleNamespace(user_id="buyer-1", is_producer=True)
