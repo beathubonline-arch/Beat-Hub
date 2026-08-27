@@ -107,20 +107,13 @@ def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
 
     The database role is the authorization source of truth. This function is
     intentionally unreachable for buyers, even if a buyer has a legacy profile
-    whose ``is_producer`` flag is true.
+    whose metadata says artist/producer.
     """
     if get_role_name(user) != "creator":
         return None
 
     profile = _load_creator_profile(db, user)
     if profile is not None:
-        if not getattr(profile, "is_producer", False):
-            profile.is_producer = True
-            try:
-                db.commit()
-                db.refresh(profile)
-            except Exception:
-                db.rollback()
         return profile
 
     email = str(getattr(user, "email", "") or "").strip()
@@ -136,6 +129,7 @@ def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
             stage_name=stage_name,
             slug=slug,
             is_producer=True,
+            is_artist=False,
         )
         db.add(profile)
         db.commit()
@@ -147,24 +141,14 @@ def _repair_creator_profile(db: Session, user: User) -> Optional[Profile]:
         return profile
     except IntegrityError:
         db.rollback()
-        profile = _load_creator_profile(db, user)
-        if profile is not None:
-            if not getattr(profile, "is_producer", False):
-                profile.is_producer = True
-                try:
-                    db.commit()
-                    db.refresh(profile)
-                except Exception:
-                    db.rollback()
-            return profile
-        return None
+        return _load_creator_profile(db, user)
     except Exception:
         db.rollback()
         return None
 
 
 def is_creator_user(db: Session, user: Optional[User]) -> bool:
-    """Return whether the database account is a creator.
+    """Return whether the database account is a creator/publisher.
 
     Profile metadata is deliberately not used as an authorization grant.
     """
@@ -175,11 +159,11 @@ def require_creator(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ) -> User:
-    """Require creator access using the canonical database role.
+    """Require creator publishing access using the canonical database role.
 
-    A buyer/customer can never gain creator access from profile metadata.
-    Creator profiles are repaired only after the account has already passed the
-    canonical ``role == creator`` authorization check.
+    Both producers and artists use the creator publishing capability. A buyer
+    can never gain access from profile metadata alone. Existing producer and
+    artist profile flags are preserved and never used as authorization grants.
     """
     role = get_role_name(user)
 
@@ -198,14 +182,6 @@ def require_creator(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Creator profile could not be created. Please contact BeatHub support.",
         )
-
-    if not getattr(profile, "is_producer", False):
-        try:
-            profile.is_producer = True
-            db.commit()
-            db.refresh(profile)
-        except Exception:
-            db.rollback()
 
     try:
         user.profile = profile
