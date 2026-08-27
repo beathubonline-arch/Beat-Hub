@@ -19,11 +19,10 @@
     <div class="rights">♢ By publishing, you confirm that you own or control the rights to this content and comply with the BeatHub <b>Terms &amp; Conditions</b>.</div>
   </form>
 </section>
-
 <template id="track-row-template">
 <div class="track-row">
   <div class="card"><div class="head"><div class="icon">♪</div><div><h2 class="row-title">Music Item</h2><p>Classify the upload first, then provide its music and licensing details.</p></div><button type="button" class="btn remove" onclick="removeTrackRow(this)">Remove</button></div><div class="body">
-    <div class="field full" id="content-type"><label>What are you publishing? *</label><div class="type-choice"><label><input type="radio" name="content_type_radio"><span><span class="type-title">🎧 Beat</span><span class="type-help">Instrumental music intended for artists to license or purchase.</span></span></label><label><input type="radio" name="content_type_radio"><span><span class="type-title">🎵 Track / Song</span><span class="type-help">A finished recording you're releasing as an artist.</span></span></label></div><select name="content_types" required style="margin-top:9px"><option value="">Choose content type</option><option value="beat">Beat</option><option value="track">Track / Song</option></select></div>
+    <div class="field full" id="content-type"><label>What are you publishing? *</label><div class="type-choice"><label><input type="radio" data-type-choice="beat"><span><span class="type-title">🎧 Beat</span><span class="type-help">Instrumental music intended for artists to license or purchase.</span></span></label><label><input type="radio" data-type-choice="track"><span><span class="type-title">🎵 Track / Song</span><span class="type-help">A finished recording you're releasing as an artist.</span></span></label></div><select name="content_types" required style="margin-top:9px"><option value="">Choose content type</option><option value="beat">Beat</option><option value="track">Track / Song</option></select></div>
     <div class="grid">
       <div class="field"><label>Title *</label><input type="text" name="titles" required placeholder="e.g. Midnight Vibes"></div>
       <div class="field"><label>Genre *</label><select name="genres" required><option value="">Select genre</option><option>Afrobeats</option><option>Amapiano</option><option>Hip-Hop</option><option>R&amp;B</option><option>Trap</option><option>Dancehall</option><option>Gospel</option><option>Pop</option><option>Other</option></select></div>
@@ -38,15 +37,12 @@
   <div class="card"><div class="head"><div class="icon">✓</div><div><h2>Cover Art</h2><p>Optional artwork for the public store.</p></div></div><div class="body"><div class="field"><label>Cover Art (optional)</label><input type="file" name="cover_files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"></div></div></div>
 </div>
 </template>
-
 <script>
 (function(){
   const rows=document.getElementById('track-rows'),template=document.getElementById('track-row-template'),form=document.getElementById('upload-form'),submit=document.getElementById('upload-submit');
   function renumber(){rows.querySelectorAll('.track-row').forEach((r,i)=>{const t=r.querySelector('.row-title');if(t)t.textContent='Music Item '+(i+1);});}
-  function wireTypeSelector(row){const radios=row.querySelectorAll('input[name="content_type_radio"]'),select=row.querySelector('select[name="content_types"]');radios.forEach(r=>r.addEventListener('change',()=>{select.value=r.checked?(r.value==='beat'?'beat':'track'):select.value;}));
-    radios[0].value='beat';radios[1].value='track';
-  }
-  window.addTrackRow=function(){rows.appendChild(template.content.cloneNode(true));renumber();const row=rows.lastElementChild;wireTypeSelector(row);const audio=row.querySelector('.audio-input');if(audio)audio.addEventListener('change',()=>analyzeRow(row,audio));};
+  function wireTypeSelector(row,index){const radios=row.querySelectorAll('[data-type-choice]'),select=row.querySelector('select[name="content_types"]');radios.forEach(r=>{r.name='content_type_radio_'+index;r.addEventListener('change',()=>{if(r.checked)select.value=r.dataset.typeChoice;});});select.addEventListener('change',()=>{radios.forEach(r=>{r.checked=r.dataset.typeChoice===select.value;});});}
+  window.addTrackRow=function(){rows.appendChild(template.content.cloneNode(true));const row=rows.lastElementChild;wireTypeSelector(row,rows.querySelectorAll('.track-row').length-1);renumber();const audio=row.querySelector('.audio-input');if(audio)audio.addEventListener('change',()=>analyzeRow(row,audio));};
   window.removeTrackRow=function(b){const r=b.closest('.track-row');if(r)r.remove();if(!rows.querySelector('.track-row'))addTrackRow();renumber();};
   async function analyzeRow(row,input){const status=row.querySelector('.bpm-status'),help=row.querySelector('.bpm-help'),bpm=row.querySelector('.bpm-input');if(!input.files||!input.files[0])return;const fd=new FormData();fd.append('audio_file',input.files[0]);status.textContent='Analyzing BPM…';help.textContent='BeatHub is analyzing the audio tempo.';bpm.readOnly=true;try{const response=await fetch('/dashboard/analyze-bpm',{method:'POST',body:fd,credentials:'same-origin'}),data=await response.json();if(data.ok&&data.bpm){bpm.value=data.bpm;bpm.readOnly=false;status.textContent='✓ BPM detected';help.textContent='Detected BPM: '+data.bpm+'. You can edit it if needed.'}else{bpm.readOnly=false;status.textContent='Could not detect';help.textContent=data.error||'Enter the BPM manually if known.'}}catch(e){bpm.readOnly=false;status.textContent='Detection unavailable';help.textContent='You can enter the BPM manually. Upload will still work.'}}
   form.addEventListener('submit',()=>{if(submit){submit.disabled=true;submit.textContent='Uploading & Publishing…'}});addTrackRow();
