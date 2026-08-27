@@ -15,7 +15,8 @@ class PlatformFinanceRegressionTests(unittest.TestCase):
         self.assertEqual(estimate_mpesa_transfer_fee(Decimal("150000.00")), Decimal("60.00"))
 
     def test_finance_amounts_are_decimal_safe(self):
-        self.assertEqual(_decimal("100.005"), Decimal("100.01"))
+        self.assertEqual(_decimal("100.005"), Decimal("100.00"))
+        self.assertEqual(_decimal("100.006"), Decimal("100.01"))
         self.assertEqual(_decimal(None), Decimal("0.00"))
         self.assertEqual(_decimal("-10.50"), Decimal("-10.50"))
 
