@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Start Publishing — BeatHub</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#070707;color:#f6f6f6;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;padding:24px}.wrap{width:min(720px,100%);background:linear-gradient(145deg,rgba(212,175,55,.1),rgba(255,255,255,.02)),#0d0d0e;border:1px solid rgba(212,175,55,.28);border-radius:26px;padding:42px;box-shadow:0 30px 80px rgba(0,0,0,.45)}.eyebrow{color:#f0d477;font-size:11px;font-weight:850;letter-spacing:2px;text-transform:uppercase}.mark{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,#f0d477,#d4af37);color:#080808;font-weight:950;margin-bottom:24px}h1{font-size:clamp(34px,6vw,56px);line-height:1.02;letter-spacing:-2px;margin:10px 0 16px}h1 span{color:#f0d477}p{color:#bdbdbd;line-height:1.7}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:28px 0}.feature{padding:18px;border:1px solid rgba(255,255,255,.08);border-radius:15px;background:rgba(255,255,255,.025)}.feature b{display:block;margin-bottom:6px}.feature small{color:#929292}label{display:block;color:#cfcfcf;font-size:13px;font-weight:800;margin-bottom:8px}.field{width:100%;height:50px;padding:0 15px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:#111;color:#fff;font-size:15px;outline:none}.field:focus{border-color:#d4af37}.error{margin:0 0 18px;padding:12px 14px;border-radius:10px;background:rgba(210,70,70,.1);border:1px solid rgba(210,70,70,.35);color:#ffb4b4}.actions{display:flex;gap:12px;margin-top:22px;flex-wrap:wrap}.btn{min-height:48px;padding:0 20px;border-radius:11px;border:0;font-weight:850;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.primary{background:linear-gradient(135deg,#f0d477,#d4af37);color:#080808}.secondary{border:1px solid rgba(255,255,255,.1);color:#bbb;background:transparent}@media(max-width:650px){.wrap{padding:28px}.features{grid-template-columns:1fr}h1{font-size:40px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="mark">BH</div>
+    <div class="eyebrow">BeatHub Publishing</div>
+    <h1>Turn your account into an <span>Artist Studio.</span></h1>
+    <p>You already have a BeatHub account. If you want to release your own music and build a store, activate artist publishing. Your existing purchases stay on the same account.</p>
+
+    <div class="features">
+      <div class="feature"><b>🎵 Upload Tracks</b><small>Publish your music to BeatHub.</small></div>
+      <div class="feature"><b>💿 Create Albums</b><small>Build albums from your tracks.</small></div>
+      <div class="feature"><b>🛍️ Add Merch</b><small>Sell your artist merchandise.</small></div>
+    </div>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/artist/activate">
+      <label for="stage_name">Artist name</label>
+      <input class="field" id="stage_name" name="stage_name" maxlength="255" required value="{{ profile.stage_name if profile else '' }}" placeholder="Your artist / stage name">
+      <div class="actions">
+        <button class="btn primary" type="submit">Activate Artist Studio</button>
+        <a class="btn secondary" href="/beats">Keep Browsing</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
