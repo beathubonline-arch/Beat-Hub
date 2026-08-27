@@ -5,11 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models.ledger import AdminWithdrawal, PlatformLedgerEntry
-from app.services.platform_finance import (
-    _decimal,
-    estimate_mpesa_transfer_fee,
-    record_platform_withdrawal,
-)
+from app.services.platform_finance import _decimal, estimate_mpesa_transfer_fee, record_platform_withdrawal
 
 
 class PlatformFinanceRegressionTests(unittest.TestCase):
