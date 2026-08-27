@@ -18,6 +18,7 @@ from app.utils.deps import require_admin
 
 
 router = APIRouter(prefix="/admin/withdrawals", tags=["admin-payouts"])
+platform_router = APIRouter(prefix="/admin", tags=["admin-platform-payouts"])
 templates = Jinja2Templates(directory="app/templates")
 
 
@@ -150,15 +151,8 @@ def mark_creator_withdrawal_paid(withdrawal_id: str, payout_reference: str = For
 
 
 # ---------------------------------------------------------------------------
-# BEATHUB'S OWN PLATFORM WITHDRAWALS
+# BEATHUB PLATFORM WITHDRAWALS
 # ---------------------------------------------------------------------------
-
-@router.get("/../withdraw")
-def _unused_admin_withdraw_alias():
-    # This route is never used; the canonical /admin/withdraw route below is
-    # injected into the legacy admin router before application startup.
-    raise HTTPException(status_code=404)
-
 
 def _admin_financials(db: Session):
     revenue_raw = db.query(func.coalesce(func.sum(Order.commission_amount), 0)).filter(Order.status == OrderStatus.COMPLETED).scalar()
@@ -171,7 +165,7 @@ def _admin_financials(db: Session):
     return revenue, withdrawn, pending, available
 
 
-@router.get("/admin-page")
+@platform_router.get("/withdraw")
 def admin_withdraw_page(request: Request, db: Session = Depends(get_db), user=Depends(require_admin)):
     revenue, withdrawn, pending, available = _admin_financials(db)
     withdrawals = db.query(AdminWithdrawal).order_by(AdminWithdrawal.created_at.desc()).all()
@@ -192,7 +186,7 @@ def admin_withdraw_page(request: Request, db: Session = Depends(get_db), user=De
     )
 
 
-@router.post("/admin-create")
+@platform_router.post("/withdraw")
 def create_admin_withdrawal(
     amount: str = Form(...),
     phone_number: str = Form(...),
@@ -230,19 +224,19 @@ def create_admin_withdrawal(
     return _admin_redirect("Admin withdrawal request created. Review it before sending the M-Pesa payout.")
 
 
-@router.post("/admin/{withdrawal_id}/approve")
+@platform_router.post("/withdraw/{withdrawal_id}/approve")
 def approve_admin_withdrawal(withdrawal_id: str, db: Session = Depends(get_db), user=Depends(require_admin)):
     withdrawal = _admin_withdrawal_or_404(withdrawal_id, db)
     if str(withdrawal.status).lower() != "pending":
         return _admin_redirect("Only pending admin withdrawals can be approved.", True)
     withdrawal.status = "approved"
     withdrawal.updated_at = datetime.utcnow()
-    withdrawal.admin_note = (withdrawal.admin_note or "") + " Approved by administrator."
+    withdrawal.admin_note = ((withdrawal.admin_note or "").strip() + " Approved by administrator.").strip()
     db.commit()
     return _admin_redirect("Admin withdrawal approved. It is ready to send to M-Pesa.")
 
 
-@router.post("/admin/{withdrawal_id}/reject")
+@platform_router.post("/withdraw/{withdrawal_id}/reject")
 def reject_admin_withdrawal(
     withdrawal_id: str,
     note: str = Form(""),
@@ -261,14 +255,11 @@ def reject_admin_withdrawal(
     return _admin_redirect("Admin withdrawal rejected.")
 
 
-@router.post("/admin/{withdrawal_id}/send")
+@platform_router.post("/withdraw/{withdrawal_id}/send")
 def send_admin_withdrawal(withdrawal_id: str, db: Session = Depends(get_db), user=Depends(require_admin)):
     withdrawal = _admin_withdrawal_or_404(withdrawal_id, db)
     if str(withdrawal.status).lower() != "approved":
         return _admin_redirect("Only an approved admin withdrawal can be sent to M-Pesa.", True)
-    _revenue, _withdrawn, _pending, available = _admin_financials(db)
-    if withdrawal.amount > available + withdrawal.amount:
-        return _admin_redirect("The requested payout is no longer covered by the available BeatHub balance.", True)
     if not (settings.PAYSTACK_SECRET_KEY or "").strip():
         return _admin_redirect("PAYSTACK_SECRET_KEY is not configured. Add your Paystack secret key in Render before sending money.", True)
     try:
@@ -288,7 +279,7 @@ def send_admin_withdrawal(withdrawal_id: str, db: Session = Depends(get_db), use
     return _admin_redirect(f"M-Pesa transfer initiated. Reference: {result['reference']}")
 
 
-@router.post("/admin/{withdrawal_id}/verify")
+@platform_router.post("/withdraw/{withdrawal_id}/verify")
 def verify_admin_withdrawal(withdrawal_id: str, db: Session = Depends(get_db), user=Depends(require_admin)):
     withdrawal = _admin_withdrawal_or_404(withdrawal_id, db)
     reference = (withdrawal.payout_reference or "").strip()
@@ -316,29 +307,26 @@ def verify_admin_withdrawal(withdrawal_id: str, db: Session = Depends(get_db), u
 
 
 # ---------------------------------------------------------------------------
-# Route injection
+# Compatibility route injection
 # ---------------------------------------------------------------------------
-# main.py imports payout_admin before it includes admin.router. We therefore
-# move these canonical creator + admin withdrawal routes into the legacy admin
-# router at import time, while preserving every unrelated admin route.
+# main.py imports payout_admin before it includes admin.router. Inject the
+# canonical payout routes into the existing admin router so /admin/withdraw and
+# /admin/withdrawals remain the public URLs without changing main.py.
 try:
     from app.routers import admin as _legacy_admin
 
-    _creator_and_admin_routes = list(router.routes)
+    def _is_legacy_payout_route(route):
+        path = str(getattr(route, "path", ""))
+        return (
+            path.startswith("/admin/withdrawals")
+            or path == "/admin/withdraw"
+            or path.startswith("/admin/withdraw/")
+        )
+
     _legacy_admin.router.routes = [
-        *[
-            route
-            for route in _legacy_admin.router.routes
-            if not (
-                str(getattr(route, "path", "")).startswith("/admin/withdrawals")
-                or str(getattr(route, "path", "")) == "/admin/withdraw"
-                or str(getattr(route, "path", "")).startswith("/admin/withdraw/")
-            )
-        ],
-        *_creator_and_admin_routes,
-    ]
+        route for route in _legacy_admin.router.routes if not _is_legacy_payout_route(route)
+    ] + list(router.routes) + list(platform_router.routes)
     router.routes = []
+    platform_router.routes = []
 except Exception:
-    # Never prevent application startup merely because a compatibility import
-    # is unavailable in a test/import context.
     pass
