@@ -4,161 +4,51 @@
 
 {% block extra_head %}
 <style>
-    :root {
-        --bh-bg: #070707;
-        --bh-card: rgba(18,18,18,.92);
-        --bh-border: rgba(255,255,255,.075);
-        --bh-gold: #f4c842;
-        --bh-gold-light: #ffe58a;
-        --bh-green: #4ade80;
-        --bh-red: #f87171;
-        --bh-blue: #60a5fa;
-        --bh-muted: #929292;
-    }
-    * { box-sizing: border-box; }
-    .admin-page { max-width:1240px; margin:0 auto; padding:42px 0 80px; color:#fff; }
-    .admin-header { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:24px; }
-    .admin-kicker { display:inline-flex; align-items:center; gap:8px; padding:7px 13px; border:1px solid rgba(244,200,66,.25); border-radius:999px; background:rgba(244,200,66,.045); color:var(--bh-gold-light); font-size:10px; font-weight:900; letter-spacing:1.2px; text-transform:uppercase; }
-    .admin-kicker-dot { width:7px; height:7px; border-radius:50%; background:var(--bh-gold); box-shadow:0 0 10px rgba(244,200,66,.8); }
-    .admin-header h1 { margin:15px 0 0; font-size:clamp(36px,5vw,55px); line-height:.98; font-weight:900; letter-spacing:-2px; }
-    .admin-header h1 span { color:var(--bh-gold); }
-    .admin-header p { margin:13px 0 0; max-width:700px; color:var(--bh-muted); font-size:13px; line-height:1.7; }
-    .admin-badge { flex-shrink:0; padding:10px 13px; border:1px solid rgba(244,200,66,.2); border-radius:10px; background:rgba(244,200,66,.045); color:var(--bh-gold-light); font-size:11px; font-weight:850; }
-    .admin-nav { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:22px; padding:7px; border:1px solid var(--bh-border); border-radius:13px; background:rgba(12,12,12,.88); }
-    .admin-nav a { display:inline-flex; align-items:center; min-height:40px; padding:0 14px; border-radius:8px; color:#858585; text-decoration:none; font-size:11px; font-weight:850; transition:.18s ease; }
-    .admin-nav a:hover { color:#fff; background:rgba(255,255,255,.035); }
-    .admin-nav a.primary { color:#090909; background:linear-gradient(135deg,#ffe58a,#f4c842,#c99b1c); box-shadow:0 7px 20px rgba(244,200,66,.13); }
-    .alert { margin-bottom:18px; padding:15px 17px; border-radius:12px; font-size:12px; line-height:1.5; }
-    .alert-success { color:#bbf7d0; background:rgba(20,83,45,.24); border:1px solid rgba(74,222,128,.25); }
-    .alert-error { color:#fecaca; background:rgba(127,29,29,.24); border:1px solid rgba(248,113,113,.25); }
-    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:20px; }
-    .stat { min-height:135px; padding:20px; border:1px solid var(--bh-border); border-radius:17px; background:var(--bh-card); box-shadow:0 20px 55px rgba(0,0,0,.25); }
-    .stat-label { color:#777; font-size:10px; font-weight:900; letter-spacing:.7px; text-transform:uppercase; }
-    .stat-value { margin-top:13px; color:#fff; font-size:25px; font-weight:900; letter-spacing:-.6px; overflow-wrap:anywhere; }
-    .stat:nth-child(1) .stat-value,.stat:nth-child(2) .stat-value { color:var(--bh-gold-light); }
-    .stat-note { margin-top:8px; color:#5f5f5f; font-size:10px; }
-    .finance-card { display:grid; grid-template-columns:1.1fr 1fr; gap:18px; margin-bottom:20px; }
-    .panel { padding:24px; border:1px solid var(--bh-border); border-radius:18px; background:var(--bh-card); box-shadow:0 20px 55px rgba(0,0,0,.25); }
-    .panel h2 { margin:0; font-size:18px; font-weight:900; }
-    .panel p { margin:8px 0 0; color:#777; font-size:11px; line-height:1.6; }
-    .platform-balance { margin-top:20px; padding:22px; border:1px solid rgba(244,200,66,.18); border-radius:14px; background:linear-gradient(145deg,rgba(244,200,66,.07),rgba(255,255,255,.012)); }
-    .balance-label { color:#8a8a8a; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.8px; }
-    .balance-value { margin-top:8px; color:var(--bh-gold-light); font-size:36px; font-weight:950; letter-spacing:-1.4px; }
-    .balance-note { margin-top:7px; color:#666; font-size:10px; }
-    .action-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; margin-top:20px; }
-    .action { display:block; padding:17px; border:1px solid rgba(255,255,255,.07); border-radius:13px; color:#eee; background:rgba(255,255,255,.025); text-decoration:none; transition:.18s ease; }
-    .action:hover { transform:translateY(-2px); border-color:rgba(244,200,66,.35); background:rgba(244,200,66,.055); }
-    .action strong { display:block; font-size:12px; }
-    .action span { display:block; margin-top:6px; color:#666; font-size:10px; line-height:1.5; }
-    .quick { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:20px; }
-    .quick a { padding:16px; border:1px solid var(--bh-border); border-radius:14px; background:rgba(15,15,15,.82); color:#e8e8e8; text-decoration:none; font-size:12px; font-weight:850; }
-    .quick a:hover { border-color:rgba(244,200,66,.3); color:#fff; }
-    .quick span { display:block; margin-top:6px; color:#666; font-size:10px; font-weight:400; line-height:1.5; }
-    .recent { margin-top:20px; overflow:hidden; }
-    .recent-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:15px; }
-    .recent-header h2 { margin:0; font-size:17px; font-weight:900; }
-    .recent-header a { color:var(--bh-gold); font-size:10px; font-weight:850; text-decoration:none; }
-    .table-wrap { overflow-x:auto; border:1px solid rgba(255,255,255,.05); border-radius:12px; }
-    table { width:100%; min-width:650px; border-collapse:collapse; }
-    th { padding:11px 13px; color:#626262; background:rgba(255,255,255,.018); border-bottom:1px solid rgba(255,255,255,.05); font-size:9px; text-align:left; text-transform:uppercase; letter-spacing:.8px; }
-    td { padding:13px; color:#aaa; border-bottom:1px solid rgba(255,255,255,.04); font-size:11px; }
-    tbody tr:last-child td { border-bottom:0; }
-    .status { display:inline-flex; padding:5px 8px; border-radius:999px; font-size:9px; font-weight:900; text-transform:capitalize; }
-    .status-completed { color:#9be8b2; background:rgba(74,222,128,.07); }
-    .status-pending { color:#fbd77a; background:rgba(251,191,36,.07); }
-    .status-failed,.status-rejected { color:#ffaaaa; background:rgba(248,113,113,.07); }
-    .empty { padding:30px; color:#626262; text-align:center; font-size:11px; }
-    @media(max-width:1000px){ .stats{grid-template-columns:repeat(2,1fr)} .quick{grid-template-columns:repeat(2,1fr)} .finance-card{grid-template-columns:1fr} }
-    @media(max-width:650px){ .admin-header{align-items:flex-start;flex-direction:column}.stats,.quick,.action-grid{grid-template-columns:1fr}.admin-nav{overflow-x:auto;flex-wrap:nowrap}.admin-nav a{flex-shrink:0}.admin-page{padding:26px 0 55px}.balance-value{font-size:32px} }
+:root{--gold:#f4c842;--gold2:#ffe58a;--card:rgba(18,18,18,.94);--border:rgba(255,255,255,.075);--muted:#929292;--green:#4ade80;--red:#f87171}
+*{box-sizing:border-box}.admin-page{max-width:1240px;margin:0 auto;padding:42px 0 80px;color:#fff}.admin-header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:24px}.kicker{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border:1px solid rgba(244,200,66,.25);border-radius:999px;background:rgba(244,200,66,.045);color:var(--gold2);font-size:10px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase}.dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px rgba(244,200,66,.8)}.admin-header h1{margin:15px 0 0;font-size:clamp(36px,5vw,55px);line-height:.98;font-weight:900;letter-spacing:-2px}.admin-header h1 span{color:var(--gold)}.admin-header p{margin:13px 0 0;max-width:720px;color:var(--muted);font-size:13px;line-height:1.7}.badge{padding:10px 13px;border:1px solid rgba(244,200,66,.2);border-radius:10px;background:rgba(244,200,66,.045);color:var(--gold2);font-size:11px;font-weight:850}.nav{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:22px;padding:7px;border:1px solid var(--border);border-radius:13px;background:rgba(12,12,12,.88)}.nav a{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:8px;color:#858585;text-decoration:none;font-size:11px;font-weight:850}.nav a:hover{color:#fff;background:rgba(255,255,255,.035)}.nav .primary{color:#090909;background:linear-gradient(135deg,#ffe58a,#f4c842,#c99b1c)}.alert{margin-bottom:18px;padding:15px 17px;border-radius:12px;font-size:12px;line-height:1.5}.success{color:#bbf7d0;background:rgba(20,83,45,.24);border:1px solid rgba(74,222,128,.25)}.error{color:#fecaca;background:rgba(127,29,29,.24);border:1px solid rgba(248,113,113,.25)}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}.stat{min-height:135px;padding:20px;border:1px solid var(--border);border-radius:17px;background:var(--card);box-shadow:0 20px 55px rgba(0,0,0,.25)}.label{color:#777;font-size:10px;font-weight:900;letter-spacing:.7px;text-transform:uppercase}.value{margin-top:13px;color:#fff;font-size:25px;font-weight:900;letter-spacing:-.6px}.stat:nth-child(1) .value,.stat:nth-child(2) .value{color:var(--gold2)}.note{margin-top:8px;color:#5f5f5f;font-size:10px}.grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px;margin-bottom:20px}.panel{padding:24px;border:1px solid var(--border);border-radius:18px;background:var(--card);box-shadow:0 20px 55px rgba(0,0,0,.25)}.panel h2{margin:0;font-size:18px;font-weight:900}.panel p{margin:8px 0 0;color:#777;font-size:11px;line-height:1.6}.balance{margin-top:18px;padding:20px;border:1px solid rgba(244,200,66,.18);border-radius:14px;background:linear-gradient(145deg,rgba(244,200,66,.07),rgba(255,255,255,.012))}.balance-value{margin-top:6px;color:var(--gold2);font-size:34px;font-weight:950}.form{display:grid;gap:13px;margin-top:18px}.field label{display:block;margin-bottom:7px;color:#ddd;font-size:11px;font-weight:850}.field input,.field textarea{width:100%;border:1px solid rgba(255,255,255,.09);border-radius:10px;outline:none;padding:12px 13px;color:#fff;background:rgba(0,0,0,.3);font:inherit;font-size:12px}.field input:focus,.field textarea:focus{border-color:rgba(244,200,66,.65);box-shadow:0 0 0 3px rgba(244,200,66,.07)}.field textarea{min-height:75px;resize:vertical}.submit{width:100%;min-height:48px;border:0;border-radius:10px;background:linear-gradient(135deg,#ffe58a,#f4c842,#c99b1c);color:#090909;cursor:pointer;font-size:11px;font-weight:950;letter-spacing:.5px;text-transform:uppercase}.submit:disabled{opacity:.4;cursor:not-allowed}.help{color:#666;font-size:10px;line-height:1.5}.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-top:18px}.action{display:block;padding:16px;border:1px solid rgba(255,255,255,.07);border-radius:13px;color:#eee;background:rgba(255,255,255,.025);text-decoration:none}.action:hover{border-color:rgba(244,200,66,.35);background:rgba(244,200,66,.05)}.action strong{display:block;font-size:12px}.action span{display:block;margin-top:6px;color:#666;font-size:10px;line-height:1.5}.quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}.quick a{padding:16px;border:1px solid var(--border);border-radius:14px;background:rgba(15,15,15,.82);color:#e8e8e8;text-decoration:none;font-size:12px;font-weight:850}.quick a:hover{border-color:rgba(244,200,66,.3);color:#fff}.quick span{display:block;margin-top:6px;color:#666;font-size:10px;font-weight:400;line-height:1.5}.recent{overflow:hidden}.recent-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.recent-head h2{margin:0;font-size:17px}.recent-head a{color:var(--gold);font-size:10px;font-weight:850;text-decoration:none}.table{overflow-x:auto;border:1px solid rgba(255,255,255,.05);border-radius:12px}table{width:100%;min-width:650px;border-collapse:collapse}th{padding:11px 13px;color:#626262;background:rgba(255,255,255,.018);border-bottom:1px solid rgba(255,255,255,.05);font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:.8px}td{padding:13px;color:#aaa;border-bottom:1px solid rgba(255,255,255,.04);font-size:11px}tbody tr:last-child td{border-bottom:0}.status{display:inline-flex;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900;text-transform:capitalize}.completed{color:#9be8b2;background:rgba(74,222,128,.07)}.pending{color:#fbd77a;background:rgba(251,191,36,.07)}.failed,.rejected{color:#ffaaaa;background:rgba(248,113,113,.07)}.empty{padding:30px;color:#626262;text-align:center;font-size:11px}@media(max-width:1000px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.quick{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.admin-header{align-items:flex-start;flex-direction:column}.stats,.quick,.actions{grid-template-columns:1fr}.nav{overflow-x:auto;flex-wrap:nowrap}.nav a{flex-shrink:0}.admin-page{padding:26px 0 55px}}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="admin-page">
-    <header class="admin-header">
-        <div>
-            <div class="admin-kicker"><span class="admin-kicker-dot"></span>BeatHub Control Center</div>
-            <h1>Admin <span>Overview.</span></h1>
-            <p>Manage BeatHub sales, creators, platform earnings and your M-Pesa withdrawals from one secure control center.</p>
-        </div>
-        <div class="admin-badge">Administrator</div>
-    </header>
+<header class="admin-header"><div><div class="kicker"><span class="dot"></span>BeatHub Control Center</div><h1>Admin <span>Overview.</span></h1><p>Manage BeatHub sales, platform earnings, creator payouts and send your available platform commission to M-Pesa.</p></div><div class="badge">Administrator</div></header>
 
-    <nav class="admin-nav">
-        <a href="/admin" class="primary">Overview</a>
-        <a href="/admin/users">Users</a>
-        <a href="/admin/content">Content</a>
-        <a href="/admin/sales">Sales</a>
-        <a href="/admin/withdraw">Platform Withdrawal</a>
-        <a href="/admin/withdrawals">Creator Withdrawals</a>
-    </nav>
+<nav class="nav"><a href="/admin" class="primary">Overview</a><a href="/admin/users">Users</a><a href="/admin/content">Content</a><a href="/admin/sales">Sales</a><a href="/admin/withdraw">Platform Withdrawal</a><a href="/admin/withdrawals">Creator Withdrawals</a></nav>
 
-    {% if request.query_params.get('success') %}
-        <div class="alert alert-success">{{ request.query_params.get('success') }}</div>
-    {% endif %}
-    {% if request.query_params.get('error') %}
-        <div class="alert alert-error">{{ request.query_params.get('error') }}</div>
-    {% endif %}
+{% if request.query_params.get('success') %}<div class="alert success">{{ request.query_params.get('success') }}</div>{% endif %}
+{% if request.query_params.get('error') %}<div class="alert error">{{ request.query_params.get('error') }}</div>{% endif %}
 
-    <section class="stats">
-        <div class="stat"><div class="stat-label">Total Sales Volume</div><div class="stat-value">KES {{ "%.2f"|format(total_sales_volume|float) }}</div><div class="stat-note">Completed orders</div></div>
-        <div class="stat"><div class="stat-label">BeatHub Commission</div><div class="stat-value">KES {{ "%.2f"|format(total_commission|float) }}</div><div class="stat-note">Platform earnings</div></div>
-        <div class="stat"><div class="stat-label">Creator Earnings</div><div class="stat-value">KES {{ "%.2f"|format(total_creator_earnings|float) }}</div><div class="stat-note">Net creator earnings</div></div>
-        <div class="stat"><div class="stat-label">Creator Withdrawals</div><div class="stat-value">{{ pending_withdrawals }}</div><div class="stat-note">Pending requests</div></div>
-    </section>
+<section class="stats">
+<div class="stat"><div class="label">Total Sales Volume</div><div class="value">KES {{ "%.2f"|format(total_sales_volume|float) }}</div><div class="note">Completed orders</div></div>
+<div class="stat"><div class="label">BeatHub Commission</div><div class="value">KES {{ "%.2f"|format(total_commission|float) }}</div><div class="note">Platform earnings</div></div>
+<div class="stat"><div class="label">Creator Earnings</div><div class="value">KES {{ "%.2f"|format(total_creator_earnings|float) }}</div><div class="note">Net creator earnings</div></div>
+<div class="stat"><div class="label">Creator Withdrawals</div><div class="value">{{ pending_withdrawals }}</div><div class="note">Pending requests</div></div>
+</section>
 
-    <section class="finance-card">
-        <div class="panel">
-            <h2>Platform Money</h2>
-            <p>This is BeatHub's own commission balance. Creator earnings are kept separate.</p>
-            <div class="platform-balance">
-                <div class="balance-label">Available for M-Pesa</div>
-                <div class="balance-value">KSh {{ "%.2f"|format((available_balance|default(0))|float) }}</div>
-                <div class="balance-note">Use Platform Withdrawal to enter an amount and M-Pesa number.</div>
-            </div>
-            <div class="action-grid">
-                <a class="action" href="/admin/withdraw"><strong>Withdraw to M-Pesa →</strong><span>Enter the amount and destination number.</span></a>
-                <a class="action" href="/admin/withdraw"><strong>View payout history →</strong><span>Track processing, paid and failed transfers.</span></a>
-            </div>
-        </div>
-        <div class="panel">
-            <h2>Important separation</h2>
-            <p>These two finance areas must not be confused.</p>
-            <div class="action-grid">
-                <a class="action" href="/admin/withdraw"><strong>Platform Withdrawal</strong><span>Withdraw BeatHub commission to your M-Pesa.</span></a>
-                <a class="action" href="/admin/withdrawals"><strong>Creator Withdrawals</strong><span>Review and manage producer payout requests.</span></a>
-            </div>
-            <div class="action-grid">
-                <a class="action" href="/admin/sales"><strong>Sales & Commission</strong><span>Verify completed sales before withdrawing.</span></a>
-                <a class="action" href="/admin"><strong>Refresh Overview</strong><span>Reload the latest financial totals.</span></a>
-            </div>
-        </div>
-    </section>
+<section class="grid">
+<div class="panel">
+<h2>Withdraw BeatHub Money to M-Pesa</h2>
+<p>This is the admin-only platform withdrawal. It uses BeatHub's available commission balance; creator balances remain separate.</p>
+<div class="balance"><div class="label">Available Platform Balance</div><div class="balance-value">KSh {{ "%.2f"|format((available_balance|default(0))|float) }}</div><div class="help">Maximum amount you can withdraw right now.</div></div>
+<form method="post" action="/admin/withdraw" class="form" id="adminWithdrawalForm">
+<div class="field"><label for="amount">Withdrawal Amount (KES)</label><input id="amount" name="amount" type="number" min="1" step="0.01" max="{{ available_balance|default(0) }}" placeholder="Enter amount" inputmode="decimal" required></div>
+<div class="field"><label for="phone_number">M-Pesa Number</label><input id="phone_number" name="phone_number" type="tel" placeholder="0712345678" autocomplete="tel" required></div>
+<div class="field"><label for="note">Withdrawal Note <span style="color:#666">(optional)</span></label><textarea id="note" name="note" placeholder="Optional internal note"></textarea></div>
+<button class="submit" type="submit" {% if (available_balance|default(0)|float) <= 0 %}disabled{% endif %}>Withdraw to M-Pesa</button>
+<div class="help">The payout is recorded with a unique reference. Live Paystack transfers remain processing until Paystack confirms the final result.</div>
+</form>
+</div>
 
-    <section class="quick">
-        <a href="/admin/users">Manage Users<span>View and control user accounts.</span></a>
-        <a href="/admin/content">Manage Content<span>Review beats and albums.</span></a>
-        <a href="/admin/sales">View Sales<span>Inspect orders and payments.</span></a>
-        <a href="/admin/withdraw">Withdraw Platform Earnings<span>Send available commission to M-Pesa.</span></a>
-    </section>
+<div class="panel">
+<h2>Finance Controls</h2>
+<p>Use the correct area for the correct type of money.</p>
+<div class="actions"><a class="action" href="/admin/withdraw"><strong>Platform Withdrawal</strong><span>Enter amount, M-Pesa number and send BeatHub commission.</span></a><a class="action" href="/admin/withdraw"><strong>Payout History</strong><span>See pending, processing, paid and rejected platform payouts.</span></a><a class="action" href="/admin/withdrawals"><strong>Creator Withdrawals</strong><span>Review producer payout requests separately.</span></a><a class="action" href="/admin/sales"><strong>Sales & Commission</strong><span>Inspect completed orders and platform earnings.</span></a></div>
+</div>
+</section>
 
-    <section class="panel recent">
-        <div class="recent-header"><h2>Recent Orders</h2><a href="/admin/sales">View all →</a></div>
-        {% if recent_orders %}
-        <div class="table-wrap"><table><thead><tr><th>Order</th><th>Track</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>
-        {% for order in recent_orders %}
-            {% set order_status = order.status.value if order.status.value is defined else order.status %}
-            {% set status_class = order_status|string|lower %}
-            <tr>
-                <td>#{{ order.id|string|truncate(12, True, '') }}</td>
-                <td>{% if order.track %}{{ order.track.title }}{% else %}Track unavailable{% endif %}</td>
-                <td>{% if order.gross_amount is not none %}KES {{ "%.2f"|format(order.gross_amount|float) }}{% else %}—{% endif %}</td>
-                <td><span class="status status-{{ status_class }}">{{ status_class }}</span></td>
-                <td>{{ order.created_at.strftime("%d %b %Y") if order.created_at else "-" }}</td>
-            </tr>
-        {% endfor %}
-        </tbody></table></div>
-        {% else %}<div class="empty">No orders yet.</div>{% endif %}
-    </section>
+<section class="quick"><a href="/admin/users">Manage Users<span>View and control user accounts.</span></a><a href="/admin/content">Manage Content<span>Review beats and albums.</span></a><a href="/admin/sales">View Sales<span>Inspect orders and payments.</span></a><a href="/admin/withdraw">Withdraw Platform Earnings<span>Send available commission to M-Pesa.</span></a></section>
+
+<section class="panel recent"><div class="recent-head"><h2>Recent Orders</h2><a href="/admin/sales">View all →</a></div>
+{% if recent_orders %}<div class="table"><table><thead><tr><th>Order</th><th>Track</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{% for order in recent_orders %}{% set order_status = order.status.value if order.status.value is defined else order.status %}{% set status_class = order_status|string|lower %}<tr><td>#{{ order.id|string|truncate(12, True, '') }}</td><td>{% if order.track %}{{ order.track.title }}{% else %}Track unavailable{% endif %}</td><td>{% if order.gross_amount is not none %}KES {{ "%.2f"|format(order.gross_amount|float) }}{% else %}—{% endif %}</td><td><span class="status {{ status_class }}">{{ status_class }}</span></td><td>{{ order.created_at.strftime("%d %b %Y") if order.created_at else "-" }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">No orders yet.</div>{% endif %}</section>
 </div>
 {% endblock %}
