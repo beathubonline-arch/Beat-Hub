@@ -45,6 +45,9 @@ def dashboard_url_for_user(user: User) -> str:
     if role == "admin":
         return "/admin"
     if role == "creator":
+        profile = getattr(user, "profile", None)
+        if profile is not None and bool(getattr(profile, "is_artist", False)):
+            return "/artist/studio"
         return "/dashboard"
     return "/account"
 
@@ -143,6 +146,24 @@ def artist_signup_page(request: Request):
         request,
         "artist_signup.html",
         base_context(request, stage_name="", email="", role="artist", artist_signup=True),
+    )
+
+
+@router.get("/artist/studio")
+def artist_studio_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    from app.utils.deps import get_current_user
+
+    user = get_current_user(request, db)
+    if not user or get_role_name(user) != "creator" or not getattr(getattr(user, "profile", None), "is_artist", False):
+        return RedirectResponse(url="/login?error=Artist%20Studio%20access%20requires%20an%20artist%20creator%20account.", status_code=303)
+
+    return templates.TemplateResponse(
+        request,
+        "artist_studio.html",
+        base_context(request, current_user=user, profile=user.profile),
     )
 
 
