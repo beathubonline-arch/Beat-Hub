@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -12,10 +12,12 @@ from app.config import settings
 from app.database import get_db
 from app.models.music import Track
 from app.models.order import License, Order, OrderStatus
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.profile import Profile
 from app.services.search import run_search
 from app.services.r2_download import r2_download_url
-from app.utils.deps import get_optional_user, require_user
+from app.utils.deps import get_optional_user, require_user, get_role_name
+from app.utils.text import unique_slug
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="app/templates")
@@ -86,6 +88,91 @@ def _safe_download_filename(track: Track, stored_path: str) -> str:
     return f"{safe_title or 'BeatHub_Track'}{suffix}"
 
 
+# ============================================================
+# ARTIST ACTIVATION
+# ============================================================
+
+@router.get("/artist/activate")
+def artist_activate_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    role = get_role_name(current_user)
+    profile = getattr(current_user, "profile", None)
+
+    if role == "creator" and profile is not None and bool(getattr(profile, "is_artist", False)):
+        return RedirectResponse(url="/artist/studio", status_code=303)
+    if role != "buyer":
+        return RedirectResponse(url="/account", status_code=303)
+
+    return templates.TemplateResponse(
+        request,
+        "artist_activate.html",
+        ctx(request, current_user, profile=profile),
+    )
+
+
+@router.post("/artist/activate")
+def artist_activate_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
+    stage_name: str = Form(...),
+):
+    # This is an explicit opt-in promotion. A buyer is never promoted merely
+    # because profile metadata says artist/producer.
+    if get_role_name(current_user) != "buyer":
+        role = get_role_name(current_user)
+        if role == "creator":
+            return RedirectResponse(url="/artist/studio", status_code=303)
+        return RedirectResponse(url="/account", status_code=303)
+
+    profile = getattr(current_user, "profile", None)
+    if profile is None:
+        profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
+
+    stage_name = (stage_name or "").strip()
+    if not stage_name:
+        return templates.TemplateResponse(
+            request,
+            "artist_activate.html",
+            ctx(request, current_user, profile=profile, error="Artist name is required."),
+            status_code=400,
+        )
+    if len(stage_name) > 255:
+        return templates.TemplateResponse(
+            request,
+            "artist_activate.html",
+            ctx(request, current_user, profile=profile, error="Artist name is too long."),
+            status_code=400,
+        )
+
+    if profile is None:
+        slug = unique_slug(db, Profile, stage_name, fallback_prefix="artist")
+        profile = Profile(
+            id=__import__("uuid").uuid4().hex,
+            user_id=current_user.id,
+            stage_name=stage_name,
+            slug=slug,
+            is_artist=True,
+            is_producer=False,
+        )
+        db.add(profile)
+    else:
+        profile.stage_name = stage_name
+        profile.is_artist = True
+        profile.is_producer = False
+
+    current_user.role = UserRole.CREATOR
+    db.commit()
+    db.refresh(current_user)
+
+    return RedirectResponse(
+        url="/artist/studio?success=Artist%20publishing%20is%20now%20enabled.",
+        status_code=303,
+    )
+
+
 @router.get("/")
 def home(request: Request, q: str = "", db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     query = (q or "").strip()
@@ -107,16 +194,45 @@ def terms(request: Request, current_user: Optional[User] = Depends(get_optional_
 
 @router.get("/account")
 def account(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
-    role = str(getattr(current_user.role, "value", current_user.role)).strip().lower()
-    if role in {"creator", "producer"}:
+    role = get_role_name(current_user)
+    if role == "creator":
+        profile = getattr(current_user, "profile", None)
+        if profile is not None and bool(getattr(profile, "is_artist", False)):
+            return RedirectResponse(url="/artist/studio", status_code=303)
         return RedirectResponse(url="/dashboard", status_code=303)
     if role == "admin":
         return RedirectResponse(url="/admin", status_code=303)
+    if role == "buyer":
+        return RedirectResponse(url="/artist/activate", status_code=303)
     profile = getattr(current_user, "profile", None)
     completed_orders = db.query(Order).filter(Order.buyer_id == current_user.id, Order.status == OrderStatus.COMPLETED).order_by(Order.completed_at.desc()).all()
     pending_orders = db.query(Order).filter(Order.buyer_id == current_user.id, Order.status == OrderStatus.PENDING).order_by(Order.created_at.desc()).all()
     total_spent = sum((order.gross_amount or 0 for order in completed_orders), 0)
     return templates.TemplateResponse(request, "account.html", ctx(request, current_user, profile=profile, completed_orders=completed_orders, pending_orders=pending_orders, purchase_count=len(completed_orders), total_spent=total_spent))
+
+
+# This compatibility route is intentionally registered before dashboard.py in main.py.
+# It keeps /dashboard secure: buyers see the explicit opt-in publishing page;
+# creators are handed to the real creator dashboard implementation.
+@router.get("/dashboard")
+@router.get("/dashboard/")
+def dashboard_entry(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
+    page: int = 1,
+    q: str = "",
+):
+    role = get_role_name(current_user)
+    if role == "buyer":
+        return RedirectResponse(url="/artist/activate", status_code=303)
+    if role == "admin":
+        return RedirectResponse(url="/admin", status_code=303)
+    if role != "creator":
+        raise HTTPException(status_code=403, detail=f"Creator access required. Current account role: {role or 'unknown'}.")
+
+    from app.routers.dashboard import dashboard_home
+    return dashboard_home(request=request, db=db, user=current_user, page=page, q=q)
 
 
 @router.get("/purchases")
@@ -133,8 +249,6 @@ def account_downloads(request: Request, db: Session = Depends(get_db), current_u
     return templates.TemplateResponse(request, "account_downloads.html", ctx(request, current_user, licenses=licenses))
 
 
-# One implementation with two compatibility URLs. Old purchased links still
-# work, but there is no second download implementation to drift out of sync.
 @router.get("/download/track/{track_id}")
 @router.get("/account/download/{track_id}")
 def download_track(track_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
@@ -154,11 +268,7 @@ def download_track(track_id: str, db: Session = Depends(get_db), current_user: U
     filename = _safe_download_filename(track, stored_text)
 
     if stored_text.lower().startswith(("r2://", "s3://")):
-        signed_url = r2_download_url(
-            stored_text,
-            filename,
-            expires=max(60, int(getattr(settings, "R2_DOWNLOAD_URL_EXPIRES", 900))),
-        )
+        signed_url = r2_download_url(stored_text, filename, expires=max(60, int(getattr(settings, "R2_DOWNLOAD_URL_EXPIRES", 900))))
         if not signed_url:
             raise HTTPException(status_code=503, detail="The purchased audio file is temporarily unavailable.")
         return RedirectResponse(url=signed_url, status_code=307)
@@ -170,12 +280,7 @@ def download_track(track_id: str, db: Session = Depends(get_db), current_user: U
     if not path:
         raise HTTPException(status_code=404, detail="The purchased audio file is currently unavailable.")
 
-    return FileResponse(
-        path=str(path),
-        media_type=_media_content_type(path),
-        filename=filename,
-        headers={"Cache-Control": "private, no-store"},
-    )
+    return FileResponse(path=str(path), media_type=_media_content_type(path), filename=filename, headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/account/orders")
@@ -203,9 +308,12 @@ def media_file(media_path: str):
 @router.get("/dashboard/home", include_in_schema=False)
 @router.get("/dashboard/index", include_in_schema=False)
 def dashboard_alias(current_user: User = Depends(require_user)):
-    role = str(getattr(current_user.role, "value", current_user.role)).strip().lower()
-    if role in {"creator", "producer"}:
+    role = get_role_name(current_user)
+    if role == "creator":
+        profile = getattr(current_user, "profile", None)
+        if profile is not None and bool(getattr(profile, "is_artist", False)):
+            return RedirectResponse(url="/artist/studio", status_code=303)
         return RedirectResponse(url="/dashboard", status_code=303)
     if role == "admin":
         return RedirectResponse(url="/admin", status_code=303)
-    return RedirectResponse(url="/account", status_code=303)
+    return RedirectResponse(url="/artist/activate", status_code=303)
