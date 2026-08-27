@@ -28,6 +28,7 @@ from app.routers import (
     pages,
     paystack_checkout,
     payout_admin,
+    track_catalog,
 )
 from app.services.payout_policy import PAYOUT_MINIMUM
 
@@ -259,6 +260,7 @@ app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
 app.include_router(music.router)
+app.include_router(track_catalog.router)
 app.include_router(checkout.router)
 app.include_router(paystack_checkout.router)
 app.include_router(dashboard.router)
