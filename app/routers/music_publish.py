@@ -1,5 +1,4 @@
 from decimal import Decimal
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -72,8 +71,7 @@ async def publish_tracks(
         "sales_models": len(sales_models),
         "content_types": len(content_types),
     }
-    mismatched = [name for name, value in lengths.items() if value != expected]
-    if mismatched:
+    if any(value != expected for value in lengths.values()):
         return _error(request, user, "Each uploaded item must include its content type and required details.")
 
     bpms = bpms or []
@@ -150,5 +148,6 @@ async def publish_tracks(
         db.rollback()
         raise
 
-    message = f"{len(created)} {\"item\" if len(created) == 1 else \"items\"} published successfully."
+    item_word = "item" if len(created) == 1 else "items"
+    message = f"{len(created)} {item_word} published successfully."
     return RedirectResponse(url="/dashboard?success=" + message.replace(" ", "%20"), status_code=303)
