@@ -75,9 +75,47 @@ def create_admin_session_token() -> str:
     return create_access_token(subject=ADMIN_SESSION_SUBJECT, extra_claims={"role": "admin", "admin": True})
 
 
+def _normalise_signup_role(role: str | None) -> str:
+    value = (role or "buyer").strip().lower()
+    if value in {"creator", "producer"}:
+        return "creator"
+    if value == "artist":
+        return "artist"
+    return "buyer"
+
+
+def _profile_flags_for_role(role: str) -> tuple[bool, bool]:
+    """Return (is_producer, is_artist) for the selected creator identity."""
+    if role == "artist":
+        return False, True
+    if role == "creator":
+        return True, False
+    return False, False
+
+
 @router.get("/signup")
 def signup_page(request: Request):
-    return templates.TemplateResponse(request, "signup.html", base_context(request, stage_name="", email="", role="creator"))
+    requested_role = _normalise_signup_role(request.query_params.get("role"))
+    return templates.TemplateResponse(
+        request,
+        "signup.html",
+        base_context(request, stage_name="", email="", role=requested_role),
+    )
+
+
+@router.get("/artist/signup")
+def artist_signup_page(request: Request):
+    """Artist-specific onboarding entry point.
+
+    Artists receive the same secure creator publishing capability as producers,
+    but their profile is explicitly marked as an artist. They are not given any
+    special access to admin, buyer purchases, or other protected areas.
+    """
+    return templates.TemplateResponse(
+        request,
+        "signup.html",
+        base_context(request, stage_name="", email="", role="artist", artist_signup=True),
+    )
 
 
 @router.post("/signup")
@@ -93,14 +131,20 @@ def signup_submit(
 ):
     stage_name = (stage_name or "").strip()
     email_norm = (email or "").strip().lower()
-    role = (role or "buyer").strip().lower()
+    selected_role = _normalise_signup_role(role)
 
     def error(message: str):
         return templates.TemplateResponse(
             request,
             "signup.html",
-            base_context(request, error=message, stage_name=stage_name, email=email_norm,
-                         role=("creator" if role in {"creator", "producer"} else "buyer")),
+            base_context(
+                request,
+                error=message,
+                stage_name=stage_name,
+                email=email_norm,
+                role=selected_role,
+                artist_signup=(selected_role == "artist"),
+            ),
             status_code=400,
         )
 
@@ -119,7 +163,11 @@ def signup_submit(
     if password != confirm_password:
         return error("Passwords do not match.")
 
-    user_role = UserRole.CREATOR if role in {"creator", "producer"} else UserRole.BUYER
+    # Artists and producers are both publishing creators. The canonical user
+    # role remains CREATOR so all existing creator-only routes stay protected
+    # behind the same authorization boundary. The profile flags distinguish
+    # the public identity without becoming an authorization mechanism.
+    user_role = UserRole.CREATOR if selected_role in {"creator", "artist"} else UserRole.BUYER
     if db.query(User).filter(User.email == email_norm).first():
         return error("An account with this email already exists.")
 
@@ -146,13 +194,15 @@ def signup_submit(
             suffix += 1
             slug = f"{base_slug}-{suffix}"
 
+        is_producer, is_artist = _profile_flags_for_role(selected_role)
         db.add(
             Profile(
                 id=str(uuid.uuid4()),
                 user_id=user.id,
                 stage_name=stage_name,
                 slug=slug,
-                is_producer=(user_role == UserRole.CREATOR),
+                is_producer=is_producer,
+                is_artist=is_artist,
             )
         )
         db.commit()
