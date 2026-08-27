@@ -21,7 +21,29 @@
     .beathub-community-link:hover{transform:translateY(-2px);border-color:rgba(240,216,120,.55);background:rgba(212,175,55,.08);box-shadow:0 10px 25px rgba(0,0,0,.22);color:#fff}
     .beathub-community-icon{width:27px;height:27px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(240,216,120,.22);border-radius:8px;background:rgba(212,175,55,.08);color:#f0d878;font-size:13px;font-weight:950}
     .beathub-community-arrow{color:#777;font-size:13px}
-    @media(max-width:720px){.beathub-community{margin:12px auto 28px;padding:23px 20px;border-radius:18px}.beathub-community-inner{align-items:flex-start;flex-direction:column}.beathub-community-links{width:100%;justify-content:flex-start}.beathub-community-link{flex:1 1 145px}}
+
+    /* BeatHub transient UX notices / toast messages. */
+    .beathub-notice-wrap{position:fixed;top:76px;right:22px;z-index:9999;width:min(430px,calc(100vw - 30px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
+    .beathub-notice{position:relative;display:flex;align-items:flex-start;gap:11px;padding:14px 42px 14px 15px;border-radius:13px;border:1px solid rgba(212,175,55,.28);background:rgba(13,13,13,.96);box-shadow:0 18px 45px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.025);color:#eee;font-size:13px;line-height:1.45;pointer-events:auto;overflow:hidden;animation:beathubNoticeIn .28s ease both}
+    .beathub-notice.success{border-color:rgba(120,205,145,.34)}
+    .beathub-notice.error{border-color:rgba(235,95,95,.42)}
+    .beathub-notice.warning{border-color:rgba(240,216,120,.4)}
+    .beathub-notice-icon{flex:0 0 25px;width:25px;height:25px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(212,175,55,.1);color:#f0d878;font-weight:900;font-size:12px}
+    .beathub-notice.success .beathub-notice-icon{color:#8ee0a4;background:rgba(120,205,145,.1)}
+    .beathub-notice.error .beathub-notice-icon{color:#ff9898;background:rgba(235,95,95,.1)}
+    .beathub-notice-text{min-width:0;padding-top:2px}
+    .beathub-notice-close{position:absolute;top:8px;right:9px;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:#888;font-size:19px;line-height:1;cursor:pointer}
+    .beathub-notice-close:hover,.beathub-notice-close:focus-visible{background:rgba(255,255,255,.07);color:#fff;outline:none}
+    .beathub-notice-progress{position:absolute;left:0;bottom:0;height:2px;width:100%;background:#d4af37;transform-origin:left center;animation:beathubNoticeProgress var(--notice-duration,5s) linear forwards}
+    .beathub-notice.success .beathub-notice-progress{background:#79d491}
+    .beathub-notice.error .beathub-notice-progress{background:#e75f5f}
+    .beathub-notice.paused .beathub-notice-progress{animation-play-state:paused}
+    .beathub-notice.leaving{animation:beathubNoticeOut .22s ease forwards}
+    @keyframes beathubNoticeIn{from{opacity:0;transform:translateY(-8px) translateX(12px)}to{opacity:1;transform:translateY(0) translateX(0)}}
+    @keyframes beathubNoticeOut{from{opacity:1;transform:translateY(0);max-height:120px;margin-bottom:0}to{opacity:0;transform:translateY(-6px) translateX(12px);max-height:0;padding-top:0;padding-bottom:0;margin-bottom:-10px}}
+    @keyframes beathubNoticeProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+    @media(max-width:720px){.beathub-community{margin:12px auto 28px;padding:23px 20px;border-radius:18px}.beathub-community-inner{align-items:flex-start;flex-direction:column}.beathub-community-links{width:100%;justify-content:flex-start}.beathub-community-link{flex:1 1 145px}.beathub-notice-wrap{top:64px;right:15px;width:calc(100vw - 30px)}}
+    @media(prefers-reduced-motion:reduce){.beathub-notice{animation:none}.beathub-notice.leaving{animation:none;opacity:0}.beathub-notice-progress{animation:none}}
   </style>
 </head>
 <body>
@@ -44,8 +66,28 @@
       </div>
     </nav>
 
-    {% if request.query_params.get('error') %}<div class="alert alert-error">{{ request.query_params.get('error') }}</div>{% endif %}
-    {% if request.query_params.get('success') %}<div class="alert alert-success">{{ request.query_params.get('success') }}</div>{% endif %}
+    {% set query_error = request.query_params.get('error') %}
+    {% set query_success = request.query_params.get('success') %}
+    {% if query_error or query_success %}
+      <div class="beathub-notice-wrap" id="beathub-notice-wrap" aria-live="polite">
+        {% if query_success %}
+          <div class="beathub-notice success" role="status" data-notice-duration="5000" tabindex="0">
+            <span class="beathub-notice-icon" aria-hidden="true">✓</span>
+            <div class="beathub-notice-text">{{ query_success }}</div>
+            <button type="button" class="beathub-notice-close" aria-label="Dismiss notification">×</button>
+            <span class="beathub-notice-progress" aria-hidden="true"></span>
+          </div>
+        {% endif %}
+        {% if query_error %}
+          <div class="beathub-notice error" role="alert" data-notice-duration="8000" tabindex="0">
+            <span class="beathub-notice-icon" aria-hidden="true">!</span>
+            <div class="beathub-notice-text">{{ query_error }}</div>
+            <button type="button" class="beathub-notice-close" aria-label="Dismiss notification">×</button>
+            <span class="beathub-notice-progress" aria-hidden="true"></span>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
 
     {% block content %}{% endblock %}
 
@@ -72,5 +114,56 @@
 
     <footer>&copy; {{ current_year }} BeatHub. All rights reserved.</footer>
   </div>
+
+  <script>
+  (function () {
+    const notices = Array.from(document.querySelectorAll('.beathub-notice'));
+    if (!notices.length) return;
+
+    notices.forEach(function (notice) {
+      const duration = Math.max(5000, Number(notice.dataset.noticeDuration || 5000));
+      notice.style.setProperty('--notice-duration', duration + 'ms');
+      let remaining = duration;
+      let startedAt = Date.now();
+      let timer = null;
+      let removed = false;
+
+      function removeNotice() {
+        if (removed) return;
+        removed = true;
+        if (timer) clearTimeout(timer);
+        notice.classList.add('leaving');
+        window.setTimeout(function () {
+          if (notice && notice.parentNode) notice.parentNode.removeChild(notice);
+        }, 240);
+      }
+
+      function startTimer() {
+        if (removed) return;
+        startedAt = Date.now();
+        timer = window.setTimeout(removeNotice, remaining);
+        notice.classList.remove('paused');
+      }
+
+      function pauseTimer() {
+        if (removed || !timer) return;
+        clearTimeout(timer);
+        timer = null;
+        remaining = Math.max(1000, remaining - (Date.now() - startedAt));
+        notice.classList.add('paused');
+      }
+
+      notice.querySelector('.beathub-notice-close').addEventListener('click', removeNotice);
+      notice.addEventListener('mouseenter', pauseTimer);
+      notice.addEventListener('mouseleave', startTimer);
+      notice.addEventListener('focusin', pauseTimer);
+      notice.addEventListener('focusout', function (event) {
+        if (!notice.contains(event.relatedTarget)) startTimer();
+      });
+
+      startTimer();
+    });
+  })();
+  </script>
 </body>
 </html>
