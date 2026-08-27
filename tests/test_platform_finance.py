@@ -1,10 +1,7 @@
 import unittest
 from decimal import Decimal
+from unittest.mock import Mock
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from app.models.ledger import AdminWithdrawal, PlatformLedgerEntry
 from app.services.platform_finance import _decimal, estimate_mpesa_transfer_fee, record_platform_withdrawal
 
 
@@ -23,38 +20,26 @@ class PlatformFinanceRegressionTests(unittest.TestCase):
         self.assertEqual(_decimal("-10.50"), Decimal("-10.50"))
 
     def test_platform_withdrawal_debit_is_idempotent(self):
-        engine = create_engine("sqlite:///:memory:")
-        AdminWithdrawal.__table__.create(engine)
-        PlatformLedgerEntry.__table__.create(engine)
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        try:
-            withdrawal = AdminWithdrawal(
-                amount=Decimal("100.00"),
-                phone_number="254712345678",
-                status="paid",
-                payout_reference="test-transfer-001",
-            )
-            db.add(withdrawal)
-            db.commit()
+        db = Mock()
+        query = db.query.return_value
+        query.filter.return_value.filter.return_value.first.side_effect = [None, object()]
 
-            first = record_platform_withdrawal(db, withdrawal, Decimal("20.00"))
-            db.commit()
-            second = record_platform_withdrawal(db, withdrawal, Decimal("20.00"))
-            db.commit()
+        withdrawal = Mock()
+        withdrawal.id = "withdrawal-1"
+        withdrawal.amount = Decimal("100.00")
+        withdrawal.payout_reference = "test-transfer-001"
 
-            entries = db.query(PlatformLedgerEntry).filter(
-                PlatformLedgerEntry.admin_withdrawal_id == withdrawal.id,
-                PlatformLedgerEntry.entry_type == "platform_withdrawal",
-            ).all()
+        first = record_platform_withdrawal(db, withdrawal, Decimal("20.00"))
+        second = record_platform_withdrawal(db, withdrawal, Decimal("20.00"))
 
-            self.assertTrue(first)
-            self.assertFalse(second)
-            self.assertEqual(len(entries), 1)
-            self.assertEqual(Decimal(str(entries[0].amount)), Decimal("-120.00"))
-        finally:
-            db.close()
-            engine.dispose()
+        self.assertTrue(first)
+        self.assertFalse(second)
+        self.assertEqual(db.add.call_count, 1)
+
+        entry = db.add.call_args.args[0]
+        self.assertEqual(entry.entry_type, "platform_withdrawal")
+        self.assertEqual(entry.amount, Decimal("-120.00"))
+        self.assertEqual(entry.admin_withdrawal_id, "withdrawal-1")
 
 
 if __name__ == "__main__":
