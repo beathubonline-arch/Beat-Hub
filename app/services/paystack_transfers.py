@@ -20,7 +20,11 @@ PHONE_RE = re.compile(r"^2547\d{8}$")
 
 
 class PaystackTransferError(RuntimeError):
-    """Raised when Paystack cannot create an M-Pesa transfer."""
+    """A definite Paystack validation/API failure."""
+
+
+class PaystackTransferNetworkError(PaystackTransferError):
+    """The transfer response is ambiguous and must not be retried blindly."""
 
 
 def normalize_ke_phone(phone: str) -> str:
@@ -140,4 +144,6 @@ async def create_mpesa_transfer(
     except PaystackTransferError:
         raise
     except (httpx.HTTPError, ValueError) as exc:
-        raise PaystackTransferError(f"Paystack transfer request failed: {exc}") from exc
+        raise PaystackTransferNetworkError(
+            f"Paystack transfer response was ambiguous: {exc}"
+        ) from exc
