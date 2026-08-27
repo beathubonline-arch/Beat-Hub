@@ -40,17 +40,20 @@ def upgrade() -> None:
         op.create_index("ix_platform_ledger_entries_provider_reference", "platform_ledger_entries", ["provider_reference"])
         op.create_index("ix_platform_ledger_entries_created_at", "platform_ledger_entries", ["created_at"])
 
-    # Backfill completed-order commission credits. Casting status to text keeps
-    # this compatible with PostgreSQL enum columns that store member names
-    # (COMPLETED) as well as legacy varchar columns that store values
-    # (completed).
+    # Backfill completed-order commission credits.
+    # IDs must fit the model's String(36) primary key.  The previous
+    # implementation used 'platform_' || order_id, which is 45 characters
+    # for a normal UUID order id and crashes on PostgreSQL.
+    # md5() produces a deterministic 32-character identifier, giving the
+    # same commission entry for the same order on retries while fitting the
+    # schema and avoiding dependence on PostgreSQL UUID extensions.
     bind.execute(
         sa.text(
             """
             INSERT INTO platform_ledger_entries
                 (id, entry_type, amount, order_id, provider, description, created_at)
             SELECT
-                'platform_' || o.id,
+                md5('platform_commission:' || o.id),
                 'platform_commission',
                 o.commission_amount,
                 o.id,
