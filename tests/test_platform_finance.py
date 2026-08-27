@@ -4,7 +4,6 @@ from decimal import Decimal
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base
 from app.models.ledger import AdminWithdrawal, PlatformLedgerEntry
 from app.services.platform_finance import (
     _decimal,
@@ -29,7 +28,8 @@ class PlatformFinanceRegressionTests(unittest.TestCase):
 
     def test_platform_withdrawal_debit_is_idempotent(self):
         engine = create_engine("sqlite:///:memory:")
-        Base.metadata.create_all(engine)
+        AdminWithdrawal.__table__.create(engine)
+        PlatformLedgerEntry.__table__.create(engine)
         Session = sessionmaker(bind=engine)
         db = Session()
         try:
@@ -55,7 +55,7 @@ class PlatformFinanceRegressionTests(unittest.TestCase):
             self.assertTrue(first)
             self.assertFalse(second)
             self.assertEqual(len(entries), 1)
-            self.assertEqual(entries[0].amount, Decimal("-120.00"))
+            self.assertEqual(Decimal(str(entries[0].amount)), Decimal("-120.00"))
         finally:
             db.close()
             engine.dispose()
