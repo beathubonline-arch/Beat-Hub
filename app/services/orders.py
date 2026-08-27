@@ -1,15 +1,14 @@
 """Provider-neutral order finalization for confirmed successful payments.
 
-This module deliberately contains no payment-gateway implementation. Payment
-providers (currently Paystack) verify a transaction first, then call
-``finalize_order`` to grant BeatHub ownership and creator earnings.
+Payment providers verify a transaction first, then call ``finalize_order``.
+Ownership and both creator/platform financial credits are created atomically.
 
 CRITICAL INVARIANTS:
 - Never finalize an order merely because checkout was initialized.
 - Finalization happens only after the payment provider confirms success.
-- Exclusive tracks are protected by the database unique constraint on
-  ExclusiveOwnershipLock.track_id.
+- Exclusive tracks are protected by the database unique constraint.
 - Duplicate webhook/callback delivery is idempotent.
+- A completed order creates at most one creator credit and one platform credit.
 """
 
 from datetime import datetime
@@ -20,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.models.ledger import CreatorLedgerEntry
 from app.models.music import SalesModel, Track
 from app.models.order import ExclusiveOwnershipLock, License, Order, OrderStatus
+from app.services.platform_finance import record_platform_commission
 
 
 class OrderFinalizationResult:
@@ -29,18 +29,12 @@ class OrderFinalizationResult:
 
 
 def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
-    """Finalize a successfully verified payment's BeatHub order.
-
-    The payment gateway is intentionally not referenced here. This keeps the
-    ownership/earnings path shared and prevents payment-provider code from
-    becoming coupled to order state.
-    """
+    """Finalize a successfully verified payment's BeatHub order."""
 
     if order.status == OrderStatus.COMPLETED:
-        return OrderFinalizationResult(
-            OrderStatus.COMPLETED,
-            "Order already completed.",
-        )
+        # A retry after a committed transaction must not create another ledger
+        # credit. The service-level uniqueness check makes this safe as well.
+        return OrderFinalizationResult(OrderStatus.COMPLETED, "Order already completed.")
 
     if order.status == OrderStatus.REJECTED:
         return OrderFinalizationResult(
@@ -53,27 +47,16 @@ def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
     if order.track_id and track is None:
         order.status = OrderStatus.REJECTED
         db.commit()
-        return OrderFinalizationResult(
-            OrderStatus.REJECTED,
-            "The purchased track no longer exists.",
-        )
+        return OrderFinalizationResult(OrderStatus.REJECTED, "The purchased track no longer exists.")
 
     try:
         if track and track.sales_model == SalesModel.EXCLUSIVE:
-            lock = ExclusiveOwnershipLock(
-                track_id=track.id,
-                order_id=order.id,
-            )
+            lock = ExclusiveOwnershipLock(track_id=track.id, order_id=order.id)
             db.add(lock)
             db.flush()
             track.is_sold = True
 
-        existing_license = (
-            db.query(License)
-            .filter(License.order_id == order.id)
-            .first()
-        )
-
+        existing_license = db.query(License).filter(License.order_id == order.id).first()
         if not existing_license:
             db.add(
                 License(
@@ -96,20 +79,22 @@ def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
                         creator_profile_id=track.creator_profile_id,
                         order_id=order.id,
                         amount=order.net_amount,
-                        description=(
-                            f"Sale of '{track.title}' "
-                            f"(order {order.order_number})"
-                        ),
+                        description=f"Sale of '{track.title}' (order {order.order_number})",
                     )
                 )
 
         order.status = OrderStatus.COMPLETED
         order.completed_at = datetime.utcnow()
+
+        # Platform revenue is recorded in its own ledger, distinct from the
+        # creator ledger. It is created before commit in the same transaction.
+        record_platform_commission(db, order)
+
         db.commit()
 
         return OrderFinalizationResult(
             OrderStatus.COMPLETED,
-            "Order completed and ownership granted.",
+            "Order completed, ownership granted, creator earnings recorded, and BeatHub commission ledgered.",
         )
 
     except IntegrityError:
@@ -122,8 +107,11 @@ def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
                 "The order could not be found after the finalization conflict.",
             )
 
-        refreshed_order.status = OrderStatus.REJECTED
-        db.commit()
+        # A unique exclusive lock conflict means another buyer won the item.
+        # Do not create financial credits for this rejected order.
+        if refreshed_order.status != OrderStatus.COMPLETED:
+            refreshed_order.status = OrderStatus.REJECTED
+            db.commit()
 
         return OrderFinalizationResult(
             OrderStatus.REJECTED,
