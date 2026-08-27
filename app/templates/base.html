@@ -57,9 +57,7 @@
       gap: 24px;
     }
 
-    .beathub-community-copy {
-      min-width: 0;
-    }
+    .beathub-community-copy { min-width: 0; }
 
     .beathub-community-eyebrow {
       margin-bottom: 7px;
@@ -132,10 +130,7 @@
       font-weight: 950;
     }
 
-    .beathub-community-arrow {
-      color: #777;
-      font-size: 13px;
-    }
+    .beathub-community-arrow { color: #777; font-size: 13px; }
 
     @media (max-width: 720px) {
       .beathub-community {
@@ -154,9 +149,7 @@
         justify-content: flex-start;
       }
 
-      .beathub-community-link {
-        flex: 1 1 145px;
-      }
+      .beathub-community-link { flex: 1 1 145px; }
     }
   </style>
 </head>
@@ -205,7 +198,7 @@
     {% block content %}{% endblock %}
 
     {% set is_creator_store_page = request.url.path.startswith('/creator/') or request.url.path.startswith('/store/') or request.url.path.startswith('/profile/') %}
-    {% if is_creator_store_page and (beathub_discord_url or beathub_facebook_url) %}
+    {% if is_creator_store_page and (beathub_discord_url or beathub_youtube_url) %}
       <section class="beathub-community" aria-label="BeatHub community">
         <div class="beathub-community-inner">
           <div class="beathub-community-copy">
@@ -223,10 +216,10 @@
               </a>
             {% endif %}
 
-            {% if beathub_facebook_url %}
-              <a class="beathub-community-link" href="{{ beathub_facebook_url }}" target="_blank" rel="noopener noreferrer" aria-label="Visit the BeatHub Facebook community">
-                <span class="beathub-community-icon">f</span>
-                <span>Facebook</span>
+            {% if beathub_youtube_url %}
+              <a class="beathub-community-link" href="{{ beathub_youtube_url }}" target="_blank" rel="noopener noreferrer" aria-label="Visit the BeatHub YouTube channel">
+                <span class="beathub-community-icon">▶</span>
+                <span>YouTube</span>
                 <span class="beathub-community-arrow">↗</span>
               </a>
             {% endif %}
