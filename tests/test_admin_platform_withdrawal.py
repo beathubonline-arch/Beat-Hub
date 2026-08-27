@@ -4,12 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 import unittest
 
-from app.services.paystack_transfers import (
-    normalize_kenyan_phone,
-    initiate_mpesa_transfer,
-    _kes_subunits,
-)
-
+from app.services.paystack_transfers import normalize_kenyan_phone, initiate_mpesa_transfer, _kes_subunits
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,6 +23,7 @@ class AdminPlatformWithdrawalTests(unittest.TestCase):
         self.assertEqual(_kes_subunits(Decimal("1.00")), 100)
         self.assertEqual(_kes_subunits(Decimal("1250.50")), 125050)
 
+    @patch("app.services.paystack_transfers.settings.PAYSTACK_SECRET_KEY", "test_secret")
     @patch("app.services.paystack_transfers.create_mpesa_recipient", return_value="RCP_test")
     @patch("app.services.paystack_transfers.httpx.post")
     def test_transfer_sends_kes_mobile_money_payload(self, post, recipient):
@@ -35,11 +31,7 @@ class AdminPlatformWithdrawalTests(unittest.TestCase):
         post.return_value.json.return_value = {
             "status": True,
             "message": "Transfer has been queued",
-            "data": {
-                "reference": "bh_admin_test_reference",
-                "transfer_code": "TRF_test",
-                "status": "pending",
-            },
+            "data": {"reference": "bh_admin_test_reference", "transfer_code": "TRF_test", "status": "pending"},
         }
         result = initiate_mpesa_transfer(Decimal("100.50"), "0712345678")
         self.assertEqual(result["reference"], "bh_admin_test_reference")
@@ -68,10 +60,7 @@ class AdminPlatformWithdrawalTests(unittest.TestCase):
         self.assertNotIn('name="payout_reference"', source)
 
     def test_transfer_service_compiles(self):
-        for relative in [
-            "app/services/paystack_transfers.py",
-            "app/routers/payout_admin.py",
-        ]:
+        for relative in ["app/services/paystack_transfers.py", "app/routers/payout_admin.py"]:
             path = ROOT / relative
             ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
