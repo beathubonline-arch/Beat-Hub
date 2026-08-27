@@ -22,7 +22,7 @@
     .beathub-community-icon{width:27px;height:27px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(240,216,120,.22);border-radius:8px;background:rgba(212,175,55,.08);color:#f0d878;font-size:13px;font-weight:950}
     .beathub-community-arrow{color:#777;font-size:13px}
 
-    /* BeatHub transient UX notices / toast messages. */
+    /* Shared BeatHub transient notices. */
     .beathub-notice-wrap{position:fixed;top:76px;right:22px;z-index:9999;width:min(430px,calc(100vw - 30px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
     .beathub-notice{position:relative;display:flex;align-items:flex-start;gap:11px;padding:14px 42px 14px 15px;border-radius:13px;border:1px solid rgba(212,175,55,.28);background:rgba(13,13,13,.96);box-shadow:0 18px 45px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.025);color:#eee;font-size:13px;line-height:1.45;pointer-events:auto;overflow:hidden;animation:beathubNoticeIn .28s ease both}
     .beathub-notice.success{border-color:rgba(120,205,145,.34)}
@@ -39,11 +39,19 @@
     .beathub-notice.error .beathub-notice-progress{background:#e75f5f}
     .beathub-notice.paused .beathub-notice-progress{animation-play-state:paused}
     .beathub-notice.leaving{animation:beathubNoticeOut .22s ease forwards}
+
+    /* Legacy inline .alert elements are also transient so every route behaves consistently. */
+    .beathub-legacy-notice{position:relative;overflow:hidden;transition:opacity .22s ease,transform .22s ease,max-height .24s ease,margin .24s ease,padding .24s ease}
+    .beathub-legacy-notice.leaving{opacity:0;transform:translateY(-6px);max-height:0!important;margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important}
+    .beathub-legacy-notice-progress{position:absolute;left:0;bottom:0;height:2px;width:100%;background:#79d491;transform-origin:left center;animation:beathubLegacyProgress var(--legacy-duration,5000ms) linear forwards;pointer-events:none}
+    .beathub-legacy-notice.error .beathub-legacy-notice-progress{background:#e75f5f}
+
     @keyframes beathubNoticeIn{from{opacity:0;transform:translateY(-8px) translateX(12px)}to{opacity:1;transform:translateY(0) translateX(0)}}
     @keyframes beathubNoticeOut{from{opacity:1;transform:translateY(0);max-height:120px;margin-bottom:0}to{opacity:0;transform:translateY(-6px) translateX(12px);max-height:0;padding-top:0;padding-bottom:0;margin-bottom:-10px}}
     @keyframes beathubNoticeProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+    @keyframes beathubLegacyProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
     @media(max-width:720px){.beathub-community{margin:12px auto 28px;padding:23px 20px;border-radius:18px}.beathub-community-inner{align-items:flex-start;flex-direction:column}.beathub-community-links{width:100%;justify-content:flex-start}.beathub-community-link{flex:1 1 145px}.beathub-notice-wrap{top:64px;right:15px;width:calc(100vw - 30px)}}
-    @media(prefers-reduced-motion:reduce){.beathub-notice{animation:none}.beathub-notice.leaving{animation:none;opacity:0}.beathub-notice-progress{animation:none}}
+    @media(prefers-reduced-motion:reduce){.beathub-notice,.beathub-legacy-notice{animation:none}.beathub-notice.leaving,.beathub-legacy-notice.leaving{animation:none;opacity:0}.beathub-notice-progress,.beathub-legacy-notice-progress{animation:none}}
   </style>
 </head>
 <body>
@@ -118,7 +126,55 @@
   <script>
   (function () {
     const notices = Array.from(document.querySelectorAll('.beathub-notice'));
-    if (!notices.length) return;
+    const legacyAlerts = Array.from(document.querySelectorAll('.alert:not(.beathub-notice):not(.beathub-legacy-notice)'));
+
+    function dismissElement(element, duration) {
+      let timer = null;
+      let startedAt = Date.now();
+      let remaining = duration;
+      let removed = false;
+      element.classList.add('beathub-legacy-notice');
+      element.style.setProperty('--legacy-duration', duration + 'ms');
+      element.style.maxHeight = element.scrollHeight + 'px';
+
+      const bar = document.createElement('span');
+      bar.className = 'beathub-legacy-notice-progress';
+      bar.setAttribute('aria-hidden', 'true');
+      element.appendChild(bar);
+
+      function remove() {
+        if (removed) return;
+        removed = true;
+        if (timer) clearTimeout(timer);
+        element.classList.add('leaving');
+        window.setTimeout(function () {
+          if (element.parentNode) element.parentNode.removeChild(element);
+        }, 260);
+      }
+      function start() {
+        if (removed) return;
+        startedAt = Date.now();
+        timer = window.setTimeout(remove, remaining);
+        bar.style.animationPlayState = 'running';
+      }
+      function pause() {
+        if (removed || !timer) return;
+        clearTimeout(timer);
+        timer = null;
+        remaining = Math.max(1000, remaining - (Date.now() - startedAt));
+        bar.style.animationPlayState = 'paused';
+      }
+      element.addEventListener('mouseenter', pause);
+      element.addEventListener('mouseleave', start);
+      element.addEventListener('focusin', pause);
+      element.addEventListener('focusout', function(event){ if (!element.contains(event.relatedTarget)) start(); });
+      start();
+    }
+
+    legacyAlerts.forEach(function(alert){
+      const isError = alert.classList.contains('alert-error') || alert.classList.contains('error') || alert.getAttribute('role') === 'alert';
+      dismissElement(alert, isError ? 8000 : 5000);
+    });
 
     notices.forEach(function (notice) {
       const duration = Math.max(5000, Number(notice.dataset.noticeDuration || 5000));
@@ -127,42 +183,29 @@
       let startedAt = Date.now();
       let timer = null;
       let removed = false;
-
       function removeNotice() {
         if (removed) return;
         removed = true;
         if (timer) clearTimeout(timer);
         notice.classList.add('leaving');
-        window.setTimeout(function () {
-          if (notice && notice.parentNode) notice.parentNode.removeChild(notice);
-        }, 240);
+        window.setTimeout(function () { if (notice.parentNode) notice.parentNode.removeChild(notice); }, 240);
       }
-
-      function startTimer() {
-        if (removed) return;
-        startedAt = Date.now();
-        timer = window.setTimeout(removeNotice, remaining);
-        notice.classList.remove('paused');
-      }
-
-      function pauseTimer() {
-        if (removed || !timer) return;
-        clearTimeout(timer);
-        timer = null;
-        remaining = Math.max(1000, remaining - (Date.now() - startedAt));
-        notice.classList.add('paused');
-      }
-
-      notice.querySelector('.beathub-notice-close').addEventListener('click', removeNotice);
+      function startTimer() { if (removed) return; startedAt = Date.now(); timer = window.setTimeout(removeNotice, remaining); notice.classList.remove('paused'); }
+      function pauseTimer() { if (removed || !timer) return; clearTimeout(timer); timer = null; remaining = Math.max(1000, remaining - (Date.now() - startedAt)); notice.classList.add('paused'); }
+      const close = notice.querySelector('.beathub-notice-close');
+      if (close) close.addEventListener('click', removeNotice);
       notice.addEventListener('mouseenter', pauseTimer);
       notice.addEventListener('mouseleave', startTimer);
       notice.addEventListener('focusin', pauseTimer);
-      notice.addEventListener('focusout', function (event) {
-        if (!notice.contains(event.relatedTarget)) startTimer();
-      });
-
+      notice.addEventListener('focusout', function (event) { if (!notice.contains(event.relatedTarget)) startTimer(); });
       startTimer();
     });
+
+    /* Success/error query strings are one-time UI state; don't let refresh repeat them. */
+    if (window.history && window.history.replaceState && (new URLSearchParams(window.location.search).has('success') || new URLSearchParams(window.location.search).has('error'))) {
+      const cleanUrl = window.location.pathname + (new URLSearchParams(window.location.search).has('next') ? '?next=' + encodeURIComponent(new URLSearchParams(window.location.search).get('next')) : '') + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
   })();
   </script>
 </body>
