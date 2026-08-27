@@ -3,17 +3,19 @@
 import hashlib
 import hmac
 import logging
+import uuid
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.models.ledger import AdminWithdrawal
+from app.routers.admin import get_admin_withdrawal_financials
 from app.services.paystack_transfers import PaystackTransferError, create_mpesa_transfer
 from app.utils.deps import require_admin
 
@@ -30,6 +32,134 @@ def _redirect(message: str, error: bool = False):
     )
 
 
+def _new_reference() -> str:
+    return f"bh_admin_{uuid.uuid4().hex}"
+
+
+@router.post("/withdraw")
+async def confirm_and_send_admin_mpesa(
+    amount: str = Form(...),
+    phone_number: str = Form(...),
+    note: str = Form(""),
+    admin_note: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    """Confirm the admin withdrawal form and actually send the money to M-Pesa.
+
+    The legacy route only created a pending database record. BeatHub's admin
+    withdrawal form is now a real payout action: it validates the platform
+    balance, creates a locked payout record, sends the Paystack transfer, and
+    records the transfer reference. Live Paystack transfers remain processing
+    until transfer.success arrives by webhook.
+    """
+    try:
+        amount_value = Decimal((amount or "").strip())
+    except (InvalidOperation, ValueError):
+        return _redirect("Enter a valid withdrawal amount.", error=True)
+
+    if not amount_value.is_finite() or amount_value < Decimal("1.00"):
+        return _redirect("The M-Pesa payout must be at least KSh 1.00.", error=True)
+
+    (
+        _platform_revenue,
+        _already_withdrawn,
+        _pending_admin,
+        available,
+        _balance,
+    ) = get_admin_withdrawal_financials(db)
+
+    if amount_value > available:
+        return _redirect(
+            f"Insufficient BeatHub platform balance. Available to withdraw: KSh {available:.2f}.",
+            error=True,
+        )
+
+    reference = _new_reference()
+    final_note = (
+        (admin_note or "").strip()
+        or (note or "").strip()
+        or "BeatHub platform earnings withdrawal to M-Pesa."
+    )
+
+    withdrawal = AdminWithdrawal(
+        amount=amount_value,
+        phone_number=(phone_number or "").strip(),
+        status="processing",
+        payout_reference=reference,
+        admin_note="Payout initiated; waiting for Paystack confirmation.",
+    )
+    db.add(withdrawal)
+    db.commit()
+
+    try:
+        admin_name = (
+            getattr(user, "username", None)
+            or getattr(user, "email", None)
+            or "BeatHub Admin"
+        )
+
+        result = await create_mpesa_transfer(
+            amount=amount_value,
+            phone_number=str(withdrawal.phone_number or ""),
+            name=str(admin_name),
+            reference=reference,
+        )
+
+        transfer_reference = str(result.get("reference") or reference)
+        transfer_status = str(result.get("status") or "pending").lower()
+
+        withdrawal.payout_reference = transfer_reference[:100]
+        withdrawal.updated_at = datetime.utcnow()
+
+        if transfer_status == "success":
+            withdrawal.status = "paid"
+            withdrawal.resolved_at = datetime.utcnow()
+            withdrawal.admin_note = final_note[:500]
+            message = (
+                f"KSh {amount_value:.2f} was sent to M-Pesa successfully. "
+                f"Paystack reference: {transfer_reference}."
+            )
+        else:
+            withdrawal.status = "processing"
+            withdrawal.admin_note = (
+                f"{final_note[:350]} Paystack transfer is processing; "
+                "waiting for transfer.success webhook."
+            )
+            message = (
+                f"M-Pesa payout initiated for KSh {amount_value:.2f}. "
+                f"Paystack reference: {transfer_reference}."
+            )
+
+        db.commit()
+        return _redirect(message)
+
+    except PaystackTransferError as exc:
+        db.rollback()
+        failed = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal.id).first()
+        if failed:
+            failed.status = "rejected"
+            failed.updated_at = datetime.utcnow()
+            failed.resolved_at = datetime.utcnow()
+            failed.admin_note = f"Paystack payout failed: {str(exc)[:430]}"
+            db.commit()
+        logger.warning("Admin M-Pesa payout failed for %s: %s", withdrawal.id, exc)
+        return _redirect(str(exc), error=True)
+    except Exception:
+        db.rollback()
+        failed = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal.id).first()
+        if failed:
+            failed.status = "processing"
+            failed.updated_at = datetime.utcnow()
+            failed.admin_note = "Paystack payout request had an ambiguous server error. Check Paystack before retrying."
+            db.commit()
+        logger.exception("Unexpected admin M-Pesa payout error for %s", withdrawal.id)
+        return _redirect(
+            "The payout response was ambiguous. The withdrawal remains processing so the same money cannot be sent twice. Check Paystack before retrying.",
+            error=True,
+        )
+
+
 @router.post("/withdraw/{withdrawal_id}/paid")
 async def initiate_admin_mpesa_payout(
     withdrawal_id: str,
@@ -37,13 +167,7 @@ async def initiate_admin_mpesa_payout(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
-    """Initiate the actual admin M-Pesa payout.
-
-    The old route only changed the database status to paid. This route instead
-    sends the funds through Paystack and only records `paid` when Paystack
-    returns a conclusive success (normally test mode); live transfers remain
-    `processing` until the transfer.success webhook arrives.
-    """
+    """Initiate the actual admin M-Pesa payout for legacy pending records."""
     withdrawal = (
         db.query(AdminWithdrawal)
         .filter(AdminWithdrawal.id == withdrawal_id)
@@ -62,7 +186,7 @@ async def initiate_admin_mpesa_payout(
     if current_status == "processing" and withdrawal.payout_reference:
         return _redirect("This M-Pesa payout has already been initiated and is awaiting Paystack confirmation.", error=True)
 
-    if current_status not in {"pending", "approved", "processing"}:
+    if current_status not in {"pending", "approved"}:
         return _redirect(
             f"This withdrawal cannot be paid because its status is {current_status}.",
             error=True,
@@ -70,8 +194,11 @@ async def initiate_admin_mpesa_payout(
 
     try:
         amount = Decimal(str(withdrawal.amount or 0))
-        if amount <= 0:
-            raise PaystackTransferError("Withdrawal amount must be greater than zero.")
+        reference = _new_reference()
+        withdrawal.status = "processing"
+        withdrawal.payout_reference = reference
+        withdrawal.updated_at = datetime.utcnow()
+        db.commit()
 
         admin_name = (
             getattr(user, "username", None)
@@ -83,23 +210,23 @@ async def initiate_admin_mpesa_payout(
             amount=amount,
             phone_number=str(withdrawal.phone_number or ""),
             name=str(admin_name),
+            reference=reference,
         )
 
-        reference = str(result["reference"])
+        transfer_reference = str(result.get("reference") or reference)
         transfer_status = str(result.get("status") or "pending").lower()
-
-        withdrawal.payout_reference = reference[:100]
+        withdrawal.payout_reference = transfer_reference[:100]
         withdrawal.updated_at = datetime.utcnow()
 
         if transfer_status == "success":
             withdrawal.status = "paid"
             withdrawal.resolved_at = datetime.utcnow()
             withdrawal.admin_note = "Paystack M-Pesa transfer completed successfully."
-            message = f"KSh {amount:.2f} was sent through Paystack to M-Pesa. Reference: {reference}."
+            message = f"KSh {amount:.2f} was sent through Paystack to M-Pesa. Reference: {transfer_reference}."
         else:
             withdrawal.status = "processing"
             withdrawal.admin_note = "Paystack M-Pesa transfer initiated; waiting for transfer.success webhook."
-            message = f"M-Pesa payout initiated for KSh {amount:.2f}. Paystack reference: {reference}."
+            message = f"M-Pesa payout initiated for KSh {amount:.2f}. Paystack reference: {transfer_reference}."
 
         db.commit()
         return _redirect(message)
@@ -111,7 +238,7 @@ async def initiate_admin_mpesa_payout(
     except Exception:
         db.rollback()
         logger.exception("Unexpected admin M-Pesa payout error for %s", withdrawal_id)
-        return _redirect("The M-Pesa payout could not be initiated. No withdrawal was marked paid.", error=True)
+        return _redirect("The M-Pesa payout could not be initiated. The record was not marked paid.", error=True)
 
 
 @router.post("/withdraw/{withdrawal_id}/approve")
@@ -181,8 +308,6 @@ async def paystack_transfer_webhook(
     )
 
     if not withdrawal:
-        # Unknown references are acknowledged so Paystack does not repeatedly
-        # retry an event that does not belong to BeatHub.
         return {"status": True}
 
     if event == "transfer.success":
