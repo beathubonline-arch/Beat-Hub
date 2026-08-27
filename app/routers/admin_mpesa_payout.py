@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.ledger import AdminWithdrawal
 from app.services.paystack_transfers import (
@@ -40,10 +41,7 @@ logger = logging.getLogger("beathub.admin_mpesa_payout")
 
 def _redirect(message: str, error: bool = False):
     key = "error" if error else "success"
-    return RedirectResponse(
-        url=f"/admin/withdraw?{key}={quote(message)}",
-        status_code=303,
-    )
+    return RedirectResponse(url=f"/admin/withdraw?{key}={quote(message)}", status_code=303)
 
 
 def _new_reference() -> str:
@@ -66,23 +64,16 @@ def _valid_phone(phone: str) -> bool:
 
 
 @router.get("/withdraw")
-def admin_withdraw_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user=Depends(require_admin),
-):
-    """Canonical platform-finance page."""
+def admin_withdraw_page(request: Request, db: Session = Depends(get_db), user=Depends(require_admin)):
     financials = get_admin_withdrawal_financials(db)
-    withdrawals = (
-        db.query(AdminWithdrawal)
-        .order_by(AdminWithdrawal.created_at.desc())
-        .all()
-    )
-
-    # Paystack transfer fees are charged against the provider balance. Show a
-    # conservative minimum fee so the admin cannot request the entire ledger
-    # balance and then discover the provider cannot cover the transfer fee.
+    withdrawals = db.query(AdminWithdrawal).order_by(AdminWithdrawal.created_at.desc()).all()
     minimum_fee = estimate_mpesa_transfer_fee(Decimal("1.00"))
+    Balance = type("Balance", (), {})
+    balance = Balance()
+    balance.commission_total = financials["platform_revenue"]
+    balance.withdrawn_total = financials["ledger_debits"]
+    balance.pending_total = financials["reserved"]
+    balance.available_balance = financials["available"]
 
     return templates.TemplateResponse(
         request,
@@ -101,12 +92,7 @@ def admin_withdraw_page(
             "transfer_minimum_fee": minimum_fee,
             "withdrawals": withdrawals,
             "admin_withdrawals": withdrawals,
-            "balance": type("Balance", (), {
-                "commission_total": financials["platform_revenue"],
-                "withdrawn_total": financials["ledger_debits"],
-                "pending_total": financials["reserved"],
-                "available_balance": financials["available"],
-            })(),
+            "balance": balance,
         },
     )
 
@@ -120,7 +106,6 @@ async def confirm_and_send_admin_mpesa(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
-    """Validate, reserve and initiate a real BeatHub platform M-Pesa payout."""
     try:
         amount_value = Decimal((amount or "").strip()).quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError):
@@ -128,7 +113,6 @@ async def confirm_and_send_admin_mpesa(
 
     if not amount_value.is_finite() or amount_value < Decimal("1.00"):
         return _redirect("The M-Pesa payout must be at least KSh 1.00.", error=True)
-
     if amount_value > Decimal("150000.00"):
         return _redirect("A single Kenyan M-Pesa customer transfer cannot exceed KSh 150,000.", error=True)
 
@@ -139,14 +123,14 @@ async def confirm_and_send_admin_mpesa(
     financials = get_admin_withdrawal_financials(db)
     available = financials["available"]
     transfer_fee = estimate_mpesa_transfer_fee(amount_value)
-
     if amount_value + transfer_fee > available:
         return _redirect(
             f"Insufficient available BeatHub platform funds. KSh {amount_value:.2f} plus an estimated KSh {transfer_fee:.2f} transfer fee exceeds the available KSh {available:.2f}.",
             error=True,
         )
 
-    # Protect against accidental browser double-submit of the same request.
+    # Protect against accidental browser double-submit of the same amount and
+    # destination within a short window.
     recent_duplicate = (
         db.query(AdminWithdrawal)
         .filter(AdminWithdrawal.phone_number == phone)
@@ -158,18 +142,10 @@ async def confirm_and_send_admin_mpesa(
     if recent_duplicate and recent_duplicate.created_at:
         age_seconds = (datetime.utcnow() - recent_duplicate.created_at).total_seconds()
         if age_seconds <= 60:
-            return _redirect(
-                "A matching platform withdrawal was already submitted in the last minute. It remains protected from duplicate payout.",
-                error=True,
-            )
+            return _redirect("A matching platform withdrawal was already submitted in the last minute. It remains protected from duplicate payout.", error=True)
 
     reference = _new_reference()
-    final_note = (
-        (admin_note or "").strip()
-        or (note or "").strip()
-        or "BeatHub platform earnings withdrawal to M-Pesa."
-    )
-
+    final_note = (admin_note or "").strip() or (note or "").strip() or "BeatHub platform earnings withdrawal to M-Pesa."
     withdrawal = AdminWithdrawal(
         amount=amount_value,
         phone_number=phone,
@@ -182,17 +158,10 @@ async def confirm_and_send_admin_mpesa(
 
     try:
         admin_name = getattr(user, "username", None) or getattr(user, "email", None) or "BeatHub Admin"
-        result = await create_mpesa_transfer(
-            amount=amount_value,
-            phone_number=phone,
-            name=str(admin_name),
-            reference=reference,
-        )
-
+        result = await create_mpesa_transfer(amount=amount_value, phone_number=phone, name=str(admin_name), reference=reference)
         transfer_reference = str(result.get("reference") or reference)
         transfer_status = str(result.get("status") or "pending").lower()
         provider_fee = Decimal(str(result.get("fee") or transfer_fee))
-
         withdrawal.payout_reference = transfer_reference[:100]
         withdrawal.updated_at = datetime.utcnow()
 
@@ -244,23 +213,12 @@ async def confirm_and_send_admin_mpesa(
 
 
 @router.post("/withdraw/{withdrawal_id}/approve")
-def approve_admin_withdrawal_for_payout(
-    withdrawal_id: str,
-    db: Session = Depends(get_db),
-    user=Depends(require_admin),
-):
-    """Approve a legacy/pending platform withdrawal without marking it paid."""
-    withdrawal = (
-        db.query(AdminWithdrawal)
-        .filter(AdminWithdrawal.id == withdrawal_id)
-        .first()
-    )
+def approve_admin_withdrawal_for_payout(withdrawal_id: str, db: Session = Depends(get_db), user=Depends(require_admin)):
+    withdrawal = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal_id).first()
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Admin withdrawal not found.")
-
     if _status(withdrawal.status) != "pending":
         return _redirect("Only pending admin withdrawals can be approved.", error=True)
-
     withdrawal.status = "approved"
     withdrawal.updated_at = datetime.utcnow()
     withdrawal.admin_note = "Admin withdrawal approved; ready for M-Pesa payout."
@@ -269,18 +227,8 @@ def approve_admin_withdrawal_for_payout(
 
 
 @router.post("/withdraw/{withdrawal_id}/paid")
-async def initiate_legacy_admin_mpesa_payout(
-    withdrawal_id: str,
-    db: Session = Depends(get_db),
-    user=Depends(require_admin),
-):
-    """Legacy confirmation endpoint: initiate payout, never fabricate 'paid'."""
-    withdrawal = (
-        db.query(AdminWithdrawal)
-        .filter(AdminWithdrawal.id == withdrawal_id)
-        .with_for_update()
-        .first()
-    )
+async def initiate_legacy_admin_mpesa_payout(withdrawal_id: str, db: Session = Depends(get_db), user=Depends(require_admin)):
+    withdrawal = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal_id).with_for_update().first()
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Admin withdrawal not found.")
 
@@ -307,12 +255,7 @@ async def initiate_legacy_admin_mpesa_payout(
 
     try:
         admin_name = getattr(user, "username", None) or getattr(user, "email", None) or "BeatHub Admin"
-        result = await create_mpesa_transfer(
-            amount=amount,
-            phone_number=str(withdrawal.phone_number),
-            name=str(admin_name),
-            reference=reference,
-        )
+        result = await create_mpesa_transfer(amount=amount, phone_number=str(withdrawal.phone_number), name=str(admin_name), reference=reference)
         transfer_reference = str(result.get("reference") or reference)
         transfer_status = str(result.get("status") or "pending").lower()
         provider_fee = Decimal(str(result.get("fee") or estimate_mpesa_transfer_fee(amount)))
@@ -348,7 +291,6 @@ async def initiate_legacy_admin_mpesa_payout(
 
 @router.post("/paystack/transfer-webhook")
 async def paystack_transfer_webhook(request: Request, db: Session = Depends(get_db)):
-    """Verify and process Paystack transfer.success/failed/reversed events."""
     raw_body = await request.body()
     signature = request.headers.get("x-paystack-signature", "")
     secret = settings.PAYSTACK_SECRET_KEY or ""
@@ -370,12 +312,7 @@ async def paystack_transfer_webhook(request: Request, db: Session = Depends(get_
     if not reference:
         return {"status": True}
 
-    withdrawal = (
-        db.query(AdminWithdrawal)
-        .filter(AdminWithdrawal.payout_reference == reference)
-        .with_for_update()
-        .first()
-    )
+    withdrawal = db.query(AdminWithdrawal).filter(AdminWithdrawal.payout_reference == reference).with_for_update().first()
     if not withdrawal:
         return {"status": True}
 
