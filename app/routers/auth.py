@@ -17,11 +17,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.profile import Profile
 from app.models.user import User, UserRole
-from app.utils.deps import (
-    ADMIN_SESSION_SUBJECT,
-    SESSION_COOKIE_NAME,
-    get_role_name,
-)
+from app.utils.deps import ADMIN_SESSION_SUBJECT, SESSION_COOKIE_NAME, get_role_name
 from app.utils.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(tags=["auth"])
@@ -45,7 +41,6 @@ def slugify(value: str) -> str:
 
 
 def dashboard_url_for_user(user: User) -> str:
-    """Choose the post-login landing page from the canonical account role."""
     role = get_role_name(user)
     if role == "admin":
         return "/admin"
@@ -85,12 +80,51 @@ def _normalise_signup_role(role: str | None) -> str:
 
 
 def _profile_flags_for_role(role: str) -> tuple[bool, bool]:
-    """Return (is_producer, is_artist) for the selected creator identity."""
     if role == "artist":
         return False, True
     if role == "creator":
         return True, False
     return False, False
+
+
+def _create_account(db: Session, stage_name: str, email_norm: str, password: str, selected_role: str):
+    """Create a buyer or publishing creator atomically."""
+    user_role = UserRole.CREATOR if selected_role in {"creator", "artist"} else UserRole.BUYER
+    if db.query(User).filter(User.email == email_norm).first():
+        raise ValueError("An account with this email already exists.")
+
+    user = User(
+        id=str(uuid.uuid4()),
+        email=email_norm,
+        hashed_password=hash_password(password),
+        role=user_role,
+        is_active=True,
+        is_verified=False,
+    )
+    db.add(user)
+    db.flush()
+
+    base_slug = slugify(stage_name)
+    slug = base_slug
+    suffix = 1
+    while db.query(Profile).filter(Profile.slug == slug).first():
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+
+    is_producer, is_artist = _profile_flags_for_role(selected_role)
+    db.add(
+        Profile(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            stage_name=stage_name,
+            slug=slug,
+            is_producer=is_producer,
+            is_artist=is_artist,
+        )
+    )
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.get("/signup")
@@ -105,15 +139,9 @@ def signup_page(request: Request):
 
 @router.get("/artist/signup")
 def artist_signup_page(request: Request):
-    """Artist-specific onboarding entry point.
-
-    Artists receive the same secure creator publishing capability as producers,
-    but their profile is explicitly marked as an artist. They are not given any
-    special access to admin, buyer purchases, or other protected areas.
-    """
     return templates.TemplateResponse(
         request,
-        "signup.html",
+        "artist_signup.html",
         base_context(request, stage_name="", email="", role="artist", artist_signup=True),
     )
 
@@ -134,17 +162,11 @@ def signup_submit(
     selected_role = _normalise_signup_role(role)
 
     def error(message: str):
+        template = "artist_signup.html" if selected_role == "artist" else "signup.html"
         return templates.TemplateResponse(
             request,
-            "signup.html",
-            base_context(
-                request,
-                error=message,
-                stage_name=stage_name,
-                email=email_norm,
-                role=selected_role,
-                artist_signup=(selected_role == "artist"),
-            ),
+            template,
+            base_context(request, error=message, stage_name=stage_name, email=email_norm, role=selected_role, artist_signup=(selected_role == "artist")),
             status_code=400,
         )
 
@@ -163,49 +185,11 @@ def signup_submit(
     if password != confirm_password:
         return error("Passwords do not match.")
 
-    # Artists and producers are both publishing creators. The canonical user
-    # role remains CREATOR so all existing creator-only routes stay protected
-    # behind the same authorization boundary. The profile flags distinguish
-    # the public identity without becoming an authorization mechanism.
-    user_role = UserRole.CREATOR if selected_role in {"creator", "artist"} else UserRole.BUYER
-    if db.query(User).filter(User.email == email_norm).first():
-        return error("An account with this email already exists.")
-
-    user = User(
-        id=str(uuid.uuid4()),
-        email=email_norm,
-        hashed_password=hash_password(password),
-        role=user_role,
-        is_active=True,
-        is_verified=False,
-    )
-    db.add(user)
-
-    # User + creator profile are one logical account. Keep them inside the
-    # same transaction so a failed profile insert can never leave a creator
-    # user without the profile required by the dashboard.
     try:
-        db.flush()
-
-        base_slug = slugify(stage_name)
-        slug = base_slug
-        suffix = 1
-        while db.query(Profile).filter(Profile.slug == slug).first():
-            suffix += 1
-            slug = f"{base_slug}-{suffix}"
-
-        is_producer, is_artist = _profile_flags_for_role(selected_role)
-        db.add(
-            Profile(
-                id=str(uuid.uuid4()),
-                user_id=user.id,
-                stage_name=stage_name,
-                slug=slug,
-                is_producer=is_producer,
-                is_artist=is_artist,
-            )
-        )
-        db.commit()
+        user = _create_account(db, stage_name, email_norm, password, selected_role)
+    except ValueError as exc:
+        db.rollback()
+        return error(str(exc))
     except IntegrityError:
         db.rollback()
         return error("Could not create account. Please try again.")
@@ -213,28 +197,15 @@ def signup_submit(
         db.rollback()
         return error("Could not create account. Please try again.")
 
-    db.refresh(user)
     token = create_access_token(subject=user.id, extra_claims={"role": get_role_name(user)})
     response = RedirectResponse(url=f"{dashboard_url_for_user(user)}?success=Account created. Welcome to BeatHub!", status_code=303)
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        max_age=COOKIE_MAX_AGE,
-        samesite="lax",
-        secure=False,
-        path="/",
-    )
+    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE, samesite="lax", secure=False, path="/")
     return response
 
 
 @router.get("/login")
 def login_page(request: Request):
     next_url = _safe_next_url(request.query_params.get("next"))
-
-    # Preserve the page that sent a customer to login. This covers legacy or
-    # manually-created /login links from a merchandise detail page that do not
-    # carry ?next= themselves. The value is restricted to same-site local paths.
     if not next_url:
         referer = request.headers.get("referer") or ""
         try:
@@ -246,19 +217,12 @@ def login_page(request: Request):
                     next_url = _safe_next_url(referred_path + query)
         except Exception:
             next_url = ""
-
     return templates.TemplateResponse(request, "login.html", base_context(request, next_url=next_url))
 
 
 @router.post("/login")
-def login_submit(
-    request: Request,
-    db: Session = Depends(get_db),
-    identifier: str = Form(...),
-    password: str = Form(...),
-):
+def login_submit(request: Request, db: Session = Depends(get_db), identifier: str = Form(...), password: str = Form(...)):
     next_url = _safe_next_url(request.query_params.get("next"))
-
     if not next_url:
         referer = request.headers.get("referer") or ""
         try:
@@ -272,12 +236,7 @@ def login_submit(
             next_url = ""
 
     def error(message: str):
-        return templates.TemplateResponse(
-            request,
-            "login.html",
-            base_context(request, error=message, next_url=next_url),
-            status_code=401,
-        )
+        return templates.TemplateResponse(request, "login.html", base_context(request, error=message, next_url=next_url), status_code=401)
 
     identifier_raw = (identifier or "").strip()
     identifier_norm = identifier_raw.lower()
@@ -290,15 +249,7 @@ def login_submit(
     if verify_admin_credentials(identifier_raw, password):
         token = create_admin_session_token()
         response = RedirectResponse(url="/admin", status_code=303)
-        response.set_cookie(
-            key=SESSION_COOKIE_NAME,
-            value=token,
-            httponly=True,
-            max_age=COOKIE_MAX_AGE,
-            samesite="lax",
-            secure=False,
-            path="/",
-        )
+        response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE, samesite="lax", secure=False, path="/")
         return response
 
     user = db.query(User).filter(User.email == identifier_norm).first()
@@ -316,21 +267,10 @@ def login_submit(
         return error("This account has been deactivated. Contact support.")
 
     db.refresh(user)
-
-    # The database role is authoritative. A profile flag must never upgrade a
-    # buyer/customer into a creator during login.
     token = create_access_token(subject=user.id, extra_claims={"role": get_role_name(user)})
     destination = next_url or dashboard_url_for_user(user)
     response = RedirectResponse(url=destination, status_code=303)
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        max_age=COOKIE_MAX_AGE,
-        samesite="lax",
-        secure=False,
-        path="/",
-    )
+    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE, samesite="lax", secure=False, path="/")
     return response
 
 
@@ -365,11 +305,7 @@ def forgot_password_submit(request: Request, db: Session = Depends(get_db), emai
         user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
         db.commit()
         print(f"[BeatHub] Password reset link for {email_norm}: /reset-password?token={token}")
-    return templates.TemplateResponse(
-        request,
-        "forgot_password.html",
-        base_context(request, success="If an account exists for that email, a reset link has been sent."),
-    )
+    return templates.TemplateResponse(request, "forgot_password.html", base_context(request, success="If an account exists for that email, a reset link has been sent."))
 
 
 @router.get("/reset-password")
@@ -380,29 +316,13 @@ def reset_password_page(request: Request, token: str, db: Session = Depends(get_
 
 
 @router.post("/reset-password")
-def reset_password_submit(
-    request: Request,
-    db: Session = Depends(get_db),
-    token: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-):
+def reset_password_submit(request: Request, db: Session = Depends(get_db), token: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
     user = db.query(User).filter(User.reset_token == token).first()
     valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
     if not valid:
-        return templates.TemplateResponse(
-            request,
-            "reset_password.html",
-            base_context(request, token=token, valid=False, error="This reset link is invalid or has expired."),
-            status_code=400,
-        )
+        return templates.TemplateResponse(request, "reset_password.html", base_context(request, token=token, valid=False, error="This reset link is invalid or has expired."), status_code=400)
     if len(password) < 8 or password != confirm_password:
-        return templates.TemplateResponse(
-            request,
-            "reset_password.html",
-            base_context(request, token=token, valid=True, error="Passwords must match and be at least 8 characters."),
-            status_code=400,
-        )
+        return templates.TemplateResponse(request, "reset_password.html", base_context(request, token=token, valid=True, error="Passwords must match and be at least 8 characters."), status_code=400)
     user.hashed_password = hash_password(password)
     user.reset_token = None
     user.reset_token_expires = None
