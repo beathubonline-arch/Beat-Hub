@@ -1,27 +1,459 @@
 {% extends "base.html" %}
 {% block title %}Terms & Conditions — BeatHub{% endblock %}
+
+{% block extra_head %}
+<style>
+  .terms-page {
+    position: relative;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 70px 0 100px;
+    overflow: hidden;
+  }
+
+  .terms-page::before {
+    content: "";
+    position: absolute;
+    width: 620px;
+    height: 620px;
+    top: -230px;
+    right: -260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232, 177, 57, .12) 0%, rgba(232, 177, 57, .035) 32%, transparent 68%);
+    pointer-events: none;
+  }
+
+  .terms-page::after {
+    content: "";
+    position: absolute;
+    width: 480px;
+    height: 480px;
+    bottom: -260px;
+    left: -250px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232, 177, 57, .07) 0%, transparent 67%);
+    pointer-events: none;
+  }
+
+  .terms-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 42px;
+    align-items: end;
+    margin-bottom: 34px;
+  }
+
+  .terms-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 15px;
+    border: 1px solid rgba(232, 177, 57, .28);
+    border-radius: 999px;
+    background: rgba(232, 177, 57, .045);
+    color: #e9bd55;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    box-shadow: 0 0 28px rgba(232, 177, 57, .05);
+  }
+
+  .terms-kicker-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e9bd55;
+    box-shadow: 0 0 12px rgba(233, 189, 85, .75);
+  }
+
+  .terms-hero h1 {
+    margin: 18px 0 12px;
+    color: #fff;
+    font-size: clamp(44px, 6vw, 72px);
+    line-height: .98;
+    letter-spacing: -.055em;
+    font-weight: 850;
+  }
+
+  .terms-hero h1 span {
+    color: #e7b94f;
+    text-shadow: 0 0 28px rgba(231, 185, 79, .13);
+  }
+
+  .terms-hero-copy {
+    max-width: 700px;
+    margin: 0;
+    color: rgba(235, 235, 235, .68);
+    font-size: 17px;
+    line-height: 1.75;
+  }
+
+  .terms-meta-card {
+    position: relative;
+    padding: 24px;
+    border: 1px solid rgba(232, 177, 57, .22);
+    border-radius: 20px;
+    background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 20px 70px rgba(0,0,0,.22);
+  }
+
+  .terms-meta-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 24px;
+    right: 24px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(232,177,57,.8), transparent);
+  }
+
+  .terms-meta-label {
+    color: #d7ae4a;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .terms-meta-title {
+    margin-top: 8px;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 750;
+  }
+
+  .terms-meta-text {
+    margin-top: 7px;
+    color: rgba(235,235,235,.55);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .terms-layout {
+    position: relative;
+    display: grid;
+    grid-template-columns: 225px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  .terms-index {
+    position: sticky;
+    top: 24px;
+    padding: 18px 14px;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    background: rgba(10,10,10,.72);
+    backdrop-filter: blur(14px);
+  }
+
+  .terms-index-title {
+    padding: 0 10px 11px;
+    color: #d9ae48;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .terms-index a {
+    display: block;
+    padding: 9px 10px;
+    border-radius: 9px;
+    color: rgba(235,235,235,.52);
+    font-size: 12px;
+    line-height: 1.35;
+    text-decoration: none;
+    transition: .2s ease;
+  }
+
+  .terms-index a:hover {
+    color: #f2ca68;
+    background: rgba(232,177,57,.07);
+    transform: translateX(2px);
+  }
+
+  .terms-content {
+    display: grid;
+    gap: 14px;
+  }
+
+  .terms-section {
+    position: relative;
+    padding: 30px 32px 31px;
+    border: 1px solid rgba(255,255,255,.075);
+    border-radius: 20px;
+    background: linear-gradient(145deg, rgba(20,20,20,.9), rgba(10,10,10,.78));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 18px 55px rgba(0,0,0,.16);
+    overflow: hidden;
+  }
+
+  .terms-section::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(232,177,57,.42), transparent 48%);
+    opacity: .7;
+  }
+
+  .terms-section:hover {
+    border-color: rgba(232,177,57,.16);
+  }
+
+  .terms-section-head {
+    display: flex;
+    gap: 17px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+
+  .terms-number {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(232,177,57,.3);
+    border-radius: 12px;
+    background: rgba(232,177,57,.06);
+    color: #e7b94f;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: .04em;
+    box-shadow: 0 0 20px rgba(232,177,57,.045);
+  }
+
+  .terms-section h2 {
+    margin: 2px 0 0;
+    color: #fff;
+    font-size: 21px;
+    line-height: 1.3;
+    letter-spacing: -.025em;
+    font-weight: 750;
+  }
+
+  .terms-section p {
+    margin: 0 0 12px;
+    color: rgba(235,235,235,.65);
+    font-size: 14px;
+    line-height: 1.85;
+  }
+
+  .terms-section p:last-child {
+    margin-bottom: 0;
+  }
+
+  .terms-section strong {
+    color: #f1c65f;
+    font-weight: 750;
+  }
+
+  .terms-highlight {
+    margin-top: 17px;
+    padding: 15px 17px;
+    border-left: 2px solid #dcae43;
+    border-radius: 0 12px 12px 0;
+    background: rgba(220,174,67,.055);
+    color: rgba(244,244,244,.72);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .terms-footer-note {
+    position: relative;
+    margin-top: 16px;
+    padding: 22px 25px;
+    border: 1px solid rgba(232,177,57,.13);
+    border-radius: 18px;
+    background: linear-gradient(90deg, rgba(232,177,57,.045), rgba(255,255,255,.015));
+    color: rgba(235,235,235,.4);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 900px) {
+    .terms-page {
+      padding: 50px 0 75px;
+    }
+
+    .terms-hero {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+
+    .terms-meta-card {
+      max-width: 420px;
+    }
+
+    .terms-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .terms-index {
+      position: relative;
+      top: auto;
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      padding: 10px;
+      scrollbar-width: none;
+    }
+
+    .terms-index::-webkit-scrollbar {
+      display: none;
+    }
+
+    .terms-index-title {
+      display: none;
+    }
+
+    .terms-index a {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .terms-page {
+      padding: 35px 0 55px;
+    }
+
+    .terms-hero h1 {
+      font-size: 43px;
+    }
+
+    .terms-hero-copy {
+      font-size: 15px;
+    }
+
+    .terms-section {
+      padding: 24px 21px 25px;
+      border-radius: 16px;
+    }
+
+    .terms-section-head {
+      gap: 12px;
+    }
+
+    .terms-number {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 10px;
+    }
+
+    .terms-section h2 {
+      font-size: 18px;
+    }
+
+    .terms-section p {
+      font-size: 13.5px;
+      line-height: 1.75;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<section style="padding:50px 0 80px;max-width:860px;line-height:1.75;color:var(--text,#e9e9e9);">
-  <div style="display:inline-block;padding:7px 12px;border:1px solid rgba(212,175,55,.22);border-radius:999px;color:#e5ca61;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;">BeatHub Marketplace</div>
-  <h1 style="font-size:38px;letter-spacing:-.04em;margin:14px 0 8px;">Terms &amp; Conditions</h1>
-  <p style="color:var(--text-muted,#8c8c8c);">These terms explain the core rules for using BeatHub, including creator earnings and scheduled withdrawals.</p>
-  <h2 style="margin-top:36px;">1. Marketplace purchases</h2>
-  <p>By using BeatHub you agree to our marketplace rules. Exclusive purchases grant the applicable exclusive rights and are removed from sale after confirmed payment. Non-exclusive licenses may be sold to multiple buyers according to the license presented at checkout.</p>
-  <h2 style="margin-top:30px;">2. Creator earnings</h2>
-  <p>BeatHub retains its disclosed platform commission on completed sales. The remaining eligible amount is credited to the creator's account as earnings. A displayed balance may include funds that are pending, reserved or otherwise unavailable for withdrawal.</p>
-  <h2 style="margin-top:30px;">3. Creator withdrawals</h2>
-  <p>Creator withdrawals are not instant. BeatHub processes eligible, approved creator withdrawals on <strong>Tuesday and Thursday</strong>, using East Africa Time (EAT), with the scheduled payout window ending at <strong>6:00 PM EAT</strong>.</p>
-  <p>The minimum creator withdrawal is <strong>KSh 500</strong>. Requests below this amount are not accepted. A request submitted after the applicable payout-day cutoff is carried forward to the next scheduled payout cycle.</p>
-  <h2 style="margin-top:30px;">4. Review and approval</h2>
-  <p>Every creator withdrawal is subject to BeatHub's administrative review before payment. BeatHub may approve, hold or reject a request where the account, transaction history, available balance, M-Pesa destination, payment records or other information requires verification.</p>
-  <p>Approval means the request has passed BeatHub's review. The payout is considered completed only after BeatHub records the M-Pesa payment as paid and records the applicable payout reference.</p>
-  <h2 style="margin-top:30px;">5. M-Pesa details and payment processing</h2>
-  <p>Creators are responsible for providing a correct, active Kenyan M-Pesa number. BeatHub is not responsible for delays or failed delivery caused by incorrect recipient information, M-Pesa service interruptions, banking or telecommunications issues, or other circumstances outside BeatHub's reasonable control.</p>
-  <h2 style="margin-top:30px;">6. Refunds, disputes and reversals</h2>
-  <p>Where a sale, payment, refund, reversal or dispute may affect creator earnings, BeatHub may temporarily hold the related withdrawal while the transaction is reviewed. This is intended to protect creators, buyers and the platform from incorrect or duplicate payouts.</p>
-  <h2 style="margin-top:30px;">7. Changes to payout policy</h2>
-  <p>BeatHub may update payout schedules, minimums, processing procedures or other marketplace terms when reasonably necessary for security, operational, payment-provider or regulatory reasons. Material changes will be communicated through the platform or updated terms.</p>
-  <p style="margin-top:42px;color:#666;font-size:12px;">These platform terms are operational terms for BeatHub and should be reviewed with qualified legal counsel before production launch.</p>
+<section class="terms-page">
+  <div class="terms-hero">
+    <div>
+      <div class="terms-kicker">
+        <span class="terms-kicker-dot"></span>
+        BeatHub Marketplace
+      </div>
+      <h1>Terms &amp; <span>Conditions.</span></h1>
+      <p class="terms-hero-copy">
+        The rules that keep BeatHub fair, secure, and built for creators. Please review these terms before buying, selling, booking, or withdrawing on the platform.
+      </p>
+    </div>
+
+    <aside class="terms-meta-card">
+      <div class="terms-meta-label">Platform Policy</div>
+      <div class="terms-meta-title">Creator-first. Clear rules.</div>
+      <div class="terms-meta-text">These terms cover marketplace purchases, creator earnings, withdrawals, payments, disputes, and platform operations.</div>
+    </aside>
+  </div>
+
+  <div class="terms-layout">
+    <aside class="terms-index" aria-label="Terms sections">
+      <div class="terms-index-title">On this page</div>
+      <a href="#marketplace">01 · Purchases</a>
+      <a href="#earnings">02 · Earnings</a>
+      <a href="#withdrawals">03 · Withdrawals</a>
+      <a href="#approval">04 · Approval</a>
+      <a href="#mpesa">05 · M-Pesa</a>
+      <a href="#refunds">06 · Disputes</a>
+      <a href="#changes">07 · Changes</a>
+    </aside>
+
+    <div class="terms-content">
+      <article class="terms-section" id="marketplace">
+        <div class="terms-section-head">
+          <div class="terms-number">01</div>
+          <h2>Marketplace purchases</h2>
+        </div>
+        <p>By using BeatHub you agree to our marketplace rules. Exclusive purchases grant the applicable exclusive rights and are removed from sale after confirmed payment. Non-exclusive licenses may be sold to multiple buyers according to the license presented at checkout.</p>
+      </article>
+
+      <article class="terms-section" id="earnings">
+        <div class="terms-section-head">
+          <div class="terms-number">02</div>
+          <h2>Creator earnings</h2>
+        </div>
+        <p>BeatHub retains its disclosed platform commission on completed sales. The remaining eligible amount is credited to the creator's account as earnings. A displayed balance may include funds that are pending, reserved or otherwise unavailable for withdrawal.</p>
+      </article>
+
+      <article class="terms-section" id="withdrawals">
+        <div class="terms-section-head">
+          <div class="terms-number">03</div>
+          <h2>Creator withdrawals</h2>
+        </div>
+        <p>Creator withdrawals are not instant. BeatHub processes eligible, approved creator withdrawals on <strong>Tuesday and Thursday</strong>, using East Africa Time (EAT), with the scheduled payout window ending at <strong>6:00 PM EAT</strong>.</p>
+        <p>The minimum creator withdrawal is <strong>KSh 500</strong>. Requests below this amount are not accepted. A request submitted after the applicable payout-day cutoff is carried forward to the next scheduled payout cycle.</p>
+        <div class="terms-highlight">Scheduled payout processing helps BeatHub review transactions, protect creator balances, and reduce incorrect or duplicate payouts.</div>
+      </article>
+
+      <article class="terms-section" id="approval">
+        <div class="terms-section-head">
+          <div class="terms-number">04</div>
+          <h2>Review and approval</h2>
+        </div>
+        <p>Every creator withdrawal is subject to BeatHub's administrative review before payment. BeatHub may approve, hold or reject a request where the account, transaction history, available balance, M-Pesa destination, payment records or other information requires verification.</p>
+        <p>Approval means the request has passed BeatHub's review. The payout is considered completed only after BeatHub records the M-Pesa payment as paid and records the applicable payout reference.</p>
+      </article>
+
+      <article class="terms-section" id="mpesa">
+        <div class="terms-section-head">
+          <div class="terms-number">05</div>
+          <h2>M-Pesa details and payment processing</h2>
+        </div>
+        <p>Creators are responsible for providing a correct, active Kenyan M-Pesa number. BeatHub is not responsible for delays or failed delivery caused by incorrect recipient information, M-Pesa service interruptions, banking or telecommunications issues, or other circumstances outside BeatHub's reasonable control.</p>
+      </article>
+
+      <article class="terms-section" id="refunds">
+        <div class="terms-section-head">
+          <div class="terms-number">06</div>
+          <h2>Refunds, disputes and reversals</h2>
+        </div>
+        <p>Where a sale, payment, refund, reversal or dispute may affect creator earnings, BeatHub may temporarily hold the related withdrawal while the transaction is reviewed. This is intended to protect creators, buyers and the platform from incorrect or duplicate payouts.</p>
+      </article>
+
+      <article class="terms-section" id="changes">
+        <div class="terms-section-head">
+          <div class="terms-number">07</div>
+          <h2>Changes to payout policy</h2>
+        </div>
+        <p>BeatHub may update payout schedules, minimums, processing procedures or other marketplace terms when reasonably necessary for security, operational, payment-provider or regulatory reasons. Material changes will be communicated through the platform or updated terms.</p>
+      </article>
+
+      <div class="terms-footer-note">These platform terms are operational terms for BeatHub and should be reviewed with qualified legal counsel before production launch.</div>
+    </div>
+  </div>
 </section>
 {% endblock %}
- beautify the page to meet the screenshots beauty, dont change anything else just the appearance and produce full rpalcement updated py
