@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.profile import Profile
 from app.services.storage import r2_presigned_url
@@ -90,5 +91,7 @@ def creator_store(
             "tracks": tracks,
             "albums": albums,
             "is_owner": is_owner,
+            "beathub_discord_url": getattr(settings, "DISCORD_INVITE_URL", ""),
+            "beathub_facebook_url": getattr(settings, "FACEBOOK_URL", ""),
         },
     )
