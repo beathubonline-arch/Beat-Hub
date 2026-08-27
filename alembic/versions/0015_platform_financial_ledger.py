@@ -40,9 +40,10 @@ def upgrade() -> None:
         op.create_index("ix_platform_ledger_entries_provider_reference", "platform_ledger_entries", ["provider_reference"])
         op.create_index("ix_platform_ledger_entries_created_at", "platform_ledger_entries", ["created_at"])
 
-    # Backfill platform commission credits from already-completed orders.
-    # This is safe and idempotent because the new production database will be
-    # empty, while an existing database gets exactly one credit per order.
+    # Backfill completed-order commission credits. Casting status to text keeps
+    # this compatible with PostgreSQL enum columns that store member names
+    # (COMPLETED) as well as legacy varchar columns that store values
+    # (completed).
     bind.execute(
         sa.text(
             """
@@ -57,7 +58,7 @@ def upgrade() -> None:
                 'BeatHub commission from order ' || o.order_number,
                 COALESCE(o.completed_at, o.created_at, CURRENT_TIMESTAMP)
             FROM orders o
-            WHERE o.status = 'completed'
+            WHERE CAST(o.status AS TEXT) IN ('COMPLETED', 'completed')
               AND NOT EXISTS (
                   SELECT 1
                   FROM platform_ledger_entries ple
