@@ -17,6 +17,7 @@ from app.database import Base, engine
 from app.models import *  # noqa: F401,F403
 from app.routers import (
     admin,
+    admin_mpesa_payout,
     admin_unified_sales,
     auth,
     checkout,
@@ -266,6 +267,9 @@ app.include_router(paystack_checkout.router)
 app.include_router(dashboard.router)
 # Unified /admin/sales must be registered before the legacy music-only sales route.
 app.include_router(admin_unified_sales.router)
+# The admin M-Pesa payout routes must be registered before the legacy admin
+# withdrawal routes so the confirmation button initiates a real Paystack transfer.
+app.include_router(admin_mpesa_payout.router)
 app.include_router(admin.router)
 app.include_router(payout_admin.router)
 app.include_router(merchandise.router)
