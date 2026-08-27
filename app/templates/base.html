@@ -6,6 +6,159 @@
   <title>{% block title %}BeatHub — The Home of Beats{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/style.css">
   {% block extra_head %}{% endblock %}
+  <style>
+    .beathub-community {
+      position: relative;
+      max-width: 1120px;
+      margin: 18px auto 34px;
+      padding: 28px 30px;
+      overflow: hidden;
+      border: 1px solid rgba(212,175,55,.22);
+      border-radius: 22px;
+      background:
+        radial-gradient(circle at 92% 10%, rgba(212,175,55,.14), transparent 30%),
+        linear-gradient(145deg, rgba(212,175,55,.065), rgba(255,255,255,.018) 52%, rgba(212,175,55,.025));
+      box-shadow: 0 22px 55px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.025);
+    }
+
+    .beathub-community::before,
+    .beathub-community::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .beathub-community::before {
+      width: 190px;
+      height: 190px;
+      right: -85px;
+      bottom: -120px;
+      border: 1px solid rgba(212,175,55,.12);
+      box-shadow: 0 0 0 28px rgba(212,175,55,.025), 0 0 0 56px rgba(212,175,55,.015);
+    }
+
+    .beathub-community::after {
+      width: 8px;
+      height: 8px;
+      left: 30%;
+      top: 22px;
+      background: #f0d878;
+      box-shadow: 0 0 18px rgba(240,216,120,.7);
+      opacity: .7;
+    }
+
+    .beathub-community-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .beathub-community-copy {
+      min-width: 0;
+    }
+
+    .beathub-community-eyebrow {
+      margin-bottom: 7px;
+      color: #f0d878;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .beathub-community h2 {
+      margin: 0;
+      color: #fff;
+      font-size: clamp(20px, 3vw, 28px);
+      line-height: 1.08;
+      letter-spacing: -.035em;
+    }
+
+    .beathub-community p {
+      max-width: 650px;
+      margin: 8px 0 0;
+      color: #858585;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .beathub-community-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .beathub-community-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 46px;
+      padding: 0 16px;
+      border: 1px solid rgba(212,175,55,.25);
+      border-radius: 12px;
+      background: rgba(0,0,0,.28);
+      color: #eee;
+      font-size: 12px;
+      font-weight: 850;
+      text-decoration: none;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+
+    .beathub-community-link:hover {
+      transform: translateY(-2px);
+      border-color: rgba(240,216,120,.55);
+      background: rgba(212,175,55,.08);
+      box-shadow: 0 10px 25px rgba(0,0,0,.22);
+      color: #fff;
+    }
+
+    .beathub-community-icon {
+      width: 27px;
+      height: 27px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(240,216,120,.22);
+      border-radius: 8px;
+      background: rgba(212,175,55,.08);
+      color: #f0d878;
+      font-size: 13px;
+      font-weight: 950;
+    }
+
+    .beathub-community-arrow {
+      color: #777;
+      font-size: 13px;
+    }
+
+    @media (max-width: 720px) {
+      .beathub-community {
+        margin: 12px auto 28px;
+        padding: 23px 20px;
+        border-radius: 18px;
+      }
+
+      .beathub-community-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .beathub-community-links {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .beathub-community-link {
+        flex: 1 1 145px;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="stripe-bar"></div>
@@ -50,6 +203,37 @@
     {% endif %}
 
     {% block content %}{% endblock %}
+
+    {% set is_creator_store_page = request.url.path.startswith('/creator/') or request.url.path.startswith('/store/') or request.url.path.startswith('/profile/') %}
+    {% if is_creator_store_page and (beathub_discord_url or beathub_facebook_url) %}
+      <section class="beathub-community" aria-label="BeatHub community">
+        <div class="beathub-community-inner">
+          <div class="beathub-community-copy">
+            <div class="beathub-community-eyebrow">BeatHub Community</div>
+            <h2>Connect with the BeatHub Community</h2>
+            <p>Meet artists, producers and music creators, stay up to date with BeatHub, and be part of the community beyond the marketplace.</p>
+          </div>
+
+          <div class="beathub-community-links">
+            {% if beathub_discord_url %}
+              <a class="beathub-community-link" href="{{ beathub_discord_url }}" target="_blank" rel="noopener noreferrer" aria-label="Join the BeatHub Discord community">
+                <span class="beathub-community-icon">⌁</span>
+                <span>Join Discord</span>
+                <span class="beathub-community-arrow">↗</span>
+              </a>
+            {% endif %}
+
+            {% if beathub_facebook_url %}
+              <a class="beathub-community-link" href="{{ beathub_facebook_url }}" target="_blank" rel="noopener noreferrer" aria-label="Visit the BeatHub Facebook community">
+                <span class="beathub-community-icon">f</span>
+                <span>Facebook</span>
+                <span class="beathub-community-arrow">↗</span>
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+    {% endif %}
 
     <footer>
       &copy; {{ current_year }} BeatHub. All rights reserved.
