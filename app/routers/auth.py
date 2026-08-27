@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.profile import Profile
 from app.models.user import User, UserRole
-from app.utils.deps import ADMIN_SESSION_SUBJECT, SESSION_COOKIE_NAME, get_role_name
+from app.utils.deps import ADMIN_SESSION_SUBJECT, SESSION_COOKIE_NAME, get_role_name, require_user
 from app.utils.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(tags=["auth"])
@@ -152,12 +152,9 @@ def artist_signup_page(request: Request):
 @router.get("/artist/studio")
 def artist_studio_page(
     request: Request,
-    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
 ):
-    from app.utils.deps import get_current_user
-
-    user = get_current_user(request, db)
-    if not user or get_role_name(user) != "creator" or not getattr(getattr(user, "profile", None), "is_artist", False):
+    if get_role_name(user) != "creator" or not getattr(getattr(user, "profile", None), "is_artist", False):
         return RedirectResponse(url="/login?error=Artist%20Studio%20access%20requires%20an%20artist%20creator%20account.", status_code=303)
 
     return templates.TemplateResponse(
