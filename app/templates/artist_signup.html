@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join BeatHub as an Artist</title>
+    <style>
+        :root{--gold:#d4af37;--gold-light:#f4d675;--bg:#050505;--panel:#101010;--muted:#a7a7a7;--border:rgba(212,175,55,.22)}
+        *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 10%,rgba(212,175,55,.12),transparent 30%),radial-gradient(circle at 85% 90%,rgba(212,175,55,.08),transparent 30%),var(--bg);color:#f7f7f7;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;align-items:center;justify-content:center;padding:28px 18px}
+        .wrap{width:min(980px,100%);display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:stretch}.intro,.card{border:1px solid var(--border);border-radius:26px;background:linear-gradient(145deg,rgba(255,255,255,.05),rgba(255,255,255,.015)),var(--panel);box-shadow:0 30px 80px rgba(0,0,0,.55)}.intro{padding:42px;display:flex;flex-direction:column;justify-content:center}.eyebrow{color:var(--gold-light);font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase}.intro h1{font-size:clamp(38px,5vw,62px);line-height:1;letter-spacing:-2.5px;margin:16px 0}.intro h1 span{color:var(--gold)}.intro p{color:var(--muted);line-height:1.7;font-size:16px}.points{display:grid;gap:12px;margin-top:25px}.point{padding:13px 15px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:rgba(0,0,0,.2)}.card{padding:34px}.card h2{margin:0 0 7px;font-size:29px}.sub{color:var(--muted);font-size:14px;margin-bottom:25px}.alert{padding:12px 14px;border-radius:12px;margin-bottom:18px;background:rgba(255,75,75,.08);border:1px solid rgba(255,75,75,.25);color:#ffd0d0;font-size:13px}.field{margin-bottom:16px}label{display:block;margin-bottom:7px;font-size:12px;font-weight:750;color:#ddd}input{width:100%;height:51px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#080808;color:#fff;outline:none}input:focus{border-color:rgba(212,175,55,.7);box-shadow:0 0 0 4px rgba(212,175,55,.07)}.terms{display:flex;gap:10px;align-items:flex-start;color:#aaa;font-size:12px;line-height:1.5;margin:18px 0}.terms input{width:16px;height:16px;margin-top:2px;flex:0 0 auto}.terms a{color:var(--gold-light)}button{width:100%;height:52px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--gold-light),var(--gold));color:#080808;font-weight:900;cursor:pointer}button:hover{filter:brightness(1.05)}.back{display:block;text-align:center;color:#999;text-decoration:none;margin-top:16px;font-size:13px}.back:hover{color:#fff}@media(max-width:760px){.wrap{grid-template-columns:1fr}.intro{padding:30px}.card{padding:26px}}
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <section class="intro">
+        <div class="eyebrow">BeatHub Artist Studio</div>
+        <h1>Build your <span>sound.</span></h1>
+        <p>Create an artist profile and publish your music directly to your BeatHub store.</p>
+        <div class="points">
+            <div class="point">🎵 Upload tracks and publish your music</div>
+            <div class="point">💿 Create and publish albums</div>
+            <div class="point">🛍 Create merchandise and sell it from your store</div>
+            <div class="point">🌐 Share one public BeatHub store with your audience</div>
+        </div>
+    </section>
+    <section class="card">
+        <h2>Create Artist Account</h2>
+        <div class="sub">Your account will receive BeatHub's creator publishing access.</div>
+        {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+        <form method="post" action="/signup">
+            <input type="hidden" name="role" value="artist">
+            <div class="field"><label for="stage_name">Artist Name</label><input id="stage_name" name="stage_name" value="{{ stage_name or '' }}" placeholder="Your artist / stage name" required maxlength="255"></div>
+            <div class="field"><label for="email">Email</label><input id="email" type="email" name="email" value="{{ email or '' }}" placeholder="you@example.com" required maxlength="255"></div>
+            <div class="field"><label for="password">Password</label><input id="password" type="password" name="password" placeholder="At least 8 characters" required></div>
+            <div class="field"><label for="confirm_password">Confirm Password</label><input id="confirm_password" type="password" name="confirm_password" placeholder="Repeat your password" required></div>
+            <label class="terms"><input type="checkbox" name="agree_terms" value="yes" required><span>I agree to the BeatHub <a href="/terms" target="_blank" rel="noopener">Terms &amp; Conditions</a>.</span></label>
+            <button type="submit">Create Artist Account</button>
+        </form>
+        <a class="back" href="/signup">← Back to standard signup</a>
+    </section>
+</div>
+</body>
+</html>
