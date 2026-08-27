@@ -6,7 +6,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Integer,
     Numeric,
@@ -29,6 +28,20 @@ class SalesModel(str, Enum):
 
 
 # ======================================================================
+# MUSIC CONTENT TYPES
+# ======================================================================
+
+class TrackContentType(str, Enum):
+    BEAT = "beat"
+    TRACK = "track"
+
+
+class AlbumContentType(str, Enum):
+    BEAT_COLLECTION = "beat_collection"
+    ALBUM = "album"
+
+
+# ======================================================================
 # ALBUM
 # ======================================================================
 
@@ -43,11 +56,12 @@ class Album(Base):
     genre = Column(String(100), nullable=True)
     artwork_path = Column(String(1000), nullable=True)
     release_date = Column(DateTime, nullable=True)
+    content_type = Column(String(30), nullable=False, default=AlbumContentType.BEAT_COLLECTION.value, server_default="beat_collection", index=True)
     is_published = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    creator_profile = relationship("Profile", foreign_keys=[creator_profile_id])
+    creator_profile = relationship("Profile", foreign_keys=[creator_profile_id], back_populates="albums")
     album_tracks = relationship("AlbumTrack", back_populates="album", cascade="all, delete-orphan", order_by="AlbumTrack.position")
 
     @property
@@ -82,21 +96,23 @@ class Track(Base):
     preview_file_path = Column(String(1000), nullable=True)
     price = Column(Numeric(12, 2), nullable=False, default=0)
     sales_model = Column(
-        SAEnum(SalesModel, name="salesmodel", native_enum=False),
+        # Keep this non-native so PostgreSQL migrations do not create another
+        # enum family for this unrelated classification feature.
+        __import__("sqlalchemy").Enum(SalesModel, name="salesmodel", native_enum=False),
         nullable=False,
         default=SalesModel.NON_EXCLUSIVE,
     )
+    content_type = Column(String(20), nullable=False, default=TrackContentType.BEAT.value, server_default="beat", index=True)
     is_sold = Column(Boolean, nullable=False, default=False, server_default="0")
 
     # New uploads are immediately public. Existing tracks are not changed by
-    # this model default; only newly-created ORM Track rows receive True.
-    # The dashboard upload flow also sets this explicitly as a second guard.
+    # this model default; the migration explicitly classifies existing rows.
     is_published = Column(Boolean, nullable=False, default=True, server_default="1")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    creator_profile = relationship("Profile", foreign_keys=[creator_profile_id])
+    creator_profile = relationship("Profile", foreign_keys=[creator_profile_id], back_populates="tracks")
     album_tracks = relationship("AlbumTrack", back_populates="track", cascade="all, delete-orphan")
 
     @property
