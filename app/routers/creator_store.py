@@ -21,21 +21,12 @@ def creator_store(
     db: Session = Depends(get_db),
     current_user=Depends(get_optional_user),
 ):
-    """Render one creator store consistently for buyers and its owner.
-
-    All public creator-store URLs use this same handler so an authenticated
-    producer never falls through to the older buyer-only presentation.
-    """
-    profile = (
-        db.query(Profile)
-        .filter(Profile.slug == slug)
-        .first()
-    )
-
+    """Render one creator store with explicit BeatHub content sections."""
+    profile = db.query(Profile).filter(Profile.slug == slug).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Creator store not found.")
 
-    tracks = []
+    published_tracks = []
     for track in list(getattr(profile, "tracks", None) or []):
         if not getattr(track, "is_published", True):
             continue
@@ -54,7 +45,16 @@ def creator_store(
         except Exception:
             track.cover_art_url = None
 
-        tracks.append(track)
+        published_tracks.append(track)
+
+    beats = [
+        track for track in published_tracks
+        if str(getattr(track, "content_type", "beat") or "beat") == "beat"
+    ]
+    tracks = [
+        track for track in published_tracks
+        if str(getattr(track, "content_type", "beat") or "beat") == "track"
+    ]
 
     albums = []
     for album in list(getattr(profile, "albums", None) or []):
@@ -74,13 +74,12 @@ def creator_store(
 
     is_owner = bool(
         current_user
-        and str(getattr(current_user, "id", ""))
-        == str(getattr(profile, "user_id", ""))
+        and str(getattr(current_user, "id", "")) == str(getattr(profile, "user_id", ""))
     )
 
     return templates.TemplateResponse(
         request,
-        "profile_detail.html",
+        "creator_store.html",
         {
             "request": request,
             "current_user": current_user,
@@ -88,6 +87,7 @@ def creator_store(
             "current_year": 2026,
             "profile": profile,
             "creator": getattr(profile, "user", None),
+            "beats": beats,
             "tracks": tracks,
             "albums": albums,
             "is_owner": is_owner,
