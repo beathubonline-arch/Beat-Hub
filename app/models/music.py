@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Enum as SAEnum,
     ForeignKey,
     Integer,
     Numeric,
@@ -96,17 +97,12 @@ class Track(Base):
     preview_file_path = Column(String(1000), nullable=True)
     price = Column(Numeric(12, 2), nullable=False, default=0)
     sales_model = Column(
-        # Keep this non-native so PostgreSQL migrations do not create another
-        # enum family for this unrelated classification feature.
-        __import__("sqlalchemy").Enum(SalesModel, name="salesmodel", native_enum=False),
+        SAEnum(SalesModel, name="salesmodel", native_enum=False),
         nullable=False,
         default=SalesModel.NON_EXCLUSIVE,
     )
     content_type = Column(String(20), nullable=False, default=TrackContentType.BEAT.value, server_default="beat", index=True)
     is_sold = Column(Boolean, nullable=False, default=False, server_default="0")
-
-    # New uploads are immediately public. Existing tracks are not changed by
-    # this model default; the migration explicitly classifies existing rows.
     is_published = Column(Boolean, nullable=False, default=True, server_default="1")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
