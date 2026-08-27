@@ -16,7 +16,11 @@ from app.config import settings
 from app.database import get_db
 from app.models.ledger import AdminWithdrawal
 from app.routers.admin import get_admin_withdrawal_financials
-from app.services.paystack_transfers import PaystackTransferError, create_mpesa_transfer
+from app.services.paystack_transfers import (
+    PaystackTransferError,
+    PaystackTransferNetworkError,
+    create_mpesa_transfer,
+)
 from app.utils.deps import require_admin
 
 
@@ -45,14 +49,7 @@ async def confirm_and_send_admin_mpesa(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
-    """Confirm the admin withdrawal form and actually send the money to M-Pesa.
-
-    The legacy route only created a pending database record. BeatHub's admin
-    withdrawal form is now a real payout action: it validates the platform
-    balance, creates a locked payout record, sends the Paystack transfer, and
-    records the transfer reference. Live Paystack transfers remain processing
-    until transfer.success arrives by webhook.
-    """
+    """Confirm the admin withdrawal form and actually send the money to M-Pesa."""
     try:
         amount_value = Decimal((amount or "").strip())
     except (InvalidOperation, ValueError):
@@ -134,6 +131,19 @@ async def confirm_and_send_admin_mpesa(
         db.commit()
         return _redirect(message)
 
+    except PaystackTransferNetworkError as exc:
+        db.rollback()
+        logger.warning("Ambiguous admin M-Pesa payout response for %s: %s", withdrawal.id, exc)
+        failed = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal.id).first()
+        if failed:
+            failed.status = "processing"
+            failed.updated_at = datetime.utcnow()
+            failed.admin_note = "Paystack response was ambiguous. Check Paystack before retrying; BeatHub will not send the same payout twice automatically."
+            db.commit()
+        return _redirect(
+            "Paystack did not return a definite response. The payout remains processing so BeatHub will not send the same money twice.",
+            error=True,
+        )
     except PaystackTransferError as exc:
         db.rollback()
         failed = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal.id).first()
@@ -231,6 +241,12 @@ async def initiate_admin_mpesa_payout(
         db.commit()
         return _redirect(message)
 
+    except PaystackTransferNetworkError:
+        db.rollback()
+        return _redirect(
+            "Paystack returned no definite payout response. The withdrawal remains processing; do not retry until Paystack is checked.",
+            error=True,
+        )
     except PaystackTransferError as exc:
         db.rollback()
         logger.warning("Admin M-Pesa payout failed for %s: %s", withdrawal_id, exc)
@@ -238,7 +254,7 @@ async def initiate_admin_mpesa_payout(
     except Exception:
         db.rollback()
         logger.exception("Unexpected admin M-Pesa payout error for %s", withdrawal_id)
-        return _redirect("The M-Pesa payout could not be initiated. The record was not marked paid.", error=True)
+        return _redirect("The M-Pesa payout could not be initiated. The record remains protected from duplicate payout.", error=True)
 
 
 @router.post("/withdraw/{withdrawal_id}/approve")
