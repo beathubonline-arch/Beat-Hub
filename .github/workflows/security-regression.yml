@@ -25,5 +25,8 @@ jobs:
       - name: Compile application
         run: python -m compileall -q app tests
 
-      - name: Run authorization regression tests
+      - name: Run full regression tests — pass 1
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Run full regression tests — pass 2
         run: python -m unittest discover -s tests -p 'test_*.py' -v
