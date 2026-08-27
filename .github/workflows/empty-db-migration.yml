@@ -38,5 +38,5 @@ jobs:
 
       - name: Run Alembic from an empty PostgreSQL database
         env:
-          DATABASE_URL: postgresql+psycopg://beathub_test:beathub_test@127.0.0.1:5432/beathub_test
+          DATABASE_URL: postgresql+psycopg2://beathub_test:beathub_test@127.0.0.1:5432/beathub_test
         run: alembic upgrade head
