@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
+    FACEBOOK_URL: str = ""
 
     EMAIL_ENABLED: bool = False
     EMAIL_HOST: str = ""
