@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Create Album — BeatHub{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:45px auto;padding:0 20px;color:#fff">
+  <div style="padding:36px;border:1px solid rgba(245,200,75,.25);border-radius:24px;background:linear-gradient(145deg,#15130d,#0c0c0c);box-shadow:0 25px 70px rgba(0,0,0,.35)">
+    <div style="color:#f5c84b;font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase">Creator Studio</div>
+    <h1 style="font-size:clamp(34px,6vw,58px);margin:10px 0 12px;letter-spacing:-.05em">Create an Album</h1>
+    <p style="color:#999;line-height:1.7;margin-bottom:28px">Build a project from tracks you have already uploaded to BeatHub.</p>
+    {% if error %}<div style="padding:13px 15px;margin-bottom:20px;border-radius:12px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fecaca">{{ error }}</div>{% endif %}
+    <form method="post" action="/dashboard/albums/new">
+      <label style="display:block;margin-bottom:8px;font-weight:800">Album title</label>
+      <input name="title" required maxlength="255" placeholder="e.g. Midnight Stories" style="width:100%;height:52px;padding:0 15px;margin-bottom:20px;border-radius:12px;border:1px solid #292929;background:#111;color:#fff">
+      <label style="display:block;margin-bottom:8px;font-weight:800">Genre <span style="color:#777">(optional)</span></label>
+      <input name="genre" maxlength="100" placeholder="Afrobeats, Hip-Hop, R&B..." style="width:100%;height:52px;padding:0 15px;margin-bottom:20px;border-radius:12px;border:1px solid #292929;background:#111;color:#fff">
+      <label style="display:block;margin-bottom:8px;font-weight:800">Description <span style="color:#777">(optional)</span></label>
+      <textarea name="description" rows="5" maxlength="5000" placeholder="Tell listeners about this project..." style="width:100%;padding:15px;margin-bottom:25px;border-radius:12px;border:1px solid #292929;background:#111;color:#fff;resize:vertical"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:12px;gap:15px"><div><h2 style="margin:0;font-size:18px">Add tracks</h2><p style="color:#777;font-size:12px;margin:5px 0 0">Only your own uploaded tracks are available.</p></div></div>
+      <div style="display:grid;gap:9px;max-height:380px;overflow:auto;padding:4px">
+        {% for track in tracks %}
+        <label style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid #242424;border-radius:13px;background:#101010;cursor:pointer">
+          <input type="checkbox" name="track_ids" value="{{ track.id }}" style="width:18px;height:18px;accent-color:#f5c84b">
+          <span style="font-weight:800">{{ track.title }}</span>
+          <span style="margin-left:auto;color:#777;font-size:11px">{{ track.genre or 'Track' }}</span>
+        </label>
+        {% else %}
+        <div style="padding:25px;border:1px dashed #333;border-radius:14px;color:#777;text-align:center">Upload at least one track before creating an album.</div>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:28px">
+        <button type="submit" style="min-height:50px;padding:0 24px;border:0;border-radius:12px;background:linear-gradient(135deg,#ffe58a,#d5a91f);color:#111;font-weight:900;cursor:pointer">Create Album</button>
+        <a href="/dashboard" style="min-height:50px;padding:0 22px;border-radius:12px;border:1px solid #292929;color:#ddd;text-decoration:none;display:inline-flex;align-items:center">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
