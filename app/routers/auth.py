@@ -190,7 +190,12 @@ def signup_submit(
 
 @router.get("/login")
 def login_page(request: Request, next: str = "", error: str = ""):
-    return templates.TemplateResponse(request, "login.html", {"request": request, "next": _safe_next_url(next), "error": error})
+    safe_next = _safe_next_url(next)
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"request": request, "next": safe_next, "next_url": quote(safe_next, safe=""), "error": error},
+    )
 
 
 @router.post("/login")
@@ -203,6 +208,7 @@ def login_submit(
     db: Session = Depends(get_db),
 ):
     login_identifier = (identifier or email).strip().lower()
+    safe_next = _safe_next_url(next)
     user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()
 
     if not user and login_identifier:
@@ -212,12 +218,12 @@ def login_submit(
             user = db.query(User).filter(User.id == profile.user_id).first()
 
     if not user or not _password_matches(password, getattr(user, "hashed_password", "")):
-        return RedirectResponse(url=f"/login?error=Invalid%20email%20or%20password&next={quote(_safe_next_url(next), safe='')}", status_code=303)
+        return RedirectResponse(url=f"/login?error=Invalid%20email%20or%20password&next={quote(safe_next, safe='')}", status_code=303)
     if hasattr(user, "is_active") and not user.is_active:
-        return RedirectResponse(url=f"/login?error=Your%20account%20is%20inactive&next={quote(_safe_next_url(next), safe='')}", status_code=303)
+        return RedirectResponse(url=f"/login?error=Your%20account%20is%20inactive&next={quote(safe_next, safe='')}", status_code=303)
 
     token = create_access_token(subject=str(user.id), extra_claims={"role": get_role_name(user)})
-    response = RedirectResponse(url=_safe_next_url(next) or dashboard_url_for_user(user), status_code=303)
+    response = RedirectResponse(url=safe_next or dashboard_url_for_user(user), status_code=303)
     _set_auth_cookie(response, token)
     return response
 
