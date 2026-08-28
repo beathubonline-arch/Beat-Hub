@@ -97,14 +97,12 @@ def artist_signup_page(request: Request):
 
 
 @router.get("/artist/studio")
-def artist_studio_page(request: Request, db: Session = Depends(get_db)):
-    from app.utils.deps import get_current_user
-
-    user = get_current_user(request, db)
-    if not user:
-        return RedirectResponse(url="/login?error=Please%20log%20in%20to%20access%20Artist%20Studio.", status_code=303)
-
-    profile = getattr(user, "profile", None)
+def artist_studio_page(
+    request: Request,
+    user: User = Depends(__import__("app.utils.deps", fromlist=["get_current_user"]).get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = db.query(Profile).filter(Profile.user_id == str(user.id)).first()
     if get_role_name(user) != "creator" or not getattr(profile, "is_artist", False):
         return RedirectResponse(url="/dashboard?error=Artist%20Studio%20requires%20an%20artist%20account.", status_code=303)
 
