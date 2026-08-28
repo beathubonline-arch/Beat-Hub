@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 
 from app.models.music import AlbumContentType, TrackContentType
-from app.routers import album, beat_catalog, music_publish
+from app.routers import album, beat_catalog, marketplace, music_publish
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,10 +23,7 @@ class MusicContentTypeTests(unittest.TestCase):
             route for route in music_publish.router.routes
             if getattr(route, "path", "") == "/dashboard/upload"
         )
-        dependency_names = {
-            parameter.name
-            for parameter in route.dependant.body_params
-        }
+        dependency_names = {parameter.name for parameter in route.dependant.body_params}
         self.assertIn("content_types", dependency_names)
 
     def test_album_creation_endpoint_requires_project_type(self):
@@ -35,17 +32,20 @@ class MusicContentTypeTests(unittest.TestCase):
             if getattr(route, "path", "") == "/dashboard/albums/new"
             and "POST" in getattr(route, "methods", set())
         )
-        dependency_names = {
-            parameter.name
-            for parameter in route.dependant.body_params
-        }
+        dependency_names = {parameter.name for parameter in route.dependant.body_params}
         self.assertIn("content_type", dependency_names)
 
-    def test_public_beats_route_is_classification_aware(self):
-        paths = [getattr(route, "path", "") for route in beat_catalog.router.routes]
+    def test_public_marketplace_is_canonical_entry(self):
+        paths = [getattr(route, "path", "") for route in marketplace.router.routes]
+        self.assertIn("/marketplace", paths)
         self.assertIn("/beats", paths)
+
+    def test_dedicated_beat_catalog_is_classification_aware(self):
+        paths = [getattr(route, "path", "") for route in beat_catalog.router.routes]
+        self.assertIn("/marketplace/beats", paths)
         source = (ROOT / "app/routers/beat_catalog.py").read_text(encoding="utf-8")
         self.assertIn('content_type", "beat"', source)
+        self.assertIn('== "beat"', source)
 
     def test_store_template_has_separate_sections(self):
         source = (ROOT / "app/templates/creator_store.html").read_text(encoding="utf-8")
@@ -68,9 +68,18 @@ class MusicContentTypeTests(unittest.TestCase):
         self.assertIn('value="beat_collection"', source)
         self.assertIn("data-type", source)
 
+    def test_marketplace_template_has_required_discovery_sections(self):
+        source = (ROOT / "app/templates/marketplace.html").read_text(encoding="utf-8")
+        self.assertIn("Beat Producers", source)
+        self.assertIn("Tracks / Songs", source)
+        self.assertIn("Creator Merchandise", source)
+        self.assertIn("/store/", source)
+        self.assertIn("/merch", source)
+
     def test_python_files_compile_as_ast(self):
         paths = [
             ROOT / "app/models/music.py",
+            ROOT / "app/routers/marketplace.py",
             ROOT / "app/routers/music_publish.py",
             ROOT / "app/routers/beat_catalog.py",
             ROOT / "app/routers/album.py",
