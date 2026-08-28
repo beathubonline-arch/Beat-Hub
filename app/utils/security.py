@@ -47,16 +47,30 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
+def _jwt_secret() -> str:
+    """Return the dedicated JWT secret and fail clearly if it is unavailable.
+
+    SECRET_KEY is intentionally separate from the session secret. We never use
+    a hard-coded fallback because that would make production tokens forgeable.
+    """
+    secret = (settings.SECRET_KEY or "").strip()
+    if not secret:
+        raise RuntimeError(
+            "JWT authentication is not configured: SECRET_KEY is missing. "
+            "Set a strong random SECRET_KEY in the deployment environment and restart BeatHub."
+        )
+    return secret
+
+
 def create_access_token(
     subject: str,
     extra_claims: Optional[dict] = None,
 ) -> str:
     now = datetime.utcnow()
-
     expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
-        "sub": subject,
+        "sub": str(subject),
         "exp": expire,
         "iat": now,
     }
@@ -66,7 +80,7 @@ def create_access_token(
 
     return jwt.encode(
         payload,
-        settings.SECRET_KEY,
+        _jwt_secret(),
         algorithm=settings.JWT_ALGORITHM,
     )
 
@@ -75,8 +89,8 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(
             token,
-            settings.SECRET_KEY,
+            _jwt_secret(),
             algorithms=[settings.JWT_ALGORITHM],
         )
-    except jwt.PyJWTError:
+    except (jwt.PyJWTError, RuntimeError):
         return None
