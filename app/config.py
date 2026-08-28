@@ -1,9 +1,12 @@
 """Central application configuration.
 
 All values are sourced from environment variables / .env.
+Production security configuration fails closed: known/default secrets are
+never accepted as signing or session secrets in a live deployment.
 """
 
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,8 +20,8 @@ class Settings(BaseSettings):
 
     APP_ENV: str = "development"
     APP_NAME: str = "BeatHub"
-    SECRET_KEY: str = "change-me-in-production"
-    SESSION_SECRET: str = ""
+    SECRET_KEY: Optional[str] = None
+    SESSION_SECRET: Optional[str] = None
     DATABASE_URL: str = "sqlite:///./beathub.db"
     BASE_URL: str = "http://localhost:8000"
 
@@ -77,10 +80,37 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.APP_ENV.lower() == "production"
 
+    def validate_runtime_security(self) -> None:
+        """Fail closed when production security secrets are missing/default."""
+        if not self.is_production:
+            return
+
+        invalid = []
+        if not self.SECRET_KEY or self.SECRET_KEY.strip() in {
+            "change-me-in-production",
+            "replace-this-with-a-long-random-string",
+        }:
+            invalid.append("SECRET_KEY")
+
+        if not self.SESSION_SECRET or self.SESSION_SECRET.strip() in {
+            "beathub-development-session-secret-change-me",
+            "replace-this-with-another-long-random-string",
+        }:
+            invalid.append("SESSION_SECRET")
+
+        if invalid:
+            raise RuntimeError(
+                "Production startup blocked: required security secret(s) "
+                f"missing or using a known/default value: {', '.join(invalid)}. "
+                "Set strong random values in the deployment environment."
+            )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    app_settings = Settings()
+    app_settings.validate_runtime_security()
+    return app_settings
 
 
 settings = get_settings()
