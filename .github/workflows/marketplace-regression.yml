@@ -25,7 +25,7 @@ jobs:
         run: python -m compileall -q app main.py tests
 
       - name: Marketplace regression pass 1
-        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace
+        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return
 
       - name: Marketplace regression pass 2
-        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace
+        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return
