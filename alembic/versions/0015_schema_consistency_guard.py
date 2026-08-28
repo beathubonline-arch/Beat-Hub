@@ -4,8 +4,8 @@ Revision ID: schema_consistency_015
 Revises: platform_financial_ledger_015
 
 This migration does not rewrite historical revisions and does not drop data.
-It verifies the production-critical payment schema and normalizes the small
-set of values that must match the current application contract.
+It verifies the production-critical payment schema and safely reconciles
+legacy payment status labels into the current application contract.
 """
 
 from alembic import op
@@ -34,9 +34,27 @@ def upgrade() -> None:
             + ", ".join(sorted(missing))
         )
 
+    # Normalize historical labels without ever upgrading an uncertain state.
+    # Successful/paid labels represent a provider-confirmed payment in the
+    # legacy schema; processing/initiated remain pending; cancelled variants
+    # remain failed. Unknown values are deliberately rejected below.
     op.execute(
         sa.text(
-            "UPDATE payment_transactions SET status = lower(status::text) "
+            "UPDATE payment_transactions "
+            "SET status = CASE lower(status::text) "
+            "WHEN 'pending' THEN 'pending' "
+            "WHEN 'processing' THEN 'pending' "
+            "WHEN 'initiated' THEN 'pending' "
+            "WHEN 'queued' THEN 'pending' "
+            "WHEN 'completed' THEN 'completed' "
+            "WHEN 'success' THEN 'completed' "
+            "WHEN 'successful' THEN 'completed' "
+            "WHEN 'paid' THEN 'completed' "
+            "WHEN 'failed' THEN 'failed' "
+            "WHEN 'failure' THEN 'failed' "
+            "WHEN 'cancelled' THEN 'failed' "
+            "WHEN 'canceled' THEN 'failed' "
+            "ELSE lower(status::text) END "
             "WHERE status IS NOT NULL"
         )
     )
@@ -48,7 +66,10 @@ def upgrade() -> None:
         )
     ).scalar_one()
     if invalid:
-        raise RuntimeError(f"Schema guard found {invalid} payment transaction(s) with an invalid status.")
+        raise RuntimeError(
+            f"Schema guard found {invalid} payment transaction(s) with an unknown status. "
+            "No unknown status was silently converted."
+        )
 
     status = {c["name"]: c for c in sa.inspect(bind).get_columns("payment_transactions")}["status"]
     status_type = str(status.get("type", "")).lower()
