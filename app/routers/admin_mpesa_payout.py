@@ -29,6 +29,7 @@ from app.services.paystack_transfers import (
 from app.services.platform_finance import (
     estimate_mpesa_transfer_fee,
     get_admin_withdrawal_financials,
+    lock_platform_withdrawal_reservation,
     record_platform_withdrawal,
 )
 from app.utils.deps import require_admin
@@ -61,6 +62,23 @@ def _valid_phone(phone: str) -> bool:
     if digits.startswith("7"):
         return len(digits) == 9
     return False
+
+
+def _validate_successful_transfer(data: dict, withdrawal: AdminWithdrawal) -> None:
+    """Validate provider data before a platform payout becomes paid."""
+    currency = str(data.get("currency") or "").upper()
+    if currency != "KES":
+        raise HTTPException(status_code=400, detail="Paystack transfer currency does not match KES.")
+
+    raw_amount = data.get("amount")
+    try:
+        provider_amount = Decimal(str(raw_amount))
+        expected_amount = (Decimal(str(withdrawal.amount)) * Decimal("100")).quantize(Decimal("1"))
+    except (InvalidOperation, ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Paystack transfer amount is invalid.")
+
+    if provider_amount != expected_amount:
+        raise HTTPException(status_code=400, detail="Paystack transfer amount does not match the BeatHub withdrawal.")
 
 
 @router.get("/withdraw")
@@ -120,17 +138,20 @@ async def confirm_and_send_admin_mpesa(
     if not _valid_phone(phone):
         return _redirect("Enter a valid Kenyan M-Pesa number.", error=True)
 
+    # Serialize the balance check with the reservation commit. This prevents
+    # two simultaneous admin submissions from spending the same available
+    # platform funds.
+    lock_platform_withdrawal_reservation(db)
     financials = get_admin_withdrawal_financials(db)
     available = financials["available"]
     transfer_fee = estimate_mpesa_transfer_fee(amount_value)
     if amount_value + transfer_fee > available:
+        db.rollback()
         return _redirect(
             f"Insufficient available BeatHub platform funds. KSh {amount_value:.2f} plus an estimated KSh {transfer_fee:.2f} transfer fee exceeds the available KSh {available:.2f}.",
             error=True,
         )
 
-    # Protect against accidental browser double-submit of the same amount and
-    # destination within a short window.
     recent_duplicate = (
         db.query(AdminWithdrawal)
         .filter(AdminWithdrawal.phone_number == phone)
@@ -142,6 +163,7 @@ async def confirm_and_send_admin_mpesa(
     if recent_duplicate and recent_duplicate.created_at:
         age_seconds = (datetime.utcnow() - recent_duplicate.created_at).total_seconds()
         if age_seconds <= 60:
+            db.rollback()
             return _redirect("A matching platform withdrawal was already submitted in the last minute. It remains protected from duplicate payout.", error=True)
 
     reference = _new_reference()
@@ -228,23 +250,37 @@ def approve_admin_withdrawal_for_payout(withdrawal_id: str, db: Session = Depend
 
 @router.post("/withdraw/{withdrawal_id}/paid")
 async def initiate_legacy_admin_mpesa_payout(withdrawal_id: str, db: Session = Depends(get_db), user=Depends(require_admin)):
+    lock_platform_withdrawal_reservation(db)
     withdrawal = db.query(AdminWithdrawal).filter(AdminWithdrawal.id == withdrawal_id).with_for_update().first()
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Admin withdrawal not found.")
 
     current = _status(withdrawal.status)
     if current == "paid":
+        db.rollback()
         return _redirect("This withdrawal is already paid. No second payout was sent.", error=True)
     if current == "processing" and withdrawal.payout_reference:
+        db.rollback()
         return _redirect("This payout has already been initiated and is awaiting Paystack confirmation. No second payout was sent.", error=True)
     if current not in {"pending", "approved"}:
+        db.rollback()
         return _redirect(f"This withdrawal cannot be paid because its status is {current}.", error=True)
 
     amount = Decimal(str(withdrawal.amount or 0)).quantize(Decimal("0.01"))
     if amount <= 0 or amount > Decimal("150000.00"):
+        db.rollback()
         return _redirect("The withdrawal amount is outside the Kenyan M-Pesa transfer limits.", error=True)
     if not _valid_phone(withdrawal.phone_number):
+        db.rollback()
         return _redirect("The withdrawal has an invalid Kenyan M-Pesa number.", error=True)
+
+    financials = get_admin_withdrawal_financials(db)
+    transfer_fee = estimate_mpesa_transfer_fee(amount)
+    # The withdrawal is already reserved by its pending/approved row, so add
+    # only the estimated provider fee when checking available funds here.
+    if amount + transfer_fee > financials["available"] + amount:
+        db.rollback()
+        return _redirect("Insufficient available platform funds for this payout and its transfer fee.", error=True)
 
     reference = _new_reference()
     withdrawal.status = "processing"
@@ -317,11 +353,18 @@ async def paystack_transfer_webhook(request: Request, db: Session = Depends(get_
         return {"status": True}
 
     if event == "transfer.success":
+        _validate_successful_transfer(data, withdrawal)
         withdrawal.status = "paid"
         withdrawal.updated_at = datetime.utcnow()
         withdrawal.resolved_at = datetime.utcnow()
         withdrawal.admin_note = "Paystack confirmed the M-Pesa transfer as successful."
+        # Paystack's transfer webhook exposes the charged fee as fee_charged.
+        # Paystack's Kenya M-Pesa fee schedule is already represented by the
+        # local estimator, so use the provider value only when it is explicitly
+        # supplied in KES; otherwise use the known schedule.
         fee = Decimal(str(data.get("fee") or estimate_mpesa_transfer_fee(Decimal(str(withdrawal.amount)))))
+        if fee < 0:
+            raise HTTPException(status_code=400, detail="Paystack transfer fee is invalid.")
         record_platform_withdrawal(db, withdrawal, fee)
     elif event == "transfer.reversed":
         withdrawal.status = "rejected"
