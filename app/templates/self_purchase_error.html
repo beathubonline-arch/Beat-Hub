@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Creator Purchase Notice — BeatHub{% endblock %}
+{% block content %}
+<style>
+  .bh-own-wrap{min-height:calc(100vh - 180px);display:flex;align-items:center;justify-content:center;padding:56px 20px 80px}
+  .bh-own-card{position:relative;width:min(760px,100%);overflow:hidden;border:1px solid rgba(212,175,55,.28);border-radius:30px;background:radial-gradient(circle at 88% 8%,rgba(240,216,120,.16),transparent 25%),linear-gradient(145deg,#111114,#0b0b0e 62%,#13110b);box-shadow:0 35px 100px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.05);padding:46px}
+  .bh-own-card:before{content:"";position:absolute;width:330px;height:330px;right:-160px;top:-170px;border:1px solid rgba(240,216,120,.13);border-radius:50%;box-shadow:0 0 0 34px rgba(240,216,120,.025),0 0 0 72px rgba(240,216,120,.015)}
+  .bh-own-kicker{position:relative;display:inline-flex;align-items:center;gap:9px;color:#f0d878;font-size:10px;font-weight:950;letter-spacing:.2em;text-transform:uppercase;margin-bottom:18px}.bh-own-kicker:before{content:"";width:28px;height:1px;background:#d4af37}
+  .bh-own-icon{position:relative;width:68px;height:68px;border-radius:21px;display:flex;align-items:center;justify-content:center;margin-bottom:22px;border:1px solid rgba(240,216,120,.25);background:linear-gradient(145deg,rgba(240,216,120,.14),rgba(212,175,55,.035));box-shadow:0 15px 35px rgba(0,0,0,.25);font-size:30px}
+  .bh-own-card h1{position:relative;margin:0;color:#fff;font-size:clamp(32px,5vw,52px);line-height:.98;letter-spacing:-.055em;max-width:620px}.bh-own-card h1 span{color:#e7bd55}
+  .bh-own-lead{position:relative;margin:18px 0 0;max-width:610px;color:#a7a7af;font-size:14px;line-height:1.75}
+  .bh-own-highlight{position:relative;margin:26px 0 0;padding:18px 19px;border-radius:17px;border:1px solid rgba(212,175,55,.18);background:rgba(212,175,55,.045);display:flex;gap:13px;align-items:flex-start}.bh-own-highlight strong{display:block;color:#f4f4f5;font-size:13px;margin-bottom:4px}.bh-own-highlight p{margin:0;color:#8e8e97;font-size:11px;line-height:1.6}.bh-own-dot{flex:0 0 9px;width:9px;height:9px;margin-top:5px;border-radius:50%;background:#f0d878;box-shadow:0 0 18px rgba(240,216,120,.65)}
+  .bh-own-actions{position:relative;display:flex;flex-wrap:wrap;gap:11px;margin-top:28px}.bh-own-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 19px;border-radius:12px;font-size:11px;font-weight:950;text-decoration:none;transition:.18s ease}.bh-own-primary{background:linear-gradient(135deg,#f3cf68,#d7a92f);color:#080808;box-shadow:0 12px 28px rgba(212,175,55,.16)}.bh-own-primary:hover{transform:translateY(-1px);box-shadow:0 17px 35px rgba(212,175,55,.24)}.bh-own-secondary{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.025);color:#d8d8dc}.bh-own-secondary:hover{border-color:rgba(240,216,120,.35);color:#fff}
+  .bh-own-foot{position:relative;margin-top:30px;padding-top:17px;border-top:1px solid rgba(255,255,255,.07);color:#65656d;font-size:10px;line-height:1.6}.bh-own-foot b{color:#8f8f97}
+  @media(max-width:620px){.bh-own-wrap{padding:28px 14px 50px}.bh-own-card{padding:30px 23px;border-radius:23px}.bh-own-actions{flex-direction:column}.bh-own-btn{width:100%}}
+</style>
+<section class="bh-own-wrap">
+  <div class="bh-own-card">
+    <div class="bh-own-kicker">Creator purchase notice</div>
+    <div class="bh-own-icon">✦</div>
+    <h1>This is <span>your</span> merchandise.</h1>
+    <p class="bh-own-lead">You’re signed in as the creator of this product, so BeatHub has stopped the purchase before any payment is created. Your creator account can manage and promote the item, but it can’t purchase its own merchandise.</p>
+    <div class="bh-own-highlight"><span class="bh-own-dot"></span><div><strong>No payment was taken.</strong><p>Your checkout was safely blocked before Paystack was initialized. Your store, product and earnings remain unchanged.</p></div></div>
+    <div class="bh-own-actions">
+      <a class="bh-own-btn bh-own-primary" href="/dashboard/merch">Manage My Merchandise</a>
+      <a class="bh-own-btn bh-own-secondary" href="/merch">Explore BeatHub Merch</a>
+      {% if store_url %}<a class="bh-own-btn bh-own-secondary" href="{{ store_url }}">View My Store</a>{% endif %}
+    </div>
+    <div class="bh-own-foot"><b>BeatHub Creator Protection</b> · We prevent self-purchases to keep sales, commissions and creator earnings accurate.</div>
+  </div>
+</section>
+{% endblock %}
