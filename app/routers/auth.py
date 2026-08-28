@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.utils.security import create_access_token, verify_password
+from app.templates import templates
 
 router = APIRouter()
 
