@@ -22,6 +22,12 @@ class TrackMarketplaceTests(unittest.TestCase):
         self.assertIn('== "track"', source)
         self.assertIn("_track_is_public", source)
 
+    def test_beat_catalog_is_classification_aware(self):
+        source = (ROOT / "app/routers/beat_catalog.py").read_text(encoding="utf-8")
+        self.assertIn('content_type", "beat")', source)
+        self.assertIn('== "beat"', source)
+        self.assertIn("_track_is_public", source)
+
     def test_track_marketplace_template_has_purchase_flow(self):
         source = (ROOT / "app/templates/tracks.html").read_text(encoding="utf-8")
         self.assertIn("Buy <span>Tracks.</span>", source)
@@ -39,9 +45,24 @@ class TrackMarketplaceTests(unittest.TestCase):
         self.assertIn('@router.get("/checkout/track/{slug}")', source)
         self.assertIn("track_is_available", source)
 
+    def test_content_type_migration_exists_and_classifies_artist_rows(self):
+        source = (ROOT / "alembic/versions/0014_music_content_types.py").read_text(encoding="utf-8")
+        self.assertIn("content_type", source)
+        self.assertIn("SET content_type = 'track'", source)
+        self.assertIn("p.is_artist", source)
+
+    def test_startup_runs_migrations_before_fastapi(self):
+        source = (ROOT / "start.sh").read_text(encoding="utf-8")
+        migration_pos = source.index("alembic upgrade head")
+        uvicorn_pos = source.index("exec python -m uvicorn")
+        self.assertLess(migration_pos, uvicorn_pos)
+
     def test_python_files_parse(self):
         for relative in (
+            "app/models/music.py",
             "app/routers/track_catalog.py",
+            "app/routers/beat_catalog.py",
+            "app/routers/music_publish.py",
             "app/routers/checkout.py",
             "main.py",
         ):
