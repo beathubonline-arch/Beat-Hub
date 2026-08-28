@@ -7,7 +7,7 @@ confirmed platform debits, including successful M-Pesa transfer fees.
 
 from decimal import Decimal
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.models.ledger import AdminWithdrawal, PlatformLedgerEntry
@@ -31,6 +31,21 @@ def estimate_mpesa_transfer_fee(amount: Decimal) -> Decimal:
     if value <= Decimal("150000.00"):
         return Decimal("60.00")
     return Decimal("0.00")
+
+
+def lock_platform_withdrawal_reservation(db: Session) -> None:
+    """Serialize platform withdrawal reservations on PostgreSQL.
+
+    The available balance is derived from ledger credits/debits plus pending
+    reservations. Without serialization, two concurrent admin submissions can
+    both observe the same available balance and reserve/spend the same money.
+    PostgreSQL transaction-level advisory locks make the check + reservation
+    atomic without introducing a fake singleton accounting row. Other database
+    engines retain the existing behavior for local development.
+    """
+    bind = db.get_bind()
+    if bind.dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(74182391)"))
 
 
 def get_platform_financials(db: Session):
@@ -116,6 +131,9 @@ def record_platform_withdrawal(
         return False
 
     fee = _decimal(provider_fee)
+    if fee < ZERO:
+        raise ValueError("Provider fee cannot be negative.")
+
     total_debit = _decimal(withdrawal.amount) + fee
     db.add(
         PlatformLedgerEntry(
