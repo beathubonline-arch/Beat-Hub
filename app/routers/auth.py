@@ -1,20 +1,19 @@
-import enum
 import re
 import secrets
-from datetime import datetime, timedelta
 from urllib.parse import quote, unquote, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.utils.security import create_access_token, verify_password
-from app.templates import templates
 
 router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
 
 SESSION_COOKIE_NAME = "beathub_session"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 30
