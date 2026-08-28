@@ -5,38 +5,17 @@
 <style>
 .creator-dashboard{max-width:1450px;margin:auto;padding:18px 0 70px;color:#f5f5f5}
 .dash-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 24px;padding:8px;border:1px solid rgba(245,200,75,.2);border-radius:16px;background:#101010;position:sticky;top:12px;z-index:5;backdrop-filter:blur(12px)}
-.dash-tabs a{padding:11px 14px;border-radius:10px;color:#aaa;text-decoration:none;font-weight:800;font-size:13px;transition:.18s}
-.dash-tabs a:hover,.dash-tabs a.active{background:rgba(245,200,75,.12);color:#ffe58a}
+.dash-tabs a{padding:11px 14px;border-radius:10px;color:#aaa;text-decoration:none;font-weight:800;font-size:13px;transition:.18s}.dash-tabs a:hover,.dash-tabs a.active{background:rgba(245,200,75,.12);color:#ffe58a}
 .dashboard-hero{padding:36px;border-radius:24px;background:linear-gradient(135deg,#151515,#0b0b0b);border:1px solid rgba(245,200,75,.2);margin-bottom:24px}
 .hero-actions,.section-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;padding:11px 17px;border-radius:10px;text-decoration:none;font-weight:800;border:1px solid transparent}.btn-primary{background:#f5c84b;color:#111}.btn-outline{border-color:#333;color:#eee}.btn-danger{border-color:#542b2b;color:#ffb5b5;background:#170d0d}
 .dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:14px}.card{padding:21px;border:1px solid #252525;border-radius:18px;background:#111}.card h2,.card h3{margin-top:0}.muted{color:#999;font-size:13px}.section{scroll-margin-top:95px;margin-top:24px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:14px}.data-list{display:grid;gap:9px}.data-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px;border:1px solid #252525;border-radius:13px;background:#0d0d0d}.row-title{font-weight:800}.row-meta{color:#999;font-size:12px;margin-top:4px}.pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#1b1b1b;color:#ccc;font-size:11px;font-weight:800}.alert{margin-bottom:18px;padding:14px 16px;border-radius:12px;border:1px solid #333;background:#141414}.empty{padding:26px;text-align:center;border:1px dashed #333;border-radius:14px;color:#999}
 @media(max-width:700px){.dashboard-hero{padding:24px}.dash-tabs{overflow:auto;flex-wrap:nowrap}.dash-tabs a{white-space:nowrap}.data-row{align-items:flex-start;flex-direction:column}.section-head{align-items:flex-start;flex-direction:column}}
 </style>
-
 <nav class="dash-tabs" aria-label="Creator Studio sections">
-<a class="active" href="#overview">Overview</a>
-<a href="#tracks">Beats &amp; Tracks</a>
-<a href="#albums">Albums / EPs</a>
-<a href="/dashboard/merch">Merchandise</a>
-<a href="/dashboard/analytics">Analytics</a>
-<a href="#earnings">Earnings</a>
-<a href="#store">My Store</a>
-<a href="/dashboard/withdraw">Withdraw</a>
+<a class="active" href="#overview">Overview</a><a href="#tracks">Beats &amp; Tracks</a><a href="#albums">Albums / EPs</a><a href="/dashboard/merch">Merchandise</a><a href="/dashboard/analytics">Analytics</a><a href="#earnings">Earnings</a><a href="#store">My Store</a><a href="/dashboard/withdraw">Withdraw</a>
 </nav>
-
-{% if success %}<div class="alert">{{ success }}</div>{% endif %}
-{% if error %}<div class="alert">{{ error }}</div>{% endif %}
-
-<section id="overview" class="dashboard-hero section">
-<h1>Creator Studio</h1>
-<p class="muted">Your complete BeatHub workspace — manage music, albums, merchandise, marketplace presence and earnings without leaving Creator Studio.</p>
-<div class="hero-actions" style="margin-top:20px">
-<a class="btn btn-primary" href="/dashboard/upload">Upload Beat / Track</a>
-<a class="btn btn-outline" href="/dashboard/albums/new">Create Album / EP</a>
-<a class="btn btn-outline" href="#store">View My Store</a>
-</div>
-</section>
-
+{% if success %}<div class="alert">{{ success }}</div>{% endif %}{% if error %}<div class="alert">{{ error }}</div>{% endif %}
+<section id="overview" class="dashboard-hero section"><h1>Creator Studio</h1><p class="muted">Your complete BeatHub workspace — manage music, albums, merchandise, marketplace presence and earnings without leaving Creator Studio.</p><div class="hero-actions" style="margin-top:20px"><a class="btn btn-primary" href="/dashboard/upload">Upload Beat / Track</a><a class="btn btn-outline" href="/dashboard/albums/new">Create Album / EP</a><a class="btn btn-outline" href="#store">View My Store</a></div></section>
 <section class="dashboard-grid">
 <div class="card"><h3>{{ track_count|default(0) }}</h3><div class="muted">Beats &amp; Tracks</div><a href="#tracks">Manage →</a></div>
 <div class="card"><h3>{{ album_count|default(0) }}</h3><div class="muted">Albums / EPs</div><a href="#albums">Manage →</a></div>
@@ -45,48 +24,14 @@
 <div class="card"><h3>{{ available_balance|default(0) }}</h3><div class="muted">Available Balance</div><a href="/dashboard/withdraw">Withdraw →</a></div>
 <div class="card"><h3>Store</h3><div class="muted">Your public marketplace</div><a href="#store">Open →</a></div>
 </section>
-
-<section id="tracks" class="card section">
-<div class="section-head"><div><h2>Beats &amp; Tracks</h2><div class="muted">Manage the music currently attached to your creator account.</div></div><div class="section-actions"><a class="btn btn-primary" href="/dashboard/upload">Upload</a></div></div>
-{% if tracks %}
-<div class="data-list">
-{% for track in tracks %}
-<div class="data-row">
-<div><div class="row-title">{{ track.title }}</div><div class="row-meta">{{ track.genre|default('Uncategorized') }}{% if track.price is defined and track.price is not none %} · {{ track.price }}{% endif %}</div></div>
-<div class="section-actions"><a class="btn btn-outline" href="/p/{{ track.slug }}">View</a><form method="post" action="/dashboard/tracks/{{ track.id }}/delete" onsubmit="return confirm('Delete or archive this track?');" style="margin:0"><button class="btn btn-danger" type="submit">Delete</button></form></div>
-</div>
-{% endfor %}
-</div>
-{% else %}<div class="empty">No uploads yet. Upload your first beat or track to start building your marketplace catalog.</div>{% endif %}
-</section>
-
-<section id="albums" class="card section">
-<div class="section-head"><div><h2>Albums / EPs</h2><div class="muted">Create and publish artist releases or instrumental collections.</div></div><div class="section-actions"><a class="btn btn-primary" href="/dashboard/albums/new">Create Album / EP</a></div></div>
-{% if albums %}
-<div class="data-list">
-{% for album in albums %}
-<div class="data-row"><div><div class="row-title">{{ album.title }}</div><div class="row-meta">{{ album.genre|default('Album / EP') }}</div></div><span class="pill">Published</span></div>
-{% endfor %}
-</div>
-{% else %}<div class="empty">No albums yet. Create an Album / EP and select the tracks you want included.</div>{% endif %}
-</section>
-
-<section id="earnings" class="card section">
-<div class="section-head"><div><h2>Earnings</h2><div class="muted">Your completed marketplace sales and payout position.</div></div><a class="btn btn-outline" href="/dashboard/withdraw">Withdrawal Center</a></div>
-<div class="dashboard-grid">
-<div class="card"><div class="muted">Gross revenue</div><h3>{{ gross_revenue|default(0) }}</h3></div>
-<div class="card"><div class="muted">Platform commission</div><h3>{{ platform_commission|default(0) }}</h3></div>
-<div class="card"><div class="muted">Net earnings</div><h3>{{ net_earnings|default(0) }}</h3></div>
-<div class="card"><div class="muted">Available</div><h3>{{ available_balance|default(0) }}</h3></div>
-</div>
-{% if recent_orders %}<div class="data-list" style="margin-top:15px">{% for order in recent_orders %}<div class="data-row"><div><div class="row-title">{{ order.track.title if order.track else 'Track sale' }}</div><div class="row-meta">Completed marketplace sale</div></div><span class="pill">{{ order.net_amount|default(0) }}</span></div>{% endfor %}</div>{% else %}<div class="empty" style="margin-top:15px">No completed sales yet.</div>{% endif %}
-</section>
-
-<section id="store" class="card section">
-<div class="section-head"><div><h2>My Store</h2><div class="muted">Your public creator marketplace presence.</div></div></div>
+<section id="tracks" class="card section"><div class="section-head"><div><h2>Beats &amp; Tracks</h2><div class="muted">Manage the music currently attached to your creator account.</div></div><div class="section-actions"><a class="btn btn-primary" href="/dashboard/upload">Upload</a></div></div>
+{% if tracks %}<div class="data-list">{% for track in tracks %}<div class="data-row"><div><div class="row-title">{{ track.title }}</div><div class="row-meta">{{ track.genre|default('Uncategorized') }}{% if track.price is defined and track.price is not none %} · {{ track.price }}{% endif %}</div></div><form method="post" action="/dashboard/tracks/{{ track.id }}/delete" onsubmit="return confirm('Delete or archive this track?');" style="margin:0"><button class="btn btn-danger" type="submit">Delete</button></form></div>{% endfor %}</div>{% else %}<div class="empty">No uploads yet. Upload your first beat or track to start building your marketplace catalog.</div>{% endif %}</section>
+<section id="albums" class="card section"><div class="section-head"><div><h2>Albums / EPs</h2><div class="muted">Create and publish artist releases or instrumental collections.</div></div><div class="section-actions"><a class="btn btn-primary" href="/dashboard/albums/new">Create Album / EP</a></div></div>
+{% if albums %}<div class="data-list">{% for album in albums %}<div class="data-row"><div><div class="row-title">{{ album.title }}</div><div class="row-meta">{{ album.genre|default('Album / EP') }}</div></div><span class="pill">Published</span></div>{% endfor %}</div>{% else %}<div class="empty">No albums yet. Create an Album / EP and select the tracks you want included.</div>{% endif %}</section>
+<section id="earnings" class="card section"><div class="section-head"><div><h2>Earnings</h2><div class="muted">Your completed marketplace sales and payout position.</div></div><a class="btn btn-outline" href="/dashboard/withdraw">Withdrawal Center</a></div>
+<div class="dashboard-grid"><div class="card"><div class="muted">Gross revenue</div><h3>{{ gross_revenue|default(0) }}</h3></div><div class="card"><div class="muted">Platform commission</div><h3>{{ platform_commission|default(0) }}</h3></div><div class="card"><div class="muted">Net earnings</div><h3>{{ net_earnings|default(0) }}</h3></div><div class="card"><div class="muted">Available</div><h3>{{ available_balance|default(0) }}</h3></div></div>
+{% if recent_orders %}<div class="data-list" style="margin-top:15px">{% for order in recent_orders %}<div class="data-row"><div><div class="row-title">{{ order.track.title if order.track else 'Track sale' }}</div><div class="row-meta">Completed marketplace sale</div></div><span class="pill">{{ order.net_amount|default(0) }}</span></div>{% endfor %}</div>{% else %}<div class="empty" style="margin-top:15px">No completed sales yet.</div>{% endif %}</section>
+<section id="store" class="card section"><div class="section-head"><div><h2>My Store</h2><div class="muted">Your public creator marketplace presence.</div></div></div>
 {% if store_url %}<div class="data-row"><div><div class="row-title">Public Store</div><div class="row-meta">{{ store_url }}</div></div><a class="btn btn-primary" href="{{ store_url }}" target="_blank" rel="noopener">Open Store →</a></div>{% else %}<div class="empty">Your public store link will appear here once your creator profile has a store slug.</div>{% endif %}
-<div class="section-actions" style="margin-top:15px"><a class="btn btn-outline" href="/dashboard/analytics">Analytics</a><a class="btn btn-outline" href="/dashboard/merch">Manage Merchandise</a><a class="btn btn-outline" href="/dashboard/withdraw">Withdraw Earnings</a></div>
-</section>
-
-</div>
-{% endblock %}
+<div class="section-actions" style="margin-top:15px"><a class="btn btn-outline" href="/dashboard/analytics">Analytics</a><a class="btn btn-outline" href="/dashboard/merch">Manage Merchandise</a><a class="btn btn-outline" href="/dashboard/withdraw">Withdraw Earnings</a></div></section>
+</div>{% endblock %}
