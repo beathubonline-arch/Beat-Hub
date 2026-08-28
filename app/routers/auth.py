@@ -92,13 +92,16 @@ def login_page(request: Request, next: str = "", error: str = ""):
 @router.post("/login")
 def login_submit(
     request: Request,
-    email: str = Form(...),
+    identifier: str = Form(""),
+    email: str = Form(""),
     password: str = Form(...),
     next: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    normalized_email = email.strip().lower()
-    user = db.query(User).filter(User.email == normalized_email).first()
+    # Accept both the current login form's `identifier` field and legacy
+    # clients/forms that still submit `email`.
+    login_identifier = (identifier or email).strip().lower()
+    user = db.query(User).filter(User.email == login_identifier).first()
 
     if not user or not _password_matches(password, user.password_hash):
         return RedirectResponse(
