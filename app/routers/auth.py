@@ -118,6 +118,7 @@ def login_submit(
 
 
 @router.get("/logout")
+@router.post("/logout")
 def logout(request: Request):
     response = RedirectResponse(url="/", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME, path="/")
