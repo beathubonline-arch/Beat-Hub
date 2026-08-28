@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# BeatHub deployment marker: creator marketplace dashboard V4.
-echo "[BeatHub] Deployment: Creator Marketplace Dashboard V4"
+# BeatHub deployment marker: creator marketplace dashboard V5.
+echo "[BeatHub] Deployment: Creator Marketplace Dashboard V5"
 
 MIGRATION_STATUS=0
 
