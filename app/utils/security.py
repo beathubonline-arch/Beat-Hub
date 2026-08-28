@@ -47,37 +47,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def _jwt_secret() -> str:
-    """Return a stable signing secret without silently inventing one.
-
-    SECRET_KEY is the preferred dedicated JWT secret. SESSION_SECRET is an
-    accepted compatibility fallback for deployments that already configured
-    only the session secret. We deliberately never use a hard-coded value.
-    Production deployments should set SECRET_KEY explicitly.
-    """
-    secret = (settings.SECRET_KEY or "").strip()
-    if not secret:
-        secret = (settings.SESSION_SECRET or "").strip()
-
-    if not secret:
-        raise RuntimeError(
-            "JWT authentication is not configured: SECRET_KEY is missing "
-            "and SESSION_SECRET is also unavailable. Set SECRET_KEY in Render "
-            "and restart BeatHub."
-        )
-
-    return secret
-
-
 def create_access_token(
     subject: str,
     extra_claims: Optional[dict] = None,
 ) -> str:
     now = datetime.utcnow()
+
     expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
-        "sub": str(subject),
+        "sub": subject,
         "exp": expire,
         "iat": now,
     }
@@ -87,7 +66,7 @@ def create_access_token(
 
     return jwt.encode(
         payload,
-        _jwt_secret(),
+        settings.SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
     )
 
@@ -96,8 +75,8 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(
             token,
-            _jwt_secret(),
+            settings.SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
         )
-    except (jwt.PyJWTError, RuntimeError):
+    except jwt.PyJWTError:
         return None
