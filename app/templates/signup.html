@@ -44,7 +44,7 @@
             </div>
 
             <div class="row">
-                <div class="field"><label class="field-label" for="stage_name">ARTIST / STAGE NAME</label><input class="input" id="stage_name" name="stage_name" value="{{ stage_name or '' }}" required maxlength="255" autocomplete="nickname"></div>
+                <div class="field"><label class="field-label" for="stage_name">ARTIST / STAGE NAME <span style="font-weight:600;color:#888;text-transform:none;letter-spacing:0">(e.g. Mr Mapema)</span></label><input class="input" id="stage_name" name="stage_name" value="{{ stage_name or '' }}" placeholder="e.g. Mr Mapema" required maxlength="255" autocomplete="nickname"></div>
                 <div class="field"><label class="field-label" for="email">EMAIL</label><input class="input" id="email" name="email" type="email" value="{{ email or '' }}" required maxlength="255" autocomplete="email"></div>
             </div>
             <div class="row">
