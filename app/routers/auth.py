@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.profile import Profile
 from app.models.user import User, UserRole
@@ -33,6 +34,23 @@ def _safe_next_url(value: str | None) -> str:
     if parsed.scheme or parsed.netloc:
         return ""
     return candidate
+
+
+def _cookie_secure() -> bool:
+    """Use secure auth cookies in production without breaking local HTTP development."""
+    return bool(settings.is_production or settings.SESSION_HTTPS_ONLY)
+
+
+def _set_auth_cookie(response: RedirectResponse, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        samesite="lax",
+        secure=_cookie_secure(),
+        path="/",
+    )
 
 
 def slugify(value: str) -> str:
@@ -150,13 +168,9 @@ def artist_signup_page(request: Request):
 
 
 @router.get("/artist/studio")
-def artist_studio_page(
-    request: Request,
-    user: User = Depends(require_user),
-):
+def artist_studio_page(request: Request, user: User = Depends(require_user)):
     if get_role_name(user) != "creator" or not getattr(getattr(user, "profile", None), "is_artist", False):
         return RedirectResponse(url="/login?error=Artist%20Studio%20access%20requires%20an%20artist%20creator%20account.", status_code=303)
-
     return templates.TemplateResponse(
         request,
         "artist_studio.html",
@@ -217,7 +231,7 @@ def signup_submit(
 
     token = create_access_token(subject=user.id, extra_claims={"role": get_role_name(user)})
     response = RedirectResponse(url=f"{dashboard_url_for_user(user)}?success=Account created. Welcome to BeatHub!", status_code=303)
-    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE, samesite="lax", secure=False, path="/")
+    _set_auth_cookie(response, token)
     return response
 
 
@@ -267,7 +281,7 @@ def login_submit(request: Request, db: Session = Depends(get_db), identifier: st
     if verify_admin_credentials(identifier_raw, password):
         token = create_admin_session_token()
         response = RedirectResponse(url="/admin", status_code=303)
-        response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE, samesite="lax", secure=False, path="/")
+        _set_auth_cookie(response, token)
         return response
 
     user = db.query(User).filter(User.email == identifier_norm).first()
@@ -288,7 +302,7 @@ def login_submit(request: Request, db: Session = Depends(get_db), identifier: st
     token = create_access_token(subject=user.id, extra_claims={"role": get_role_name(user)})
     destination = next_url or dashboard_url_for_user(user)
     response = RedirectResponse(url=destination, status_code=303)
-    response.set_cookie(key=SESSION_COOKIE_NAME, value=token, httponly=True, max_age=COOKIE_MAX_AGE, samesite="lax", secure=False, path="/")
+    _set_auth_cookie(response, token)
     return response
 
 
