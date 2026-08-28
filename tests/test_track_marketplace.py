@@ -38,7 +38,7 @@ class TrackMarketplaceTests(unittest.TestCase):
         self.assertIn("Beat Producers", source)
         self.assertIn("Tracks / Songs", source)
         self.assertIn("Creator Merchandise", source)
-        self.assertIn("/store/", source)
+        self.assertIn("producer.store_url", source)
         self.assertIn("/tracks", source)
         self.assertIn("/merch", source)
         self.assertIn("Browse all beats", source)
