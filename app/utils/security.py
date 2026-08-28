@@ -48,17 +48,24 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def _jwt_secret() -> str:
-    """Return the dedicated JWT secret and fail clearly if it is unavailable.
+    """Return a stable signing secret without silently inventing one.
 
-    SECRET_KEY is intentionally separate from the session secret. We never use
-    a hard-coded fallback because that would make production tokens forgeable.
+    SECRET_KEY is the preferred dedicated JWT secret. SESSION_SECRET is an
+    accepted compatibility fallback for deployments that already configured
+    only the session secret. We deliberately never use a hard-coded value.
+    Production deployments should set SECRET_KEY explicitly.
     """
     secret = (settings.SECRET_KEY or "").strip()
     if not secret:
+        secret = (settings.SESSION_SECRET or "").strip()
+
+    if not secret:
         raise RuntimeError(
-            "JWT authentication is not configured: SECRET_KEY is missing. "
-            "Set a strong random SECRET_KEY in the deployment environment and restart BeatHub."
+            "JWT authentication is not configured: SECRET_KEY is missing "
+            "and SESSION_SECRET is also unavailable. Set SECRET_KEY in Render "
+            "and restart BeatHub."
         )
+
     return secret
 
 
