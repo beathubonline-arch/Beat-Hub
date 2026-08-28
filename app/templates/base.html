@@ -22,7 +22,6 @@
     .beathub-community-icon{width:27px;height:27px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(240,216,120,.22);border-radius:8px;background:rgba(212,175,55,.08);color:#f0d878;font-size:13px;font-weight:950}
     .beathub-community-arrow{color:#777;font-size:13px}
 
-    /* Shared BeatHub transient notices. */
     .beathub-notice-wrap{position:fixed;top:76px;right:22px;z-index:9999;width:min(430px,calc(100vw - 30px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
     .beathub-notice{position:relative;display:flex;align-items:flex-start;gap:11px;padding:14px 42px 14px 15px;border-radius:13px;border:1px solid rgba(212,175,55,.28);background:rgba(13,13,13,.96);box-shadow:0 18px 45px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.025);color:#eee;font-size:13px;line-height:1.45;pointer-events:auto;overflow:hidden;animation:beathubNoticeIn .28s ease both}
     .beathub-notice.success{border-color:rgba(120,205,145,.34)}
@@ -39,18 +38,22 @@
     .beathub-notice.error .beathub-notice-progress{background:#e75f5f}
     .beathub-notice.paused .beathub-notice-progress{animation-play-state:paused}
     .beathub-notice.leaving{animation:beathubNoticeOut .22s ease forwards}
-
-    /* Legacy inline .alert elements are also transient so every route behaves consistently. */
     .beathub-legacy-notice{position:relative;overflow:hidden;transition:opacity .22s ease,transform .22s ease,max-height .24s ease,margin .24s ease,padding .24s ease}
     .beathub-legacy-notice.leaving{opacity:0;transform:translateY(-6px);max-height:0!important;margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important}
     .beathub-legacy-notice-progress{position:absolute;left:0;bottom:0;height:2px;width:100%;background:#79d491;transform-origin:left center;animation:beathubLegacyProgress var(--legacy-duration,5000ms) linear forwards;pointer-events:none}
     .beathub-legacy-notice.error .beathub-legacy-notice-progress{background:#e75f5f}
-
     @keyframes beathubNoticeIn{from{opacity:0;transform:translateY(-8px) translateX(12px)}to{opacity:1;transform:translateY(0) translateX(0)}}
     @keyframes beathubNoticeOut{from{opacity:1;transform:translateY(0);max-height:120px;margin-bottom:0}to{opacity:0;transform:translateY(-6px) translateX(12px);max-height:0;padding-top:0;padding-bottom:0;margin-bottom:-10px}}
     @keyframes beathubNoticeProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
     @keyframes beathubLegacyProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
-    @media(max-width:720px){.beathub-community{margin:12px auto 28px;padding:23px 20px;border-radius:18px}.beathub-community-inner{align-items:flex-start;flex-direction:column}.beathub-community-links{width:100%;justify-content:flex-start}.beathub-community-link{flex:1 1 145px}.beathub-notice-wrap{top:64px;right:15px;width:calc(100vw - 30px)}}
+
+    /* Creator Studio navigation: presentation only; every destination is an existing functional route. */
+    .beathub-creator-tabs{display:flex;align-items:center;gap:7px;margin:18px auto 22px;padding:7px;max-width:1400px;overflow-x:auto;border:1px solid rgba(212,175,55,.16);border-radius:15px;background:rgba(13,13,13,.86);box-shadow:0 12px 30px rgba(0,0,0,.16);scrollbar-width:thin}
+    .beathub-creator-tabs a{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px;border:1px solid transparent;border-radius:10px;color:#999;text-decoration:none;font-size:11px;font-weight:850;white-space:nowrap;transition:.18s ease}
+    .beathub-creator-tabs a:hover{color:#fff;background:rgba(255,255,255,.045);border-color:#303030}
+    .beathub-creator-tabs a.active{color:#f0d878;background:rgba(212,175,55,.09);border-color:rgba(212,175,55,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+    .beathub-creator-tabs .tab-manage{margin-left:auto;color:#777;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+    @media(max-width:720px){.beathub-community{margin:12px auto 28px;padding:23px 20px;border-radius:18px}.beathub-community-inner{align-items:flex-start;flex-direction:column}.beathub-community-links{width:100%;justify-content:flex-start}.beathub-community-link{flex:1 1 145px}.beathub-notice-wrap{top:64px;right:15px;width:calc(100vw - 30px)}.beathub-creator-tabs{margin:12px 0 18px;border-radius:12px}.beathub-creator-tabs .tab-manage{display:none}}
     @media(prefers-reduced-motion:reduce){.beathub-notice,.beathub-legacy-notice{animation:none}.beathub-notice.leaving,.beathub-legacy-notice.leaving{animation:none;opacity:0}.beathub-notice-progress,.beathub-legacy-notice-progress{animation:none}}
   </style>
 </head>
@@ -73,6 +76,21 @@
         {% endif %}
       </div>
     </nav>
+
+    {% set is_creator_dashboard = request.url.path.startswith('/dashboard') and current_user and current_user.role.value == 'creator' %}
+    {% if is_creator_dashboard %}
+      {% set dashboard_path = request.url.path %}
+      <nav class="beathub-creator-tabs" aria-label="Creator Studio sections">
+        <a href="/dashboard" class="{% if dashboard_path == '/dashboard' or dashboard_path == '/dashboard/' %}active{% endif %}">⌂ Overview</a>
+        <a href="/dashboard/upload" class="{% if dashboard_path.startswith('/dashboard/upload') %}active{% endif %}">🎵 Beats &amp; Tracks</a>
+        <a href="/dashboard/albums/new" class="{% if dashboard_path.startswith('/dashboard/albums') %}active{% endif %}">💿 Albums</a>
+        <a href="/dashboard/merch" class="{% if dashboard_path.startswith('/dashboard/merch') %}active{% endif %}">👕 Merchandise</a>
+        <a href="/dashboard/analytics" class="{% if dashboard_path.startswith('/dashboard/analytics') %}active{% endif %}">📊 Analytics</a>
+        <a href="/dashboard/withdraw" class="{% if dashboard_path.startswith('/dashboard/withdraw') %}active{% endif %}">💰 Earnings</a>
+        {% if store_url %}<a href="{{ store_url }}" target="_blank" rel="noopener noreferrer">🛍 Store</a>{% else %}<a href="/dashboard">🛍 Store</a>{% endif %}
+        <span class="tab-manage">Creator Studio</span>
+      </nav>
+    {% endif %}
 
     {% set query_error = request.query_params.get('error') %}
     {% set query_success = request.query_params.get('success') %}
@@ -201,9 +219,9 @@
       startTimer();
     });
 
-    /* Success/error query strings are one-time UI state; don't let refresh repeat them. */
     if (window.history && window.history.replaceState && (new URLSearchParams(window.location.search).has('success') || new URLSearchParams(window.location.search).has('error'))) {
-      const cleanUrl = window.location.pathname + (new URLSearchParams(window.location.search).has('next') ? '?next=' + encodeURIComponent(new URLSearchParams(window.location.search).get('next')) : '') + window.location.hash;
+      const params = new URLSearchParams(window.location.search);
+      const cleanUrl = window.location.pathname + (params.has('next') ? '?next=' + encodeURIComponent(params.get('next')) : '') + window.location.hash;
       window.history.replaceState({}, document.title, cleanUrl);
     }
   })();
