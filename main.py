@@ -23,6 +23,7 @@ from app.routers import (
     checkout,
     creator_store,
     dashboard,
+    dashboard_analytics,
     merchandise,
     merchandise_account,
     music,
@@ -186,12 +187,7 @@ class MerchandiseLoginRedirectMiddleware:
 
 
 class CreatorPayoutPolicyMiddleware(BaseHTTPMiddleware):
-    """Enforce the creator withdrawal minimum without breaking ASGI startup.
-
-    Requests may be submitted any day. They remain pending until the scheduled
-    Tuesday/Thursday payout cycle. The KSh 500 minimum is enforced server-side,
-    not only by the HTML form.
-    """
+    """Enforce the creator withdrawal minimum without breaking ASGI startup."""
 
     async def dispatch(self, request, call_next):
         if request.method != "POST" or request.url.path != "/dashboard/withdraw":
@@ -234,8 +230,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Production schema is managed exclusively by Alembic migrations.
-# Never run Base.metadata.create_all() while the web process is starting:
-# it can acquire PostgreSQL locks and make every new deploy wait unnecessarily.
+# Never run Base.metadata.create_all() while the web process is starting.
 
 
 @app.get("/healthz", include_in_schema=False)
@@ -253,9 +248,6 @@ async def merchandise_legacy_alias():
     return RedirectResponse(url="/merch", status_code=307)
 
 
-# Alembic remains the canonical production migration mechanism. Merchandise
-# schema repair is handled by forward-only migrations rather than application startup.
-
 # One canonical route implementation per feature.
 app.include_router(auth.router)
 app.include_router(creator_store.router)
@@ -265,10 +257,8 @@ app.include_router(track_catalog.router)
 app.include_router(checkout.router)
 app.include_router(paystack_checkout.router)
 app.include_router(dashboard.router)
-# Unified /admin/sales must be registered before the legacy music-only sales route.
+app.include_router(dashboard_analytics.router)
 app.include_router(admin_unified_sales.router)
-# The admin M-Pesa payout routes must be registered before the legacy admin
-# withdrawal routes so the confirmation button initiates a real Paystack transfer.
 app.include_router(admin_mpesa_payout.router)
 app.include_router(admin.router)
 app.include_router(payout_admin.router)
