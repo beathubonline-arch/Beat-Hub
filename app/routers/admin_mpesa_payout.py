@@ -1,9 +1,4 @@
-"""Canonical BeatHub platform withdrawals to M-Pesa via Paystack.
-
-This router is registered before the legacy admin router. It owns the live
-/admin/withdraw GET/POST flow so the dashboard uses the platform ledger and
-Paystack confirmation rather than a manual 'mark paid' action.
-"""
+"""Canonical BeatHub platform withdrawals to M-Pesa via Paystack."""
 
 import hashlib
 import hmac
@@ -33,7 +28,6 @@ from app.services.platform_finance import (
     record_platform_withdrawal,
 )
 from app.utils.deps import require_admin
-
 
 router = APIRouter(prefix="/admin", tags=["admin-mpesa-payout"])
 templates = Jinja2Templates(directory="app/templates")
@@ -138,9 +132,6 @@ async def confirm_and_send_admin_mpesa(
     if not _valid_phone(phone):
         return _redirect("Enter a valid Kenyan M-Pesa number.", error=True)
 
-    # Serialize the balance check with the reservation commit. This prevents
-    # two simultaneous admin submissions from spending the same available
-    # platform funds.
     lock_platform_withdrawal_reservation(db)
     financials = get_admin_withdrawal_financials(db)
     available = financials["available"]
@@ -274,14 +265,6 @@ async def initiate_legacy_admin_mpesa_payout(withdrawal_id: str, db: Session = D
         db.rollback()
         return _redirect("The withdrawal has an invalid Kenyan M-Pesa number.", error=True)
 
-    financials = get_admin_withdrawal_financials(db)
-    transfer_fee = estimate_mpesa_transfer_fee(amount)
-    # The withdrawal is already reserved by its pending/approved row, so add
-    # only the estimated provider fee when checking available funds here.
-    if amount + transfer_fee > financials["available"] + amount:
-        db.rollback()
-        return _redirect("Insufficient available platform funds for this payout and its transfer fee.", error=True)
-
     reference = _new_reference()
     withdrawal.status = "processing"
     withdrawal.payout_reference = reference
@@ -358,11 +341,14 @@ async def paystack_transfer_webhook(request: Request, db: Session = Depends(get_
         withdrawal.updated_at = datetime.utcnow()
         withdrawal.resolved_at = datetime.utcnow()
         withdrawal.admin_note = "Paystack confirmed the M-Pesa transfer as successful."
-        # Paystack's transfer webhook exposes the charged fee as fee_charged.
-        # Paystack's Kenya M-Pesa fee schedule is already represented by the
-        # local estimator, so use the provider value only when it is explicitly
-        # supplied in KES; otherwise use the known schedule.
-        fee = Decimal(str(data.get("fee") or estimate_mpesa_transfer_fee(Decimal(str(withdrawal.amount)))))
+        fee_charged = data.get("fee_charged")
+        if fee_charged is not None:
+            try:
+                fee = (Decimal(str(fee_charged)) / Decimal("100")).quantize(Decimal("0.01"))
+            except (InvalidOperation, ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Paystack transfer fee is invalid.")
+        else:
+            fee = estimate_mpesa_transfer_fee(Decimal(str(withdrawal.amount)))
         if fee < 0:
             raise HTTPException(status_code=400, detail="Paystack transfer fee is invalid.")
         record_platform_withdrawal(db, withdrawal, fee)
