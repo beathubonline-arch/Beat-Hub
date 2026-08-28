@@ -2,48 +2,12 @@
 {% block title %}Creator Dashboard — BeatHub{% endblock %}
 {% block content %}
 <div class="creator-dashboard">
-  <style>
-    .creator-dashboard{max-width:1450px;margin:auto;padding:18px 0 70px;color:#f5f5f5}.dash-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 24px;padding:8px;border:1px solid rgba(245,200,75,.2);border-radius:16px;background:#101010}.dash-tabs a{padding:12px 16px;border-radius:10px;color:#bbb;text-decoration:none;font-weight:800;font-size:13px}.dash-tabs a:hover,.dash-tabs a.active{background:rgba(245,200,75,.12);color:#ffe58a}.dashboard-hero{padding:36px;border-radius:24px;background:linear-gradient(135deg,#151515,#0b0b0b);border:1px solid rgba(245,200,75,.2);margin-bottom:24px}.hero-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:800}.btn-primary{background:#f5c84b;color:#111}.btn-outline{border:1px solid #333;color:#eee}.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.card{padding:22px;border:1px solid #252525;border-radius:18px;background:#111}.card h3{margin:0 0 8px}.muted{color:#999;font-size:13px}@media(max-width:700px){.dashboard-hero{padding:24px}.dash-tabs{overflow:auto;flex-wrap:nowrap}.dash-tabs a{white-space:nowrap}}
-  </style>
-
-  <nav class="dash-tabs" aria-label="Creator Studio">
-    <a class="active" href="/dashboard">Overview</a>
-    <a href="/dashboard?section=beats">Beats &amp; Tracks</a>
-    <a href="/dashboard?section=albums">Albums / EPs</a>
-    <a href="/dashboard?section=merchandise">Merchandise</a>
-    <a href="/dashboard/analytics">Analytics</a>
-    <a href="/dashboard/earnings">Earnings</a>
-    <a href="/dashboard/store">My Store</a>
-    <a href="/dashboard/withdraw">Withdraw</a>
-  </nav>
-
-  {% if success %}<div class="card">{{ success }}</div>{% endif %}
-  {% if error %}<div class="card">{{ error }}</div>{% endif %}
-
-  <section class="dashboard-hero">
-    <h1>Creator Studio</h1>
-    <p class="muted">Manage your music, projects, marketplace presence, earnings and creator tools from one place.</p>
-    <div class="hero-actions" style="margin-top:20px">
-      <a class="btn btn-primary" href="/dashboard/upload">Upload Beat / Track</a>
-      <a class="btn btn-outline" href="/dashboard/albums/new">Create Album / EP</a>
-      <a class="btn btn-outline" href="/dashboard/store">View My Store</a>
-    </div>
-  </section>
-
-  <section class="dashboard-grid">
-    <div class="card"><h3>{{ track_count|default(0) }}</h3><div class="muted">Beats &amp; Tracks</div><a href="/dashboard?section=beats">Manage →</a></div>
-    <div class="card"><h3>{{ album_count|default(0) }}</h3><div class="muted">Albums / EPs</div><a href="/dashboard?section=albums">Manage →</a></div>
-    <div class="card"><h3>Merchandise</h3><div class="muted">Products &amp; orders</div><a href="/dashboard?section=merchandise">Manage →</a></div>
-    <div class="card"><h3>Analytics</h3><div class="muted">Sales and performance</div><a href="/dashboard/analytics">View →</a></div>
-    <div class="card"><h3>Earnings</h3><div class="muted">Wallet and transactions</div><a href="/dashboard/earnings">View →</a></div>
-    <div class="card"><h3>Store</h3><div class="muted">Public marketplace profile</div><a href="/dashboard/store">Open →</a></div>
-  </section>
-
-  <section class="card" style="margin-top:24px">
-    <h2>Recent uploads</h2>
-    {% if tracks %}
-      {% for track in tracks %}<div style="padding:14px 0;border-bottom:1px solid #222"><strong>{{ track.title }}</strong></div>{% endfor %}
-    {% else %}<p class="muted">No uploads yet. Start by uploading your first beat or track.</p>{% endif %}
-  </section>
-</div>
-{% endblock %}
+<style>.creator-dashboard{max-width:1450px;margin:auto;padding:18px 0 70px;color:#f5f5f5}.dash-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 24px;padding:8px;border:1px solid rgba(245,200,75,.2);border-radius:16px;background:#101010}.dash-tabs a{padding:12px 16px;border-radius:10px;color:#bbb;text-decoration:none;font-weight:800;font-size:13px}.dash-tabs a:hover,.dash-tabs a.active{background:rgba(245,200,75,.12);color:#ffe58a}.dashboard-hero{padding:36px;border-radius:24px;background:linear-gradient(135deg,#151515,#0b0b0b);border:1px solid rgba(245,200,75,.2);margin-bottom:24px}.hero-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:800}.btn-primary{background:#f5c84b;color:#111}.btn-outline{border:1px solid #333;color:#eee}.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.card{padding:22px;border:1px solid #252525;border-radius:18px;background:#111}.card h3{margin:0 0 8px}.muted{color:#999;font-size:13px}@media(max-width:700px){.dashboard-hero{padding:24px}.dash-tabs{overflow:auto;flex-wrap:nowrap}.dash-tabs a{white-space:nowrap}}</style>
+<nav class="dash-tabs" aria-label="Creator Studio">
+<a class="active" href="/dashboard">Overview</a><a href="/dashboard?section=beats">Beats &amp; Tracks</a><a href="/dashboard?section=albums">Albums / EPs</a><a href="/dashboard?section=merchandise">Merchandise</a><a href="/dashboard/analytics">Analytics</a><a href="/dashboard/earnings">Earnings</a><a href="/dashboard/store">My Store</a><a href="/dashboard/withdraw">Withdraw</a>
+</nav>
+{% if success %}<div class="card">{{ success }}</div>{% endif %}{% if error %}<div class="card">{{ error }}</div>{% endif %}
+<section class="dashboard-hero"><h1>Creator Studio</h1><p class="muted">Manage your music, projects, marketplace presence, earnings and creator tools from one place.</p><div class="hero-actions" style="margin-top:20px"><a class="btn btn-primary" href="/dashboard/upload">Upload Beat / Track</a><a class="btn btn-outline" href="/dashboard/albums/new">Create Album / EP</a><a class="btn btn-outline" href="/dashboard/store">View My Store</a></div></section>
+<section class="dashboard-grid"><div class="card"><h3>{{ track_count|default(0) }}</h3><div class="muted">Beats &amp; Tracks</div><a href="/dashboard?section=beats">Manage →</a></div><div class="card"><h3>{{ album_count|default(0) }}</h3><div class="muted">Albums / EPs</div><a href="/dashboard?section=albums">Manage →</a></div><div class="card"><h3>Merchandise</h3><div class="muted">Products &amp; orders</div><a href="/dashboard?section=merchandise">Manage →</a></div><div class="card"><h3>Analytics</h3><div class="muted">Sales and performance</div><a href="/dashboard/analytics">View →</a></div><div class="card"><h3>Earnings</h3><div class="muted">Wallet and transactions</div><a href="/dashboard/earnings">View →</a></div><div class="card"><h3>Store</h3><div class="muted">Public marketplace profile</div><a href="/dashboard/store">Open →</a></div></section>
+<section class="card" style="margin-top:24px"><h2>Recent uploads</h2>{% if tracks %}{% for track in tracks %}<div style="padding:14px 0;border-bottom:1px solid #222"><strong>{{ track.title }}</strong></div>{% endfor %}{% else %}<p class="muted">No uploads yet. Start by uploading your first beat or track.</p>{% endif %}</section>
+</div>{% endblock %}
