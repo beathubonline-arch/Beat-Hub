@@ -38,6 +38,23 @@ def _error(request: Request, user: User, message: str):
     )
 
 
+@router.get("/dashboard/upload")
+def upload_page(
+    request: Request,
+    user: User = Depends(require_creator),
+):
+    """Creator upload workspace for one or many beats/tracks."""
+    return templates.TemplateResponse(
+        request,
+        "upload_track.html",
+        {
+            "request": request,
+            "current_user": user,
+            "current_year": 2026,
+        },
+    )
+
+
 @router.post("/dashboard/upload")
 async def publish_tracks(
     request: Request,
