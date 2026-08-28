@@ -5,6 +5,7 @@ from urllib.parse import quote, unquote, urlparse
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -97,7 +98,19 @@ def login_submit(
     db: Session = Depends(get_db),
 ):
     login_identifier = (identifier or email).strip().lower()
-    user = db.query(User).filter(User.email == login_identifier).first()
+
+    # BeatHub login accepts either the user's email or username.
+    # The database model has no stage_name column, so do not reference one.
+    user = (
+        db.query(User)
+        .filter(
+            or_(
+                func.lower(User.email) == login_identifier,
+                func.lower(User.username) == login_identifier,
+            )
+        )
+        .first()
+    )
 
     if not user or not _password_matches(password, getattr(user, "hashed_password", "")):
         return RedirectResponse(
