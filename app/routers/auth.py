@@ -47,6 +47,9 @@ def dashboard_url_for_user(user: User) -> str:
     if role == "admin":
         return "/admin"
     if role == "creator":
+        profile = getattr(user, "profile", None)
+        if profile is not None and bool(getattr(profile, "is_artist", False)):
+            return "/artist/studio"
         return "/dashboard"
     return "/account"
 
@@ -82,6 +85,34 @@ def signup_page(request: Request, role: str = "buyer"):
     if role not in {"artist", "creator", "buyer"}:
         role = "buyer"
     return templates.TemplateResponse(request, "signup.html", _signup_context(request, role=role))
+
+
+@router.get("/artist/signup")
+def artist_signup_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "artist_signup.html",
+        _signup_context(request, role="artist", artist_signup=True),
+    )
+
+
+@router.get("/artist/studio")
+def artist_studio_page(request: Request, db: Session = Depends(get_db)):
+    from app.utils.deps import get_current_user
+
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login?error=Please%20log%20in%20to%20access%20Artist%20Studio.", status_code=303)
+
+    profile = getattr(user, "profile", None)
+    if get_role_name(user) != "creator" or not getattr(profile, "is_artist", False):
+        return RedirectResponse(url="/dashboard?error=Artist%20Studio%20requires%20an%20artist%20account.", status_code=303)
+
+    return templates.TemplateResponse(
+        request,
+        "artist_studio.html",
+        _signup_context(request, current_user=user, profile=profile),
+    )
 
 
 @router.post("/signup")
@@ -123,8 +154,6 @@ def signup_submit(
     if db.query(User).filter(func.lower(User.email) == email_norm).first():
         return error("An account with this email already exists.")
 
-    # Username is derived from the stage name and made unique. This preserves
-    # the user's requested stage name while providing username login.
     base_username = slugify(stage_name).replace("-", "")[:90] or f"user{secrets.token_hex(4)}"
     username = base_username
     suffix = 2
@@ -136,7 +165,6 @@ def signup_submit(
     db.add(user)
     try:
         db.flush()
-
         base_slug = slugify(stage_name)
         slug = base_slug
         suffix = 2
@@ -179,8 +207,6 @@ def login_submit(
     login_identifier = (identifier or email).strip().lower()
     user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()
 
-    # Backward-compatible login for existing creators whose public profile slug
-    # is their historical username/stage identity.
     if not user and login_identifier:
         possible_slug = slugify(login_identifier)
         profile = db.query(Profile).filter(func.lower(Profile.slug) == possible_slug).first()
