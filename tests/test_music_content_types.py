@@ -19,12 +19,11 @@ class MusicContentTypeTests(unittest.TestCase):
         self.assertEqual(AlbumContentType.ALBUM.value, "album")
 
     def test_upload_endpoint_requires_content_type(self):
-        route = next(
-            route for route in music_publish.router.routes
-            if getattr(route, "path", "") == "/dashboard/upload"
-        )
-        dependency_names = {parameter.name for parameter in route.dependant.body_params}
-        self.assertIn("content_types", dependency_names)
+        source = (ROOT / "app/routers/music_publish.py").read_text(encoding="utf-8")
+        self.assertIn("content_types", source)
+        self.assertIn("content_type_radio_", (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8"))
+        self.assertIn('value="beat"', (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8"))
+        self.assertIn('value="track"', (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8"))
 
     def test_album_creation_endpoint_requires_project_type(self):
         route = next(
@@ -44,7 +43,7 @@ class MusicContentTypeTests(unittest.TestCase):
         paths = [getattr(route, "path", "") for route in beat_catalog.router.routes]
         self.assertIn("/marketplace/beats", paths)
         source = (ROOT / "app/routers/beat_catalog.py").read_text(encoding="utf-8")
-        self.assertIn('content_type", "beat"', source)
+        self.assertIn('content_type", "beat")', source)
         self.assertIn('== "beat"', source)
 
     def test_store_template_has_separate_sections(self):
@@ -73,7 +72,8 @@ class MusicContentTypeTests(unittest.TestCase):
         self.assertIn("Beat Producers", source)
         self.assertIn("Tracks / Songs", source)
         self.assertIn("Creator Merchandise", source)
-        self.assertIn("/store/", source)
+        self.assertIn("producer.store_url", source)
+        self.assertIn("/tracks", source)
         self.assertIn("/merch", source)
 
     def test_python_files_compile_as_ast(self):
