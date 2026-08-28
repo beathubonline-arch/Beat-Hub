@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Render Free does not expose a separate pre-deploy command. Start the web
-# process immediately so Render can detect $PORT, while migrations run once
-# in the same deploy before the process is allowed to exit.
-#
-# The migration runs in the background after Uvicorn binds the port. If the
-# migration fails, the web process is terminated and the deploy fails instead
-# of silently serving an incomplete schema.
+# BeatHub deployment marker: creator marketplace dashboard V4.
+echo "[BeatHub] Deployment: Creator Marketplace Dashboard V4"
 
 MIGRATION_STATUS=0
 
@@ -21,8 +16,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Give Uvicorn a moment to bind before the migration starts. This avoids
-# Render's port detector waiting behind database work.
 sleep 2
 
 echo "[BeatHub] Running Alembic migrations..."
@@ -44,5 +37,4 @@ if [ "$MIGRATION_STATUS" -ne 0 ]; then
     exit "$MIGRATION_STATUS"
 fi
 
-# Keep Uvicorn as the foreground process after migrations finish.
 wait "$WEB_PID"
