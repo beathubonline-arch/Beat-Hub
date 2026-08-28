@@ -1,140 +1,29 @@
 {% extends "base.html" %}
-
 {% block title %}Order Status — BeatHub{% endblock %}
-
 {% block extra_head %}
 <style>
-  .bh-order-page{padding:34px 0 70px}
-  .bh-order-notice{display:flex;align-items:center;gap:14px;padding:17px 20px;margin-bottom:20px;border:1px solid rgba(75,210,112,.35);border-radius:15px;background:linear-gradient(90deg,rgba(4,62,31,.72),rgba(4,35,22,.42));box-shadow:0 14px 35px rgba(0,0,0,.18)}
-  .bh-order-notice-icon{width:30px;height:30px;flex:0 0 30px;border:2px solid #67d982;border-radius:50%;display:grid;place-items:center;color:#67d982;font-weight:900}
-  .bh-order-notice strong{display:block;color:#fff;font-size:14px;margin-bottom:3px}.bh-order-notice span{color:#9da39f;font-size:12px}
-  .bh-order-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(320px,.95fr);gap:20px}
-  .bh-order-card{position:relative;overflow:hidden;border:1px solid rgba(212,175,55,.22);border-radius:20px;background:radial-gradient(circle at 92% 10%,rgba(212,175,55,.09),transparent 27%),linear-gradient(145deg,rgba(25,25,29,.94),rgba(10,10,14,.97));box-shadow:0 24px 65px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025)}
-  .bh-order-main{padding:34px 32px}.bh-order-side{padding:27px 25px}
-  .bh-eyebrow{display:flex;align-items:center;gap:9px;color:#f0c83d;font-size:11px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}.bh-eyebrow svg{width:18px;height:18px}
-  .bh-order-main h1{margin:17px 0 11px;color:#fff;font-size:clamp(34px,4.2vw,48px);line-height:1;letter-spacing:-.045em}.bh-order-main .lead{max-width:590px;margin:0;color:#a3a3a7;font-size:14px;line-height:1.75}
-  .bh-orbit{position:absolute;right:-35px;top:18px;width:245px;height:245px;border:1px solid rgba(212,175,55,.10);border-radius:50%;box-shadow:0 0 0 28px rgba(212,175,55,.025),0 0 0 56px rgba(212,175,55,.018);pointer-events:none}.bh-orbit:after{content:"";position:absolute;inset:62px;border:1px solid rgba(212,175,55,.12);border-radius:50%}
-  .bh-wave{position:absolute;right:67px;top:92px;width:82px;height:62px;display:flex;align-items:center;justify-content:center;gap:4px;opacity:.9}.bh-wave i{display:block;width:5px;border-radius:4px;background:#e9bf32;box-shadow:0 0 12px rgba(233,191,50,.25)}.bh-wave i:nth-child(1){height:22px}.bh-wave i:nth-child(2){height:36px}.bh-wave i:nth-child(3){height:50px}.bh-wave i:nth-child(4){height:28px}.bh-wave i:nth-child(5){height:43px}.bh-wave i:nth-child(6){height:24px}
-  .bh-steps{display:grid;grid-template-columns:repeat(4,1fr);margin:43px 0 37px;position:relative}.bh-steps:before{content:"";position:absolute;left:12%;right:12%;top:25px;height:2px;background:linear-gradient(90deg,#e5b927 0 33%,rgba(255,255,255,.18) 33% 100%)}
-  .bh-step{position:relative;z-index:1;text-align:center}.bh-step-dot{width:52px;height:52px;margin:0 auto 13px;border:1px solid rgba(255,255,255,.28);border-radius:50%;background:#101116;display:grid;place-items:center;color:#9b9ca1}.bh-step-dot svg{width:21px;height:21px}.bh-step.active .bh-step-dot{border-color:#f1c735;color:#f1c735;box-shadow:0 0 25px rgba(241,199,53,.17)}.bh-step.done .bh-step-dot{border-color:#67d982;color:#67d982}.bh-step-label{color:#9d9da2;font-size:12px;line-height:1.45}.bh-step.active .bh-step-label{color:#efc534;font-weight:800}.bh-step.done .bh-step-label{color:#b7c6bb}
-  .bh-info{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}.bh-info-box{padding:20px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.018)}.bh-info-box h3{margin:0 0 6px;color:#fff;font-size:14px}.bh-info-box p{margin:0;color:#929399;font-size:12px;line-height:1.65}.bh-info-icon{width:34px;height:34px;display:grid;place-items:center;margin-bottom:13px;border:1px solid rgba(212,175,55,.2);border-radius:10px;color:#eac338;background:rgba(212,175,55,.06)}
-  .bh-help{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:19px 20px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:rgba(255,255,255,.018)}.bh-help h3{margin:0 0 4px;color:#fff;font-size:14px}.bh-help p{margin:0;color:#888a90;font-size:12px}.bh-help a{white-space:nowrap}
-  .bh-side-title{display:flex;align-items:center;gap:9px;color:#efc335;font-size:11px;font-weight:900;letter-spacing:.13em;text-transform:uppercase;margin-bottom:22px}.bh-side-title svg{width:18px}
-  .bh-product{display:flex;gap:15px;align-items:center;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,.08)}.bh-art{width:92px;height:92px;flex:0 0 92px;border-radius:14px;object-fit:cover;background:#16161a;border:1px solid rgba(255,255,255,.08)}.bh-product h2{margin:0 0 6px;color:#fff;font-size:19px;line-height:1.2}.bh-product p{margin:0;color:#a2a3a8;font-size:12px}.bh-product .license{display:inline-flex;margin-top:10px;color:#ddd;font-size:12px;align-items:center;gap:6px}
-  .bh-prices{padding:20px 0;border-bottom:1px solid rgba(255,255,255,.08)}.bh-price-row{display:flex;justify-content:space-between;gap:15px;margin-bottom:13px;color:#92949b;font-size:13px}.bh-price-row:last-child{margin:0}.bh-price-row strong{color:#e8e8eb;font-weight:700}.bh-total{display:flex;justify-content:space-between;align-items:end;padding-top:18px}.bh-total span{color:#fff;font-size:15px;font-weight:800}.bh-total strong{color:#75d64d;font-size:21px}
-  .bh-details{margin-top:20px;padding:18px;border:1px solid rgba(212,175,55,.17);border-radius:16px;background:rgba(212,175,55,.035)}.bh-details h3{margin:0 0 14px;color:#edc438;font-size:11px;letter-spacing:.12em;text-transform:uppercase}.bh-detail{display:flex;justify-content:space-between;gap:14px;margin-top:11px;color:#85868d;font-size:12px}.bh-detail strong{color:#d8d8dc;text-align:right}.bh-paystack{display:inline-flex;align-items:center;gap:6px;color:#2bb8e8!important;font-weight:900}
-  .bh-wait{display:flex;gap:12px;margin-top:18px;padding:17px;border:1px solid rgba(212,175,55,.18);border-radius:15px;background:rgba(212,175,55,.045)}.bh-wait-icon{width:32px;height:32px;flex:0 0 32px;border:1px solid rgba(212,175,55,.4);border-radius:50%;display:grid;place-items:center;color:#efc334}.bh-wait h3{margin:0 0 5px;color:#eee;font-size:13px}.bh-wait p{margin:0;color:#8d8e94;font-size:11px;line-height:1.6}
-  .bh-security{display:flex;align-items:center;gap:15px;margin-top:20px;padding:20px 25px;border:1px solid rgba(255,255,255,.07);border-radius:17px;background:linear-gradient(90deg,rgba(255,255,255,.018),rgba(255,255,255,.008))}.bh-security-icon{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(212,175,55,.3);border-radius:11px;color:#e9c237}.bh-security h3{margin:0 0 4px;color:#fff;font-size:15px}.bh-security p{margin:0;color:#85868d;font-size:12px}
-  .bh-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.bh-actions .btn{min-width:135px;text-align:center}
-  @media(max-width:900px){.bh-order-grid{grid-template-columns:1fr}.bh-orbit{opacity:.45}.bh-main{padding:28px 23px}}
-  @media(max-width:620px){.bh-order-page{padding-top:20px}.bh-order-main,.bh-order-side{padding:23px 18px}.bh-order-main h1{font-size:35px}.bh-steps{margin-top:32px}.bh-steps:before{left:8%;right:8%}.bh-step-dot{width:45px;height:45px}.bh-step-label{font-size:10px}.bh-info{grid-template-columns:1fr}.bh-help{align-items:flex-start;flex-direction:column}.bh-product h2{font-size:17px}}
+.bh-order{padding:34px 0 70px}.bh-notice{display:flex;gap:14px;align-items:center;margin-bottom:20px;padding:16px 20px;border:1px solid rgba(90,210,115,.35);border-radius:15px;background:linear-gradient(90deg,rgba(4,62,31,.72),rgba(4,35,22,.4))}.bh-notice-icon{width:30px;height:30px;display:grid;place-items:center;flex:0 0 30px;border:2px solid #67d982;border-radius:50%;color:#67d982;font-weight:900}.bh-notice strong{display:block;color:#fff;font-size:14px}.bh-notice span{display:block;margin-top:3px;color:#9da39f;font-size:12px}.bh-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(315px,.95fr);gap:20px}.bh-card{position:relative;overflow:hidden;border:1px solid rgba(212,175,55,.22);border-radius:20px;background:radial-gradient(circle at 92% 10%,rgba(212,175,55,.09),transparent 28%),linear-gradient(145deg,rgba(25,25,29,.95),rgba(10,10,14,.98));box-shadow:0 24px 65px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025)}.bh-main{padding:34px 32px}.bh-side{padding:27px 25px}.bh-eyebrow,.bh-side-title{color:#efc335;font-size:11px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}.bh-main h1{margin:17px 0 11px;color:#fff;font-size:clamp(34px,4.2vw,48px);line-height:1;letter-spacing:-.045em}.bh-lead{max-width:600px;margin:0;color:#a3a3a7;font-size:14px;line-height:1.75}.bh-orbit{position:absolute;right:-35px;top:20px;width:245px;height:245px;border:1px solid rgba(212,175,55,.1);border-radius:50%;box-shadow:0 0 0 28px rgba(212,175,55,.025),0 0 0 56px rgba(212,175,55,.018);pointer-events:none}.bh-wave{position:absolute;right:67px;top:96px;display:flex;align-items:center;gap:4px}.bh-wave i{width:5px;border-radius:4px;background:#e9bf32;box-shadow:0 0 12px rgba(233,191,50,.25)}.bh-wave i:nth-child(1){height:22px}.bh-wave i:nth-child(2){height:36px}.bh-wave i:nth-child(3){height:50px}.bh-wave i:nth-child(4){height:28px}.bh-wave i:nth-child(5){height:43px}.bh-wave i:nth-child(6){height:24px}.bh-steps{display:grid;grid-template-columns:repeat(4,1fr);margin:43px 0 37px;position:relative}.bh-steps:before{content:"";position:absolute;left:12%;right:12%;top:25px;height:2px;background:linear-gradient(90deg,#e5b927 0 33%,rgba(255,255,255,.18) 33% 100%)}.bh-step{position:relative;z-index:1;text-align:center}.bh-dot{width:52px;height:52px;margin:0 auto 13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.28);border-radius:50%;background:#101116;color:#9b9ca1}.bh-dot svg{width:21px;height:21px}.bh-step.active .bh-dot{border-color:#f1c735;color:#f1c735;box-shadow:0 0 25px rgba(241,199,53,.17)}.bh-step.done .bh-dot{border-color:#67d982;color:#67d982}.bh-step-label{color:#9d9da2;font-size:12px;line-height:1.45}.bh-step.active .bh-step-label{color:#efc534;font-weight:800}.bh-step.done .bh-step-label{color:#b7c6bb}.bh-info{display:grid;grid-template-columns:1fr 1fr;gap:14px}.bh-info-box{padding:20px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.018)}.bh-info-icon{width:34px;height:34px;display:grid;place-items:center;margin-bottom:13px;border:1px solid rgba(212,175,55,.2);border-radius:10px;color:#eac338;background:rgba(212,175,55,.06)}.bh-info-box h3{margin:0 0 6px;color:#fff;font-size:14px}.bh-info-box p{margin:0;color:#929399;font-size:12px;line-height:1.65}.bh-help{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:19px 20px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:rgba(255,255,255,.018)}.bh-help h3{margin:0 0 4px;color:#fff;font-size:14px}.bh-help p{margin:0;color:#888a90;font-size:12px}.bh-help a{white-space:nowrap}.bh-side-title{margin-bottom:22px}.bh-product{display:flex;gap:15px;align-items:center;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,.08)}.bh-art{width:92px;height:92px;flex:0 0 92px;border-radius:14px;object-fit:cover;background:#16161a;border:1px solid rgba(255,255,255,.08)}.bh-product h2{margin:0 0 6px;color:#fff;font-size:19px}.bh-product p{margin:0;color:#a2a3a8;font-size:12px}.bh-license{display:inline-block;margin-top:10px;color:#ddd;font-size:12px}.bh-prices{padding:20px 0;border-bottom:1px solid rgba(255,255,255,.08)}.bh-row{display:flex;justify-content:space-between;gap:15px;margin-bottom:13px;color:#92949b;font-size:13px}.bh-row strong{color:#e8e8eb}.bh-total{display:flex;justify-content:space-between;align-items:end;padding-top:5px}.bh-total span{color:#fff;font-size:15px;font-weight:800}.bh-total strong{color:#75d64d;font-size:21px}.bh-details{margin-top:20px;padding:18px;border:1px solid rgba(212,175,55,.17);border-radius:16px;background:rgba(212,175,55,.035)}.bh-details h3{margin:0 0 14px;color:#edc438;font-size:11px;letter-spacing:.12em;text-transform:uppercase}.bh-detail{display:flex;justify-content:space-between;gap:14px;margin-top:11px;color:#85868d;font-size:12px}.bh-detail strong{color:#d8d8dc;text-align:right}.bh-paystack{color:#2bb8e8!important}.bh-wait{display:flex;gap:12px;margin-top:18px;padding:17px;border:1px solid rgba(212,175,55,.18);border-radius:15px;background:rgba(212,175,55,.045)}.bh-wait-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border:1px solid rgba(212,175,55,.4);border-radius:50%;color:#efc334}.bh-wait h3{margin:0 0 5px;color:#eee;font-size:13px}.bh-wait p{margin:0;color:#8d8e94;font-size:11px;line-height:1.6}.bh-security{display:flex;align-items:center;gap:15px;margin-top:20px;padding:20px 25px;border:1px solid rgba(255,255,255,.07);border-radius:17px;background:rgba(255,255,255,.012)}.bh-security-icon{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(212,175,55,.3);border-radius:11px;color:#e9c237}.bh-security h3{margin:0 0 4px;color:#fff;font-size:15px}.bh-security p{margin:0;color:#85868d;font-size:12px}.bh-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.bh-actions .btn{min-width:135px;text-align:center}@media(max-width:900px){.bh-grid{grid-template-columns:1fr}.bh-orbit{opacity:.4}}@media(max-width:620px){.bh-order{padding-top:20px}.bh-main,.bh-side{padding:23px 18px}.bh-main h1{font-size:35px}.bh-step-label{font-size:10px}.bh-dot{width:45px;height:45px}.bh-info{grid-template-columns:1fr}.bh-help{align-items:flex-start;flex-direction:column}}
 </style>
 {% endblock %}
-
 {% block content %}
-<div class="bh-order-page">
-  {% set status = order.status.value %}
-
-  {% if status == 'completed' %}
-    <div class="bh-order-notice" style="border-color:rgba(75,210,112,.42);background:linear-gradient(90deg,rgba(4,62,31,.78),rgba(4,35,22,.48));">
-      <div class="bh-order-notice-icon">✓</div><div><strong>Payment confirmed — your purchase is ready.</strong><span>You can now download your purchased track securely.</span></div>
-    </div>
-  {% elif status in ['failed','rejected'] %}
-    <div class="bh-order-notice" style="border-color:rgba(235,95,95,.35);background:linear-gradient(90deg,rgba(66,12,12,.7),rgba(35,8,8,.4));">
-      <div class="bh-order-notice-icon" style="color:#ff8585;border-color:#ff8585;">!</div><div><strong>{{ 'Payment was not completed.' if status == 'failed' else 'Order could not be completed.' }}</strong><span>No download has been granted for this order.</span></div>
-    </div>
-  {% else %}
-    <div class="bh-order-notice">
-      <div class="bh-order-notice-icon">✓</div><div><strong>Order received! We're confirming your payment.</strong><span>You will be notified as soon as your payment is confirmed.</span></div>
-    </div>
-  {% endif %}
-
-  <div class="bh-order-grid">
-    <section class="bh-order-card bh-order-main">
-      <div class="bh-orbit"></div><div class="bh-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-      <div class="bh-eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg> Order Status</div>
-      <h1 id="order-heading">{% if status == 'completed' %}Payment Confirmed{% elif status == 'failed' %}Payment Failed{% elif status == 'rejected' %}Order Rejected{% else %}Order Received{% endif %}</h1>
-      <p class="lead" id="status-message">{% if status == 'completed' %}Your payment is confirmed and your beat is ready to download.{% elif status == 'failed' %}The Paystack payment was not completed. You can safely try again.{% elif status == 'rejected' %}The payment was received, but this order could not be completed.{% else %}We've received your order and are waiting for payment confirmation. This usually takes a few seconds.{% endif %}</p>
-
-      <div class="bh-steps" id="status-steps">
-        <div class="bh-step active" data-step="received"><div class="bh-step-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6h15l-1.5 8h-12z"/><path d="M6 6 5 3H2M8 19a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg></div><div class="bh-step-label">Order Received</div></div>
-        <div class="bh-step" data-step="progress"><div class="bh-step-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></div><div class="bh-step-label">Payment<br>In Progress</div></div>
-        <div class="bh-step" data-step="confirmed"><div class="bh-step-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></div><div class="bh-step-label">Payment<br>Confirmed</div></div>
-        <div class="bh-step" data-step="download"><div class="bh-step-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg></div><div class="bh-step-label">Ready to<br>Download</div></div>
-      </div>
-
-      {% if status == 'completed' %}
-        <div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">✓</div><h3>Purchase confirmed</h3><p>Your license has been added to your BeatHub account and is available in My Purchases.</p></div><div class="bh-info-box"><div class="bh-info-icon">↓</div><h3>Files are ready</h3><p>Your protected download link is available below and is limited to your account.</p></div></div>
-      {% elif status == 'failed' %}
-        <div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">!</div><h3>Payment not completed</h3><p>Your account has not been given ownership of this track.</p></div><div class="bh-info-box"><div class="bh-info-icon">↻</div><h3>Try again</h3><p>Return to the track page and start a new secure Paystack checkout.</p></div></div>
-      {% else %}
-        <div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">⌁</div><h3>Your order is safe with BeatHub</h3><p>Paystack handles the payment securely. BeatHub grants ownership only after payment confirmation.</p></div><div class="bh-info-box"><div class="bh-info-icon">◷</div><h3>Usually only a few seconds</h3><p>Keep this page open while Paystack confirms the transaction. It updates automatically.</p></div></div>
-      {% endif %}
-
-      {% if status == 'completed' and order.track %}
-        <div class="bh-actions"><a href="/account/download/{{ order.track.id }}" class="btn btn-primary">Download {{ order.track.title }}</a><a href="/purchases" class="btn btn-outline">View My Purchases</a></div>
-      {% elif status == 'failed' and order.track %}
-        <div class="bh-actions"><a href="/track/{{ order.track.slug }}" class="btn btn-primary">Try Again</a><a href="/beats" class="btn btn-outline">Browse Beats</a></div>
-      {% elif status == 'rejected' %}
-        <div class="bh-actions"><a href="/beats" class="btn btn-primary">Find More Beats</a></div>
-      {% endif %}
-
-      <div class="bh-help"><div><h3>Need Help?</h3><p>If you have any issues with your order, our support team is here to help.</p></div><a href="/terms" class="btn btn-outline">Contact Support&nbsp; →</a></div>
-    </section>
-
-    <aside class="bh-order-card bh-order-side">
-      <div class="bh-side-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4M9 11h6M9 15h6"/></svg> Order Summary</div>
-      {% if order.track %}
-        <div class="bh-product">
-          <img class="bh-art" src="/track/{{ order.track.slug }}/artwork" alt="{{ order.track.title }} artwork" onerror="this.style.visibility='hidden'">
-          <div><h2>{{ order.track.title }}</h2><p>by {{ order.track.creator_profile.display_name if order.track.creator_profile and order.track.creator_profile.display_name else 'BeatHub Creator' }}</p><span class="license">▣ {{ 'Exclusive License' if order.sales_model_at_purchase == 'exclusive' else 'MP3 Lease' }}</span></div>
-        </div>
-      {% endif %}
-
-      <div class="bh-prices">
-        <div class="bh-price-row"><span>License</span><strong>KSh {{ "%.2f"|format(order.gross_amount|float) }}</strong></div>
-        <div class="bh-price-row"><span>Secure payment</span><strong>Paystack</strong></div>
-        <div class="bh-total"><span>Total Paid</span><strong>KSh {{ "%.2f"|format(order.gross_amount|float) }}</strong></div>
-      </div>
-
-      <div class="bh-details"><h3>Order Details</h3><div class="bh-detail"><span>Order ID</span><strong>{{ order.order_number }}</strong></div><div class="bh-detail"><span>Date</span><strong>{{ order.created_at.strftime('%b %d, %Y • %I:%M %p') if order.created_at else '—' }}</strong></div><div class="bh-detail"><span>Payment Method</span><strong class="bh-paystack">▰ paystack</strong></div></div>
-
-      {% if status == 'pending' %}
-        <div class="bh-wait"><div class="bh-wait-icon">◷</div><div><h3>Waiting for payment confirmation</h3><p>You'll be able to download your files once payment is confirmed.</p></div></div>
-      {% elif status == 'completed' %}
-        <div class="bh-wait" style="border-color:rgba(75,210,112,.2);background:rgba(75,210,112,.04)"><div class="bh-wait-icon" style="color:#67d982;border-color:rgba(75,210,112,.4)">✓</div><div><h3>Payment confirmed</h3><p>Your purchase is now available in your BeatHub account.</p></div></div>
-      {% endif %}
-    </aside>
-  </div>
-
-  <div class="bh-security"><div class="bh-security-icon">⌑</div><div><h3>Secure • Fast • Reliable</h3><p>BeatHub protects your purchase and only unlocks downloads after payment has been confirmed.</p></div></div>
-  <div class="bh-actions"><a href="/beats" class="btn btn-outline">Browse Beats</a><a href="/" class="btn btn-outline">Home</a></div>
+<div class="bh-order">
+{% set status=order.status.value %}
+{% if status=='completed' %}<div class="bh-notice"><div class="bh-notice-icon">✓</div><div><strong>Payment confirmed — your purchase is ready.</strong><span>You can now download your purchased track securely.</span></div></div>
+{% elif status in ['failed','rejected'] %}<div class="bh-notice" style="border-color:rgba(235,95,95,.35);background:linear-gradient(90deg,rgba(66,12,12,.7),rgba(35,8,8,.4))"><div class="bh-notice-icon" style="color:#ff8585;border-color:#ff8585">!</div><div><strong>{{ 'Payment was not completed.' if status=='failed' else 'Order could not be completed.' }}</strong><span>No download has been granted for this order.</span></div></div>
+{% else %}<div class="bh-notice"><div class="bh-notice-icon">✓</div><div><strong>Order received! We're confirming your payment.</strong><span>You will be notified as soon as your payment is confirmed.</span></div></div>{% endif %}
+<div class="bh-grid">
+<section class="bh-card bh-main"><div class="bh-orbit"></div><div class="bh-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="bh-eyebrow">◉ &nbsp; ORDER STATUS</div>
+<h1>{% if status=='completed' %}Payment Confirmed{% elif status=='failed' %}Payment Failed{% elif status=='rejected' %}Order Rejected{% else %}Order Received{% endif %}</h1>
+<p class="bh-lead" id="status-message">{% if status=='completed' %}Your payment is confirmed and your beat is ready to download.{% elif status=='failed' %}The Paystack payment was not completed. You can safely try again.{% elif status=='rejected' %}The payment was received, but this order could not be completed.{% else %}We've received your order and are waiting for payment confirmation. This usually takes a few seconds.{% endif %}</p>
+<div class="bh-steps"><div class="bh-step {% if status=='pending' %}done{% else %}done{% endif %}"><div class="bh-dot">🛒</div><div class="bh-step-label">Order Received</div></div><div class="bh-step {% if status=='pending' %}active{% elif status in ['completed','failed','rejected'] %}done{% endif %}"><div class="bh-dot">▤</div><div class="bh-step-label">Payment<br>In Progress</div></div><div class="bh-step {% if status=='completed' %}done{% endif %}"><div class="bh-dot">✓</div><div class="bh-step-label">Payment<br>Confirmed</div></div><div class="bh-step {% if status=='completed' %}done{% endif %}"><div class="bh-dot">↓</div><div class="bh-step-label">Ready to<br>Download</div></div></div>
+{% if status=='completed' %}<div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">✓</div><h3>Purchase confirmed</h3><p>Your license has been added to your BeatHub purchases.</p></div><div class="bh-info-box"><div class="bh-info-icon">↓</div><h3>Files are ready</h3><p>Your protected download is available below.</p></div></div><div class="bh-actions"><a href="/account/download/{{ order.track.id }}" class="btn btn-primary">Download {{ order.track.title }}</a><a href="/purchases" class="btn btn-outline">View My Purchases</a></div>
+{% elif status=='failed' %}<div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">!</div><h3>Payment not completed</h3><p>Your account has not been given ownership of this track.</p></div><div class="bh-info-box"><div class="bh-info-icon">↻</div><h3>Try again</h3><p>Return to the track page and start a new secure checkout.</p></div></div><div class="bh-actions">{% if order.track %}<a href="/track/{{ order.track.slug }}" class="btn btn-primary">Try Again</a>{% endif %}<a href="/beats" class="btn btn-outline">Browse Beats</a></div>
+{% elif status=='rejected' %}<div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">!</div><h3>Order rejected</h3><p>The payment was received but ownership could not be granted.</p></div></div><div class="bh-actions"><a href="/beats" class="btn btn-primary">Find More Beats</a></div>
+{% else %}<div class="bh-info"><div class="bh-info-box"><div class="bh-info-icon">⌁</div><h3>Your order is safe with BeatHub</h3><p>Paystack securely processes your payment. Ownership is granted only after confirmation.</p></div><div class="bh-info-box"><div class="bh-info-icon">◷</div><h3>Usually only a few seconds</h3><p>Keep this page open while Paystack confirms the transaction.</p></div></div>{% endif %}
+<div class="bh-help"><div><h3>Need Help?</h3><p>If you have any issues with your order, our support team is here to help.</p></div><a href="/terms" class="btn btn-outline">Contact Support →</a></div>
+</section>
+<aside class="bh-card bh-side"><div class="bh-side-title">▤ &nbsp; ORDER SUMMARY</div>{% if order.track %}<div class="bh-product"><img class="bh-art" src="/track/{{ order.track.slug }}/artwork" alt="{{ order.track.title }} artwork" onerror="this.style.visibility='hidden'"><div><h2>{{ order.track.title }}</h2><p>by {{ order.track.creator_profile.display_name if order.track.creator_profile and order.track.creator_profile.display_name else 'BeatHub Creator' }}</p><span class="bh-license">▣ {{ 'Exclusive License' if order.sales_model_at_purchase=='exclusive' else 'MP3 Lease' }}</span></div></div>{% endif %}<div class="bh-prices"><div class="bh-row"><span>License</span><strong>KSh {{ '%.2f'|format(order.gross_amount|float) }}</strong></div><div class="bh-row"><span>Payment Method</span><strong>Paystack</strong></div><div class="bh-total"><span>Total Paid</span><strong>KSh {{ '%.2f'|format(order.gross_amount|float) }}</strong></div></div><div class="bh-details"><h3>Order Details</h3><div class="bh-detail"><span>Order ID</span><strong>{{ order.order_number }}</strong></div><div class="bh-detail"><span>Date</span><strong>{{ order.created_at.strftime('%b %d, %Y • %I:%M %p') if order.created_at else '—' }}</strong></div><div class="bh-detail"><span>Payment Method</span><strong class="bh-paystack">▰ paystack</strong></div></div>{% if status=='pending' %}<div class="bh-wait"><div class="bh-wait-icon">◷</div><div><h3>Waiting for payment confirmation</h3><p>You'll be able to download your files once payment is confirmed.</p></div></div>{% elif status=='completed' %}<div class="bh-wait" style="border-color:rgba(75,210,112,.2);background:rgba(75,210,112,.04)"><div class="bh-wait-icon" style="color:#67d982;border-color:rgba(75,210,112,.4)">✓</div><div><h3>Payment confirmed</h3><p>Your purchase is available in your BeatHub account.</p></div></div>{% endif %}</aside></div>
+<div class="bh-security"><div class="bh-security-icon">⌑</div><div><h3>Secure • Fast • Reliable</h3><p>BeatHub protects your purchase and only unlocks downloads after payment confirmation.</p></div></div><div class="bh-actions"><a href="/beats" class="btn btn-outline">Browse Beats</a><a href="/" class="btn btn-outline">Home</a></div>
 </div>
-
-<script>
-(function(){
-  const orderId={{ order.id|tojson }};
-  const initialStatus={{ order.status.value|tojson }};
-  const statusUrl='/api/orders/'+encodeURIComponent(orderId)+'/status';
-  const heading=document.getElementById('order-heading');
-  const message=document.getElementById('status-message');
-  const steps=Array.from(document.querySelectorAll('.bh-step'));
-  let finished=initialStatus!=='pending';
-
-  function paint(status){
-    const labels={pending:['Order Received','We\'ve received your order and are waiting for payment confirmation. This usually takes a few seconds.'],completed:['Payment Confirmed','Your payment is confirmed and your beat is ready to download.'],failed:['Payment Failed','The Paystack payment was not completed. You can safely try again.'],rejected:['Order Rejected','The payment was received, but this order could not be completed.']};
-    const item=labels[status]||labels.pending;
-    if(heading) heading.textContent=item[0]; if(message) message.textContent=item[1];
-    const states=status==='completed'?['done','done','done','done']:status==='pending'?['active','active','', '']:['done','done','', ''];
-    steps.forEach((step,i)=>{step.classList.remove('active','done');if(states[i])step.classList.add(states[i]);});
-    if(status==='completed') return true;
-    if(status==='failed'||status==='rejected') return true;
-    return false;
-  }
-  async function poll(){
-    try{const r=await fetch(statusUrl,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});if(!r.ok)return false;return paint(String((await r.json()).status||'').toLowerCase());}catch(e){return false;}
-  }
-  if(!finished){setTimeout(async function loop(){finished=await poll();if(!finished)setTimeout(loop,3000);},1800);}
-})();
-</script>
+{% if status=='pending' %}<script>(function(){const url='/api/orders/{{ order.id }}'+'/status';let stopped=false;async function check(){try{const r=await fetch(url,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});if(!r.ok)return;const d=await r.json();if(['completed','failed','rejected'].includes(String(d.status||'').toLowerCase())){stopped=true;window.location.reload();}}catch(e){}if(!stopped)setTimeout(check,3000)}setTimeout(check,1800)})();</script>{% endif %}
 {% endblock %}
