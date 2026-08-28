@@ -207,8 +207,14 @@ def login_submit(
     next: str = Form(""),
     db: Session = Depends(get_db),
 ):
+    # The login form carries the return target in its action query string.
+    # Browsers do not submit that query parameter as a form field, so fall
+    # back to request.query_params here. This preserves the exact product
+    # page/checkout that sent an unauthenticated buyer to login.
+    requested_next = next or request.query_params.get("next", "")
+    safe_next = _safe_next_url(requested_next)
+
     login_identifier = (identifier or email).strip().lower()
-    safe_next = _safe_next_url(next)
     user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()
 
     if not user and login_identifier:
