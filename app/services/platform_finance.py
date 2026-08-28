@@ -64,17 +64,28 @@ def get_platform_ledger_totals(db: Session):
 
 
 def get_admin_withdrawal_financials(db: Session):
-    """Return platform revenue, confirmed debits, reservations and available ledger balance."""
+    """Return platform revenue, confirmed debits, reservations and available ledger balance.
+
+    Reservations include the expected Paystack M-Pesa transfer fee. This keeps
+    the fee from being spent by a concurrent withdrawal while the payout is
+    still processing. On success, the actual provider fee is recorded in the
+    immutable platform ledger; on failure/reversal, the reservation disappears
+    when the withdrawal leaves a reserved status.
+    """
     _gross, order_commission, _creator = get_platform_financials(db)
     ledger_credits, ledger_debits, ledger_net = get_platform_ledger_totals(db)
     platform_revenue = ledger_credits if ledger_credits > ZERO else order_commission
 
-    reserved_raw = (
-        db.query(func.coalesce(func.sum(AdminWithdrawal.amount), 0))
+    reserved_rows = (
+        db.query(AdminWithdrawal.amount)
         .filter(AdminWithdrawal.status.in_(RESERVED_STATUSES))
-        .scalar()
+        .all()
     )
-    reserved = _decimal(reserved_raw)
+    reserved = ZERO
+    for (amount,) in reserved_rows:
+        payout_amount = _decimal(amount)
+        reserved += payout_amount + estimate_mpesa_transfer_fee(payout_amount)
+    reserved = _decimal(reserved)
 
     available = platform_revenue - ledger_debits - reserved
     if available < ZERO:
