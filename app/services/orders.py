@@ -9,6 +9,8 @@ CRITICAL INVARIANTS:
 - Exclusive tracks are protected by the database unique constraint.
 - Duplicate webhook/callback delivery is idempotent.
 - A completed order creates at most one creator credit and one platform credit.
+- A previously completed order is checked for missing fulfillment/ledger rows
+  so an interrupted legacy transaction can be repaired safely.
 """
 
 from datetime import datetime
@@ -28,13 +30,71 @@ class OrderFinalizationResult:
         self.message = message
 
 
+def _ensure_fulfillment_and_ledger(db: Session, order: Order, track: Track | None) -> None:
+    """Repair missing idempotent fulfillment records for a completed order.
+
+    This function intentionally does not change payment state or amounts. It
+    only makes sure a legitimately completed order has the records required to
+    deliver ownership and account for the sale.
+    """
+    existing_license = db.query(License).filter(License.order_id == order.id).first()
+    if not existing_license:
+        db.add(
+            License(
+                order_id=order.id,
+                buyer_id=order.buyer_id,
+                track_id=order.track_id,
+                album_id=order.album_id,
+            )
+        )
+
+    if track:
+        existing_ledger = (
+            db.query(CreatorLedgerEntry)
+            .filter(CreatorLedgerEntry.order_id == order.id)
+            .first()
+        )
+        if not existing_ledger:
+            db.add(
+                CreatorLedgerEntry(
+                    creator_profile_id=track.creator_profile_id,
+                    order_id=order.id,
+                    amount=order.net_amount,
+                    description=f"Sale of '{track.title}' (order {order.order_number})",
+                )
+            )
+
+    # record_platform_commission() is itself idempotent by order + entry type.
+    record_platform_commission(db, order)
+
+
 def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
     """Finalize a successfully verified payment's BeatHub order."""
 
+    # Completed orders are normally a fast idempotent return. Before returning,
+    # however, repair any missing fulfillment/accounting rows from a previously
+    # interrupted or legacy completion. This never credits an order twice.
     if order.status == OrderStatus.COMPLETED:
-        # A retry after a committed transaction must not create another ledger
-        # credit. The service-level uniqueness check makes this safe as well.
-        return OrderFinalizationResult(OrderStatus.COMPLETED, "Order already completed.")
+        track = db.get(Track, order.track_id) if order.track_id else None
+        try:
+            _ensure_fulfillment_and_ledger(db, order, track)
+            if order.completed_at is None:
+                order.completed_at = datetime.utcnow()
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            # Another concurrent retry may have inserted the same idempotent
+            # rows. Re-check the committed order and return its real state.
+            refreshed = db.get(Order, order.id)
+            if refreshed is None:
+                return OrderFinalizationResult(OrderStatus.REJECTED, "Order could not be found after finalization retry.")
+            if refreshed.status == OrderStatus.COMPLETED:
+                return OrderFinalizationResult(OrderStatus.COMPLETED, "Order already completed.")
+            raise
+        return OrderFinalizationResult(
+            OrderStatus.COMPLETED,
+            "Order already completed; fulfillment and financial records verified.",
+        )
 
     if order.status == OrderStatus.REJECTED:
         return OrderFinalizationResult(
@@ -56,40 +116,12 @@ def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
             db.flush()
             track.is_sold = True
 
-        existing_license = db.query(License).filter(License.order_id == order.id).first()
-        if not existing_license:
-            db.add(
-                License(
-                    order_id=order.id,
-                    buyer_id=order.buyer_id,
-                    track_id=order.track_id,
-                    album_id=order.album_id,
-                )
-            )
-
-        if track:
-            existing_ledger = (
-                db.query(CreatorLedgerEntry)
-                .filter(CreatorLedgerEntry.order_id == order.id)
-                .first()
-            )
-            if not existing_ledger:
-                db.add(
-                    CreatorLedgerEntry(
-                        creator_profile_id=track.creator_profile_id,
-                        order_id=order.id,
-                        amount=order.net_amount,
-                        description=f"Sale of '{track.title}' (order {order.order_number})",
-                    )
-                )
+        _ensure_fulfillment_and_ledger(db, order, track)
 
         order.status = OrderStatus.COMPLETED
         order.completed_at = datetime.utcnow()
 
-        # Platform revenue is recorded in its own ledger, distinct from the
-        # creator ledger. It is created before commit in the same transaction.
-        record_platform_commission(db, order)
-
+        # All ownership and financial records are committed atomically.
         db.commit()
 
         return OrderFinalizationResult(
