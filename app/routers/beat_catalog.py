@@ -14,7 +14,7 @@ router = APIRouter(tags=["beat-catalog"])
 templates = Jinja2Templates(directory="app/templates")
 
 
-@router.get("/beats")
+@router.get("/marketplace/beats")
 def beats_catalog(
     request: Request,
     q: str = Query(default="", max_length=100),
@@ -38,7 +38,7 @@ def beats_catalog(
     tracks = [
         track for track in tracks
         if _track_is_public(track)
-        and str(getattr(track, "content_type", "beat") or "beat") == "beat"
+        and str(getattr(track, "content_type", "beat") or "beat").strip().lower() == "beat"
     ]
 
     total = len(tracks)
