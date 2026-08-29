@@ -21,22 +21,22 @@ class MusicContentTypeTests(unittest.TestCase):
     def test_upload_endpoint_requires_content_type(self):
         source = (ROOT / "app/routers/music_publish.py").read_text(encoding="utf-8")
         self.assertIn("content_types", source)
-        self.assertIn("content_type_radio_", (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8"))
-        self.assertIn('value="beat"', (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8"))
-        self.assertIn('value="track"', (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8"))
+        upload = (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8")
+        self.assertIn("content_type_radio_", upload)
+        self.assertIn('value="beat"', upload)
+        self.assertIn('value="track"', upload)
 
     def test_album_creation_endpoint_requires_project_type(self):
-        route = next(
-            route for route in album.router.routes
-            if getattr(route, "path", "") == "/dashboard/albums/new"
-            and "POST" in getattr(route, "methods", set())
-        )
+        route = next(route for route in album.router.routes if getattr(route, "path", "") == "/dashboard/albums/new" and "POST" in getattr(route, "methods", set()))
         dependency_names = {parameter.name for parameter in route.dependant.body_params}
         self.assertIn("content_type", dependency_names)
 
     def test_public_marketplace_is_canonical_entry(self):
         paths = [getattr(route, "path", "") for route in marketplace.router.routes]
         self.assertIn("/marketplace", paths)
+        self.assertIn("/marketplace/producers", paths)
+        self.assertIn("/marketplace/albums", paths)
+        self.assertIn("/marketplace/merch", paths)
         self.assertIn("/beats", paths)
 
     def test_dedicated_beat_catalog_is_classification_aware(self):
@@ -69,21 +69,21 @@ class MusicContentTypeTests(unittest.TestCase):
 
     def test_marketplace_template_has_required_discovery_sections(self):
         source = (ROOT / "app/templates/marketplace.html").read_text(encoding="utf-8")
-        self.assertIn("Beat Producers", source)
-        self.assertIn("Tracks / Songs", source)
-        self.assertIn("Creator Merchandise", source)
-        self.assertIn("producer.store_url", source)
-        self.assertIn("/tracks", source)
-        self.assertIn("/merch", source)
+        for expected in (
+            "Hot picks",
+            "Featured producers",
+            "Tracks worth hearing",
+            "Merch, kept simple.",
+            "/marketplace/beats",
+            "/tracks",
+            "/marketplace/albums",
+            "/merch",
+            "/marketplace/producers",
+        ):
+            self.assertIn(expected, source)
 
     def test_python_files_compile_as_ast(self):
-        paths = [
-            ROOT / "app/models/music.py",
-            ROOT / "app/routers/marketplace.py",
-            ROOT / "app/routers/music_publish.py",
-            ROOT / "app/routers/beat_catalog.py",
-            ROOT / "app/routers/album.py",
-        ]
+        paths = [ROOT / "app/models/music.py", ROOT / "app/routers/marketplace.py", ROOT / "app/routers/music_publish.py", ROOT / "app/routers/beat_catalog.py", ROOT / "app/routers/album.py"]
         for path in paths:
             ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
