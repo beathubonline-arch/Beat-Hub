@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import Base, engine
@@ -217,8 +216,6 @@ class AbuseRateLimitMiddleware(BaseHTTPMiddleware):
             return response
 
         events.append(now)
-        # Keep the in-memory structure bounded if a process receives many
-        # distinct client addresses over time.
         if len(self._events) > 10000:
             stale_keys = [k for k, values in self._events.items() if not values or values[-1] <= now - 3600]
             for stale_key in stale_keys[:5000]:
@@ -299,14 +296,10 @@ class CreatorPayoutPolicyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=_session_secret(),
-    session_cookie="beathub_session",
-    max_age=_session_max_age(),
-    same_site="lax",
-    https_only=_session_https_only(),
-)
+# Authentication is already implemented as a signed JWT in the HttpOnly
+# beathub_session cookie by app.routers.auth + app.utils.deps. Do not install
+# Starlette SessionMiddleware on the same cookie: doing so creates two
+# incompatible owners for one cookie name and can cause session ambiguity.
 app.add_middleware(SameOriginMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AbuseRateLimitMiddleware)
