@@ -1,4 +1,3 @@
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +41,20 @@ class AudioPreviewSecurityTests(unittest.TestCase):
             info = sf.info(preview_path)
             self.assertLessEqual(info.duration, PREVIEW_SECONDS + 1)
             self.assertEqual(info.channels, 1)
+
+    def test_secure_preview_route_is_registered_before_legacy_music_route(self):
+        from main import app
+
+        preview_routes = [
+            route
+            for route in app.routes
+            if getattr(route, "path", None) == "/track/{slug}/preview"
+        ]
+        self.assertGreaterEqual(len(preview_routes), 2)
+        self.assertEqual(
+            getattr(preview_routes[0].endpoint, "__name__", ""),
+            "secure_track_preview",
+        )
 
 
 if __name__ == "__main__":
