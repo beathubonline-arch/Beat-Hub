@@ -1,27 +1,25 @@
 """Secure public audio previews without exposing uploaded masters.
 
 The marketplace must be able to preview music before purchase, but the
-original uploaded master must remain private.  This router uses the existing
+original uploaded master must remain private. This router uses the existing
 Track.preview_file_path column and lazily creates a short, lower-bitrate MP3
 preview when an older track does not have one yet.
 
-The implementation deliberately avoids fetching arbitrary HTTP URLs from the
-server.  Only BeatHub-managed local MEDIA_ROOT files and R2 objects are used
-as preview sources.
+Only BeatHub-managed local MEDIA_ROOT files and R2 objects are used as preview
+sources. Arbitrary external URLs are never fetched by the server.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import os
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -30,16 +28,15 @@ from app.models.music import SalesModel, Track
 from app.services.storage import (
     ALLOWED_AUDIO_EXT,
     UploadValidationError,
-    _r2_client,
     _parse_r2_path,
-    media_url,
+    _r2_bucket,
+    _r2_client,
     save_upload,
 )
 
 logger = logging.getLogger("beathub.audio_preview")
 
 router = APIRouter(tags=["music"])
-templates = Jinja2Templates(directory="app/templates")
 
 PREVIEW_SECONDS = 30
 PREVIEW_SAMPLE_RATE = 22050
@@ -99,7 +96,8 @@ def _download_r2_source(stored_path: str, destination: Path) -> None:
         normalized = "r2://" + normalized[6:]
 
     bucket, key = _parse_r2_path(normalized)
-    if not bucket or not key:
+    configured_bucket = _r2_bucket()
+    if not bucket or not key or not configured_bucket or bucket != configured_bucket:
         raise ValueError("Invalid R2 audio path.")
 
     client = _r2_client()
@@ -195,8 +193,6 @@ def _generate_preview_bytes(stored_path: str) -> bytes:
             local = _resolve_local_source(value)
             if not local:
                 raise RuntimeError("Stored source audio is unavailable.")
-            # A copy prevents ffmpeg from ever receiving a path outside the
-            # validated temporary workspace.
             source_path.write_bytes(local.read_bytes())
 
         return _make_preview_from_source(source_path)
@@ -205,7 +201,17 @@ def _generate_preview_bytes(stored_path: str) -> bytes:
 def _safe_preview_path(value: str) -> bool:
     """Only serve preview objects created by this application."""
     normalized = str(value or "").strip().replace("\\", "/")
-    return normalized.startswith(("r2://", "media/previews/", "previews/"))
+    if normalized.startswith("s3://"):
+        normalized = "r2://" + normalized[6:]
+    if normalized.startswith("r2://"):
+        bucket, key = _parse_r2_path(normalized)
+        return bool(
+            bucket
+            and key
+            and bucket == _r2_bucket()
+            and key.startswith("previews/")
+        )
+    return normalized.startswith(("media/previews/", "previews/"))
 
 
 def _serve_preview(stored_path: str, request: Request):
@@ -257,21 +263,13 @@ def _serve_preview(stored_path: str, request: Request):
 
 def _save_preview(db: Session, track: Track, preview_bytes: bytes) -> str:
     from io import BytesIO
-    from fastapi import UploadFile
 
     upload = UploadFile(
         file=BytesIO(preview_bytes),
         filename="preview.mp3",
     )
-    return_path = None
     try:
-        # save_upload applies the same extension/signature/size validation as
-        # normal user uploads and uses the already-configured R2/local backend.
-        import asyncio
-
-        return_path = asyncio.run(
-            save_upload(upload, "previews", {".mp3"})
-        )
+        return_path = asyncio.run(save_upload(upload, "previews", {".mp3"}))
     finally:
         try:
             upload.file.close()
@@ -291,14 +289,8 @@ def _save_preview(db: Session, track: Track, preview_bytes: bytes) -> str:
 def secure_track_preview(
     slug: str,
     request: Request,
-    db: Session = None,
+    db: Session = Depends(get_db),
 ):
-    # FastAPI injects the database dependency through the function signature
-    # below after route registration; keeping this wrapper explicit makes the
-    # route easy to audit.
-    if db is None:
-        db = get_db().__next__()
-
     track = db.query(Track).filter(Track.slug == slug).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found.")
