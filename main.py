@@ -15,6 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.database import Base, engine
 from app.models import *  # noqa: F401,F403
+from app.middleware.security import SameOriginMiddleware
 from app.routers import (
     admin,
     admin_mpesa_payout,
@@ -47,6 +48,8 @@ app = FastAPI(
     description="BeatHub — beats, music, sessions, producer stores and creator merchandise.",
     version="1.0.0",
 )
+app.state.beathub_production = bool(settings.is_production)
+app.state.beathub_base_url = str(getattr(settings, "BASE_URL", "") or "").strip().rstrip("/")
 
 
 def _session_secret() -> str:
@@ -222,6 +225,7 @@ app.add_middleware(
     same_site="lax",
     https_only=_session_https_only(),
 )
+app.add_middleware(SameOriginMiddleware)
 app.add_middleware(MerchandiseLoginRedirectMiddleware)
 app.add_middleware(CreatorPayoutPolicyMiddleware)
 app.add_middleware(HomepageMotionMiddleware)

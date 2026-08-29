@@ -1,7 +1,10 @@
+import hashlib
 import re
 import secrets
+import smtplib
 import uuid
 from datetime import datetime, timedelta
+from email.message import EmailMessage
 from urllib.parse import quote, unquote, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -22,6 +25,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 SESSION_COOKIE_NAME = "beathub_session"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+RESET_TOKEN_TTL = timedelta(hours=1)
 
 
 def get_role_name(user: User) -> str:
@@ -77,6 +81,59 @@ def _signup_context(request: Request, **extra):
     context = {"request": request, "stage_name": "", "email": "", "role": "buyer"}
     context.update(extra)
     return context
+
+
+def _reset_token_digest(token: str) -> str:
+    """Store only a SHA-256 digest of a password-reset token.
+
+    The raw token remains in the user's reset URL, but a database/log leak no
+    longer provides a directly usable reset credential.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _send_password_reset_email(email: str, reset_url: str) -> bool:
+    """Send a reset message when SMTP delivery is explicitly enabled.
+
+    Failure is deliberately logged without the token or reset URL. The caller
+    keeps the response generic so account existence is not disclosed.
+    """
+    if not bool(getattr(settings, "EMAIL_ENABLED", False)):
+        return False
+
+    host = str(getattr(settings, "EMAIL_HOST", "") or "").strip()
+    username = str(getattr(settings, "EMAIL_USERNAME", "") or "").strip()
+    password = str(getattr(settings, "EMAIL_PASSWORD", "") or "")
+    sender = str(getattr(settings, "EMAIL_FROM", "") or username).strip()
+    try:
+        port = int(getattr(settings, "EMAIL_PORT", 587) or 587)
+    except (TypeError, ValueError):
+        port = 587
+
+    if not host or not sender:
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = "BeatHub password reset"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        "We received a request to reset your BeatHub password.\n\n"
+        f"Use this link within 1 hour:\n{reset_url}\n\n"
+        "If you did not request this, you can safely ignore this email."
+    )
+
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+            if username:
+                smtp.login(username, password)
+            smtp.send_message(message)
+        return True
+    except Exception:
+        return False
 
 
 @router.get("/signup")
@@ -207,10 +264,6 @@ def login_submit(
     next: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    # The login form carries the return target in its action query string.
-    # Browsers do not submit that query parameter as a form field, so fall
-    # back to request.query_params here. This preserves the exact product
-    # page/checkout that sent an unauthenticated buyer to login.
     requested_next = next or request.query_params.get("next", "")
     safe_next = _safe_next_url(requested_next)
 
@@ -261,23 +314,47 @@ def forgot_password_submit(request: Request, db: Session = Depends(get_db), emai
     user = db.query(User).filter(func.lower(User.email) == email_norm).first()
     if user:
         token = secrets.token_urlsafe(32)
-        user.reset_token = token
-        user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+        user.reset_token = _reset_token_digest(token)
+        user.reset_token_expires = datetime.utcnow() + RESET_TOKEN_TTL
         db.commit()
-        print(f"[BeatHub] Password reset link for {email_norm}: /reset-password?token={token}")
-    return templates.TemplateResponse(request, "forgot_password.html", {"request": request, "error": "", "success": "If an account exists for that email, a reset link has been generated. Check the server/admin delivery channel."})
+
+        base_url = str(getattr(settings, "BASE_URL", "") or "").strip().rstrip("/")
+        if not base_url:
+            base_url = str(request.base_url).rstrip("/")
+        reset_url = f"{base_url}/reset-password?token={quote(token, safe='')}"
+
+        delivered = _send_password_reset_email(email_norm, reset_url)
+        if not delivered and bool(getattr(settings, "EMAIL_ENABLED", False)):
+            # Never include the token/reset URL in logs. The account holder can
+            # request another message after email delivery is corrected.
+            import logging
+            logging.getLogger("beathub.auth").warning(
+                "Password reset email delivery failed for configured account."
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "forgot_password.html",
+        {
+            "request": request,
+            "error": "",
+            "success": "If an account exists for that email, a password reset link will be sent shortly.",
+        },
+    )
 
 
 @router.get("/reset-password")
 def reset_password_page(request: Request, token: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.reset_token == token).first()
+    token_digest = _reset_token_digest(token)
+    user = db.query(User).filter(User.reset_token == token_digest).first()
     valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
     return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": valid, "error": ""})
 
 
 @router.post("/reset-password")
 def reset_password_submit(request: Request, db: Session = Depends(get_db), token: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
-    user = db.query(User).filter(User.reset_token == token).first()
+    token_digest = _reset_token_digest(token)
+    user = db.query(User).filter(User.reset_token == token_digest).first()
     valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
     if not valid:
         return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": False, "error": "This reset link is invalid or has expired."}, status_code=400)
