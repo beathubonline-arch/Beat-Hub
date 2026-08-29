@@ -143,8 +143,6 @@ def _validate(file: UploadFile, allowed_extensions: set[str]):
             f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(allowed_extensions))}"
         )
 
-    # Validate actual file signatures instead of trusting the client filename
-    # or Content-Type. We only inspect a small prefix and restore the stream.
     stream = file.file
     try:
         position = stream.tell()
@@ -181,7 +179,7 @@ def _content_matches_extension(header: bytes, ext: str) -> bool:
         return len(header) >= 12 and header[4:8] == b"ftyp" and header[8:12] in {
             b"M4A ", b"M4B ", b"isom", b"iso2", b"mp41", b"mp42", b"MSNV"
         }
-    if ext == ".jpg" or ext == ".jpeg":
+    if ext in {".jpg", ".jpeg"}:
         return header.startswith(b"\xff\xd8\xff")
     if ext == ".png":
         return header.startswith(b"\x89PNG\r\n\x1a\n")
@@ -219,8 +217,6 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     if not bucket:
         raise RuntimeError("R2 bucket is not configured.")
     key = f"{subfolder.strip('/')}/{uuid.uuid4().hex}{ext}"
-    # Do not trust a browser-supplied Content-Type for security decisions.
-    # Store a safe canonical type based on the validated extension.
     content_type = {
         ".mp3": "audio/mpeg",
         ".wav": "audio/wav",
@@ -250,6 +246,8 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     return f"r2://{bucket}/{key}"
 
 async def save_upload(file: UploadFile, subfolder: str, allowed_extensions: set[str]) -> str:
+    if _r2_is_configured():
+        return await save_upload_to_r2(file, subfolder, allowed_extensions)
     ext = _validate(file, allowed_extensions)
     contents = await file.read()
     if len(contents) > _max_upload_bytes():
