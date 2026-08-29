@@ -20,6 +20,7 @@ from app.routers import (
     admin,
     admin_mpesa_payout,
     admin_unified_sales,
+    audio_preview,
     auth,
     checkout,
     creator_store,
@@ -256,6 +257,9 @@ async def merchandise_legacy_alias():
 app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
+# Secure preview route must be registered before music.router's legacy preview
+# handler. The public URL remains exactly /track/{slug}/preview.
+app.include_router(audio_preview.router)
 app.include_router(music.router)
 app.include_router(track_catalog.router)
 app.include_router(checkout.router)
