@@ -7,6 +7,7 @@ import soundfile as sf
 from app.routers.audio_preview import (
     PREVIEW_SECONDS,
     _generate_preview_bytes,
+    _make_preview_from_source,
     _safe_preview_path,
 )
 
@@ -32,7 +33,7 @@ class AudioPreviewSecurityTests(unittest.TestCase):
             samples = np.zeros(22050 * 5, dtype="float32")
             sf.write(source, samples, 22050, format="WAV", subtype="PCM_16")
 
-            preview = _generate_preview_bytes(str(source))
+            preview = _make_preview_from_source(source)
             self.assertGreater(len(preview), 0)
             self.assertLess(len(preview), 8 * 1024 * 1024)
 
