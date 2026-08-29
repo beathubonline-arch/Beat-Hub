@@ -1,0 +1,1 @@
+"""BeatHub application middleware."""
