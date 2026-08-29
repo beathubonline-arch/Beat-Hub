@@ -103,7 +103,7 @@ class SameOriginMiddleware:
 
     async def _capture_response(self, scope, receive):
         start_message = None
-        body_chunks = []
+        body_messages = []
 
         async def capture(message):
             nonlocal start_message
@@ -112,22 +112,19 @@ class SameOriginMiddleware:
                 start_message = dict(message)
                 start_message["headers"] = list(message.get("headers", []))
             elif message_type == "http.response.body":
-                body_chunks.append(bytes(message.get("body", b"")))
+                body_messages.append(dict(message))
             else:
-                # Preserve non-HTTP response messages exactly.
-                body_chunks.append(message)
+                body_messages.append(dict(message))
 
         await self.app(scope, receive, capture)
-        return start_message, body_chunks
+        return start_message, body_messages
 
-    async def _send_captured(self, send, start_message, body_chunks):
-        if start_message is not None:
-            await send(start_message)
-            for body in body_chunks:
-                if isinstance(body, dict):
-                    await send(body)
-                else:
-                    await send({"type": "http.response.body", "body": body, "more_body": False})
+    async def _send_captured(self, send, start_message, body_messages):
+        if start_message is None:
+            return
+        await send(start_message)
+        for message in body_messages:
+            await send(message)
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
@@ -155,12 +152,12 @@ class SameOriginMiddleware:
             safe_next = _safe_return_path(next_value)
 
             if safe_next:
-                start_message, body_chunks = await self._capture_response(scope, receive)
+                start_message, body_messages = await self._capture_response(scope, receive)
                 if start_message is not None:
                     response_headers = list(start_message.get("headers", []))
                     response_headers.append(_set_cookie_header(safe_next, max_age=RETURN_TO_MAX_AGE))
                     start_message["headers"] = response_headers
-                await self._send_captured(send, start_message, body_chunks)
+                await self._send_captured(send, start_message, body_messages)
                 return
 
         # After account creation, redirect to the exact safe destination that
@@ -169,7 +166,7 @@ class SameOriginMiddleware:
         if method == "POST" and path in {"/signup", "/artist/signup"}:
             stored_next = _safe_return_path(_request_cookie(headers, RETURN_TO_COOKIE))
             if stored_next:
-                start_message, body_chunks = await self._capture_response(scope, receive)
+                start_message, body_messages = await self._capture_response(scope, receive)
                 if start_message is not None:
                     response_headers = []
                     status_code = int(start_message.get("status", 200))
@@ -179,7 +176,7 @@ class SameOriginMiddleware:
                         response_headers.append((key, value))
                     response_headers.append(_set_cookie_header("", max_age=0, delete=True))
                     start_message["headers"] = response_headers
-                await self._send_captured(send, start_message, body_chunks)
+                await self._send_captured(send, start_message, body_messages)
                 return
 
         if (
