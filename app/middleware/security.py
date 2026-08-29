@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 from fastapi.responses import JSONResponse
 
+from app.config import settings
+
 
 EXEMPT_POST_PATHS = {
     "/paystack/webhook",
@@ -27,10 +29,9 @@ def _origin(value: str | None) -> str:
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
 
 
-def _allowed_origins(app, host: str, forwarded_proto: str) -> set[str]:
+def _allowed_origins(host: str, forwarded_proto: str) -> set[str]:
     allowed: set[str] = set()
-    base_url = getattr(getattr(app, "state", None), "beathub_base_url", "") or ""
-    base_origin = _origin(base_url)
+    base_origin = _origin(getattr(settings, "BASE_URL", ""))
     if base_origin:
         allowed.add(base_origin)
 
@@ -59,9 +60,11 @@ class SameOriginMiddleware:
             for key, value in scope.get("headers", [])
         }
 
-        app_state = getattr(self.app, "state", None)
-        is_production = bool(getattr(app_state, "beathub_production", False))
-        if not is_production or method not in {"POST", "PUT", "PATCH", "DELETE"} or path in EXEMPT_POST_PATHS:
+        if (
+            not settings.is_production
+            or method not in {"POST", "PUT", "PATCH", "DELETE"}
+            or path in EXEMPT_POST_PATHS
+        ):
             await self.app(scope, receive, send)
             return
 
@@ -74,7 +77,6 @@ class SameOriginMiddleware:
         origin = _origin(headers.get("origin"))
         referer = _origin(headers.get("referer"))
         allowed = _allowed_origins(
-            self.app,
             headers.get("host", "").strip(),
             headers.get("x-forwarded-proto", "https"),
         )
