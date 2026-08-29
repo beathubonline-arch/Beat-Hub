@@ -1,5 +1,7 @@
 import logging
 import os
+import time
+from collections import defaultdict, deque
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from http.cookies import SimpleCookie
@@ -145,6 +147,85 @@ class HomepageMotionMiddleware:
         await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add safe baseline browser security headers without changing page content.
+
+    CSP is intentionally not enabled here yet: BeatHub currently uses inline
+    scripts/styles and third-party payment/audio integrations that need a
+    dedicated CSP inventory. HSTS is only emitted in production because local
+    HTTP development must continue to work.
+    """
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        if settings.is_production:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
+        return response
+
+
+class AbuseRateLimitMiddleware(BaseHTTPMiddleware):
+    """Small dependency-free guard for high-risk unauthenticated endpoints.
+
+    This is deliberately conservative: it only throttles authentication and
+    password-reset entry points, never payment callbacks, browsing, audio,
+    uploads, dashboards, or ordinary purchases. The store is process-local;
+    it is a safety net, not the final distributed rate-limit architecture.
+    """
+
+    RULES = {
+        ("POST", "/login"): (10, 60),
+        ("POST", "/signup"): (5, 300),
+        ("POST", "/forgot-password"): (5, 900),
+        ("POST", "/reset-password"): (10, 900),
+    }
+
+    def __init__(self, app):
+        super().__init__(app)
+        self._events = defaultdict(deque)
+
+    @staticmethod
+    def _client_key(request):
+        client = request.client
+        return str(getattr(client, "host", "unknown") or "unknown")
+
+    async def dispatch(self, request, call_next):
+        rule = self.RULES.get((request.method.upper(), request.url.path))
+        if not rule:
+            return await call_next(request)
+
+        limit, window = rule
+        key = (self._client_key(request), request.method.upper(), request.url.path)
+        now = time.monotonic()
+        events = self._events[key]
+        cutoff = now - window
+        while events and events[0] <= cutoff:
+            events.popleft()
+        if len(events) >= limit:
+            retry_after = max(1, int(window - (now - events[0])))
+            response = JSONResponse(
+                {"detail": "Too many attempts. Please try again later."},
+                status_code=429,
+                headers={"Retry-After": str(retry_after), "Cache-Control": "no-store"},
+            )
+            return response
+
+        events.append(now)
+        # Keep the in-memory structure bounded if a process receives many
+        # distinct client addresses over time.
+        if len(self._events) > 10000:
+            stale_keys = [k for k, values in self._events.items() if not values or values[-1] <= now - 3600]
+            for stale_key in stale_keys[:5000]:
+                self._events.pop(stale_key, None)
+        return await call_next(request)
+
+
 class MerchandiseLoginRedirectMiddleware:
     """Give logged-out merchandise buyers a real login flow instead of a raw 401."""
 
@@ -227,6 +308,8 @@ app.add_middleware(
     https_only=_session_https_only(),
 )
 app.add_middleware(SameOriginMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AbuseRateLimitMiddleware)
 app.add_middleware(MerchandiseLoginRedirectMiddleware)
 app.add_middleware(CreatorPayoutPolicyMiddleware)
 app.add_middleware(HomepageMotionMiddleware)
