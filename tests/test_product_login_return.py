@@ -9,27 +9,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ProductLoginReturnTests(unittest.TestCase):
     def test_safe_next_url_allows_internal_product_destinations(self):
-        destinations = [
-            "/checkout/track/sample-beat",
-            "/track/sample-track",
-            "/merch/sample-shirt",
-        ]
+        destinations = ["/checkout/track/sample-beat", "/track/sample-track", "/merch/sample-shirt"]
         for destination in destinations:
             self.assertEqual(_safe_next_url(destination), destination)
 
     def test_safe_next_url_rejects_external_redirects(self):
-        for destination in [
-            "https://evil.example/steal",
-            "//evil.example/steal",
-            "javascript:alert(1)",
-            "evil.example/steal",
-        ]:
+        for destination in ["https://evil.example/steal", "//evil.example/steal", "javascript:alert(1)", "evil.example/steal"]:
             self.assertEqual(_safe_next_url(destination), "")
 
     def test_login_page_supplies_encoded_next_url_for_template(self):
         source = (ROOT / "app" / "routers" / "auth.py").read_text(encoding="utf-8")
         self.assertIn('"next_url": quote(safe_next, safe="")', source)
-        self.assertIn('url=_safe_next_url(next) or dashboard_url_for_user(user)', source)
+        self.assertIn('url=safe_next or dashboard_url_for_user(user)', source)
 
     def test_login_template_preserves_next_in_post_action(self):
         source = (ROOT / "app" / "templates" / "login.html").read_text(encoding="utf-8")
