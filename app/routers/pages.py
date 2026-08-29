@@ -202,9 +202,19 @@ def account_downloads(request: Request, db: Session = Depends(get_db), current_u
 @router.get("/download/track/{track_id}")
 @router.get("/account/download/{track_id}")
 def download_track(track_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
-    license_record = db.query(License).filter(License.buyer_id == current_user.id, License.track_id == track_id).first()
+    license_record = (
+        db.query(License)
+        .join(Order, License.order_id == Order.id)
+        .filter(
+            License.buyer_id == current_user.id,
+            License.track_id == track_id,
+            Order.status == OrderStatus.COMPLETED,
+        )
+        .first()
+    )
     if not license_record:
         raise HTTPException(status_code=403, detail="You do not own this track.")
+
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found.")
@@ -242,6 +252,13 @@ def media_file(media_path: str):
     clean = str(media_path or "").replace("\\", "/").lstrip("/")
     if not clean or clean.startswith((".", "../", "..\\")):
         raise HTTPException(status_code=404, detail="Media file not found.")
+
+    # Audio masters are never public filesystem media. Preview playback uses
+    # the dedicated /track/{slug}/preview route, while purchased masters use
+    # /account/download/{track_id} after ownership verification.
+    if clean == "audio" or clean.startswith("audio/"):
+        raise HTTPException(status_code=404, detail="Media file not found.")
+
     return _serve_local_media(f"media/{clean}")
 
 
