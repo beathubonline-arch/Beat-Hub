@@ -142,7 +142,53 @@ def _validate(file: UploadFile, allowed_extensions: set[str]):
         raise UploadValidationError(
             f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(allowed_extensions))}"
         )
+
+    # Validate actual file signatures instead of trusting the client filename
+    # or Content-Type. We only inspect a small prefix and restore the stream.
+    stream = file.file
+    try:
+        position = stream.tell()
+        stream.seek(0)
+        header = stream.read(32)
+        stream.seek(position)
+    except (OSError, AttributeError):
+        header = b""
+        try:
+            stream.seek(0)
+        except Exception:
+            pass
+
+    if not _content_matches_extension(header, ext):
+        raise UploadValidationError("The uploaded file content does not match its file type.")
+
     return ext
+
+
+def _content_matches_extension(header: bytes, ext: str) -> bool:
+    """Perform conservative magic-byte/container checks for supported media."""
+    if not header:
+        return False
+
+    if ext == ".wav":
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE"
+    if ext == ".flac":
+        return header.startswith(b"fLaC")
+    if ext == ".mp3":
+        return header.startswith(b"ID3") or (
+            len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0
+        )
+    if ext == ".m4a":
+        return len(header) >= 12 and header[4:8] == b"ftyp" and header[8:12] in {
+            b"M4A ", b"M4B ", b"isom", b"iso2", b"mp41", b"mp42", b"MSNV"
+        }
+    if ext == ".jpg" or ext == ".jpeg":
+        return header.startswith(b"\xff\xd8\xff")
+    if ext == ".png":
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
+    if ext == ".webp":
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP"
+
+    return False
 
 def _max_upload_bytes() -> int:
     return int(settings.MAX_UPLOAD_MB) * 1024 * 1024
@@ -173,12 +219,21 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     if not bucket:
         raise RuntimeError("R2 bucket is not configured.")
     key = f"{subfolder.strip('/')}/{uuid.uuid4().hex}{ext}"
-    content_type = file.content_type or "application/octet-stream"
+    # Do not trust a browser-supplied Content-Type for security decisions.
+    # Store a safe canonical type based on the validated extension.
+    content_type = {
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".m4a": "audio/mp4",
+        ".flac": "audio/flac",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }.get(ext, "application/octet-stream")
     try:
         client = _r2_client()
         file.file.seek(0)
-        # Streaming avoids the previous await file.read() full-file copy.
-        # boto3 handles multipart transfer for large objects when appropriate.
         client.upload_fileobj(
             file.file,
             bucket,
@@ -195,8 +250,6 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     return f"r2://{bucket}/{key}"
 
 async def save_upload(file: UploadFile, subfolder: str, allowed_extensions: set[str]) -> str:
-    if _r2_is_configured():
-        return await save_upload_to_r2(file, subfolder, allowed_extensions)
     ext = _validate(file, allowed_extensions)
     contents = await file.read()
     if len(contents) > _max_upload_bytes():
