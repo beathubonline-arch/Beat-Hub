@@ -101,6 +101,34 @@ class SameOriginMiddleware:
     def __init__(self, app):
         self.app = app
 
+    async def _capture_response(self, scope, receive):
+        start_message = None
+        body_chunks = []
+
+        async def capture(message):
+            nonlocal start_message
+            message_type = message.get("type")
+            if message_type == "http.response.start":
+                start_message = dict(message)
+                start_message["headers"] = list(message.get("headers", []))
+            elif message_type == "http.response.body":
+                body_chunks.append(bytes(message.get("body", b"")))
+            else:
+                # Preserve non-HTTP response messages exactly.
+                body_chunks.append(message)
+
+        await self.app(scope, receive, capture)
+        return start_message, body_chunks
+
+    async def _send_captured(self, send, start_message, body_chunks):
+        if start_message is not None:
+            await send(start_message)
+            for body in body_chunks:
+                if isinstance(body, dict):
+                    await send(body)
+                else:
+                    await send({"type": "http.response.body", "body": body, "more_body": False})
+
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
@@ -126,28 +154,13 @@ class SameOriginMiddleware:
                         break
             safe_next = _safe_return_path(next_value)
 
-            if path == "/login" and not safe_next:
-                # Do not let an old purchase destination affect a normal login.
-                safe_next = ""
-
             if safe_next:
-                captured_start = None
-
-                async def capture(message):
-                    nonlocal captured_start
-                    if message.get("type") == "http.response.start":
-                        captured_start = dict(message)
-                        captured_start["headers"] = list(message.get("headers", []))
-                    else:
-                        await send(message)
-
-                await self.app(scope, receive, capture)
-                if captured_start is not None:
-                    response_headers = list(captured_start.get("headers", []))
+                start_message, body_chunks = await self._capture_response(scope, receive)
+                if start_message is not None:
+                    response_headers = list(start_message.get("headers", []))
                     response_headers.append(_set_cookie_header(safe_next, max_age=RETURN_TO_MAX_AGE))
-                    captured_start["headers"] = response_headers
-                    await send(captured_start)
-                    await send({"type": "http.response.body", "body": b"", "more_body": False})
+                    start_message["headers"] = response_headers
+                await self._send_captured(send, start_message, body_chunks)
                 return
 
         # After account creation, redirect to the exact safe destination that
@@ -156,27 +169,17 @@ class SameOriginMiddleware:
         if method == "POST" and path in {"/signup", "/artist/signup"}:
             stored_next = _safe_return_path(_request_cookie(headers, RETURN_TO_COOKIE))
             if stored_next:
-                captured_start = None
-
-                async def capture(message):
-                    nonlocal captured_start
-                    if message.get("type") == "http.response.start":
-                        captured_start = dict(message)
-                        captured_start["headers"] = list(message.get("headers", []))
-                    else:
-                        await send(message)
-
-                await self.app(scope, receive, capture)
-                if captured_start is not None:
+                start_message, body_chunks = await self._capture_response(scope, receive)
+                if start_message is not None:
                     response_headers = []
-                    for key, value in captured_start.get("headers", []):
-                        if key.lower() == b"location" and 300 <= int(captured_start.get("status", 200)) < 400:
+                    status_code = int(start_message.get("status", 200))
+                    for key, value in start_message.get("headers", []):
+                        if key.lower() == b"location" and 300 <= status_code < 400:
                             value = stored_next.encode("latin-1")
                         response_headers.append((key, value))
                     response_headers.append(_set_cookie_header("", max_age=0, delete=True))
-                    captured_start["headers"] = response_headers
-                    await send(captured_start)
-                    await send({"type": "http.response.body", "body": b"", "more_body": False})
+                    start_message["headers"] = response_headers
+                await self._send_captured(send, start_message, body_chunks)
                 return
 
         if (
