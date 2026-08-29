@@ -10,9 +10,6 @@ from urllib.parse import urlparse
 from fastapi.responses import JSONResponse
 
 
-# These endpoints are server-to-server callbacks and therefore cannot carry a
-# browser CSRF token/origin. Their own authentication/signature mechanisms are
-# responsible for authenticity.
 EXEMPT_POST_PATHS = {
     "/paystack/webhook",
     "/paystack/transfer/webhook",
@@ -30,18 +27,14 @@ def _origin(value: str | None) -> str:
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
 
 
-def _allowed_origins(request) -> set[str]:
+def _allowed_origins(app, host: str, forwarded_proto: str) -> set[str]:
     allowed: set[str] = set()
-    base_url = getattr(request.app.state, "beathub_base_url", "") or ""
+    base_url = getattr(getattr(app, "state", None), "beathub_base_url", "") or ""
     base_origin = _origin(base_url)
     if base_origin:
         allowed.add(base_origin)
 
-    # Also accept the actual host presented by the trusted reverse proxy. This
-    # keeps the security check working during Render/custom-domain migration.
-    host = request.headers.get("host", "").strip()
     if host:
-        forwarded_proto = request.headers.get("x-forwarded-proto", "https")
         scheme = forwarded_proto.split(",", 1)[0].strip().lower() or "https"
         allowed.add(f"{scheme}://{host.lower()}")
 
@@ -66,16 +59,13 @@ class SameOriginMiddleware:
             for key, value in scope.get("headers", [])
         }
 
-        # Development/testing remains permissive so local workflows are not
-        # unexpectedly broken. Production is fail-closed for browser writes.
-        is_production = bool(getattr(scope.get("app"), "state", None) and getattr(scope["app"].state, "beathub_production", False))
+        app_state = getattr(self.app, "state", None)
+        is_production = bool(getattr(app_state, "beathub_production", False))
         if not is_production or method not in {"POST", "PUT", "PATCH", "DELETE"} or path in EXEMPT_POST_PATHS:
             await self.app(scope, receive, send)
             return
 
-        # Bearer-authenticated API clients are not cookie-authenticated and do
-        # not need browser CSRF protection. Browser requests using the BeatHub
-        # session cookie continue through the same-origin checks below.
+        # Bearer-authenticated API clients are not cookie-authenticated.
         authorization = headers.get("authorization", "")
         if authorization.lower().startswith("bearer ") and authorization[7:].strip():
             await self.app(scope, receive, send)
@@ -83,7 +73,11 @@ class SameOriginMiddleware:
 
         origin = _origin(headers.get("origin"))
         referer = _origin(headers.get("referer"))
-        allowed = _allowed_origins(scope.get("app"))
+        allowed = _allowed_origins(
+            self.app,
+            headers.get("host", "").strip(),
+            headers.get("x-forwarded-proto", "https"),
+        )
 
         if (origin and origin in allowed) or (referer and referer in allowed):
             await self.app(scope, receive, send)
