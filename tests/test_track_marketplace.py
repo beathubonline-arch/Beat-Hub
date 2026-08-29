@@ -28,29 +28,64 @@ class TrackMarketplaceTests(unittest.TestCase):
         self.assertIn('== "beat"', source)
         self.assertIn("_track_is_public", source)
 
-    def test_canonical_marketplace_routes_exist(self):
+    def test_marketplace_has_discovery_and_category_routes(self):
         routes = [getattr(route, "path", "") for route in marketplace.router.routes]
-        self.assertIn("/marketplace", routes)
-        self.assertIn("/beats", routes)
+        for expected in (
+            "/marketplace",
+            "/marketplace/producers",
+            "/marketplace/albums",
+            "/marketplace/merch",
+            "/beats",
+        ):
+            self.assertIn(expected, routes)
 
-    def test_marketplace_landing_has_required_sections_and_producer_flow(self):
+    def test_marketplace_landing_is_discovery_first(self):
         source = (ROOT / "app/templates/marketplace.html").read_text(encoding="utf-8")
-        self.assertIn("Beat Producers", source)
-        self.assertIn("Tracks / Songs", source)
-        self.assertIn("Creator Merchandise", source)
-        self.assertIn("producer.store_url", source)
-        self.assertIn("/tracks", source)
-        self.assertIn("/merch", source)
-        self.assertIn("Browse all beats", source)
+        for expected in (
+            "Hot picks",
+            "Featured producers",
+            "Tracks worth hearing",
+            "Merch, kept simple.",
+            "/marketplace/beats",
+            "/tracks",
+            "/marketplace/albums",
+            "/merch",
+            "/marketplace/producers",
+        ):
+            self.assertIn(expected, source)
+        self.assertNotIn("One marketplace. Three ways to discover.", source)
 
-    def test_marketplace_backend_builds_producer_cards_from_beats(self):
+    def test_marketplace_backend_keeps_product_types_separate(self):
         source = (ROOT / "app/routers/marketplace.py").read_text(encoding="utf-8")
         self.assertIn("_producer_cards", source)
+        self.assertIn("_album_cards", source)
         self.assertIn("content_type", source)
         self.assertIn('== "beat"', source)
         self.assertIn('== "track"', source)
         self.assertIn("beathub_merchandise", source)
         self.assertIn("/store/", source)
+
+    def test_dedicated_category_templates_exist(self):
+        for relative in (
+            "app/templates/marketplace_producers.html",
+            "app/templates/marketplace_albums.html",
+        ):
+            self.assertTrue((ROOT / relative).is_file(), relative)
+
+    def test_album_and_producer_pages_have_back_navigation(self):
+        producer = (ROOT / "app/templates/marketplace_producers.html").read_text(encoding="utf-8")
+        albums = (ROOT / "app/templates/marketplace_albums.html").read_text(encoding="utf-8")
+        self.assertIn("/marketplace", producer)
+        self.assertIn("/marketplace", albums)
+        self.assertIn("Open producer store", producer)
+        self.assertIn("Open release", albums)
+
+    def test_main_route_still_exists_and_marketplace_is_reachable_from_legacy_entry(self):
+        pages_source = (ROOT / "app/routers/pages.py").read_text(encoding="utf-8")
+        marketplace_source = (ROOT / "app/routers/marketplace.py").read_text(encoding="utf-8")
+        self.assertIn('@router.get("/")', pages_source)
+        self.assertIn('@router.get("/marketplace")', marketplace_source)
+        self.assertIn('RedirectResponse(url="/marketplace", status_code=307)', marketplace_source)
 
     def test_track_marketplace_template_has_purchase_flow(self):
         source = (ROOT / "app/templates/tracks.html").read_text(encoding="utf-8")
