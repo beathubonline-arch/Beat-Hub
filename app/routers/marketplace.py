@@ -26,12 +26,7 @@ def _track_type(track: Track) -> str:
 
 
 def _public_tracks(db: Session) -> list[Track]:
-    rows = (
-        db.query(Track)
-        .filter(Track.is_published.is_(True))
-        .order_by(Track.created_at.desc())
-        .all()
-    )
+    rows = db.query(Track).filter(Track.is_published.is_(True)).order_by(Track.created_at.desc()).all()
     return [track for track in rows if _track_is_public(track)]
 
 
@@ -41,16 +36,9 @@ def _producer_cards(db: Session, beat_tracks: list[Track], limit: int = 12) -> l
         profile_id = str(getattr(track, "creator_profile_id", "") or "")
         if profile_id:
             counts[profile_id] = counts.get(profile_id, 0) + 1
-
     if not counts:
         return []
-
-    profiles = (
-        db.query(Profile)
-        .filter(Profile.id.in_(list(counts.keys())))
-        .order_by(Profile.stage_name.asc())
-        .all()
-    )
+    profiles = db.query(Profile).filter(Profile.id.in_(list(counts.keys()))).order_by(Profile.stage_name.asc()).all()
     result = []
     for profile in profiles:
         count = counts.get(str(profile.id), 0)
@@ -63,36 +51,27 @@ def _producer_cards(db: Session, beat_tracks: list[Track], limit: int = 12) -> l
                 avatar_url = media_url(stored)
             except Exception:
                 avatar_url = None
-        result.append(
-            {
-                "profile": profile,
-                "name": getattr(profile, "stage_name", None) or "BeatHub Producer",
-                "slug": getattr(profile, "slug", None),
-                "store_url": f"/store/{profile.slug}" if getattr(profile, "slug", None) else None,
-                "beat_count": count,
-                "avatar_url": avatar_url,
-            }
-        )
+        result.append({
+            "profile": profile,
+            "name": getattr(profile, "stage_name", None) or "BeatHub Producer",
+            "slug": getattr(profile, "slug", None),
+            "store_url": f"/store/{profile.slug}" if getattr(profile, "slug", None) else None,
+            "beat_count": count,
+            "avatar_url": avatar_url,
+        })
     return result[:limit]
 
 
 def _merchandise(db: Session, limit: int = 12) -> list[dict]:
     try:
-        rows = db.execute(
-            text(
-                f"SELECT id, creator_profile_id, name, slug, description, price, image_path, created_at "
-                f"FROM {MERCH_TABLE} ORDER BY created_at DESC LIMIT {int(limit)}"
-            )
-        ).mappings().all()
+        rows = db.execute(text(
+            f"SELECT id, creator_profile_id, name, slug, description, price, image_path, created_at "
+            f"FROM {MERCH_TABLE} ORDER BY created_at DESC LIMIT {int(limit)}"
+        )).mappings().all()
     except Exception:
         return []
-
     profile_ids = {str(row["creator_profile_id"]) for row in rows if row.get("creator_profile_id")}
-    profiles = {
-        str(profile.id): profile
-        for profile in db.query(Profile).filter(Profile.id.in_(list(profile_ids))).all()
-    } if profile_ids else {}
-
+    profiles = {str(profile.id): profile for profile in db.query(Profile).filter(Profile.id.in_(list(profile_ids))).all()} if profile_ids else {}
     result = []
     for row in rows:
         item = dict(row)
@@ -108,43 +87,43 @@ def _merchandise(db: Session, limit: int = 12) -> list[dict]:
     return result
 
 
+def _album_cards(albums: list[Album]) -> list[dict]:
+    cards = []
+    for album in albums:
+        artwork_url = None
+        stored = getattr(album, "artwork_path", None)
+        if stored:
+            try:
+                artwork_url = media_url(stored)
+            except Exception:
+                artwork_url = None
+        profile = getattr(album, "creator_profile", None)
+        cards.append({
+            "album": album,
+            "title": getattr(album, "title", None) or "Untitled project",
+            "slug": getattr(album, "slug", None),
+            "genre": getattr(album, "genre", None) or "Release",
+            "artwork_url": artwork_url,
+            "creator": getattr(profile, "stage_name", None) or "BeatHub Creator",
+            "track_count": len(getattr(album, "album_tracks", []) or []),
+        })
+    return cards
+
+
 def _hot_picks(beats: list[Track], tracks: list[Track], merch: list[dict]) -> list[dict]:
     picks: list[dict] = []
     for track in beats[:3]:
         item = _catalog_item(track)
-        picks.append({
-            "kind": "Beat",
-            "title": item["title"],
-            "creator": item["producer"],
-            "price": item["price"],
-            "image_url": item["artwork_url"],
-            "url": item["url"],
-        })
+        picks.append({"kind": "Beat", "title": item["title"], "creator": item["producer"], "price": item["price"], "image_url": item["artwork_url"], "url": item["url"]})
     for track in tracks[:2]:
         item = _catalog_item(track)
-        picks.append({
-            "kind": "Track",
-            "title": item["title"],
-            "creator": item["producer"],
-            "price": item["price"],
-            "image_url": item["artwork_url"],
-            "url": item["url"],
-        })
+        picks.append({"kind": "Track", "title": item["title"], "creator": item["producer"], "price": item["price"], "image_url": item["artwork_url"], "url": item["url"]})
     for item in merch[:1]:
-        picks.append({
-            "kind": "Merch",
-            "title": item.get("name") or "BeatHub Merch",
-            "creator": item.get("creator_name") or "BeatHub Creator",
-            "price": item.get("price") or 0,
-            "image_url": item.get("image_url"),
-            "url": f"/merch/{item.get('slug')}" if item.get("slug") else "/merch",
-        })
+        picks.append({"kind": "Merch", "title": item.get("name") or "BeatHub Merch", "creator": item.get("creator_name") or "BeatHub Creator", "price": item.get("price") or 0, "image_url": item.get("image_url"), "url": f"/merch/{item.get('slug')}" if item.get("slug") else "/merch"})
     return picks[:6]
 
 
 def _context(request: Request, user, beats: list[Track], tracks: list[Track], producers: list[dict], merch: list[dict]):
-    beat_preview = [_catalog_item(track) for track in beats[:4]]
-    track_preview = [_catalog_item(track) for track in tracks[:4]]
     return {
         "request": request,
         "current_user": user,
@@ -154,8 +133,8 @@ def _context(request: Request, user, beats: list[Track], tracks: list[Track], pr
         "beat_count": len(beats),
         "track_count": len(tracks),
         "merch_count": len(merch),
-        "beat_preview": beat_preview,
-        "track_preview": track_preview,
+        "beat_preview": [_catalog_item(track) for track in beats[:4]],
+        "track_preview": [_catalog_item(track) for track in tracks[:4]],
         "merchandise": merch[:4],
         "hot_picks": _hot_picks(beats, tracks, merch),
     }
@@ -173,51 +152,25 @@ def _load(request: Request, db: Session, user: Optional[object]):
 @router.get("/marketplace")
 def marketplace(request: Request, db: Session = Depends(get_db), current_user=Depends(get_optional_user)):
     _, beats, tracks, producers, merch = _load(request, db, current_user)
-    return templates.TemplateResponse(
-        request,
-        "marketplace.html",
-        _context(request, current_user, beats, tracks, producers, merch),
-    )
+    return templates.TemplateResponse(request, "marketplace.html", _context(request, current_user, beats, tracks, producers, merch))
 
 
 @router.get("/marketplace/producers")
 def marketplace_producers(request: Request, db: Session = Depends(get_db), current_user=Depends(get_optional_user)):
     _, beats, _, producers, _ = _load(request, db, current_user)
-    return templates.TemplateResponse(
-        request,
-        "marketplace_producers.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "producers": producers,
-            "producer_count": len(producers),
-            "beat_count": len(beats),
-        },
-    )
+    return templates.TemplateResponse(request, "marketplace_producers.html", {
+        "request": request, "current_user": current_user, "user": current_user, "current_year": 2026,
+        "producers": producers, "producer_count": len(producers), "beat_count": len(beats),
+    })
 
 
 @router.get("/marketplace/albums")
 def marketplace_albums(request: Request, db: Session = Depends(get_db), current_user=Depends(get_optional_user)):
-    albums = (
-        db.query(Album)
-        .filter(Album.is_published.is_(True))
-        .order_by(Album.created_at.desc())
-        .limit(24)
-        .all()
-    )
-    return templates.TemplateResponse(
-        request,
-        "marketplace_albums.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-            "albums": albums,
-        },
-    )
+    albums = db.query(Album).filter(Album.is_published.is_(True)).order_by(Album.created_at.desc()).limit(24).all()
+    return templates.TemplateResponse(request, "marketplace_albums.html", {
+        "request": request, "current_user": current_user, "user": current_user, "current_year": 2026,
+        "albums": _album_cards(albums),
+    })
 
 
 @router.get("/marketplace/merch")
