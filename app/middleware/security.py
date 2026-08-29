@@ -10,10 +10,11 @@ implemented here so the existing checkout, marketplace and authentication
 routes do not need to be duplicated or reordered.
 """
 
+from html import escape
 from http.cookies import SimpleCookie
 from urllib.parse import quote, unquote, urlparse
 
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
 
@@ -200,13 +201,33 @@ class SameOriginMiddleware:
             headers.get("x-forwarded-proto", "https"),
         )
 
-        if (origin and origin in allowed) or (referer and referer in allowed):
+        # Modern browsers send Sec-Fetch-Site on ordinary browser requests.
+        # Treat same-origin/same-site as an additional signal when Origin and
+        # Referer are absent (some legitimate form submissions omit both).
+        fetch_site = headers.get("sec-fetch-site", "").strip().lower()
+        browser_same_site = fetch_site in {"same-origin", "same-site"}
+
+        if (origin and origin in allowed) or (referer and referer in allowed) or browser_same_site:
             await self.app(scope, receive, send)
             return
 
-        response = JSONResponse(
-            {"detail": "Cross-site request blocked."},
-            status_code=403,
-            headers={"Cache-Control": "no-store"},
-        )
+        # Keep API clients on the machine-readable response, while browser
+        # requests receive a simple, branded error instead of raw JSON.
+        accepts = headers.get("accept", "").lower()
+        if "text/html" in accepts:
+            response = HTMLResponse(
+                """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request blocked · BeatHub</title>
+<style>body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d0d12;color:#fff;display:grid;place-items:center;min-height:100vh}.card{max-width:520px;margin:24px;padding:36px;border:1px solid #292936;border-radius:20px;background:#15151d;text-align:center;box-shadow:0 20px 60px #0006}h1{margin:0 0 12px;font-size:28px}p{color:#b9b9c7;line-height:1.6}.brand{font-weight:800;letter-spacing:.04em;margin-bottom:22px}.btn{display:inline-block;margin-top:12px;padding:11px 18px;border-radius:10px;background:#fff;color:#111;text-decoration:none;font-weight:700}</style>
+</head><body><main class="card"><div class="brand">BeatHub</div><h1>Request blocked</h1><p>This request could not be verified as coming from BeatHub. Please go back and try again.</p><a class="btn" href="/">Return to BeatHub</a></main></body></html>""",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+        else:
+            response = JSONResponse(
+                {"detail": "Cross-site request blocked."},
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
         await response(scope, receive, send)
