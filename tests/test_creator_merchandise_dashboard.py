@@ -1,7 +1,6 @@
 import unittest
 from datetime import datetime
 from decimal import Decimal
-from types import SimpleNamespace
 
 from app.routers import creator_merch_integration as integration
 import app.routers.dashboard as dashboard
@@ -50,11 +49,14 @@ class CreatorMerchandiseDashboardTests(unittest.TestCase):
             )
         )
 
-        gross, commission, net, recent = integration._paid_merchandise_stats(db, "bono-profile")
+        gross, commission, net, count, recent = integration._paid_merchandise_stats(
+            db, "bono-profile"
+        )
 
         self.assertEqual(gross, Decimal("3000"))
         self.assertEqual(commission, Decimal("300"))
         self.assertEqual(net, Decimal("2700"))
+        self.assertEqual(count, 1)
         self.assertEqual(len(recent), 1)
         self.assertEqual(recent[0].track.title, "Merch: Bono Hoodie")
         self.assertEqual(recent[0].net_amount, Decimal("2700"))
