@@ -34,7 +34,7 @@ def _decimal(value) -> Decimal:
 
 
 def _paid_merchandise_stats(db, profile_id):
-    """Return creator-owned paid merchandise totals and recent sale rows."""
+    """Return creator-owned paid merchandise totals, count and recent rows."""
     rows = db.execute(
         text(
             f"""
@@ -83,7 +83,7 @@ def _paid_merchandise_stats(db, profile_id):
             )
         )
 
-    return gross, commission, net, recent
+    return gross, commission, net, len(rows), recent
 
 
 def patch_creator_dashboard():
@@ -96,11 +96,11 @@ def patch_creator_dashboard():
 
     def creator_stats_with_merch(db, profile_id):
         stats = original(db, profile_id)
-        merch_gross, merch_commission, merch_net, merch_recent = _paid_merchandise_stats(
+        merch_gross, merch_commission, merch_net, merch_count, merch_recent = _paid_merchandise_stats(
             db, profile_id
         )
 
-        stats["total_sales"] = int(stats.get("total_sales", 0)) + len(merch_recent)
+        stats["total_sales"] = int(stats.get("total_sales", 0)) + merch_count
         stats["gross_revenue"] = _decimal(stats.get("gross_revenue")) + merch_gross
         stats["platform_commission"] = _decimal(stats.get("platform_commission")) + merch_commission
         stats["net_earnings"] = _decimal(stats.get("net_earnings")) + merch_net
