@@ -96,6 +96,11 @@ def patch_creator_dashboard():
 
     def creator_stats_with_merch(db, profile_id):
         stats = original(db, profile_id)
+        old_net = _decimal(stats.get("net_earnings"))
+        old_available = _decimal(stats.get("available_balance"))
+        pending = _decimal(stats.get("pending_withdrawal"))
+        withdrawn = max(Decimal("0"), old_net - old_available - pending)
+
         merch_gross, merch_commission, merch_net, merch_count, merch_recent = _paid_merchandise_stats(
             db, profile_id
         )
@@ -103,13 +108,15 @@ def patch_creator_dashboard():
         stats["total_sales"] = int(stats.get("total_sales", 0)) + merch_count
         stats["gross_revenue"] = _decimal(stats.get("gross_revenue")) + merch_gross
         stats["platform_commission"] = _decimal(stats.get("platform_commission")) + merch_commission
-        stats["net_earnings"] = _decimal(stats.get("net_earnings")) + merch_net
+        stats["net_earnings"] = old_net + merch_net
 
-        # Recalculate the same withdrawal-adjusted balance the dashboard
-        # already uses, now against the complete creator net earnings total.
-        withdrawn = _decimal(stats.get("net_earnings")) - _decimal(stats.get("available_balance")) - _decimal(stats.get("pending_withdrawal"))
-        available = stats["net_earnings"] - withdrawn - _decimal(stats.get("pending_withdrawal"))
-        stats["available_balance"] = max(Decimal("0"), available)
+        # Preserve the dashboard's existing withdrawal/pending deductions,
+        # then add only the new merchandise net earnings to the available
+        # balance. No withdrawal records are changed here.
+        stats["available_balance"] = max(
+            Decimal("0"),
+            stats["net_earnings"] - withdrawn - pending,
+        )
 
         combined = list(stats.get("recent_orders") or []) + merch_recent
         combined.sort(
