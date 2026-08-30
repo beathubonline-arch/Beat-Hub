@@ -1,6 +1,7 @@
 from . import album
 from . import album_upload
 from . import beat_catalog
+from . import dashboard
 from . import dashboard_analytics
 from . import marketplace
 from . import music_publish
