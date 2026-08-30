@@ -1,10 +1,12 @@
 from . import album
 from . import album_upload
 from . import beat_catalog
+from . import dashboard
 from . import dashboard_analytics
 from . import marketplace
 from . import music_publish
 from . import pages
+from . import creator_merch_integration
 
 # Register canonical public marketplace discovery before the legacy catalog.
 # /beats remains the compatibility entry point for the Marketplace navigation,
