@@ -7,6 +7,9 @@ from . import marketplace
 from . import music_publish
 from . import pages
 from . import creator_merch_integration
+from . import creator_sales_history
+
+dashboard.router.include_router(creator_sales_history.router)
 
 # Register canonical public marketplace discovery before the legacy catalog.
 # /beats remains the compatibility entry point for the Marketplace navigation,
