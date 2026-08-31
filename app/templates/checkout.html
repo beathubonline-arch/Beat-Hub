@@ -1,72 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Checkout — {{ track.title }}{% endblock %}
-
 {% block extra_head %}
 <style>
-  .bh-checkout-page{padding:34px 0 70px}.bh-checkout-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.8fr);gap:20px}
-  .bh-checkout-card{border:1px solid rgba(212,175,55,.22);border-radius:20px;background:radial-gradient(circle at 92% 8%,rgba(212,175,55,.10),transparent 28%),linear-gradient(145deg,rgba(25,25,29,.95),rgba(10,10,14,.98));box-shadow:0 24px 65px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025);overflow:hidden}.bh-checkout-main{padding:34px 32px}.bh-checkout-side{padding:27px 25px}
-  .bh-checkout-eyebrow{color:#efc536;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.bh-checkout-main h1{margin:14px 0 9px;color:#fff;font-size:clamp(34px,4.3vw,50px);line-height:1;letter-spacing:-.045em}.bh-checkout-lead{margin:0;color:#999ba1;font-size:14px;line-height:1.7}.bh-checkout-badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.bh-checkout-badge{padding:8px 11px;border:1px solid rgba(212,175,55,.24);border-radius:999px;color:#e8c43c;background:rgba(212,175,55,.06);font-size:10px;font-weight:900;letter-spacing:.07em}.bh-checkout-badge.alt{border-color:rgba(255,255,255,.10);color:#b6b7bc;background:rgba(255,255,255,.025)}
-  .bh-payment-box{margin-top:28px;padding:23px;border:1px solid rgba(255,255,255,.08);border-radius:17px;background:rgba(255,255,255,.018)}.bh-payment-title{display:flex;align-items:center;gap:10px;margin-bottom:19px;color:#fff;font-size:15px;font-weight:800}.bh-payment-icon{width:35px;height:35px;display:grid;place-items:center;border:1px solid rgba(212,175,55,.3);border-radius:10px;color:#edc334;background:rgba(212,175,55,.06)}
-  .bh-field label{display:block;margin-bottom:8px;color:#ddd;font-size:12px;font-weight:800}.bh-field input{width:100%;box-sizing:border-box;padding:14px 15px;border:1px solid rgba(255,255,255,.12);border-radius:11px;background:#0d0e12;color:#fff;outline:none;font-size:13px}.bh-field input:focus{border-color:rgba(212,175,55,.65);box-shadow:0 0 0 3px rgba(212,175,55,.08)}.bh-field small{display:block;margin-top:7px;color:#777980;font-size:11px}.bh-pay-btn{width:100%;margin-top:18px;min-height:51px;font-size:13px;font-weight:900;letter-spacing:.01em;cursor:pointer}
-  .bh-safe{display:flex;gap:12px;margin-top:17px;padding:15px;border:1px solid rgba(75,210,112,.14);border-radius:13px;background:rgba(75,210,112,.035)}.bh-safe-icon{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;border:1px solid rgba(103,217,130,.35);border-radius:50%;color:#67d982}.bh-safe strong{display:block;color:#ddd;font-size:12px;margin-bottom:3px}.bh-safe span{color:#85868c;font-size:11px;line-height:1.5}
-  .bh-side-title{display:flex;align-items:center;gap:9px;margin-bottom:20px;color:#efc335;font-size:11px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}.bh-product{display:flex;gap:14px;align-items:center;padding-bottom:21px;border-bottom:1px solid rgba(255,255,255,.08)}.bh-art{width:90px;height:90px;flex:0 0 90px;border-radius:14px;object-fit:cover;background:#15161a;border:1px solid rgba(255,255,255,.08)}.bh-product h2{margin:0 0 6px;color:#fff;font-size:18px}.bh-product p{margin:0;color:#999aa0;font-size:12px}.bh-license{display:inline-block;margin-top:9px;color:#ddd;font-size:11px}.bh-price-list{padding:20px 0;border-bottom:1px solid rgba(255,255,255,.08)}.bh-price-row{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;color:#8e9097;font-size:12px}.bh-price-row strong{color:#e2e2e5}.bh-total{display:flex;justify-content:space-between;align-items:end;margin-top:17px}.bh-total span{color:#fff;font-size:14px;font-weight:800}.bh-total strong{color:#75d64d;font-size:21px}.bh-side-note{margin-top:18px;padding:16px;border:1px solid rgba(212,175,55,.16);border-radius:14px;background:rgba(212,175,55,.035);color:#929399;font-size:11px;line-height:1.65}.bh-side-note strong{display:block;margin-bottom:5px;color:#efc335;font-size:11px}
-  .bh-error{margin-top:18px;padding:13px 15px;border:1px solid rgba(235,95,95,.35);border-radius:12px;background:rgba(235,95,95,.07);color:#ff9b9b;font-size:12px}
-  .bh-footer-strip{display:flex;gap:25px;align-items:center;margin-top:20px;padding:18px 23px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:rgba(255,255,255,.015);color:#85868c;font-size:11px}.bh-footer-strip strong{color:#eee;font-size:12px}
-  @media(max-width:850px){.bh-checkout-grid{grid-template-columns:1fr}.bh-checkout-main,.bh-checkout-side{padding:25px 20px}}@media(max-width:520px){.bh-checkout-page{padding-top:20px}.bh-checkout-main h1{font-size:36px}.bh-footer-strip{align-items:flex-start;flex-direction:column;gap:6px}}
+.bh-checkout-page{padding:34px 0 70px}.bh-checkout-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.8fr);gap:20px}.bh-checkout-card{border:1px solid rgba(212,175,55,.22);border-radius:20px;background:radial-gradient(circle at 92% 8%,rgba(212,175,55,.10),transparent 28%),linear-gradient(145deg,rgba(25,25,29,.95),rgba(10,10,14,.98));box-shadow:0 24px 65px rgba(0,0,0,.28);overflow:hidden}.bh-checkout-main{padding:34px 32px}.bh-checkout-side{padding:27px 25px}.eyebrow{color:#efc536;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.bh-checkout-main h1{margin:14px 0 9px;color:#fff;font-size:clamp(34px,4.3vw,50px);line-height:1;letter-spacing:-.045em}.lead{margin:0;color:#999ba1;font-size:14px;line-height:1.7}.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.badge{padding:8px 11px;border:1px solid rgba(212,175,55,.24);border-radius:999px;color:#e8c43c;background:rgba(212,175,55,.06);font-size:10px;font-weight:900}.badge.alt{border-color:rgba(255,255,255,.1);color:#b6b7bc;background:rgba(255,255,255,.025)}.payment{margin-top:28px;padding:23px;border:1px solid rgba(255,255,255,.08);border-radius:17px;background:rgba(255,255,255,.018)}.payment-title{color:#fff;font-size:15px;font-weight:800;margin-bottom:19px}.field label{display:block;margin-bottom:8px;color:#ddd;font-size:12px;font-weight:800}.field input{width:100%;box-sizing:border-box;padding:14px 15px;border:1px solid rgba(255,255,255,.12);border-radius:11px;background:#0d0e12;color:#fff;outline:none;font-size:13px}.field small{display:block;margin-top:7px;color:#777980;font-size:11px}.pay-btn{width:100%;margin-top:18px;min-height:51px;font-size:13px;font-weight:900;cursor:pointer}.safe{display:flex;gap:12px;margin-top:17px;padding:15px;border:1px solid rgba(75,210,112,.14);border-radius:13px;background:rgba(75,210,112,.035)}.safe strong{display:block;color:#ddd;font-size:12px;margin-bottom:3px}.safe span{color:#85868c;font-size:11px;line-height:1.5}.side-title{margin-bottom:20px;color:#efc335;font-size:11px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}.product{display:flex;gap:14px;align-items:center;padding-bottom:21px;border-bottom:1px solid rgba(255,255,255,.08)}.art{width:90px;height:90px;flex:0 0 90px;border-radius:14px;object-fit:cover;background:#15161a;border:1px solid rgba(255,255,255,.08)}.product h2{margin:0 0 6px;color:#fff;font-size:18px}.product p{margin:0;color:#999aa0;font-size:12px}.price-list{padding:20px 0;border-bottom:1px solid rgba(255,255,255,.08)}.price-row{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;color:#8e9097;font-size:12px}.price-row strong{color:#e2e2e5}.total{display:flex;justify-content:space-between;align-items:end;margin-top:17px}.total span{color:#fff;font-size:14px;font-weight:800}.total strong{color:#75d64d;font-size:21px}.note{margin-top:18px;padding:16px;border:1px solid rgba(212,175,55,.16);border-radius:14px;background:rgba(212,175,55,.035);color:#929399;font-size:11px;line-height:1.65}.note strong{display:block;margin-bottom:5px;color:#efc335}.error{margin-top:18px;padding:13px 15px;border:1px solid rgba(235,95,95,.35);border-radius:12px;background:rgba(235,95,95,.07);color:#ff9b9b;font-size:12px}@media(max-width:850px){.bh-checkout-grid{grid-template-columns:1fr}.bh-checkout-main,.bh-checkout-side{padding:25px 20px}}
 </style>
 {% endblock %}
-
 {% block content %}
-<div class="bh-checkout-page">
-  <div class="bh-checkout-grid">
-    <section class="bh-checkout-card bh-checkout-main">
-      <div class="bh-checkout-eyebrow">BeatHub Secure Checkout</div>
-      <h1>Complete your purchase</h1>
-      <p class="bh-checkout-lead">You're one step away from adding <strong style="color:#fff">{{ track.title }}</strong> to your BeatHub purchases.</p>
-
-      <div class="bh-checkout-badges">
-        {% if track.sales_model.value == 'exclusive' %}<span class="bh-checkout-badge">EXCLUSIVE — ONE-TIME PURCHASE</span>{% else %}<span class="bh-checkout-badge">NON-EXCLUSIVE LICENSE</span>{% endif %}
-        <span class="bh-checkout-badge alt">SECURE PAYSTACK PAYMENT</span>
-      </div>
-
-      {% if error %}<div class="bh-error">{{ error }}</div>{% endif %}
-
-      <div class="bh-payment-box">
-        <div class="bh-payment-title"><div class="bh-payment-icon">▣</div> Payment details</div>
-        <form action="/paystack/checkout/track/{{ track.slug }}" method="post" id="bh-payment-form">
-          <div class="bh-field">
-            <label for="paystack-email">Email Address</label>
-            <input id="paystack-email" type="email" name="email" value="{{ current_user.email if current_user else '' }}" placeholder="you@example.com" autocomplete="email" required>
-            <small>Paystack uses this email for your payment receipt.</small>
-          </div>
-          <button type="submit" class="btn btn-primary bh-pay-btn" id="bh-pay-button">Pay KSh {{ '%.2f'|format(track.price|float) }} with Paystack</button>
-        </form>
-        <div class="bh-safe"><div class="bh-safe-icon">✓</div><div><strong>Your payment is protected</strong><span>Paystack securely processes your M-Pesa or card payment. BeatHub only unlocks your purchase after confirmation.</span></div></div>
-      </div>
-
-      <div class="bh-footer-strip"><strong>Secure • Fast • Reliable</strong><span>After payment, you'll be returned to BeatHub and your order will update automatically.</span></div>
-    </section>
-
-    <aside class="bh-checkout-card bh-checkout-side">
-      <div class="bh-side-title">▤ Order Summary</div>
-      <div class="bh-product">
-        <img class="bh-art" src="/track/{{ track.slug }}/artwork" alt="{{ track.title }} artwork" onerror="this.style.visibility='hidden'">
-        <div><h2>{{ track.title }}</h2><p>by {{ track.creator_profile.display_name if track.creator_profile and track.creator_profile.display_name else 'BeatHub Creator' }}</p><span class="bh-license">▣ {{ 'Exclusive License' if track.sales_model.value == 'exclusive' else 'MP3 Lease' }}</span></div>
-      </div>
-      <div class="bh-price-list">
-        <div class="bh-price-row"><span>License</span><strong>KSh {{ '%.2f'|format(track.price|float) }}</strong></div>
-        <div class="bh-price-row"><span>Payment method</span><strong>Paystack</strong></div>
-        <div class="bh-total"><span>Total</span><strong>KSh {{ '%.2f'|format(track.price|float) }}</strong></div>
-      </div>
-      <div class="bh-side-note"><strong>What happens next?</strong>Click the payment button, complete your payment on Paystack, then return to BeatHub. Once Paystack confirms the transaction, your download will become available.</div>
-    </aside>
-  </div>
-</div>
-
-<script>
-(function(){
-  const form=document.getElementById('bh-payment-form');const button=document.getElementById('bh-pay-button');
-  if(form&&button){form.addEventListener('submit',function(){button.disabled=true;button.textContent='Opening secure Paystack checkout…';});}
-})();
-</script>
+<div class="bh-checkout-page"><div class="bh-checkout-grid">
+<section class="bh-checkout-card bh-checkout-main">
+<div class="eyebrow">BeatHub Secure Checkout</div><h1>Complete your purchase</h1>
+<p class="lead">You're one step away from adding <strong style="color:#fff">{{ track.title }}</strong> to your BeatHub purchases.</p>
+<div class="badges">{% if track.sales_model.value == 'exclusive' %}<span class="badge">EXCLUSIVE — ONE-TIME PURCHASE</span>{% else %}<span class="badge">NON-EXCLUSIVE LICENSE</span>{% endif %}<span class="badge alt">{{ track.currency|default('KES') }} • SECURE PAYSTACK PAYMENT</span></div>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<div class="payment"><div class="payment-title">Payment details</div><form action="/paystack/checkout/track/{{ track.slug }}" method="post" id="bh-payment-form"><div class="field"><label for="paystack-email">Email Address</label><input id="paystack-email" type="email" name="email" value="{{ current_user.email if current_user else '' }}" placeholder="you@example.com" autocomplete="email" required><small>Paystack uses this email for your payment receipt.</small></div><button type="submit" class="btn btn-primary pay-btn" id="bh-pay-button">Pay {{ 'KSh' if (track.currency|default('KES')) == 'KES' else '$' }} {{ '%.2f'|format(track.price|float) }} with Paystack</button></form><div class="safe"><div>✓</div><div><strong>Your payment is protected</strong><span>Paystack securely processes the supported payment method. BeatHub unlocks your purchase only after confirmed payment.</span></div></div></div>
+</section>
+<aside class="bh-checkout-card bh-checkout-side"><div class="side-title">Order Summary</div><div class="product"><img class="art" src="/track/{{ track.slug }}/artwork" alt="{{ track.title }} artwork" onerror="this.style.visibility='hidden'"><div><h2>{{ track.title }}</h2><p>by {{ track.creator_profile.display_name if track.creator_profile and track.creator_profile.display_name else 'BeatHub Creator' }}</p></div></div><div class="price-list"><div class="price-row"><span>License</span><strong>{{ 'KSh' if (track.currency|default('KES')) == 'KES' else '$' }} {{ '%.2f'|format(track.price|float) }}</strong></div><div class="price-row"><span>Currency</span><strong>{{ track.currency|default('KES') }}</strong></div><div class="price-row"><span>Payment method</span><strong>Paystack</strong></div><div class="total"><span>Total</span><strong>{{ 'KSh' if (track.currency|default('KES')) == 'KES' else '$' }} {{ '%.2f'|format(track.price|float) }}</strong></div></div><div class="note"><strong>What happens next?</strong>Complete payment on Paystack. BeatHub verifies the transaction amount and currency before granting ownership and download access.</div></aside>
+</div></div>
+<script>(function(){const f=document.getElementById('bh-payment-form'),b=document.getElementById('bh-pay-button');if(f&&b)f.addEventListener('submit',function(){b.disabled=true;b.textContent='Opening secure Paystack checkout…';});})();</script>
 {% endblock %}
