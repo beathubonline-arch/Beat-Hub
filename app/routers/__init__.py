@@ -8,6 +8,7 @@ from . import music_publish
 from . import pages
 from . import creator_merch_integration
 from . import creator_sales_history
+from . import admin_reconciliation
 
 dashboard.router.include_router(creator_sales_history.router)
 
