@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import re
 import secrets
 import smtplib
@@ -26,6 +27,8 @@ templates = Jinja2Templates(directory="app/templates")
 SESSION_COOKIE_NAME = "beathub_session"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 RESET_TOKEN_TTL = timedelta(hours=1)
+VERIFICATION_CODE_TTL = timedelta(minutes=10)
+VERIFICATION_MAX_ATTEMPTS = 5
 
 
 def get_role_name(user: User) -> str:
@@ -84,20 +87,29 @@ def _signup_context(request: Request, **extra):
 
 
 def _reset_token_digest(token: str) -> str:
-    """Store only a SHA-256 digest of a password-reset token.
-
-    The raw token remains in the user's reset URL, but a database/log leak no
-    longer provides a directly usable reset credential.
-    """
+    """Store only a SHA-256 digest of a password-reset token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _send_password_reset_email(email: str, reset_url: str) -> bool:
-    """Send a reset message when SMTP delivery is explicitly enabled.
+def _verification_code_digest(code: str) -> str:
+    """Hash the short-lived verification code with an application secret."""
+    secret = str(getattr(settings, "SECRET_KEY", None) or getattr(settings, "SESSION_SECRET", None) or "beathub-development-verification")
+    return hmac.new(secret.encode("utf-8"), code.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    Failure is deliberately logged without the token or reset URL. The caller
-    keeps the response generic so account existence is not disclosed.
-    """
+
+def _new_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _set_verification_code(user: User) -> str:
+    code = _new_verification_code()
+    user.verification_code_hash = _verification_code_digest(code)
+    user.verification_code_expires = datetime.utcnow() + VERIFICATION_CODE_TTL
+    user.verification_attempts = 0
+    return code
+
+
+def _send_email(to_email: str, subject: str, body: str) -> bool:
     if not bool(getattr(settings, "EMAIL_ENABLED", False)):
         return False
 
@@ -114,14 +126,10 @@ def _send_password_reset_email(email: str, reset_url: str) -> bool:
         return False
 
     message = EmailMessage()
-    message["Subject"] = "BeatHub password reset"
+    message["Subject"] = subject
     message["From"] = sender
-    message["To"] = email
-    message.set_content(
-        "We received a request to reset your BeatHub password.\n\n"
-        f"Use this link within 1 hour:\n{reset_url}\n\n"
-        "If you did not request this, you can safely ignore this email."
-    )
+    message["To"] = to_email
+    message.set_content(body)
 
     try:
         with smtplib.SMTP(host, port, timeout=10) as smtp:
@@ -134,6 +142,28 @@ def _send_password_reset_email(email: str, reset_url: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _send_verification_email(email: str, code: str) -> bool:
+    return _send_email(
+        email,
+        "Verify your BeatHub email",
+        "Welcome to BeatHub.\n\n"
+        f"Your verification code is: {code}\n\n"
+        "This code expires in 10 minutes and can only be used once.\n\n"
+        "If you did not create this account, you can ignore this email.",
+    )
+
+
+def _send_password_reset_email(email: str, reset_url: str) -> bool:
+    """Send a reset message when SMTP delivery is explicitly enabled."""
+    return _send_email(
+        email,
+        "BeatHub password reset",
+        "We received a request to reset your BeatHub password.\n\n"
+        f"Use this link within 1 hour:\n{reset_url}\n\n"
+        "If you did not request this, you can safely ignore this email.",
+    )
 
 
 @router.get("/signup")
@@ -216,7 +246,16 @@ def signup_submit(
         username = f"{base_username}{suffix}"
         suffix += 1
 
-    user = User(id=str(uuid.uuid4()), email=email_norm, username=username, hashed_password=hash_password(password), role=user_role, is_active=True, is_verified=False)
+    user = User(
+        id=str(uuid.uuid4()),
+        email=email_norm,
+        username=username,
+        hashed_password=hash_password(password),
+        role=user_role,
+        is_active=True,
+        is_verified=False,
+    )
+    verification_code = _set_verification_code(user)
     db.add(user)
     try:
         db.flush()
@@ -239,10 +278,109 @@ def signup_submit(
         db.rollback()
         return error("Could not create the account. The email or username may already be in use.")
 
-    token = create_access_token(subject=str(user.id), extra_claims={"role": get_role_name(user)})
-    response = RedirectResponse(url=dashboard_url_for_user(user) + "?success=Account%20created.%20Welcome%20to%20BeatHub!", status_code=303)
-    _set_auth_cookie(response, token)
-    return response
+    if not _send_verification_email(email_norm, verification_code):
+        # Keep the account unverified. The user can use the resend endpoint
+        # after email delivery is configured. Never expose the verification code.
+        return RedirectResponse(
+            url=f"/verify-email?email={quote(email_norm, safe='')}&error=We%20could%20not%20send%20the%20verification%20email.%20Please%20try%20resending%20the%20code.",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=f"/verify-email?email={quote(email_norm, safe='')}&success=We%20sent%20a%206-digit%20verification%20code%20to%20your%20email.",
+        status_code=303,
+    )
+
+
+@router.get("/verify-email")
+def verify_email_page(request: Request, email: str = "", error: str = "", success: str = ""):
+    return templates.TemplateResponse(
+        request,
+        "verify_email.html",
+        {"request": request, "email": (email or "").strip().lower(), "error": error, "success": success},
+    )
+
+
+@router.post("/verify-email")
+def verify_email_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    email: str = Form(...),
+    code: str = Form(...),
+):
+    email_norm = (email or "").strip().lower()
+    code_norm = re.sub(r"\s+", "", code or "")
+    user = db.query(User).filter(func.lower(User.email) == email_norm).first()
+
+    if not user:
+        return templates.TemplateResponse(
+            request, "verify_email.html",
+            {"request": request, "email": email_norm, "error": "The verification code is invalid or has expired.", "success": ""},
+            status_code=400,
+        )
+
+    if user.is_verified:
+        return RedirectResponse(url="/login?success=Your%20email%20is%20already%20verified.%20Please%20log%20in.", status_code=303)
+
+    if not re.fullmatch(r"\d{6}", code_norm):
+        return templates.TemplateResponse(
+            request, "verify_email.html",
+            {"request": request, "email": email_norm, "error": "Enter the 6-digit verification code.", "success": ""},
+            status_code=400,
+        )
+
+    if int(getattr(user, "verification_attempts", 0) or 0) >= VERIFICATION_MAX_ATTEMPTS:
+        return templates.TemplateResponse(
+            request, "verify_email.html",
+            {"request": request, "email": email_norm, "error": "Too many incorrect attempts. Please request a new code.", "success": ""},
+            status_code=429,
+        )
+
+    expires = getattr(user, "verification_code_expires", None)
+    stored_hash = getattr(user, "verification_code_hash", None)
+    if not stored_hash or not expires or expires <= datetime.utcnow():
+        return templates.TemplateResponse(
+            request, "verify_email.html",
+            {"request": request, "email": email_norm, "error": "This verification code has expired. Please request a new code.", "success": ""},
+            status_code=400,
+        )
+
+    expected_hash = _verification_code_digest(code_norm)
+    if not hmac.compare_digest(stored_hash, expected_hash):
+        user.verification_attempts = int(getattr(user, "verification_attempts", 0) or 0) + 1
+        db.commit()
+        return templates.TemplateResponse(
+            request, "verify_email.html",
+            {"request": request, "email": email_norm, "error": "The verification code is incorrect.", "success": ""},
+            status_code=400,
+        )
+
+    user.is_verified = True
+    user.verification_code_hash = None
+    user.verification_code_expires = None
+    user.verification_attempts = 0
+    db.commit()
+
+    return RedirectResponse(url="/login?success=Email%20verified.%20You%20can%20now%20sign%20in.", status_code=303)
+
+
+@router.post("/verify-email/resend")
+def resend_verification_email(
+    request: Request,
+    db: Session = Depends(get_db),
+    email: str = Form(...),
+):
+    email_norm = (email or "").strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email_norm).first()
+
+    if not user or user.is_verified:
+        return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success=If%20verification%20is%20needed,%20a%20new%20code%20has%20been%20sent.", status_code=303)
+
+    code = _set_verification_code(user)
+    db.commit()
+    delivered = _send_verification_email(email_norm, code)
+    message = "A new verification code has been sent." if delivered else "We could not send the verification email. Please try again later."
+    return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success={quote(message, safe='')}", status_code=303)
 
 
 @router.get("/login")
@@ -280,6 +418,8 @@ def login_submit(
         return RedirectResponse(url=f"/login?error=Invalid%20email%20or%20password&next={quote(safe_next, safe='')}", status_code=303)
     if hasattr(user, "is_active") and not user.is_active:
         return RedirectResponse(url=f"/login?error=Your%20account%20is%20inactive&next={quote(safe_next, safe='')}", status_code=303)
+    if not getattr(user, "is_verified", False):
+        return RedirectResponse(url=f"/verify-email?email={quote(user.email, safe='')}&error=Please%20verify%20your%20email%20before%20signing%20in.", status_code=303)
 
     token = create_access_token(subject=str(user.id), extra_claims={"role": get_role_name(user)})
     response = RedirectResponse(url=safe_next or dashboard_url_for_user(user), status_code=303)
@@ -325,12 +465,8 @@ def forgot_password_submit(request: Request, db: Session = Depends(get_db), emai
 
         delivered = _send_password_reset_email(email_norm, reset_url)
         if not delivered and bool(getattr(settings, "EMAIL_ENABLED", False)):
-            # Never include the token/reset URL in logs. The account holder can
-            # request another message after email delivery is corrected.
             import logging
-            logging.getLogger("beathub.auth").warning(
-                "Password reset email delivery failed for configured account."
-            )
+            logging.getLogger("beathub.auth").warning("Password reset email delivery failed for configured account.")
 
     return templates.TemplateResponse(
         request,

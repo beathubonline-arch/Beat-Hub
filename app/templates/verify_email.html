@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#070707">
+    <title>Verify Email | BeatHub</title>
+    <style>
+        :root{--gold:#d4af37;--gold-bright:#f6d86d;--bg:#050505;--panel:#0d0d0d;--muted:#929292;--text:#f8f8f8}
+        *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 10%,rgba(212,175,55,.13),transparent 30%),#050505;color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;display:grid;place-items:center;padding:24px}
+        .card{width:min(480px,100%);background:linear-gradient(145deg,#111,#090909);border:1px solid rgba(212,175,55,.25);border-radius:24px;padding:42px;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+        .brand{text-align:center;font-weight:950;font-size:25px;letter-spacing:-.04em;text-transform:uppercase}.brand span{color:var(--gold-bright)}
+        .icon{width:62px;height:62px;margin:28px auto 20px;border-radius:18px;display:grid;place-items:center;background:rgba(212,175,55,.10);border:1px solid rgba(212,175,55,.25);font-size:27px;color:var(--gold-bright)}
+        h1{text-align:center;margin:0 0 10px;font-size:29px;letter-spacing:-.045em}.intro{text-align:center;color:#929292;font-size:13px;line-height:1.65;margin:0 auto 25px;max-width:360px}
+        .email{color:#f6d86d;font-weight:800;word-break:break-word}.alert{padding:12px 14px;border-radius:12px;margin-bottom:18px;font-size:12px;line-height:1.5}.error{color:#ffd1d1;background:rgba(255,75,75,.07);border:1px solid rgba(255,75,75,.24)}.success{color:#e8fbdc;background:rgba(91,180,76,.08);border:1px solid rgba(91,180,76,.22)}
+        label{display:block;margin-bottom:8px;color:#d8d8d8;font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.code{width:100%;height:58px;border:1px solid rgba(255,255,255,.10);border-radius:13px;background:#070707;color:#fff;text-align:center;font-size:27px;font-weight:900;letter-spacing:.35em;padding-left:.35em;outline:none}.code:focus{border-color:rgba(212,175,55,.7);box-shadow:0 0 0 4px rgba(212,175,55,.07)}
+        .submit{width:100%;height:53px;margin-top:16px;border:0;border-radius:13px;background:linear-gradient(135deg,#fff0a8,var(--gold),#b58b20);color:#090909;font-weight:950;cursor:pointer}.submit:hover{filter:brightness(1.05)}
+        .resend{width:100%;height:46px;margin-top:10px;border:1px solid rgba(212,175,55,.25);border-radius:12px;background:transparent;color:var(--gold-bright);font-weight:800;cursor:pointer}.resend:hover{background:rgba(212,175,55,.06)}
+        .foot{text-align:center;margin-top:20px;color:#666;font-size:11px}.foot a{color:#dcbf59;text-decoration:none;font-weight:800}
+    </style>
+</head>
+<body>
+<main class="card">
+    <div class="brand">Beat<span>Hub</span></div>
+    <div class="icon">✉</div>
+    <h1>Verify your email</h1>
+    <p class="intro">We sent a 6-digit verification code to <span class="email">{{ email }}</span>. The code expires in 10 minutes.</p>
+
+    {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+    {% if success %}<div class="alert success" role="status">{{ success }}</div>{% endif %}
+
+    <form method="post" action="/verify-email">
+        <input type="hidden" name="email" value="{{ email }}">
+        <label for="code">Verification code</label>
+        <input id="code" class="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required autofocus>
+        <button class="submit" type="submit">Verify Email</button>
+    </form>
+
+    <form method="post" action="/verify-email/resend">
+        <input type="hidden" name="email" value="{{ email }}">
+        <button class="resend" type="submit">Send a new code</button>
+    </form>
+
+    <div class="foot"><a href="/login">Back to sign in</a></div>
+</main>
+</body>
+</html>
