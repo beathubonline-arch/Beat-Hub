@@ -70,7 +70,11 @@ def get_optional_user(
     if not subject or str(subject) == ADMIN_SESSION_SUBJECT:
         return None
     user = _get_user_from_subject(db, str(subject))
-    if user is None or not getattr(user, "is_active", True):
+    # Authentication is granted only to active, verified accounts. The login
+    # route already enforces verification before issuing a token; this second
+    # check prevents an older token from bypassing the verification gate after
+    # account state changes.
+    if user is None or not getattr(user, "is_active", True) or not getattr(user, "is_verified", False):
         return None
     return user
 
