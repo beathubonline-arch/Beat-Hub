@@ -42,12 +42,18 @@ class Settings(BaseSettings):
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
     FACEBOOK_URL: str = ""
 
+    # Transactional email — Resend uses HTTPS/API, avoiding SMTP egress limits.
     EMAIL_ENABLED: bool = False
+    EMAIL_PROVIDER: str = "resend"
+    EMAIL_FROM: str = ""
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = ""
+
+    # Legacy SMTP settings retained for local/backward compatibility only.
     EMAIL_HOST: str = ""
     EMAIL_PORT: int = 587
     EMAIL_USERNAME: str = ""
     EMAIL_PASSWORD: str = ""
-    EMAIL_FROM: str = ""
 
     MEDIA_STORAGE: str = "r2"
     MEDIA_ROOT: str = "media"
