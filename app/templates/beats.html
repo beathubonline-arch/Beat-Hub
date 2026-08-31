@@ -1638,7 +1638,7 @@
                   </div>
 
                   <div class="price">
-                    KSh {{ '%.2f'|format(item.price or 0) }}
+                    {{ '$' if (item.track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(item.price or 0) }} {{ item.track.currency|default('KES') }}
                   </div>
 
                 </div>

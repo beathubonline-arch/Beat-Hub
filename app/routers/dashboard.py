@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.ledger import WithdrawalRequest
-from app.models.music import Album, AlbumTrack, SalesModel, Track
+from app.models.music import Album, AlbumTrack, ProductCurrency, SalesModel, Track
 from app.models.order import Order, OrderStatus
 from app.models.profile import Profile
 from app.models.user import User
@@ -631,6 +631,7 @@ async def upload_submit(
     bpms: Optional[List[str]] = Form(None),
     tags_list: List[str] = Form(...),
     prices: List[str] = Form(...),
+    currencies: List[str] = Form(...),
     sales_models: List[str] = Form(...),
     audio_files: List[UploadFile] = File(...),
     cover_files: List[Optional[UploadFile]] = File(None),
@@ -721,6 +722,17 @@ async def upload_submit(
                     f"Price for '{title}' is invalid."
                 )
 
+            currency_raw = (
+                currencies[i].strip().upper()
+                if i < len(currencies)
+                else ProductCurrency.KES.value
+            )
+
+            if currency_raw not in {ProductCurrency.KES.value, ProductCurrency.USD.value}:
+                return error(
+                    f"Currency for '{title}' must be KES or USD."
+                )
+
             model_raw = (
                 sales_models[i]
                 if i < len(sales_models)
@@ -796,6 +808,7 @@ async def upload_submit(
                 audio_file_path=audio_path,
                 cover_art_path=cover_path,
                 price=price_value,
+                currency=currency_raw,
                 sales_model=sales_model,
             )
 

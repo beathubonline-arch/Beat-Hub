@@ -295,6 +295,7 @@ def _catalog_item(track: Track) -> dict:
         "producer": _producer_name(track),
         "producer_store_url": _producer_store_url(track),
         "price": _track_price(track),
+        "currency": str(_model_value(track, "currency", default="KES") or "KES").upper(),
         "artwork_url": _track_artwork(track),
         "audio_url": _track_audio(track),
         "url": _track_url(track),
