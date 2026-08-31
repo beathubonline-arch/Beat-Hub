@@ -2,35 +2,16 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Enum as SAEnum,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    UniqueConstraint,
-)
+from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
 
-# ======================================================================
-# SALES MODEL
-# ======================================================================
-
 class SalesModel(str, Enum):
     EXCLUSIVE = "exclusive"
     NON_EXCLUSIVE = "non_exclusive"
 
-
-# ======================================================================
-# MUSIC CONTENT TYPES
-# ======================================================================
 
 class TrackContentType(str, Enum):
     BEAT = "beat"
@@ -42,9 +23,10 @@ class AlbumContentType(str, Enum):
     ALBUM = "album"
 
 
-# ======================================================================
-# ALBUM
-# ======================================================================
+class ProductCurrency(str, Enum):
+    KES = "KES"
+    USD = "USD"
+
 
 class Album(Base):
     __tablename__ = "albums"
@@ -68,18 +50,12 @@ class Album(Base):
     @property
     def artwork_url(self):
         value = getattr(self, "_artwork_url", None)
-        if value:
-            return value
-        return self.artwork_path
+        return value or self.artwork_path
 
     @artwork_url.setter
     def artwork_url(self, value):
         self._artwork_url = value
 
-
-# ======================================================================
-# TRACK
-# ======================================================================
 
 class Track(Base):
     __tablename__ = "tracks"
@@ -96,15 +72,11 @@ class Track(Base):
     audio_file_path = Column(String(1000), nullable=False)
     preview_file_path = Column(String(1000), nullable=True)
     price = Column(Numeric(12, 2), nullable=False, default=0)
-    sales_model = Column(
-        SAEnum(SalesModel, name="salesmodel", native_enum=False),
-        nullable=False,
-        default=SalesModel.NON_EXCLUSIVE,
-    )
+    currency = Column(String(3), nullable=False, default=ProductCurrency.KES.value, server_default="KES", index=True)
+    sales_model = Column(SAEnum(SalesModel, name="salesmodel", native_enum=False), nullable=False, default=SalesModel.NON_EXCLUSIVE)
     content_type = Column(String(20), nullable=False, default=TrackContentType.BEAT.value, server_default="beat", index=True)
     is_sold = Column(Boolean, nullable=False, default=False, server_default="0")
     is_published = Column(Boolean, nullable=False, default=True, server_default="1")
-
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -114,18 +86,12 @@ class Track(Base):
     @property
     def cover_art_url(self):
         value = getattr(self, "_cover_art_url", None)
-        if value:
-            return value
-        return self.cover_art_path
+        return value or self.cover_art_path
 
     @cover_art_url.setter
     def cover_art_url(self, value):
         self._cover_art_url = value
 
-
-# ======================================================================
-# ALBUM / TRACK LINK
-# ======================================================================
 
 class AlbumTrack(Base):
     __tablename__ = "album_tracks"
