@@ -1,13 +1,8 @@
-"""Small production security middleware that is intentionally route-aware.
+"""Production browser-security middleware for BeatHub.
 
-BeatHub authenticates browser requests with an HttpOnly cookie. For those
-requests, state-changing cross-site requests must be rejected. Provider
-webhooks and non-browser bearer-token clients are explicitly left alone.
-
-This middleware also preserves a safe in-site purchase destination when a
-visitor goes from a product page -> login -> create account. That flow is
-implemented here so the existing checkout, marketplace and authentication
-routes do not need to be duplicated or reordered.
+Browser requests authenticated by the HttpOnly session cookie must carry
+same-origin metadata for state-changing requests. Provider webhooks and
+bearer-authenticated API clients are explicitly left alone.
 """
 
 from http.cookies import SimpleCookie
@@ -27,6 +22,7 @@ EXEMPT_POST_PATHS = {
 
 RETURN_TO_COOKIE = "beathub_return_to"
 RETURN_TO_MAX_AGE = 10 * 60
+STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def _origin(value: str | None) -> str:
@@ -87,15 +83,11 @@ def _set_cookie_header(value: str, *, max_age: int, delete: bool = False) -> tup
 
 
 class SameOriginMiddleware:
-    """Reject cross-site browser POST/PUT/PATCH/DELETE requests in production.
+    """Reject cross-site browser state changes in production.
 
-    For the browser purchase flow, this middleware additionally remembers a
-    validated local destination while the visitor creates an account. This
-    fixes the common sequence:
-
-        product -> login -> create account -> product/checkout
-
-    without changing the existing checkout or payment routes.
+    A missing Origin/Referer is rejected rather than treated as safe. This
+    closes the metadata-less request gap while preserving webhook and bearer
+    API compatibility.
     """
 
     def __init__(self, app):
@@ -138,8 +130,6 @@ class SameOriginMiddleware:
             for key, value in scope.get("headers", [])
         }
 
-        # Preserve a safe destination when login/signup is entered from a
-        # product purchase flow. Only relative same-site paths are accepted.
         if method == "GET" and path in {"/login", "/signup", "/artist/signup"}:
             query = scope.get("query_string", b"").decode("latin-1", errors="ignore")
             next_value = ""
@@ -160,9 +150,6 @@ class SameOriginMiddleware:
                 await self._send_captured(send, start_message, body_messages)
                 return
 
-        # After account creation, redirect to the exact safe destination that
-        # brought the visitor into authentication. The signup endpoint itself
-        # remains unchanged and still owns account creation/session issuance.
         if method == "POST" and path in {"/signup", "/artist/signup"}:
             stored_next = _safe_return_path(_request_cookie(headers, RETURN_TO_COOKIE))
             if stored_next:
@@ -181,13 +168,14 @@ class SameOriginMiddleware:
 
         if (
             not settings.is_production
-            or method not in {"POST", "PUT", "PATCH", "DELETE"}
+            or method not in STATE_CHANGING_METHODS
             or path in EXEMPT_POST_PATHS
         ):
             await self.app(scope, receive, send)
             return
 
-        # Bearer-authenticated API clients are not cookie-authenticated.
+        # Bearer-authenticated API clients are not cookie-authenticated and
+        # therefore do not use this browser CSRF protection mechanism.
         authorization = headers.get("authorization", "")
         if authorization.lower().startswith("bearer ") and authorization[7:].strip():
             await self.app(scope, receive, send)
@@ -200,7 +188,17 @@ class SameOriginMiddleware:
             headers.get("x-forwarded-proto", "https"),
         )
 
-        if (origin and origin in allowed) or (referer and referer in allowed):
+        # Prefer Origin. Referer is accepted only as a fallback for clients
+        # that legitimately omit Origin. Neither header means the browser
+        # request cannot be proven same-origin, so reject it.
+        if origin:
+            same_origin = origin in allowed
+        elif referer:
+            same_origin = referer in allowed
+        else:
+            same_origin = False
+
+        if same_origin:
             await self.app(scope, receive, send)
             return
 
