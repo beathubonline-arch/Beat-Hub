@@ -1,10 +1,13 @@
-import asyncio
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.middleware.security import SameOriginMiddleware, _origin
-from app.routers.auth import _reset_token_digest
+from app.routers.auth import (
+    _reset_token_digest,
+    _send_email_resend,
+    _verification_delivery_error_message,
+)
 from app.services.storage import _content_matches_extension
 
 
@@ -40,6 +43,26 @@ class P0SecurityTests(unittest.TestCase):
         with patch("app.middleware.security.settings", settings):
             allowed = {"https://beathub.example"}
         self.assertNotIn("", allowed)
+
+    def test_verification_delivery_failure_message_is_provider_agnostic(self):
+        message = _verification_delivery_error_message()
+        self.assertIn("verification email", message.lower())
+        self.assertNotIn("403", message)
+        self.assertNotIn("resend", message.lower())
+        self.assertNotIn("api", message.lower())
+
+    def test_resend_403_returns_false_without_leaking_recipient(self):
+        response = SimpleNamespace(
+            status_code=403,
+            json=lambda: {"name": "validation_error", "message": "testing recipient restriction"},
+        )
+        client = SimpleNamespace(__enter__=lambda self: self, __exit__=lambda self, *args: None, post=lambda *args, **kwargs: response)
+        settings = SimpleNamespace(RESEND_API_KEY="test-key", RESEND_FROM="BeatHub <beathubonline@gmail.com>")
+        with patch("app.routers.auth.settings", settings), patch("app.routers.auth.httpx.Client", return_value=client):
+            with patch("app.routers.auth.logger.error") as log_error:
+                self.assertFalse(_send_email_resend("other@example.com", "Verify", "code"))
+                rendered = " ".join(str(call) for call in log_error.call_args_list)
+                self.assertNotIn("other@example.com", rendered)
 
 
 if __name__ == "__main__":
