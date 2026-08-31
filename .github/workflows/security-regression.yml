@@ -2,7 +2,7 @@ name: BeatHub Security Regression
 
 on:
   push:
-    branches: [main]
+    branches: [main, security/auth-session-hardening]
   pull_request:
     branches: [main]
 
