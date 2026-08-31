@@ -20,6 +20,7 @@ from app.middleware.security import SameOriginMiddleware
 from app.routers import (
     admin,
     admin_mpesa_payout,
+    admin_paystack_reconciliation,
     admin_unified_sales,
     audio_preview,
     auth,
@@ -344,6 +345,7 @@ app.include_router(dashboard.router)
 app.include_router(dashboard_analytics.router)
 app.include_router(admin_unified_sales.router)
 app.include_router(admin_mpesa_payout.router)
+app.include_router(admin_paystack_reconciliation.router)
 app.include_router(admin.router)
 app.include_router(payout_admin.router)
 app.include_router(merchandise.router)
