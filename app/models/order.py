@@ -6,21 +6,18 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.currency import DEFAULT_CURRENCY
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING = "pending"          # STK push initiated, awaiting confirmation
-    COMPLETED = "completed"      # payment confirmed, ownership granted
-    FAILED = "failed"            # payment failed / timed out / cancelled
-    REJECTED = "rejected"        # payment succeeded but item became unavailable (exclusive race) -> must be refunded
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REJECTED = "rejected"
 
 
 class Order(Base):
-    """
-    Represents a purchase attempt. Only becomes authoritative once linked to a
-    CONFIRMED PaymentTransaction. Ownership (License) is only created after
-    the order transitions to COMPLETED.
-    """
+    """Purchase attempt with immutable server-calculated financial snapshots."""
 
     __tablename__ = "orders"
 
@@ -31,15 +28,14 @@ class Order(Base):
     track_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tracks.id"), nullable=True, index=True)
     album_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("albums.id"), nullable=True, index=True)
 
-    # Snapshot values captured at checkout time — server-calculated, never trusted from client.
     sales_model_at_purchase: Mapped[str] = mapped_column(String(20), nullable=False)
     gross_amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
     commission_amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
     net_amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
     commission_percent_at_purchase: Mapped[Numeric] = mapped_column(Numeric(5, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default=DEFAULT_CURRENCY, server_default=DEFAULT_CURRENCY, index=True)
 
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False, index=True)
-
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -57,10 +53,7 @@ class Order(Base):
 
 
 class License(Base):
-    """
-    Buyer's access/ownership record for a purchased item. Created ONLY after
-    an order is COMPLETED (i.e. after confirmed payment).
-    """
+    """Buyer's access record, created only after confirmed payment."""
 
     __tablename__ = "licenses"
 
@@ -76,13 +69,7 @@ class License(Base):
 
 
 class ExclusiveOwnershipLock(Base):
-    """
-    Hard database-level guarantee that an exclusive track can only ever be
-    sold once. Exactly one row per exclusively-sold track. Insertion is
-    attempted transactionally at order-finalization time; a unique constraint
-    violation means someone else already won the sale, and the current order
-    must be rejected (and refunded if payment already succeeded).
-    """
+    """Database-level guarantee that an exclusive track can only be sold once."""
 
     __tablename__ = "exclusive_ownership_locks"
 
