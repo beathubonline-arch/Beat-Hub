@@ -3,13 +3,11 @@ import hmac
 import logging
 import re
 import secrets
-import smtplib
-import ssl
 import uuid
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 from urllib.parse import quote, unquote, urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -32,6 +30,7 @@ COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 RESET_TOKEN_TTL = timedelta(hours=1)
 VERIFICATION_CODE_TTL = timedelta(minutes=10)
 VERIFICATION_MAX_ATTEMPTS = 5
+RESEND_API_URL = "https://api.resend.com/emails"
 
 
 def get_role_name(user: User) -> str:
@@ -90,12 +89,10 @@ def _signup_context(request: Request, **extra):
 
 
 def _reset_token_digest(token: str) -> str:
-    """Store only a SHA-256 digest of a password-reset token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _verification_code_digest(code: str) -> str:
-    """Hash the short-lived verification code with an application secret."""
     secret = str(getattr(settings, "SECRET_KEY", None) or getattr(settings, "SESSION_SECRET", None) or "beathub-development-verification")
     return hmac.new(secret.encode("utf-8"), code.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -112,56 +109,72 @@ def _set_verification_code(user: User) -> str:
     return code
 
 
+def _send_email_resend(to_email: str, subject: str, body: str) -> bool:
+    api_key = str(getattr(settings, "RESEND_API_KEY", "") or "").strip()
+    sender = str(getattr(settings, "RESEND_FROM", "") or getattr(settings, "EMAIL_FROM", "") or "").strip()
+    if not api_key or not sender:
+        logger.error("Resend email delivery is misconfigured: RESEND_API_KEY or RESEND_FROM is missing.")
+        return False
+
+    payload = {
+        "from": sender,
+        "to": [to_email],
+        "subject": subject,
+        "text": body,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.post(RESEND_API_URL, json=payload, headers=headers)
+        if 200 <= response.status_code < 300:
+            logger.info("Email sent successfully through Resend.")
+            return True
+        logger.error("Resend email delivery failed with HTTP %s.", response.status_code)
+    except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        logger.error("Resend network/timeout error: %s", type(exc).__name__)
+    except httpx.HTTPError as exc:
+        logger.error("Resend HTTP error: %s", type(exc).__name__)
+    except Exception as exc:
+        logger.error("Unexpected Resend delivery error: %s", type(exc).__name__)
+    return False
+
+
 def _send_email(to_email: str, subject: str, body: str) -> bool:
     if not bool(getattr(settings, "EMAIL_ENABLED", False)):
         logger.warning("Email delivery disabled by EMAIL_ENABLED.")
         return False
-    host = str(getattr(settings, "EMAIL_HOST", "") or "").strip()
-    username = str(getattr(settings, "EMAIL_USERNAME", "") or "").strip()
-    password = str(getattr(settings, "EMAIL_PASSWORD", "") or "")
-    sender = str(getattr(settings, "EMAIL_FROM", "") or username).strip()
-    try:
-        port = int(getattr(settings, "EMAIL_PORT", 587) or 587)
-    except (TypeError, ValueError):
-        port = 587
-    if not host or not sender:
-        logger.error("Email delivery misconfigured: EMAIL_HOST or EMAIL_FROM is missing.")
-        return False
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = sender
-    message["To"] = to_email
-    message.set_content(body)
-    try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP(host, port, timeout=10) as smtp:
-            smtp.ehlo()
-            smtp.starttls(context=context)
-            smtp.ehlo()
-            if username:
-                smtp.login(username, password)
-            smtp.send_message(message)
-        logger.info("Email sent successfully.")
-        return True
-    except smtplib.SMTPAuthenticationError:
-        logger.error("Email SMTP authentication failed. Check EMAIL_USERNAME and Google App Password.")
-    except smtplib.SMTPConnectError:
-        logger.error("Email SMTP connection failed to configured host/port.")
-    except smtplib.SMTPException as exc:
-        logger.error("Email SMTP error: %s", type(exc).__name__)
-    except (OSError, TimeoutError) as exc:
-        logger.error("Email network/timeout error: %s", type(exc).__name__)
-    except Exception as exc:
-        logger.error("Unexpected email delivery error: %s", type(exc).__name__)
+
+    provider = str(getattr(settings, "EMAIL_PROVIDER", "resend") or "resend").strip().lower()
+    if provider == "resend":
+        return _send_email_resend(to_email, subject, body)
+
+    # Legacy SMTP is retained only for local/backward compatibility.
+    logger.error("Unsupported email provider: %s", provider)
     return False
 
 
 def _send_verification_email(email: str, code: str) -> bool:
-    return _send_email(email, "Verify your BeatHub email", "Welcome to BeatHub.\n\n" f"Your verification code is: {code}\n\n" "This code expires in 10 minutes and can only be used once.\n\n" "If you did not create this account, you can ignore this email.")
+    return _send_email(
+        email,
+        "Verify your BeatHub email",
+        "Welcome to BeatHub.\n\n"
+        f"Your verification code is: {code}\n\n"
+        "This code expires in 10 minutes and can only be used once.\n\n"
+        "If you did not create this account, you can ignore this email.",
+    )
 
 
 def _send_password_reset_email(email: str, reset_url: str) -> bool:
-    return _send_email(email, "BeatHub password reset", "We received a request to reset your BeatHub password.\n\n" f"Use this link within 1 hour:\n{reset_url}\n\n" "If you did not request this, you can safely ignore this email.")
+    return _send_email(
+        email,
+        "BeatHub password reset",
+        "We received a request to reset your BeatHub password.\n\n"
+        f"Use this link within 1 hour:\n{reset_url}\n\n"
+        "If you did not request this, you can safely ignore this email.",
+    )
 
 
 @router.get("/signup")
@@ -191,8 +204,10 @@ def signup_submit(request: Request, db: Session = Depends(get_db), stage_name: s
     email_norm = (email or "").strip().lower()
     role = (role or "buyer").strip().lower()
     selected_role = role if role in {"artist", "creator", "buyer"} else "buyer"
+
     def error(message: str):
         return templates.TemplateResponse(request, "signup.html", _signup_context(request, error=message, stage_name=stage_name, email=email_norm, role=selected_role), status_code=400)
+
     if not stage_name: return error("Artist / stage name is required.")
     if len(stage_name) > 120: return error("Artist / stage name is too long.")
     if not email_norm: return error("Email address is required.")
@@ -200,24 +215,45 @@ def signup_submit(request: Request, db: Session = Depends(get_db), stage_name: s
     if not agree_terms: return error("You must agree to the Terms & Conditions.")
     if len(password) < 8: return error("Password must be at least 8 characters.")
     if password != confirm_password: return error("Passwords do not match.")
+
     user_role = UserRole.CREATOR if selected_role in {"artist", "creator"} else UserRole.BUYER
-    if db.query(User).filter(func.lower(User.email) == email_norm).first(): return error("An account with this email already exists.")
+    if db.query(User).filter(func.lower(User.email) == email_norm).first():
+        return error("An account with this email already exists.")
+
     base_username = slugify(stage_name).replace("-", "")[:90] or f"user{secrets.token_hex(4)}"
     username = base_username
     suffix = 2
     while db.query(User).filter(func.lower(User.username) == username.lower()).first():
-        username = f"{base_username}{suffix}"; suffix += 1
-    user = User(id=str(uuid.uuid4()), email=email_norm, username=username, hashed_password=hash_password(password), role=user_role, is_active=True, is_verified=False)
+        username = f"{base_username}{suffix}"
+        suffix += 1
+
+    user = User(
+        id=str(uuid.uuid4()),
+        email=email_norm,
+        username=username,
+        hashed_password=hash_password(password),
+        role=user_role,
+        is_active=True,
+        is_verified=False,
+    )
     verification_code = _set_verification_code(user)
     db.add(user)
+
     try:
         db.flush()
-        base_slug = slugify(stage_name); slug = base_slug; suffix = 2
-        while db.query(Profile).filter(Profile.slug == slug).first(): slug = f"{base_slug}-{suffix}"; suffix += 1
+        base_slug = slugify(stage_name)
+        slug = base_slug
+        suffix = 2
+        while db.query(Profile).filter(Profile.slug == slug).first():
+            slug = f"{base_slug}-{suffix}"
+            suffix += 1
         db.add(Profile(id=str(uuid.uuid4()), user_id=user.id, stage_name=stage_name, slug=slug, is_producer=(user_role == UserRole.CREATOR), is_artist=(selected_role == "artist")))
-        db.commit(); db.refresh(user)
+        db.commit()
+        db.refresh(user)
     except IntegrityError:
-        db.rollback(); return error("Could not create the account. The email or username may already be in use.")
+        db.rollback()
+        return error("Could not create the account. The email or username may already be in use.")
+
     if not _send_verification_email(email_norm, verification_code):
         return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&error=We%20could%20not%20send%20the%20verification%20email.%20Please%20try%20resending%20the%20code.", status_code=303)
     return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success=We%20sent%20a%206-digit%20verification%20code%20to%20your%20email.", status_code=303)
@@ -230,26 +266,44 @@ def verify_email_page(request: Request, email: str = "", error: str = "", succes
 
 @router.post("/verify-email")
 def verify_email_submit(request: Request, db: Session = Depends(get_db), email: str = Form(...), code: str = Form(...)):
-    email_norm = (email or "").strip().lower(); code_norm = re.sub(r"\s+", "", code or "")
+    email_norm = (email or "").strip().lower()
+    code_norm = re.sub(r"\s+", "", code or "")
     user = db.query(User).filter(func.lower(User.email) == email_norm).first()
-    if not user: return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "The verification code is invalid or has expired.", "success": ""}, status_code=400)
-    if user.is_verified: return RedirectResponse(url="/login?success=Your%20email%20is%20already%20verified.%20Please%20log%20in.", status_code=303)
-    if not re.fullmatch(r"\d{6}", code_norm): return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Enter the 6-digit verification code.", "success": ""}, status_code=400)
-    if int(getattr(user, "verification_attempts", 0) or 0) >= VERIFICATION_MAX_ATTEMPTS: return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Too many incorrect attempts. Please request a new code.", "success": ""}, status_code=429)
-    expires = getattr(user, "verification_code_expires", None); stored_hash = getattr(user, "verification_code_hash", None)
-    if not stored_hash or not expires or expires <= datetime.utcnow(): return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "This verification code has expired. Please request a new code.", "success": ""}, status_code=400)
+    if not user:
+        return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "The verification code is invalid or has expired.", "success": ""}, status_code=400)
+    if user.is_verified:
+        return RedirectResponse(url="/login?success=Your%20email%20is%20already%20verified.%20Please%20log%20in.", status_code=303)
+    if not re.fullmatch(r"\d{6}", code_norm):
+        return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Enter the 6-digit verification code.", "success": ""}, status_code=400)
+    if int(getattr(user, "verification_attempts", 0) or 0) >= VERIFICATION_MAX_ATTEMPTS:
+        return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Too many incorrect attempts. Please request a new code.", "success": ""}, status_code=429)
+
+    expires = getattr(user, "verification_code_expires", None)
+    stored_hash = getattr(user, "verification_code_hash", None)
+    if not stored_hash or not expires or expires <= datetime.utcnow():
+        return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "This verification code has expired. Please request a new code.", "success": ""}, status_code=400)
     if not hmac.compare_digest(stored_hash, _verification_code_digest(code_norm)):
-        user.verification_attempts = int(getattr(user, "verification_attempts", 0) or 0) + 1; db.commit()
+        user.verification_attempts = int(getattr(user, "verification_attempts", 0) or 0) + 1
+        db.commit()
         return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "The verification code is incorrect.", "success": ""}, status_code=400)
-    user.is_verified = True; user.verification_code_hash = None; user.verification_code_expires = None; user.verification_attempts = 0; db.commit()
+
+    user.is_verified = True
+    user.verification_code_hash = None
+    user.verification_code_expires = None
+    user.verification_attempts = 0
+    db.commit()
     return RedirectResponse(url="/login?success=Email%20verified.%20You%20can%20now%20sign%20in.", status_code=303)
 
 
 @router.post("/verify-email/resend")
 def resend_verification_email(request: Request, db: Session = Depends(get_db), email: str = Form(...)):
-    email_norm = (email or "").strip().lower(); user = db.query(User).filter(func.lower(User.email) == email_norm).first()
-    if not user or user.is_verified: return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success=If%20verification%20is%20needed,%20a%20new%20code%20has%20been%20sent.", status_code=303)
-    code = _set_verification_code(user); db.commit(); delivered = _send_verification_email(email_norm, code)
+    email_norm = (email or "").strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email_norm).first()
+    if not user or user.is_verified:
+        return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success=If%20verification%20is%20needed,%20a%20new%20code%20has%20been%20sent.", status_code=303)
+    code = _set_verification_code(user)
+    db.commit()
+    delivered = _send_verification_email(email_norm, code)
     message = "A new verification code has been sent." if delivered else "We could not send the verification email. Please try again later."
     return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success={quote(message, safe='')}", status_code=303)
 
@@ -262,60 +316,87 @@ def login_page(request: Request, next: str = "", error: str = ""):
 
 @router.post("/login")
 def login_submit(request: Request, identifier: str = Form(""), email: str = Form(""), password: str = Form(...), next: str = Form(""), db: Session = Depends(get_db)):
-    requested_next = next or request.query_params.get("next", ""); safe_next = _safe_next_url(requested_next)
+    requested_next = next or request.query_params.get("next", "")
+    safe_next = _safe_next_url(requested_next)
     login_identifier = (identifier or email).strip().lower()
     user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()
     if not user and login_identifier:
         profile = db.query(Profile).filter(func.lower(Profile.slug) == slugify(login_identifier)).first()
-        if profile: user = db.query(User).filter(User.id == profile.user_id).first()
+        if profile:
+            user = db.query(User).filter(User.id == profile.user_id).first()
     if not user or not _password_matches(password, getattr(user, "hashed_password", "")):
         return RedirectResponse(url=f"/login?error=Invalid%20email%20or%20password&next={quote(safe_next, safe='')}", status_code=303)
-    if hasattr(user, "is_active") and not user.is_active: return RedirectResponse(url=f"/login?error=Your%20account%20is%20inactive&next={quote(safe_next, safe='')}", status_code=303)
+    if hasattr(user, "is_active") and not user.is_active:
+        return RedirectResponse(url=f"/login?error=Your%20account%20is%20inactive&next={quote(safe_next, safe='')}", status_code=303)
     if not getattr(user, "is_verified", False):
-        code = _set_verification_code(user); db.commit(); delivered = _send_verification_email(user.email, code)
+        code = _set_verification_code(user)
+        db.commit()
+        delivered = _send_verification_email(user.email, code)
         message = "Please verify your email. A new verification code has been sent." if delivered else "Please verify your email. We could not send a new code; use Resend Code."
         return RedirectResponse(url=f"/verify-email?email={quote(user.email, safe='')}&error={quote(message, safe='')}", status_code=303)
     token = create_access_token(subject=str(user.id), extra_claims={"role": get_role_name(user)})
-    response = RedirectResponse(url=safe_next or dashboard_url_for_user(user), status_code=303); _set_auth_cookie(response, token); return response
+    response = RedirectResponse(url=safe_next or dashboard_url_for_user(user), status_code=303)
+    _set_auth_cookie(response, token)
+    return response
 
 
 def perform_logout() -> RedirectResponse:
-    response = RedirectResponse(url="/?success=You%20have%20been%20logged%20out.", status_code=303); response.delete_cookie(key=SESSION_COOKIE_NAME, path="/"); return response
+    response = RedirectResponse(url="/?success=You%20have%20been%20logged%20out.", status_code=303)
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return response
 
 
 @router.post("/logout")
-def logout(): return perform_logout()
+def logout():
+    return perform_logout()
 
 
 @router.get("/logout")
-def logout_get(): return perform_logout()
+def logout_get():
+    return perform_logout()
 
 
 @router.get("/forgot-password")
-def forgot_password_page(request: Request): return templates.TemplateResponse(request, "forgot_password.html", {"request": request, "error": "", "success": ""})
+def forgot_password_page(request: Request):
+    return templates.TemplateResponse(request, "forgot_password.html", {"request": request, "error": "", "success": ""})
 
 
 @router.post("/forgot-password")
 def forgot_password_submit(request: Request, db: Session = Depends(get_db), email: str = Form(...)):
-    email_norm = (email or "").strip().lower(); user = db.query(User).filter(func.lower(User.email) == email_norm).first()
+    email_norm = (email or "").strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email_norm).first()
     if user:
-        token = secrets.token_urlsafe(32); user.reset_token = _reset_token_digest(token); user.reset_token_expires = datetime.utcnow() + RESET_TOKEN_TTL; db.commit()
+        token = secrets.token_urlsafe(32)
+        user.reset_token = _reset_token_digest(token)
+        user.reset_token_expires = datetime.utcnow() + RESET_TOKEN_TTL
+        db.commit()
         base_url = str(getattr(settings, "BASE_URL", "") or "").strip().rstrip("/") or str(request.base_url).rstrip("/")
-        reset_url = f"{base_url}/reset-password?token={quote(token, safe='')}"; delivered = _send_password_reset_email(email_norm, reset_url)
-        if not delivered and bool(getattr(settings, "EMAIL_ENABLED", False)): logger.warning("Password reset email delivery failed for configured account.")
+        reset_url = f"{base_url}/reset-password?token={quote(token, safe='')}"
+        delivered = _send_password_reset_email(email_norm, reset_url)
+        if not delivered and bool(getattr(settings, "EMAIL_ENABLED", False)):
+            logger.warning("Password reset email delivery failed for configured account.")
     return templates.TemplateResponse(request, "forgot_password.html", {"request": request, "error": "", "success": "If an account exists for that email, a password reset link will be sent shortly."})
 
 
 @router.get("/reset-password")
 def reset_password_page(request: Request, token: str, db: Session = Depends(get_db)):
-    token_digest = _reset_token_digest(token); user = db.query(User).filter(User.reset_token == token_digest).first(); valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
+    token_digest = _reset_token_digest(token)
+    user = db.query(User).filter(User.reset_token == token_digest).first()
+    valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
     return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": valid, "error": ""})
 
 
 @router.post("/reset-password")
 def reset_password_submit(request: Request, db: Session = Depends(get_db), token: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
-    token_digest = _reset_token_digest(token); user = db.query(User).filter(User.reset_token == token_digest).first(); valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
-    if not valid: return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": False, "error": "This reset link is invalid or has expired."}, status_code=400)
-    if len(password) < 8 or password != confirm_password: return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": True, "error": "Passwords must match and be at least 8 characters."}, status_code=400)
-    user.hashed_password = hash_password(password); user.reset_token = None; user.reset_token_expires = None; db.commit()
+    token_digest = _reset_token_digest(token)
+    user = db.query(User).filter(User.reset_token == token_digest).first()
+    valid = bool(user and user.reset_token_expires and user.reset_token_expires > datetime.utcnow())
+    if not valid:
+        return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": False, "error": "This reset link is invalid or has expired."}, status_code=400)
+    if len(password) < 8 or password != confirm_password:
+        return templates.TemplateResponse(request, "reset_password.html", {"request": request, "token": token, "valid": True, "error": "Passwords must match and be at least 8 characters."}, status_code=400)
+    user.hashed_password = hash_password(password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    db.commit()
     return RedirectResponse(url="/login?success=Password%20updated.%20Please%20log%20in.", status_code=303)
