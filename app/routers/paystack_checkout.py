@@ -1,14 +1,11 @@
-"""Canonical Paystack checkout for BeatHub Kenya.
+"""Canonical Paystack checkout for BeatHub.
 
-Paystack is the single customer payment gateway for BeatHub. The customer
-pays through Paystack (for example card or Kenya mobile money/M-PESA).
+Paystack is the customer payment gateway for BeatHub. Currency and amount are
+always read from the server-side Track/Order records; the browser never gets to
+choose the amount or currency used to initialize or settle a transaction.
 
-Important payment rule:
-- The signed Paystack webhook is authoritative for successful payments.
-- The browser callback is only a navigation mechanism and must not make the
-  customer wait for server-side settlement before showing the order page.
-- A callback still verifies an already-pending payment as a fallback, but the
-  verification is asynchronous and bounded.
+Successful payments are authoritative only after Paystack verification/webhook
+checks status, amount, and currency against the immutable Order snapshot.
 """
 
 import hashlib
@@ -17,7 +14,7 @@ import logging
 import re
 import uuid
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -26,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.currency import SUPPORTED_CURRENCIES, normalize_currency
 from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
 from app.models.music import SalesModel, Track
@@ -38,7 +36,10 @@ from app.utils.deps import require_user
 router = APIRouter(tags=["paystack"])
 logger = logging.getLogger("beathub.paystack")
 
-PAYSTACK_KES_MINIMUM = Decimal("3.00")
+PAYSTACK_MINIMUMS = {
+    "KES": Decimal("3.00"),
+    "USD": Decimal("2.00"),
+}
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -49,34 +50,16 @@ def _headers() -> dict:
     }
 
 
-def _amount_kobo(amount: Decimal) -> int:
-    return int((amount * Decimal("100")).quantize(Decimal("1")))
+def _currency_for_track(track: Track) -> str:
+    """Return the canonical product currency, defaulting legacy rows to KES."""
+    return normalize_currency(getattr(track, "currency", None))
 
 
-def _available(track: Track) -> bool:
-    """Return whether a track can currently be purchased.
-
-    Keep the purchase gate aligned with the public catalogue: a track must
-    be published, have a positive price, and must not already be sold when it
-    is an exclusive license. Non-exclusive tracks remain purchasable after
-    previous sales.
-    """
-    if not bool(getattr(track, "is_published", False)):
-        return False
-
-    try:
-        price = Decimal(str(getattr(track, "price", 0)))
-    except Exception:
-        return False
-    if price <= 0:
-        return False
-
-    sales_model = getattr(track, "sales_model", None)
-    sales_model_value = getattr(sales_model, "value", sales_model)
-    if str(sales_model_value).lower() == SalesModel.EXCLUSIVE.value:
-        return not bool(getattr(track, "is_sold", False))
-
-    return True
+def _minor_units(amount: Decimal, currency: str) -> int:
+    """Convert a major-unit Decimal into Paystack's minor-unit integer."""
+    currency = normalize_currency(currency)
+    # BeatHub currently supports KES and USD, both with two decimal places.
+    return int((amount * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 async def _verify_reference(reference: str) -> dict:
@@ -97,8 +80,37 @@ async def _verify_reference(reference: str) -> dict:
     return payload["data"]
 
 
+def _available(track: Track) -> bool:
+    """Return whether a track can currently be purchased."""
+    if not bool(getattr(track, "is_published", False)):
+        return False
+
+    try:
+        price = Decimal(str(getattr(track, "price", 0)))
+    except Exception:
+        return False
+    if price <= 0:
+        return False
+
+    try:
+        currency = _currency_for_track(track)
+    except ValueError:
+        return False
+    if currency not in SUPPORTED_CURRENCIES:
+        return False
+    if price < PAYSTACK_MINIMUMS[currency]:
+        return False
+
+    sales_model = getattr(track, "sales_model", None)
+    sales_model_value = getattr(sales_model, "value", sales_model)
+    if str(sales_model_value).lower() == SalesModel.EXCLUSIVE.value:
+        return not bool(getattr(track, "is_sold", False))
+
+    return True
+
+
 def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransaction, data: dict) -> bool:
-    """Apply a verified Paystack track result exactly once under DB locks."""
+    """Apply a verified Paystack result exactly once under DB locks."""
     locked_payment = (
         db.query(PaymentTransaction)
         .filter(PaymentTransaction.id == payment.id)
@@ -132,13 +144,30 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
         db.commit()
         return False
 
-    expected = _amount_kobo(Decimal(str(order.gross_amount)))
-    actual = int(data.get("amount") or 0)
-    currency = str(data.get("currency") or "").upper()
-
-    if currency != "KES" or actual != expected:
+    try:
+        expected_currency = normalize_currency(order.currency)
+    except ValueError:
         payment.status = PaymentStatus.FAILED
-        payment.result_description = "Paystack verification amount or currency mismatch."
+        payment.result_description = "Order contains an unsupported currency."
+        payment.callback_processed = True
+        order.status = OrderStatus.FAILED
+        db.commit()
+        return False
+
+    expected_amount = _minor_units(Decimal(str(order.gross_amount)), expected_currency)
+    try:
+        actual_amount = int(data.get("amount") or 0)
+    except (TypeError, ValueError):
+        actual_amount = 0
+    actual_currency = str(data.get("currency") or "").upper().strip()
+
+    if actual_currency != expected_currency or actual_amount != expected_amount:
+        payment.status = PaymentStatus.FAILED
+        payment.result_description = (
+            "Paystack verification amount or currency mismatch. "
+            f"Expected {expected_currency} {expected_amount}; "
+            f"received {actual_currency or 'missing'} {actual_amount}."
+        )
         payment.callback_processed = True
         order.status = OrderStatus.FAILED
         db.commit()
@@ -149,6 +178,8 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     payment.result_description = "Paystack payment verified successfully."
     payment.completed_at = datetime.utcnow()
     payment.callback_processed = True
+    payment.currency = expected_currency
+    payment.amount = Decimal(str(order.gross_amount))
 
     customer = data.get("customer") or {}
     phone = customer.get("phone")
@@ -174,21 +205,33 @@ async def paystack_checkout(
     if not track:
         raise HTTPException(status_code=404, detail="Track not found.")
     if not _available(track):
-        return RedirectResponse(f"/track/{slug}?error=This%20track%20is%20no%20longer%20available%20for%20purchase.", 303)
+        return RedirectResponse(
+            f"/track/{slug}?error=This%20track%20is%20no%20longer%20available%20for%20purchase.",
+            303,
+        )
 
     profile = getattr(track, "creator_profile", None)
     if getattr(profile, "user_id", None) == user.id:
         return RedirectResponse(f"/track/{slug}?error=You%20cannot%20purchase%20your%20own%20track.", 303)
 
     price = Decimal(str(track.price))
+    currency = _currency_for_track(track)
+    minimum = PAYSTACK_MINIMUMS[currency]
     if price <= 0:
         raise HTTPException(status_code=400, detail="This track has an invalid price.")
-    if price < PAYSTACK_KES_MINIMUM:
-        return RedirectResponse(f"/checkout/track/{slug}?error=Paystack%20requires%20a%20minimum%20payment%20of%20KSh%203.00.", 303)
+    if price < minimum:
+        symbol = "KSh" if currency == "KES" else "$"
+        return RedirectResponse(
+            f"/checkout/track/{slug}?error=Paystack%20requires%20a%20minimum%20payment%20of%20{symbol}%20{minimum:.2f}.",
+            303,
+        )
 
     customer_email = (email or "").strip().lower() or (getattr(user, "email", "") or "").strip().lower()
     if not EMAIL_RE.fullmatch(customer_email):
-        return RedirectResponse(f"/checkout/track/{slug}?error=Please%20enter%20a%20valid%20email%20address%20for%20Paystack%20checkout.", 303)
+        return RedirectResponse(
+            f"/checkout/track/{slug}?error=Please%20enter%20a%20valid%20email%20address%20for%20Paystack%20checkout.",
+            303,
+        )
 
     split = calculate_split(price)
     if Decimal(str(split["commission_percent"])) != BEATHUB_COMMISSION_PERCENT:
@@ -204,7 +247,8 @@ async def paystack_checkout(
         gross_amount=Decimal(str(split["gross_amount"])),
         commission_amount=Decimal(str(split["commission_amount"])),
         net_amount=Decimal(str(split["net_amount"])),
-        commission_percent_at_purchase=Decimal("10.00"),
+        commission_percent_at_purchase=Decimal(str(split["commission_percent"])),
+        currency=currency,
         status=OrderStatus.PENDING,
         phone_number="paystack",
     )
@@ -214,8 +258,8 @@ async def paystack_checkout(
     callback_url = f"{settings.BASE_URL.rstrip('/')}/paystack/callback"
     payload = {
         "email": customer_email,
-        "amount": str(_amount_kobo(price)),
-        "currency": "KES",
+        "amount": _minor_units(price, currency),
+        "currency": currency,
         "reference": order.order_number,
         "callback_url": callback_url,
         "channels": ["card", "mobile_money"],
@@ -223,7 +267,8 @@ async def paystack_checkout(
             "beathub_order_id": order.id,
             "beathub_track_slug": track.slug,
             "buyer_id": user.id,
-            "beathub_commission_percent": "10.00",
+            "beathub_currency": currency,
+            "beathub_commission_percent": str(split["commission_percent"]),
             "beathub_commission_amount": str(split["commission_amount"]),
             "beathub_producer_amount": str(split["net_amount"]),
         },
@@ -232,7 +277,7 @@ async def paystack_checkout(
     producer_subaccount = getattr(profile, "paystack_subaccount_code", None)
     if producer_subaccount:
         payload["subaccount"] = str(producer_subaccount)
-        payload["transaction_charge"] = _amount_kobo(split["commission_amount"])
+        payload["transaction_charge"] = _minor_units(Decimal(str(split["commission_amount"])), currency)
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
@@ -263,11 +308,11 @@ async def paystack_checkout(
         checkout_request_id=reference,
         phone_number="paystack",
         amount=Decimal(str(order.gross_amount)),
+        currency=currency,
         status=PaymentStatus.PENDING,
         result_description=(
-            "Paystack checkout initialized with 10% BeatHub / 90% producer split."
-            if producer_subaccount
-            else "Paystack checkout initialized; 10% BeatHub / 90% producer split recorded internally until producer Paystack subaccount is configured."
+            f"Paystack {currency} checkout initialized with {split['commission_percent']}% BeatHub / "
+            f"{Decimal('100') - Decimal(str(split['commission_percent']))}% producer split."
         ),
     )
     db.add(payment)
