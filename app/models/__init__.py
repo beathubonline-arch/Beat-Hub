@@ -11,10 +11,11 @@ from app.models.ledger import (
     AdminWithdrawal,
     AdminWithdrawalStatus,
 )
+from app.models.paystack_settlement import PaystackSettlement, PaystackSettlementTransaction
 
 __all__ = [
     "User", "UserRole", "Profile", "Track", "Album", "AlbumTrack", "SalesModel", "ProductCurrency",
     "Order", "OrderStatus", "License", "PaymentTransaction", "PaymentStatus",
     "CreatorLedgerEntry", "PlatformLedgerEntry", "WithdrawalRequest", "WithdrawalStatus",
-    "AdminWithdrawal", "AdminWithdrawalStatus",
+    "AdminWithdrawal", "AdminWithdrawalStatus", "PaystackSettlement", "PaystackSettlementTransaction",
 ]
