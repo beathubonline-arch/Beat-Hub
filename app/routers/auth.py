@@ -31,6 +31,7 @@ RESET_TOKEN_TTL = timedelta(hours=1)
 VERIFICATION_CODE_TTL = timedelta(minutes=10)
 VERIFICATION_MAX_ATTEMPTS = 5
 RESEND_API_URL = "https://api.resend.com/emails"
+RESEND_USER_AGENT = "BeatHub/1.0 (+https://beat-hub-ox42.onrender.com)"
 
 
 def get_role_name(user: User) -> str:
@@ -125,6 +126,7 @@ def _send_email_resend(to_email: str, subject: str, body: str) -> bool:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "User-Agent": RESEND_USER_AGENT,
     }
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -132,7 +134,20 @@ def _send_email_resend(to_email: str, subject: str, body: str) -> bool:
         if 200 <= response.status_code < 300:
             logger.info("Email sent successfully through Resend.")
             return True
-        logger.error("Resend email delivery failed with HTTP %s.", response.status_code)
+
+        error_name = ""
+        error_message = ""
+        try:
+            error_data = response.json()
+            if isinstance(error_data, dict):
+                error_name = str(error_data.get("name", ""))[:120]
+                error_message = str(error_data.get("message", ""))[:240]
+        except ValueError:
+            pass
+        if error_name or error_message:
+            logger.error("Resend email delivery failed with HTTP %s (%s): %s", response.status_code, error_name, error_message)
+        else:
+            logger.error("Resend email delivery failed with HTTP %s.", response.status_code)
     except (httpx.TimeoutException, httpx.NetworkError) as exc:
         logger.error("Resend network/timeout error: %s", type(exc).__name__)
     except httpx.HTTPError as exc:
