@@ -1,45 +1,40 @@
-"""
-Server-authoritative pricing and commission calculations.
-Never trust a price or split coming from the client/browser.
-
-BeatHub's marketplace commission is a product rule, not a customer-controlled
-setting: every producer sale is split 90% producer / 10% BeatHub.
-"""
+"""Server-authoritative pricing, currency and commission calculations."""
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.config import settings
 
 BEATHUB_COMMISSION_PERCENT = Decimal("10.00")
+SUPPORTED_CURRENCIES = ("KES", "USD")
+CURRENCY_SYMBOLS = {"KES": "KSh", "USD": "$"}
+
+
+def normalize_currency(value: str | None) -> str:
+    currency = str(value or "KES").strip().upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        raise ValueError("Unsupported currency. Choose KES or USD.")
+    return currency
+
+
+def currency_symbol(currency: str | None) -> str:
+    return CURRENCY_SYMBOLS[normalize_currency(currency)]
+
+
+def format_money(amount, currency: str | None = "KES") -> str:
+    currency = normalize_currency(currency)
+    value = Decimal(str(amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return f"{currency_symbol(currency)} {value:,.2f}"
 
 
 def calculate_split(gross_amount: Decimal, commission_percent: Decimal | None = None) -> dict:
-    """
-    Return gross, commission, net and the immutable BeatHub commission rate.
-
-    The optional argument is retained for compatibility with older callers,
-    but producer transactions are never allowed to silently change the
-    platform rate away from the contractual 10% rule.
-    """
     gross_amount = Decimal(gross_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    configured = Decimal(str(
-        commission_percent
-        if commission_percent is not None
-        else settings.PLATFORM_COMMISSION_PERCENT
-    ))
-
+    configured = Decimal(str(commission_percent if commission_percent is not None else settings.PLATFORM_COMMISSION_PERCENT))
     if configured != BEATHUB_COMMISSION_PERCENT:
         raise RuntimeError(
             "BeatHub commission must remain exactly 10% for producer transactions. "
             f"Configured value was {configured}."
         )
-
-    commission = (gross_amount * BEATHUB_COMMISSION_PERCENT / Decimal("100")).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
-    net = (gross_amount - commission).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
-    )
-
+    commission = (gross_amount * BEATHUB_COMMISSION_PERCENT / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    net = (gross_amount - commission).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return {
         "gross_amount": gross_amount,
         "commission_amount": commission,
