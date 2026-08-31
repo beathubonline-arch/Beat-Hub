@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.models.currency import DEFAULT_CURRENCY
 
 
 # ======================================================================
@@ -96,6 +97,7 @@ class Track(Base):
     audio_file_path = Column(String(1000), nullable=False)
     preview_file_path = Column(String(1000), nullable=True)
     price = Column(Numeric(12, 2), nullable=False, default=0)
+    currency = Column(String(3), nullable=False, default=DEFAULT_CURRENCY, server_default=DEFAULT_CURRENCY, index=True)
     sales_model = Column(
         SAEnum(SalesModel, name="salesmodel", native_enum=False),
         nullable=False,
