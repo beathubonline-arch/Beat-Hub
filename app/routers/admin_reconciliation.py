@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.paystack_reconciliation import build_reconciliation, sync_paystack_settlements
 from app.utils.deps import require_admin
+from app.routers import admin as admin_router_module
 
-router = APIRouter(prefix="/admin/finance/reconciliation", tags=["admin-finance"])
+router = APIRouter(prefix="/finance/reconciliation", tags=["admin-finance"])
+admin_router_module.router.include_router(router)
 
 
 @router.get("")
