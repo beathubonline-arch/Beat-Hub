@@ -232,17 +232,56 @@ async def paystack_checkout(
 
 
 @router.get("/paystack/callback")
-async def paystack_callback(request: Request, reference: str | None = None, trxref: str | None = None, db: Session = Depends(get_db)):
-    reference = reference or trxref
-    if not reference:
+async def paystack_callback(
+    reference: str | None = None,
+    trxref: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Public Paystack return URL: verify, fulfill, then return to the product.
+
+    This route deliberately has no login dependency because Paystack redirects
+    the browser here outside BeatHub's authenticated request flow. Fulfillment
+    is authorized by the server-side Paystack verification, not by the browser.
+    The webhook remains the provider-retry backup and is idempotent.
+    """
+    ref = (reference or trxref or "").strip()
+    if not ref:
         return RedirectResponse("/beats?error=Payment%20reference%20was%20missing.", 303)
-    merch_order_id = find_merchandise_order_id(db, reference)
+
+    merch_order_id = find_merchandise_order_id(db, ref)
     if merch_order_id:
-        return RedirectResponse(f"/merch/orders/{merch_order_id}", 303)
-    payment = db.query(PaymentTransaction).filter(PaymentTransaction.checkout_request_id == reference).first()
+        try:
+            data = await _verify_reference(ref)
+            complete_merchandise_payment(db, merch_order_id, ref, data)
+        except Exception:
+            db.rollback()
+            logger.exception("Paystack merchandise callback verification failed: %s", ref)
+            return RedirectResponse(f"/merch/orders/{merch_order_id}?payment=pending", 303)
+        return RedirectResponse(f"/merch/orders/{merch_order_id}?payment=success", 303)
+
+    payment = db.query(PaymentTransaction).filter(PaymentTransaction.checkout_request_id == ref).first()
     if not payment:
         return RedirectResponse("/beats?error=Payment%20record%20was%20not%20found.", 303)
-    return RedirectResponse(f"/orders/{payment.order_id}/status", 303)
+
+    order = db.get(Order, payment.order_id)
+    if not order:
+        return RedirectResponse("/beats?error=Payment%20order%20was%20not%20found.", 303)
+
+    track_slug = order.track.slug if order.track else None
+    if not track_slug:
+        return RedirectResponse("/beats?error=Purchased%20track%20was%20not%20found.", 303)
+
+    try:
+        data = await _verify_reference(ref)
+        completed = _complete_verified_payment(db, order, payment, data)
+    except Exception:
+        db.rollback()
+        logger.exception("Paystack music callback verification failed: %s", ref)
+        return RedirectResponse(f"/track/{track_slug}?payment=pending", 303)
+
+    if completed:
+        return RedirectResponse(f"/track/{track_slug}?payment=success", 303)
+    return RedirectResponse(f"/track/{track_slug}?payment=failed", 303)
 
 
 @router.post("/paystack/webhook")
