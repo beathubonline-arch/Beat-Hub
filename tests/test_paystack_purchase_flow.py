@@ -14,7 +14,9 @@ class FakeDB:
         self.order = order
 
     def query(self, model):
-        return FakeQuery(self.payment)
+        if getattr(model, "__name__", "") == "PaymentTransaction":
+            return FakeQuery(self.payment)
+        return FakeQuery(self.order)
 
     def get(self, model, key):
         return self.order
