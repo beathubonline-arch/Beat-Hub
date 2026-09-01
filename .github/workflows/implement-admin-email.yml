@@ -20,24 +20,12 @@ jobs:
               if old not in s: raise SystemExit(f'pattern not found in {path}')
               p.write_text(s.replace(old,new,1))
 
-          replace('app/routers/auth.py',
-              'from app.utils.security import create_access_token, hash_password, verify_password\n',
-              'from app.utils.security import create_access_token, hash_password, verify_password\nfrom app.services.admin_notifications import notify_new_user\n')
-          replace('app/routers/auth.py',
-              '    if not _send_verification_email(email_norm, verification_code):\n',
-              '    notify_new_user(user)\n    if not _send_verification_email(email_norm, verification_code):\n')
-          replace('app/routers/paystack_checkout.py',
-              'from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency\n',
-              'from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency\nfrom app.services.admin_notifications import notify_payment\n')
-          replace('app/routers/paystack_checkout.py',
-              '    result = finalize_order(db, order)\n    return result.status == OrderStatus.COMPLETED\n',
-              '    result = finalize_order(db, order)\n    completed = result.status == OrderStatus.COMPLETED\n    if completed:\n        notify_payment(result, "music")\n    return completed\n')
-          replace('app/services/merchandise_payments.py',
-              'from sqlalchemy.orm import Session\n',
-              'from sqlalchemy.orm import Session\n\nfrom app.services.admin_notifications import notify_admin\n')
-          replace('app/services/merchandise_payments.py',
-              '    db.commit()\n    return True\n\n\ndef find_merchandise_order_id',
-              '    db.commit()\n    notify_admin(\n        "BeatHub — Payment completed (merchandise)",\n        f"A merchandise payment was successfully verified.\\n\\nOrder ID: {order_id}\\nReference: {reference}\\nAmount: {row[\"total_amount\"]} KES\\n",\n    )\n    return True\n\n\ndef find_merchandise_order_id')
+          replace('app/routers/auth.py', 'from app.utils.security import create_access_token, hash_password, verify_password\n', 'from app.utils.security import create_access_token, hash_password, verify_password\nfrom app.services.admin_notifications import notify_new_user\n')
+          replace('app/routers/auth.py', '    if not _send_verification_email(email_norm, verification_code):\n', '    notify_new_user(user)\n    if not _send_verification_email(email_norm, verification_code):\n')
+          replace('app/routers/paystack_checkout.py', 'from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency\n', 'from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency\nfrom app.services.admin_notifications import notify_payment\n')
+          replace('app/routers/paystack_checkout.py', '    result = finalize_order(db, order)\n    return result.status == OrderStatus.COMPLETED\n', '    result = finalize_order(db, order)\n    completed = result.status == OrderStatus.COMPLETED\n    if completed:\n        notify_payment(result, "music")\n    return completed\n')
+          replace('app/services/merchandise_payments.py', 'from sqlalchemy.orm import Session\n', 'from sqlalchemy.orm import Session\n\nfrom app.services.admin_notifications import notify_admin\n')
+          replace('app/services/merchandise_payments.py', '    db.commit()\n    return True\n\n\ndef find_merchandise_order_id', '    db.commit()\n    notify_admin("BeatHub — Payment completed (merchandise)", f"A merchandise payment was successfully verified.\\n\\nOrder ID: {order_id}\\nReference: {reference}\\nAmount: {row[\"total_amount\"]} KES\\n")\n    return True\n\n\ndef find_merchandise_order_id')
           PY
       - name: Verify imports and tests
         run: |
