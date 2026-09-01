@@ -11,13 +11,12 @@ from . import creator_sales_history
 from . import admin_reconciliation
 from . import admin
 from . import admin_paystack_reconciliation
+from . import payment_callback_fix
 
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
 
 # Register canonical public marketplace discovery before the legacy catalog.
-# /beats remains the compatibility entry point for the Marketplace navigation,
-# while /marketplace/beats is the dedicated beat catalogue.
 pages.router.include_router(music_publish.router)
 pages.router.include_router(marketplace.router)
 pages.router.include_router(beat_catalog.router)
