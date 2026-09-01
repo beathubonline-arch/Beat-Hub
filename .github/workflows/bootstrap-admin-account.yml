@@ -1,0 +1,65 @@
+name: BeatHub Bootstrap Admin Account
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - app/config.py
+      - app/routers/auth.py
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch admin provisioning
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          config = Path('app/config.py')
+          text = config.read_text()
+          old = '    ADMIN_EMAIL: str = "admin@mybeathub.com"\n    ADMIN_FROM: str = "BeatHub Admin <admin@mybeathub.com>"\n'
+          new = old + '    ADMIN_PASSWORD: str = ""\n'
+          if 'ADMIN_PASSWORD: str' not in text:
+              if old not in text:
+                  raise SystemExit('config insertion point not found')
+              text = text.replace(old, new, 1)
+              config.write_text(text)
+
+          auth = Path('app/routers/auth.py')
+          text = auth.read_text()
+          if 'import os\n' not in text:
+              text = text.replace('import logging\n', 'import logging\nimport os\n', 1)
+
+          marker = '    user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()\n'
+          injection = '''    user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()\n\n    # Production admin bootstrap: the Render ADMIN_PASSWORD is never stored in\n    # GitHub or the database. On the first login using ADMIN_EMAIL + ADMIN_PASSWORD,\n    # create the dedicated verified admin account. Existing accounts are untouched.\n    admin_email = str(getattr(settings, "ADMIN_EMAIL", "admin@mybeathub.com") or "").strip().lower()\n    admin_password = str(getattr(settings, "ADMIN_PASSWORD", "") or os.getenv("ADMIN_PASSWORD", "")).strip()\n    if user is None and login_identifier == admin_email and admin_password and password == admin_password:\n        user = User(\n            id=str(uuid.uuid4()),\n            email=admin_email,\n            username="admin",\n            hashed_password=hash_password(admin_password),\n            role=UserRole.ADMIN,\n            is_active=True,\n            is_verified=True,\n        )\n        db.add(user)\n        try:\n            db.commit()\n            db.refresh(user)\n        except IntegrityError:\n            db.rollback()\n            user = db.query(User).filter(func.lower(User.email) == admin_email).first()\n'''
+          if 'Production admin bootstrap:' not in text:
+              if marker not in text:
+                  raise SystemExit('login insertion point not found')
+              text = text.replace(marker, injection, 1)
+          auth.write_text(text)
+          PY
+
+      - name: Compile and test
+        run: |
+          python -m compileall -q app
+          python - <<'PY'
+          from pathlib import Path
+          c = Path('app/config.py').read_text()
+          a = Path('app/routers/auth.py').read_text()
+          assert 'ADMIN_PASSWORD: str' in c
+          assert 'Production admin bootstrap:' in a
+          print('Admin bootstrap checks passed')
+          PY
+
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/config.py app/routers/auth.py
+          git diff --cached --quiet || git commit -m 'Bootstrap production admin account from Render secret'
+          git push
