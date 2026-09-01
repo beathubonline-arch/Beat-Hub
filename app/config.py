@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = ""
+    # Dedicated transactional identities under the verified BeatHub domain.
+    EMAIL_VERIFICATION_FROM: str = "BeatHub <no-reply@mybeathub.com>"
+    PASSWORD_RESET_FROM: str = "BeatHub Password Reset <reset-password@mybeathub.com>"
+    SUPPORT_EMAIL: str = "support@mybeathub.com"
 
     # Legacy SMTP settings retained for local/backward compatibility only.
     EMAIL_HOST: str = ""

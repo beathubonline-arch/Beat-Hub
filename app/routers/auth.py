@@ -103,19 +103,21 @@ def _set_verification_code(user: User) -> str:
     return code
 
 
-def _send_email_resend(to_email: str, subject: str, body: str) -> bool:
+def _send_email_resend(to_email: str, subject: str, body: str, sender: str | None = None, reply_to: str | None = None) -> bool:
     api_key = str(getattr(settings, "RESEND_API_KEY", "") or "").strip()
-    sender = str(getattr(settings, "RESEND_FROM", "") or getattr(settings, "EMAIL_FROM", "") or "").strip()
+    sender = str(sender or getattr(settings, "RESEND_FROM", "") or getattr(settings, "EMAIL_FROM", "") or "").strip()
     if not api_key or not sender:
-        logger.error("Resend email delivery is misconfigured: RESEND_API_KEY or RESEND_FROM is missing.")
+        logger.error("Resend email delivery is misconfigured: RESEND_API_KEY or sender is missing.")
         return False
     payload = {"from": sender, "to": [to_email], "subject": subject, "text": body}
+    if reply_to:
+        payload["reply_to"] = reply_to
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": RESEND_USER_AGENT}
     try:
         with httpx.Client(timeout=15.0) as client:
             response = client.post(RESEND_API_URL, json=payload, headers=headers)
         if 200 <= response.status_code < 300:
-            logger.info("Email sent successfully through Resend.")
+            logger.info("Email sent successfully through Resend from configured transactional sender.")
             return True
         error_name = ""
         error_message = ""
@@ -139,22 +141,25 @@ def _send_email_resend(to_email: str, subject: str, body: str) -> bool:
     return False
 
 
-def _send_email(to_email: str, subject: str, body: str) -> bool:
+def _send_email(to_email: str, subject: str, body: str, sender: str | None = None, reply_to: str | None = None) -> bool:
     if not bool(getattr(settings, "EMAIL_ENABLED", False)):
         logger.warning("Email delivery disabled by EMAIL_ENABLED.")
         return False
     provider = str(getattr(settings, "EMAIL_PROVIDER", "resend") or "resend").strip().lower()
-    if provider == "resend": return _send_email_resend(to_email, subject, body)
+    if provider == "resend": return _send_email_resend(to_email, subject, body, sender=sender, reply_to=reply_to)
     logger.error("Unsupported email provider: %s", provider)
     return False
 
 
 def _send_verification_email(email: str, code: str) -> bool:
-    return _send_email(email, "Verify your BeatHub email", "Welcome to BeatHub.\n\n" f"Your verification code is: {code}\n\n" "This code expires in 10 minutes and can only be used once.\n\n" "If you did not create this account, you can ignore this email.")
+    sender = str(getattr(settings, "EMAIL_VERIFICATION_FROM", "") or "BeatHub <no-reply@mybeathub.com>").strip()
+    return _send_email(email, "Verify your BeatHub email", "Welcome to BeatHub.\n\n" f"Your verification code is: {code}\n\n" "This code expires in 10 minutes and can only be used once.\n\n" "If you did not create this account, you can ignore this email.", sender=sender)
 
 
 def _send_password_reset_email(email: str, reset_url: str) -> bool:
-    return _send_email(email, "BeatHub password reset", "We received a request to reset your BeatHub password.\n\n" f"Use this link within 1 hour:\n{reset_url}\n\n" "If you did not request this, you can safely ignore this email.")
+    sender = str(getattr(settings, "PASSWORD_RESET_FROM", "") or "BeatHub Password Reset <reset-password@mybeathub.com>").strip()
+    reply_to = str(getattr(settings, "SUPPORT_EMAIL", "") or "support@mybeathub.com").strip()
+    return _send_email(email, "BeatHub password reset", "We received a request to reset your BeatHub password.\n\n" f"Use this link within 1 hour:\n{reset_url}\n\n" "If you did not request this, you can safely ignore this email.", sender=sender, reply_to=reply_to)
 
 
 def _verification_delivery_error_message() -> str:
