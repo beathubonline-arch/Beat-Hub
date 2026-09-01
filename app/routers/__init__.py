@@ -9,8 +9,11 @@ from . import pages
 from . import creator_merch_integration
 from . import creator_sales_history
 from . import admin_reconciliation
+from . import admin
+from . import admin_paystack_reconciliation
 
 dashboard.router.include_router(creator_sales_history.router)
+admin.router.include_router(admin_paystack_reconciliation.router)
 
 # Register canonical public marketplace discovery before the legacy catalog.
 # /beats remains the compatibility entry point for the Marketplace navigation,
