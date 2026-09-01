@@ -28,12 +28,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     JWT_ALGORITHM: str = "HS256"
 
-    # Immutable BeatHub marketplace rule: 10% platform / 90% creator.
     PLATFORM_COMMISSION_PERCENT: float = 10.0
     PLATFORM_COMMISSION_RATE: float = 10.0
 
-    # Paystack — single customer payment gateway for Kenya.
-    # Paystack Checkout supports cards and Kenya M-PESA/mobile money.
     PAYSTACK_SECRET_KEY: str = ""
     PAYSTACK_PUBLIC_KEY: str = ""
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
@@ -48,12 +45,12 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = ""
-    # Dedicated transactional identities under the verified BeatHub domain.
     EMAIL_VERIFICATION_FROM: str = "BeatHub <no-reply@mybeathub.com>"
     PASSWORD_RESET_FROM: str = "BeatHub Password Reset <reset-password@mybeathub.com>"
     SUPPORT_EMAIL: str = "support@mybeathub.com"
+    ADMIN_EMAIL: str = "admin@mybeathub.com"
+    ADMIN_FROM: str = "BeatHub Admin <admin@mybeathub.com>"
 
-    # Legacy SMTP settings retained for local/backward compatibility only.
     EMAIL_HOST: str = ""
     EMAIL_PORT: int = 587
     EMAIL_USERNAME: str = ""
