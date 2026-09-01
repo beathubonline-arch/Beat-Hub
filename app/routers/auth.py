@@ -31,7 +31,7 @@ RESET_TOKEN_TTL = timedelta(hours=1)
 VERIFICATION_CODE_TTL = timedelta(minutes=10)
 VERIFICATION_MAX_ATTEMPTS = 5
 RESEND_API_URL = "https://api.resend.com/emails"
-RESEND_USER_AGENT = "BeatHub/1.0 (+https://beat-hub-ox42.onrender.com)"
+RESEND_USER_AGENT = f"BeatHub/1.0 (+{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')})"
 
 
 def get_role_name(user: User) -> str:
@@ -231,7 +231,7 @@ def verify_email_submit(request: Request, db: Session = Depends(get_db), email: 
     if not user: return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "The verification code is invalid or has expired.", "success": ""}, status_code=400)
     if user.is_verified: return RedirectResponse(url="/login?success=Your%20email%20is%20already%20verified.%20Please%20log%20in.", status_code=303)
     if not re.fullmatch(r"\d{6}", code_norm): return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Enter the 6-digit verification code.", "success": ""}, status_code=400)
-    if int(getattr(user, "verification_attempts", 0) or 0) >= VERIFICATION_MAX_ATTEMPTS: return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Too many incorrect attempts. Please request a new code.", "success": ""}, status_code=429)
+    if int(getattr(user, "verification_attempts", 0) or 0) >= VERIFICATION_MAX_ATTEMPTS: return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "Too many incorrect attempts. Please request a new code."}, status_code=429)
     expires = getattr(user, "verification_code_expires", None); stored_hash = getattr(user, "verification_code_hash", None)
     if not stored_hash or not expires or expires <= datetime.utcnow(): return templates.TemplateResponse(request, "verify_email.html", {"request": request, "email": email_norm, "error": "This verification code has expired. Please request a new code.", "success": ""}, status_code=400)
     if not hmac.compare_digest(stored_hash, _verification_code_digest(code_norm)):
@@ -249,7 +249,7 @@ def resend_verification_email(request: Request, db: Session = Depends(get_db), e
     delivered = _send_verification_email(email_norm, code)
     if not delivered:
         return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&error={quote(_verification_delivery_error_message(), safe='')}", status_code=303)
-    _store_verification_code(user); db.commit()
+    _store_verification_code(user, code); db.commit()
     return RedirectResponse(url=f"/verify-email?email={quote(email_norm, safe='')}&success=A%20new%20verification%20code%20has%20been%20sent.", status_code=303)
 
 
