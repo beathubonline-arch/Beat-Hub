@@ -7,7 +7,7 @@ from app.database import get_db
 from app.services.paystack_settlement import PaystackSettlementError, reconciliation_summary, reconcile_settlements
 from app.utils.deps import require_admin
 
-router = APIRouter(prefix="/admin/paystack", tags=["admin-paystack-reconciliation"])
+router = APIRouter(prefix="/paystack", tags=["admin-paystack-reconciliation"])
 
 
 @router.get("/reconciliation")
