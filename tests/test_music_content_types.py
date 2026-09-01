@@ -22,7 +22,9 @@ class MusicContentTypeTests(unittest.TestCase):
         source = (ROOT / "app/routers/music_publish.py").read_text(encoding="utf-8")
         self.assertIn("content_types", source)
         upload = (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8")
-        self.assertIn("content_type_radio_", upload)
+        self.assertIn('name="content_types"', upload)
+        self.assertIn('data-kind="beat"', upload)
+        self.assertIn('data-kind="track"', upload)
         self.assertIn('value="beat"', upload)
         self.assertIn('value="track"', upload)
 
@@ -56,9 +58,10 @@ class MusicContentTypeTests(unittest.TestCase):
     def test_upload_template_submits_content_type_per_item(self):
         source = (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8")
         self.assertIn('name="content_types"', source)
-        self.assertIn('value="beat"', source)
-        self.assertIn('value="track"', source)
-        self.assertIn("content_type_radio_", source)
+        self.assertIn('data-kind="beat"', source)
+        self.assertIn('data-kind="track"', source)
+        self.assertIn("content_kind_", source)
+        self.assertIn("select.value=r.dataset.kind", source)
 
     def test_album_template_filters_tracks_by_project_type(self):
         source = (ROOT / "app/templates/upload_album.html").read_text(encoding="utf-8")
