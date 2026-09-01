@@ -11,7 +11,6 @@ from . import creator_sales_history
 from . import admin_reconciliation
 from . import admin
 from . import admin_paystack_reconciliation
-from . import payment_callback_fix
 
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
