@@ -28,7 +28,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           config = Path("app/config.py")
           text = config.read_text()
           old = '''    EMAIL_ENABLED: bool = False\n    EMAIL_PROVIDER: str = "resend"\n    EMAIL_FROM: str = ""\n    RESEND_API_KEY: str = ""\n    RESEND_FROM: str = ""\n'''
