@@ -3,9 +3,10 @@
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from app.models.ledger import WithdrawalRequest
 from app.models.order import Order, OrderStatus
 from app.models.user import User
-from app.services.admin_notifications import notify_new_user, notify_payment
+from app.services.admin_notifications import notify_new_user, notify_payment, notify_withdrawal
 
 _KEY = "beathub_admin_notifications"
 
@@ -31,6 +32,13 @@ def _completed_order(mapper, connection, target):
         _queue(session, f"order:{target.id}", notify_payment, target, "music")
 
 
+@event.listens_for(WithdrawalRequest, "after_insert")
+def _new_withdrawal(mapper, connection, target):
+    session = Session.object_session(target)
+    if session is not None:
+        _queue(session, f"withdrawal:{target.id}", notify_withdrawal, target)
+
+
 @event.listens_for(Session, "after_commit")
 def _send_queued(session: Session):
     bucket = session.info.pop(_KEY, {})
@@ -38,5 +46,4 @@ def _send_queued(session: Session):
         try:
             callback(*args)
         except Exception:
-            # Notification failures must never affect a committed business transaction.
             pass
