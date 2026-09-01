@@ -10,9 +10,9 @@ from app.services import paystack_reconciliation as reconciliation
 
 
 class FakeQuery:
-    def __init__(self, model, scalars=None, rows=None, existing=None):
+    def __init__(self, model, scalar_value=Decimal("0.00"), rows=None, existing=None):
         self.model = model
-        self.scalars = scalars or {}
+        self.scalar_value = scalar_value
         self.rows = rows or []
         self.existing = existing
 
@@ -20,7 +20,7 @@ class FakeQuery:
         return self
 
     def scalar(self):
-        return self.scalars.get(self.model, Decimal("0.00"))
+        return self.scalar_value
 
     def all(self):
         return list(self.rows)
@@ -36,11 +36,22 @@ class FakeDB:
         self.existing = existing
         self.added = []
         self.commits = 0
+        self.aggregate_query_index = 0
 
     def query(self, model):
         if model is PaystackSettlement:
             return FakeQuery(model, rows=self.settlements, existing=self.existing)
-        return FakeQuery(model, scalars=self.scalars)
+
+        # build_reconciliation uses aggregate SQL expressions as the query
+        # target, so the test double maps the first aggregate to payments and
+        # the second aggregate to orders.
+        aggregate_models = (PaymentTransaction, Order)
+        if self.aggregate_query_index < len(aggregate_models):
+            source_model = aggregate_models[self.aggregate_query_index]
+            self.aggregate_query_index += 1
+            return FakeQuery(model, scalar_value=self.scalars.get(source_model, Decimal("0.00")))
+
+        return FakeQuery(model)
 
     def add(self, value):
         self.added.append(value)
@@ -76,22 +87,45 @@ class PaystackReconciliationTests(unittest.TestCase):
     def test_sync_is_idempotent(self):
         class FakeResponse:
             status_code = 200
+
             def json(self):
-                return {"data": [{"id": "stl_001", "status": "success", "currency": "KES", "total_amount": 90000, "settlement_date": "2026-09-01T12:00:00Z"}]}
+                return {
+                    "data": [
+                        {
+                            "id": "stl_001",
+                            "status": "success",
+                            "currency": "KES",
+                            "total_amount": 90000,
+                            "settlement_date": "2026-09-01T12:00:00Z",
+                        }
+                    ]
+                }
+
             def raise_for_status(self):
                 return None
 
         class FakeClient:
-            async def __aenter__(self): return self
-            async def __aexit__(self, *args): return False
-            async def get(self, *args, **kwargs): return FakeResponse()
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def get(self, *args, **kwargs):
+                return FakeResponse()
 
         db = FakeDB()
-        with patch.object(reconciliation.httpx, "AsyncClient", FakeClient), patch.object(reconciliation.settings, "PAYSTACK_SECRET_KEY", "test-key"):
+        with patch.object(reconciliation.httpx, "AsyncClient", FakeClient), patch.object(
+            reconciliation.settings, "PAYSTACK_SECRET_KEY", "test-key"
+        ):
             first = asyncio.run(reconciliation.sync_paystack_settlements(db, max_pages=1))
             self.assertEqual(first["imported"], 1)
             self.assertEqual(len(db.added), 1)
             db.existing = db.added[0]
+
             second = asyncio.run(reconciliation.sync_paystack_settlements(db, max_pages=1))
             self.assertEqual(second["imported"], 0)
             self.assertEqual(second["updated"], 1)
