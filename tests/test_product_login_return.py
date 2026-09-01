@@ -66,7 +66,8 @@ class ProductLoginReturnTests(unittest.TestCase):
     def test_product_entry_points_preserve_the_correct_destination(self):
         checkout = (ROOT / "app" / "routers" / "checkout.py").read_text(encoding="utf-8")
         merch = (ROOT / "app" / "templates" / "merchandise_public.html").read_text(encoding="utf-8")
-        self.assertIn('next_url=f"/checkout/track/{quote(slug,safe=\'\')}"', checkout)
+        self.assertIn('next_url = f"/checkout/track/{quote(slug, safe=\'\')}"', checkout)
+        self.assertIn('quote(slug, safe=\'\')', checkout)
         self.assertIn('/login?next=/merch/{{ product.slug }}', merch)
 
     def test_login_sets_short_lived_return_cookie(self):
