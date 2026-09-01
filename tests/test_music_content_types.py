@@ -60,7 +60,7 @@ class MusicContentTypeTests(unittest.TestCase):
         self.assertIn('name="content_types"', source)
         self.assertIn('data-kind="beat"', source)
         self.assertIn('data-kind="track"', source)
-        self.assertIn("content_kind_", source)
+        self.assertIn("content_type_radio_", source)
         self.assertIn("select.value=r.dataset.kind", source)
 
     def test_album_template_filters_tracks_by_project_type(self):
