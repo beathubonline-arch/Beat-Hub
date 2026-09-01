@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     SECRET_KEY: Optional[str] = None
     SESSION_SECRET: Optional[str] = None
     DATABASE_URL: str = "sqlite:///./beathub.db"
-    BASE_URL: str = "http://localhost:8000"
+    BASE_URL: str = "https://mybeathub.com"
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     JWT_ALGORITHM: str = "HS256"
