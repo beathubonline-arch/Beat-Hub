@@ -15,18 +15,8 @@ def notify_admin(subject: str, body: str) -> bool:
     if not recipient or not api_key or not sender or not bool(getattr(settings, "EMAIL_ENABLED", False)):
         logger.error("Admin notification skipped: email configuration is incomplete.")
         return False
-    payload = {
-        "from": sender,
-        "to": [recipient],
-        "subject": subject,
-        "text": body,
-        "reply_to": str(getattr(settings, "SUPPORT_EMAIL", "") or "support@mybeathub.com").strip(),
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "User-Agent": f"BeatHub/1.0 (+{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')})",
-    }
+    payload = {"from": sender, "to": [recipient], "subject": subject, "text": body, "reply_to": str(getattr(settings, "SUPPORT_EMAIL", "") or "support@mybeathub.com").strip()}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": f"BeatHub/1.0 (+{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')})"}
     try:
         with httpx.Client(timeout=15.0) as client:
             response = client.post(RESEND_API_URL, json=payload, headers=headers)
@@ -45,3 +35,7 @@ def notify_new_user(user) -> bool:
 
 def notify_payment(order, payment_type: str = "music") -> bool:
     return notify_admin(f"BeatHub — Payment completed ({payment_type})", "A payment has been successfully verified and fulfilled.\n\n" f"Order: {getattr(order, 'order_number', getattr(order, 'id', ''))}\nAmount: {getattr(order, 'gross_amount', getattr(order, 'total_amount', ''))} {getattr(order, 'currency', 'KES')}\nBuyer ID: {getattr(order, 'buyer_id', '')}\nStatus: {getattr(getattr(order, 'status', None), 'value', getattr(order, 'status', ''))}\n")
+
+
+def notify_withdrawal(withdrawal) -> bool:
+    return notify_admin("BeatHub — New creator withdrawal request", "A creator withdrawal request requires attention.\n\n" f"Request ID: {getattr(withdrawal, 'id', '')}\nAmount: KSh {getattr(withdrawal, 'amount', '')}\nPhone: {getattr(withdrawal, 'phone_number', '')}\nStatus: {getattr(withdrawal, 'status', '')}\nCreator profile: {getattr(withdrawal, 'creator_profile_id', '')}\n")
