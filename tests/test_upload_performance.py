@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.config import Settings
 from app.services import storage
 
 
@@ -35,6 +36,10 @@ class FakeFile:
 
 def upload_file(data=b"ID3" + b"x" * 100, filename="beat.mp3"):
     return SimpleNamespace(filename=filename, file=FakeFile(data))
+
+
+def test_default_upload_limit_is_1gb():
+    assert Settings().MAX_UPLOAD_MB == 1000
 
 
 def test_stream_size_does_not_consume_upload():
