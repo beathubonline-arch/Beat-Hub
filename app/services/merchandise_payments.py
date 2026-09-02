@@ -58,10 +58,20 @@ def complete_merchandise_payment(db: Session, order_id: str, reference: str, dat
 
 
 def find_merchandise_order_id(db: Session, reference: str, metadata: dict | None = None) -> str | None:
+    """Resolve a merchandise order without interfering with music-only flows.
+
+    Some callback callers/tests provide a lightweight DB abstraction that only
+    implements the ORM query API. In that case there is no merchandise SQL
+    table to inspect, so the lookup must safely return None and let the normal
+    music-payment path continue.
+    """
     metadata = metadata or {}
     order_id = metadata.get("beathub_merchandise_order_id")
     if order_id:
         return str(order_id)
+
+    if not hasattr(db, "execute"):
+        return None
 
     row = db.execute(
         text(f"SELECT id FROM {MERCH_ORDER_TABLE} WHERE checkout_request_id=:reference LIMIT 1"),
