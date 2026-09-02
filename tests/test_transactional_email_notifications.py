@@ -9,6 +9,8 @@ from app.services.transactional_email_notifications import (
     notify_completed_music_sale,
     notify_creator_sale,
     notify_failed_payment,
+    notify_withdrawal_requested,
+    notify_withdrawal_status,
 )
 
 
@@ -27,16 +29,9 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.addCleanup(self.settings_patch.stop)
 
     def test_buyer_confirmation_uses_stable_idempotency_key(self):
-        order = SimpleNamespace(
-            id="order-123",
-            order_number="BH-123",
-            gross_amount=Decimal("1500.00"),
-            currency="KES",
-            buyer=SimpleNamespace(email="buyer@example.com", username="buyer"),
-        )
+        order = SimpleNamespace(id="order-123", order_number="BH-123", gross_amount=Decimal("1500.00"), currency="KES", buyer=SimpleNamespace(email="buyer@example.com", username="buyer"))
         with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
             self.assertTrue(notify_buyer_purchase(order, "Midnight Beat", "DeeVeevo"))
-
         args, kwargs = send.call_args
         self.assertEqual(args[2], "buyer@example.com")
         self.assertEqual(args[3], "BeatHub — Your purchase is complete")
@@ -45,18 +40,9 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
 
     def test_creator_sale_email_contains_earnings(self):
-        order = SimpleNamespace(
-            id="order-456",
-            order_number="BH-456",
-            gross_amount=Decimal("2000.00"),
-            net_amount=Decimal("1800.00"),
-            currency="KES",
-        )
+        order = SimpleNamespace(id="order-456", order_number="BH-456", gross_amount=Decimal("2000.00"), net_amount=Decimal("1800.00"), currency="KES")
         with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
-            self.assertTrue(
-                notify_creator_sale(order, "Summer Beat", "Producer One", "creator@example.com")
-            )
-
+            self.assertTrue(notify_creator_sale(order, "Summer Beat", "Producer One", "creator@example.com"))
         args, kwargs = send.call_args
         self.assertEqual(args[2], "creator@example.com")
         self.assertEqual(args[3], "BeatHub — You made a sale")
@@ -65,23 +51,8 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertIn("idempotency_key", kwargs)
 
     def test_completed_sale_sends_both_recipient_emails(self):
-        with patch(
-            "app.services.transactional_email_notifications.send_email",
-            return_value=True,
-        ) as send:
-            result = notify_completed_music_sale(
-                "order-789",
-                "BH-789",
-                Decimal("1500.00"),
-                Decimal("1350.00"),
-                "KES",
-                "buyer@example.com",
-                "buyer",
-                "creator@example.com",
-                "Producer One",
-                "New Beat",
-            )
-
+        with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
+            result = notify_completed_music_sale("order-789", "BH-789", Decimal("1500.00"), Decimal("1350.00"), "KES", "buyer@example.com", "buyer", "creator@example.com", "Producer One", "New Beat")
         self.assertEqual(result, (True, True))
         self.assertEqual(send.call_count, 2)
         recipients = {call.args[2] for call in send.call_args_list}
@@ -93,7 +64,6 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
     def test_failed_payment_email_is_buyer_only_and_idempotent(self):
         with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
             self.assertTrue(notify_failed_payment("buyer@example.com", "BH-999", "Cancelled by customer"))
-
         args, kwargs = send.call_args
         self.assertEqual(args[2], "buyer@example.com")
         self.assertEqual(args[3], "BeatHub — Payment not completed")
@@ -101,32 +71,40 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
 
     def test_completed_merch_sale_sends_buyer_and_creator_emails(self):
-        with patch(
-            "app.services.transactional_email_notifications.send_email",
-            return_value=True,
-        ) as send:
-            result = notify_completed_merch_sale(
-                "merch-order-1",
-                "BMABC123",
-                Decimal("3000.00"),
-                "buyer@example.com",
-                "Buyer One",
-                "creator@example.com",
-                "Creator One",
-                "Creator Tee",
-                quantity=2,
-            )
-
+        with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
+            result = notify_completed_merch_sale("merch-order-1", "BMABC123", Decimal("3000.00"), "buyer@example.com", "Buyer One", "creator@example.com", "Creator One", "Creator Tee", quantity=2)
         self.assertEqual(result, (True, True))
         self.assertEqual(send.call_count, 2)
-        recipients = [call.args[2] for call in send.call_args_list]
-        self.assertEqual(recipients, ["buyer@example.com", "creator@example.com"])
+        self.assertEqual([call.args[2] for call in send.call_args_list], ["buyer@example.com", "creator@example.com"])
         self.assertEqual(send.call_args_list[0].args[3], "BeatHub — Your merch order is confirmed")
         self.assertEqual(send.call_args_list[1].args[3], "BeatHub — You made a merch sale")
         self.assertIn("Quantity: 2", send.call_args_list[0].args[4])
         self.assertIn("KES 3,000.00", send.call_args_list[0].args[4])
-        keys = [call.kwargs["idempotency_key"] for call in send.call_args_list]
-        self.assertEqual(len(set(keys)), 2)
+        self.assertEqual(len({call.kwargs["idempotency_key"] for call in send.call_args_list}), 2)
+
+    def test_withdrawal_request_confirmation(self):
+        with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
+            self.assertTrue(notify_withdrawal_requested("wd-1", Decimal("1200.00"), "0712345678", "creator@example.com", "Creator One"))
+        args, kwargs = send.call_args
+        self.assertEqual(args[2], "creator@example.com")
+        self.assertEqual(args[3], "BeatHub — Withdrawal request received")
+        self.assertIn("KSh 1,200.00", args[4])
+        self.assertIn("0712345678", args[4])
+        self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
+
+    def test_withdrawal_status_subjects_and_details(self):
+        for status, subject in {
+            "approved": "BeatHub — Withdrawal approved",
+            "processing": "BeatHub — Withdrawal processing",
+            "paid": "BeatHub — Withdrawal paid",
+            "rejected": "BeatHub — Withdrawal rejected",
+        }.items():
+            with self.subTest(status=status), patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
+                self.assertTrue(notify_withdrawal_status("wd-2", Decimal("900.00"), "0712345678", status, "creator@example.com", "Creator One", "Admin note", "PAY-123"))
+                self.assertEqual(send.call_args.args[3], subject)
+                self.assertIn("Status: " + status.upper(), send.call_args.args[4])
+                self.assertIn("PAY-123", send.call_args.args[4])
+                self.assertIn("Admin note", send.call_args.args[4])
 
 
 if __name__ == "__main__":
