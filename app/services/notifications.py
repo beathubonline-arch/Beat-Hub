@@ -20,7 +20,7 @@ def create_notification(user_id, event_key, type_, title, message, link=None):
             return False
         db.add(Notification(user_id=user_id, event_key=event_key, type=str(type_ or "general")[:60], title=str(title)[:180], message=str(message), link=(str(link)[:500] if link else None)))
         db.commit()
-        return True
+        created = True
     except IntegrityError:
         db.rollback()
         return False
@@ -29,6 +29,15 @@ def create_notification(user_id, event_key, type_, title, message, link=None):
         return False
     finally:
         db.close()
+
+    # Push delivery is deliberately best-effort. A provider/browser failure must
+    # never undo or delay the persistent in-app notification.
+    try:
+        from app.services.web_push import send_push_to_user
+        send_push_to_user(user_id, str(title)[:180], str(message), link)
+    except Exception:
+        pass
+    return created
 
 
 def create_notifications(recipients, event_key, type_, title, message, link=None):
