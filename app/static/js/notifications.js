@@ -227,16 +227,89 @@
     return true;
   }
 
+  function initCreatorMerchFolders() {
+    // Only operate on the public merchandise catalogue. Detail pages do not
+    // contain .bh-merch-grid, so purchase/checkout UI is untouched.
+    var grid = document.querySelector('.bh-merch-grid');
+    if (!grid || grid.dataset.creatorFoldersReady === 'true') return false;
+
+    var cards = Array.prototype.slice.call(grid.querySelectorAll('.bh-merch-card'));
+    if (!cards.length) return false;
+
+    var groups = new Map();
+    cards.forEach(function (card) {
+      var nameNode = card.querySelector('.bh-merch-creator');
+      var creator = nameNode ? nameNode.textContent.trim() : 'BeatHub Creator';
+      if (!creator) creator = 'BeatHub Creator';
+      if (!groups.has(creator)) groups.set(creator, []);
+      groups.get(creator).push(card);
+    });
+
+    var organized = document.createElement('div');
+    organized.className = 'bh-merch-organized';
+
+    groups.forEach(function (creatorCards, creator) {
+      if (creatorCards.length === 1) {
+        var single = document.createElement('div');
+        single.className = 'bh-merch-singleton';
+        single.appendChild(creatorCards[0]);
+        organized.appendChild(single);
+        return;
+      }
+
+      var folder = document.createElement('section');
+      folder.className = 'bh-merch-creator-folder';
+
+      var head = document.createElement('div');
+      head.className = 'bh-merch-folder-head';
+      var title = document.createElement('div');
+      title.className = 'bh-merch-folder-title';
+      var icon = document.createElement('span');
+      icon.className = 'bh-merch-folder-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = '✦';
+      var copy = document.createElement('span');
+      var name = document.createElement('span');
+      name.className = 'bh-merch-folder-name';
+      name.textContent = creator;
+      var count = document.createElement('span');
+      count.className = 'bh-merch-folder-count';
+      count.textContent = creatorCards.length + ' merch items';
+      copy.appendChild(name);
+      copy.appendChild(count);
+      title.appendChild(icon);
+      title.appendChild(copy);
+
+      var newest = document.createElement('span');
+      newest.className = 'bh-merch-folder-latest';
+      newest.textContent = 'Newest first';
+      head.appendChild(title);
+      head.appendChild(newest);
+
+      var cardGrid = document.createElement('div');
+      cardGrid.className = 'bh-merch-folder-items';
+      creatorCards.forEach(function (card) { cardGrid.appendChild(card); });
+      folder.appendChild(head);
+      folder.appendChild(cardGrid);
+      organized.appendChild(folder);
+    });
+
+    grid.replaceWith(organized);
+    organized.dataset.creatorFoldersReady = 'true';
+    return true;
+  }
+
   function init() {
     initNotifications();
     if (initBeatCreatorFolders()) return;
+    if (initCreatorMerchFolders()) return;
 
     // Give server-rendered/late-inserted marketplace cards a short second
     // chance without polling the page indefinitely.
     var attempts = 0;
     var retry = window.setInterval(function () {
       attempts += 1;
-      if (initBeatCreatorFolders() || attempts >= 10) window.clearInterval(retry);
+      if (initBeatCreatorFolders() || initCreatorMerchFolders() || attempts >= 10) window.clearInterval(retry);
     }, 100);
   }
 
