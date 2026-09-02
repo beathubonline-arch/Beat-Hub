@@ -23,6 +23,7 @@
       '<div class="bh-notification-dropdown" role="dialog" aria-label="Recent notifications">' +
         '<div class="bh-notification-head"><span class="bh-notification-title">Notifications</span><button type="button" class="bh-notification-mark">Mark all read</button></div>' +
         '<div class="bh-notification-list"><div class="bh-notification-empty">Loading notifications…</div></div>' +
+        '<div class="bh-notification-push" hidden><span>Get important BeatHub alerts</span><button type="button">Enable</button></div>' +
         '<div class="bh-notification-foot"><a href="/notifications">View all notifications</a></div>' +
       '</div>';
 
@@ -31,6 +32,8 @@
     var dropdown = wrap.querySelector('.bh-notification-dropdown');
     var list = wrap.querySelector('.bh-notification-list');
     var markAll = wrap.querySelector('.bh-notification-mark');
+    var pushRow = wrap.querySelector('.bh-notification-push');
+    var pushButton = pushRow.querySelector('button');
     var timer = null;
 
     function close() {
@@ -98,10 +101,30 @@
       });
     }
 
+    function refreshPushState() {
+      if (!window.BeatHubPush || !window.BeatHubPush.getState) return;
+      window.BeatHubPush.getState().then(function (state) {
+        if (!state.enabled || state.subscribed || state.permission === 'denied') {
+          pushRow.hidden = true;
+          return;
+        }
+        pushRow.hidden = false;
+      }).catch(function () {});
+    }
+
     bell.addEventListener('click', function () {
       var open = !dropdown.classList.contains('open');
-      if (open) { dropdown.classList.add('open'); bell.setAttribute('aria-expanded', 'true'); refresh(); }
+      if (open) { dropdown.classList.add('open'); bell.setAttribute('aria-expanded', 'true'); refresh(); refreshPushState(); }
       else close();
+    });
+
+    pushButton.addEventListener('click', function () {
+      if (!window.BeatHubPush || !window.BeatHubPush.enable) return;
+      pushButton.disabled = true;
+      window.BeatHubPush.enable().then(function (ok) {
+        pushButton.disabled = false;
+        if (ok) pushRow.hidden = true;
+      }).catch(function () { pushButton.disabled = false; });
     });
 
     markAll.addEventListener('click', function () {
