@@ -76,7 +76,7 @@ class TrackMarketplaceTests(unittest.TestCase):
         template = (ROOT / "app/templates/marketplace.html").read_text(encoding="utf-8")
         self.assertIn("collection-grid", template)
         self.assertIn("standalone_merch", template)
-        self.assertIn("/store/{{", template)
+        self.assertIn("store_url", template)
 
     def test_dedicated_category_templates_exist(self):
         for relative in (
