@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     SUPPORT_EMAIL: str = "support@mybeathub.com"
     ADMIN_EMAIL: str = "admin@mybeathub.com"
     ADMIN_FROM: str = "BeatHub Admin <admin@mybeathub.com>"
+    ADMIN_PASSWORD: str = ""
 
     EMAIL_HOST: str = ""
     EMAIL_PORT: int = 587
