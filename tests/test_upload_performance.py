@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -53,12 +54,13 @@ def test_wrong_audio_content_is_rejected():
         storage._validate(file, {".mp3"})
 
 
-def test_r2_upload_uses_worker_thread(monkeypatch):
+def test_r2_upload_uses_worker_thread_and_multipart_config(monkeypatch):
     calls = []
+    main_thread = threading.get_ident()
 
     class FakeClient:
         def upload_fileobj(self, *args, **kwargs):
-            calls.append((args, kwargs))
+            calls.append((threading.get_ident(), args, kwargs))
 
     monkeypatch.setattr(storage, "_r2_client", lambda: FakeClient())
     monkeypatch.setattr(storage, "_r2_bucket", lambda: "beathub")
@@ -74,7 +76,14 @@ def test_r2_upload_uses_worker_thread(monkeypatch):
 
     assert result.startswith("r2://beathub/audio/")
     assert len(calls) == 1
-    assert calls[0][1]["ExtraArgs"]["ContentType"] == "audio/mpeg"
+    thread_id, _, kwargs = calls[0]
+    assert thread_id != main_thread
+    assert kwargs["ExtraArgs"]["ContentType"] == "audio/mpeg"
+    transfer_config = kwargs["Config"]
+    assert transfer_config.multipart_threshold == 8 * 1024 * 1024
+    assert transfer_config.multipart_chunksize == 8 * 1024 * 1024
+    assert transfer_config.max_concurrency == 10
+    assert transfer_config.use_threads is True
 
 
 def test_upload_page_has_real_progress_and_duplicate_submit_protection():
