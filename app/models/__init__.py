@@ -5,6 +5,7 @@ from app.models.order import Order, OrderStatus, License
 from app.models.payment import PaymentTransaction, PaymentStatus
 from app.models.paystack_settlement import PaystackSettlement, PaystackSettlementTransaction
 from app.models.notification import Notification
+from app.models.push_subscription import PushSubscription
 from app.models.ledger import (
     CreatorLedgerEntry,
     PlatformLedgerEntry,
@@ -17,6 +18,6 @@ from app.models.ledger import (
 __all__ = [
     "User", "UserRole", "Profile", "Track", "Album", "AlbumTrack", "SalesModel", "ProductCurrency",
     "Order", "OrderStatus", "License", "PaymentTransaction", "PaymentStatus", "PaystackSettlement", "PaystackSettlementTransaction",
-    "Notification", "CreatorLedgerEntry", "PlatformLedgerEntry", "WithdrawalRequest", "WithdrawalStatus",
+    "Notification", "PushSubscription", "CreatorLedgerEntry", "PlatformLedgerEntry", "WithdrawalRequest", "WithdrawalStatus",
     "AdminWithdrawal", "AdminWithdrawalStatus",
 ]
