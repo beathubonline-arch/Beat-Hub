@@ -75,6 +75,8 @@
 .bh-merch-folder-items .bh-merch-card:hover{transform:translateY(-3px)}
 .bh-merch-singleton{min-width:0}
 .bh-merch-singleton .bh-merch-card{width:100%;max-width:300px;margin:0 auto}
-@media(max-width:900px){.bh-merch-organized{grid-template-columns:1fr}.bh-merch-folder-items{max-width:680px}}
-@media(max-width:560px){.bh-merch-organized{gap:14px}.bh-merch-folder-head{padding:14px}.bh-merch-folder-items{grid-template-columns:1fr;max-width:330px;padding:12px}.bh-merch-folder-items .bh-merch-card{max-width:310px}.bh-merch-folder-latest{display:none}.bh-merch-singleton .bh-merch-card{max-width:330px}}
+/* Keep single-creator products in a clean marketplace grid when no folders exist. */
+.bh-merch-organized:not(:has(.bh-merch-creator-folder)){grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:900px){.bh-merch-organized{grid-template-columns:1fr}.bh-merch-folder-items{max-width:680px}.bh-merch-organized:not(:has(.bh-merch-creator-folder)){grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.bh-merch-organized{gap:14px}.bh-merch-folder-head{padding:14px}.bh-merch-folder-items{grid-template-columns:1fr;max-width:330px;padding:12px}.bh-merch-folder-items .bh-merch-card{max-width:310px}.bh-merch-folder-latest{display:none}.bh-merch-singleton .bh-merch-card{max-width:330px}.bh-merch-organized:not(:has(.bh-merch-creator-folder)){grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.bh-merch-folder-items .bh-merch-card{transition:none}}
