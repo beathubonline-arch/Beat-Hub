@@ -66,10 +66,9 @@ class Settings(BaseSettings):
     R2_PUBLIC_URL_EXPIRES: int = 3600
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
-    # Audio masters can be much larger than 50MB. Keep the application default
-    # high enough for lossless WAV/FLAC uploads while allowing deployment
-    # operators to lower it explicitly through MAX_UPLOAD_MB if required.
-    MAX_UPLOAD_MB: int = 500
+    # Audio masters can be large lossless files. The default application
+    # limit is 1 GB; deployments can explicitly lower MAX_UPLOAD_MB if needed.
+    MAX_UPLOAD_MB: int = 1000
 
     @property
     def r2_enabled(self) -> bool:
