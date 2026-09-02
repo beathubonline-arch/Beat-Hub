@@ -29,3 +29,14 @@
 .bh-notification-foot a:hover{background:rgba(212,175,55,.07)}
 @media(max-width:720px){.bh-notification{margin-right:4px}.bh-notification-dropdown{position:fixed;top:64px;right:14px;width:calc(100vw - 28px);transform-origin:top right}.bh-notification-list{max-height:min(55vh,360px)}}
 @media(prefers-reduced-motion:reduce){.bh-notification-bell,.bh-notification-dropdown{transition:none}}
+
+/* Consistent premium sizing for ungrouped marketplace grids such as Hot Picks. */
+.market-grid{align-items:start}
+.market-grid .beat-card{width:100%;min-width:0;max-width:300px;margin:0 auto;align-self:start;overflow:hidden}
+.market-grid .beat-card .artwork{width:100%;height:auto;aspect-ratio:1/1;min-height:0;max-height:none;overflow:hidden}
+.market-grid .beat-card .artwork img,.market-grid .beat-card .artwork-fallback{display:block;width:100%;height:100%;min-width:0;min-height:0;max-width:none;max-height:none;aspect-ratio:1/1;object-fit:cover;object-position:center}
+.market-grid .beat-card .card-body{min-height:142px;display:flex;flex-direction:column}
+.market-grid .beat-card .meta-row{margin-top:auto}
+@media(max-width:1050px){.market-grid .beat-card{max-width:300px}}
+@media(max-width:760px){.market-grid .beat-card{max-width:320px}}
+@media(max-width:520px){.market-grid .beat-card{max-width:340px}}
