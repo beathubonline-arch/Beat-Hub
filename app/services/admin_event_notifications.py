@@ -1,6 +1,6 @@
 """Post-commit notifications for important BeatHub business events."""
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
 
 from app.models.ledger import WithdrawalRequest
@@ -25,11 +25,23 @@ def _new_user(mapper, connection, target):
 
 @event.listens_for(Order, "after_update")
 def _completed_order(mapper, connection, target):
-    if getattr(target, "status", None) != OrderStatus.COMPLETED:
+    """Queue only the pending/failed/rejected -> completed transition."""
+    state = inspect(target)
+    history = state.attrs.status.history
+    if not history.has_changes() or target.status != OrderStatus.COMPLETED:
         return
+
     session = Session.object_session(target)
-    if session is not None:
-        _queue(session, f"order:{target.id}", notify_payment, target, "music")
+    if session is None:
+        return
+
+    previous = history.deleted[0] if history.deleted else None
+    if previous == OrderStatus.COMPLETED:
+        return
+
+    # Orders in this model represent music purchases. Merchandise payments
+    # use their own payment service and are not represented by Order.
+    _queue(session, f"order:{target.id}", notify_payment, target, "music")
 
 
 @event.listens_for(WithdrawalRequest, "after_insert")
@@ -41,9 +53,11 @@ def _new_withdrawal(mapper, connection, target):
 
 @event.listens_for(Session, "after_commit")
 def _send_queued(session: Session):
+    """Send after the transaction commits so email can never roll it back."""
     bucket = session.info.pop(_KEY, {})
     for callback, args in bucket.values():
         try:
             callback(*args)
         except Exception:
+            # Notification failure must never break the already-committed action.
             pass
