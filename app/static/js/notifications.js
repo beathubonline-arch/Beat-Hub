@@ -3,7 +3,7 @@
 
   function initNotifications() {
     var nav = document.querySelector('.nav-actions');
-    if (!nav) return;
+    if (!nav || !nav.querySelector('form[action="/logout"]')) return;
 
     var wrap = document.querySelector('[data-notification-center]');
     if (!wrap) {
