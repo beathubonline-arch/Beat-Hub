@@ -7,6 +7,7 @@ from app.services.transactional_email_notifications import (
     notify_buyer_purchase,
     notify_completed_music_sale,
     notify_creator_sale,
+    notify_failed_payment,
 )
 
 
@@ -40,7 +41,6 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertEqual(args[3], "BeatHub — Your purchase is complete")
         self.assertIn("Midnight Beat", args[4])
         self.assertIn("1500.00", args[4])
-        self.assertIn("idempotency_key", kwargs)
         self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
 
     def test_creator_sale_email_contains_earnings(self):
@@ -61,7 +61,6 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertEqual(args[3], "BeatHub — You made a sale")
         self.assertIn("KES 1,800.00", args[4])
         self.assertIn("Summer Beat", args[4])
-        self.assertIn("Idempotency-Key", "idempotency-key-placeholder".replace(" ", "")) if False else None
         self.assertIn("idempotency_key", kwargs)
 
     def test_completed_sale_sends_both_recipient_emails(self):
@@ -89,6 +88,16 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         keys = [call.kwargs["idempotency_key"] for call in send.call_args_list]
         self.assertEqual(len(keys), 2)
         self.assertEqual(len(set(keys)), 2)
+
+    def test_failed_payment_email_is_buyer_only_and_idempotent(self):
+        with patch("app.services.transactional_email_notifications.send_email", return_value=True) as send:
+            self.assertTrue(notify_failed_payment("buyer@example.com", "BH-999", "Cancelled by customer"))
+
+        args, kwargs = send.call_args
+        self.assertEqual(args[2], "buyer@example.com")
+        self.assertEqual(args[3], "BeatHub — Payment not completed")
+        self.assertIn("Cancelled by customer", args[4])
+        self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
 
 
 if __name__ == "__main__":
