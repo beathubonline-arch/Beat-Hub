@@ -1,4 +1,4 @@
-"""Buyer/creator transactional email notifications for completed music sales."""
+"""Buyer/creator transactional email notifications for BeatHub sales."""
 
 from __future__ import annotations
 
@@ -61,48 +61,36 @@ def _deliver(to_email: str, subject: str, body: str, event_key: str) -> bool:
 
 
 def notify_buyer_purchase(order, item_name: str, creator_name: str) -> bool:
-    """Send a purchase confirmation to the buyer after payment is committed."""
+    """Send a music purchase confirmation to the buyer."""
     buyer = getattr(order, "buyer", None)
     email = getattr(buyer, "email", "")
     order_id = str(getattr(order, "id", ""))
     order_number = getattr(order, "order_number", order_id)
     amount = _money(getattr(order, "gross_amount", ""), getattr(order, "currency", "KES"))
     dashboard_url = f"{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/account"
-
     body = (
         f"Hi {getattr(buyer, 'username', '') or 'there'},\n\n"
         "Your BeatHub purchase was completed successfully.\n\n"
-        f"Item: {item_name}\n"
-        f"Creator: {creator_name}\n"
-        f"Order: {order_number}\n"
-        f"Amount: {amount}\n\n"
+        f"Item: {item_name}\nCreator: {creator_name}\nOrder: {order_number}\nAmount: {amount}\n\n"
         "Your purchase and license are now recorded on your BeatHub account.\n"
         f"Account: {dashboard_url}\n\n"
-        "Thank you for supporting independent creators on BeatHub.\n\n"
-        "BeatHub Support"
+        "Thank you for supporting independent creators on BeatHub.\n\nBeatHub Support"
     )
     return _deliver(email, "BeatHub — Your purchase is complete", body, f"buyer-purchase:{order_id}")
 
 
 def notify_creator_sale(order, item_name: str, creator_name: str, creator_email: str) -> bool:
-    """Notify the creator that a sale was successfully completed."""
+    """Notify a music creator that a sale was successfully completed."""
     order_id = str(getattr(order, "id", ""))
     order_number = getattr(order, "order_number", order_id)
     gross = _money(getattr(order, "gross_amount", ""), getattr(order, "currency", "KES"))
     net = _money(getattr(order, "net_amount", ""), getattr(order, "currency", "KES"))
     dashboard_url = f"{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/dashboard"
-
     body = (
-        f"Hi {creator_name or 'Creator'},\n\n"
-        "Good news — you made a sale on BeatHub.\n\n"
-        f"Item: {item_name}\n"
-        f"Order: {order_number}\n"
-        f"Customer amount: {gross}\n"
-        f"Your earnings: {net}\n\n"
+        f"Hi {creator_name or 'Creator'},\n\nGood news — you made a sale on BeatHub.\n\n"
+        f"Item: {item_name}\nOrder: {order_number}\nCustomer amount: {gross}\nYour earnings: {net}\n\n"
         "The payment has been verified and your creator earnings have been recorded.\n"
-        f"Creator dashboard: {dashboard_url}\n\n"
-        "Keep creating.\n\n"
-        "BeatHub"
+        f"Creator dashboard: {dashboard_url}\n\nKeep creating.\n\nBeatHub"
     )
     return _deliver(
         creator_email,
@@ -115,10 +103,8 @@ def notify_creator_sale(order, item_name: str, creator_name: str, creator_email:
 def notify_failed_payment(email: str, order_number: str, reason: str = "") -> bool:
     """Notify a buyer when a payment is verified as failed."""
     body = (
-        "Hi,\n\n"
-        "Your BeatHub payment could not be completed. No successful purchase was recorded.\n\n"
-        f"Order: {order_number}\n"
-        f"Reason: {reason or 'The payment was unsuccessful.'}\n\n"
+        "Hi,\n\nYour BeatHub payment could not be completed. No successful purchase was recorded.\n\n"
+        f"Order: {order_number}\nReason: {reason or 'The payment was unsuccessful.'}\n\n"
         "You can try the purchase again from BeatHub. If you believe you were charged, please contact support with your order number.\n\n"
         "BeatHub Support"
     )
@@ -148,7 +134,51 @@ def notify_completed_music_sale(
     order.net_amount = net_amount
     order.currency = currency
     order.buyer = type("Buyer", (), {"email": buyer_email, "username": buyer_name})()
+    return (
+        notify_buyer_purchase(order, item_name, creator_name),
+        notify_creator_sale(order, item_name, creator_name, creator_email),
+    )
 
-    buyer_sent = notify_buyer_purchase(order, item_name, creator_name)
-    creator_sent = notify_creator_sale(order, item_name, creator_name, creator_email)
+
+def notify_completed_merch_sale(
+    order_id: str,
+    order_number: str,
+    total_amount: Any,
+    buyer_email: str,
+    buyer_name: str,
+    creator_email: str,
+    creator_name: str,
+    product_name: str,
+    quantity: int = 1,
+    currency: str = "KES",
+) -> tuple[bool, bool]:
+    """Deliver buyer confirmation and creator sale notice for paid merchandise."""
+    buyer_body = (
+        f"Hi {buyer_name or 'there'},\n\nYour BeatHub merchandise order has been paid successfully.\n\n"
+        f"Product: {product_name}\nQuantity: {quantity}\nCreator: {creator_name or 'BeatHub Creator'}\n"
+        f"Order: {order_number}\nTotal: {_money(total_amount, currency)}\n\n"
+        "Your order is now recorded. The creator will handle fulfillment according to their store arrangements.\n\n"
+        "BeatHub Support"
+    )
+    buyer_sent = _deliver(
+        buyer_email,
+        "BeatHub — Your merch order is confirmed",
+        buyer_body,
+        f"merch-buyer-purchase:{order_id}",
+    )
+
+    creator_body = (
+        f"Hi {creator_name or 'Creator'},\n\nYou made a merchandise sale on BeatHub.\n\n"
+        f"Product: {product_name}\nQuantity: {quantity}\nOrder: {order_number}\n"
+        f"Sale amount: {_money(total_amount, currency)}\n\n"
+        "The payment has been verified and the sale is recorded in your creator dashboard.\n"
+        f"Creator dashboard: {str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/dashboard\n\n"
+        "Please proceed with fulfillment according to your store arrangements.\n\nBeatHub"
+    )
+    creator_sent = _deliver(
+        creator_email,
+        "BeatHub — You made a merch sale",
+        creator_body,
+        f"merch-creator-sale:{order_id}:{creator_email.strip().lower()}",
+    )
     return buyer_sent, creator_sent
