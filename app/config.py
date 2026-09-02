@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     R2_PUBLIC_URL_EXPIRES: int = 3600
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
+    # Browser Web Push. Keep the private VAPID key only in the deployment environment.
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:support@mybeathub.com"
+
     # Audio masters can be large lossless files. The default application
     # limit is 1 GB; deployments can explicitly lower MAX_UPLOAD_MB if needed.
     MAX_UPLOAD_MB: int = 1000
@@ -89,6 +94,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV.lower() == "production"
+
+    @property
+    def web_push_enabled(self) -> bool:
+        return bool(self.VAPID_PUBLIC_KEY.strip() and self.VAPID_PRIVATE_KEY.strip() and self.VAPID_SUBJECT.strip())
 
     def validate_runtime_security(self) -> None:
         """Fail closed when production security secrets are missing/default."""
