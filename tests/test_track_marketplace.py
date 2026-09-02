@@ -69,16 +69,41 @@ class TrackMarketplaceTests(unittest.TestCase):
         for relative in (
             "app/templates/marketplace_producers.html",
             "app/templates/marketplace_albums.html",
+            "app/templates/album_detail.html",
         ):
             self.assertTrue((ROOT / relative).is_file(), relative)
 
     def test_album_and_producer_pages_have_back_navigation(self):
         producer = (ROOT / "app/templates/marketplace_producers.html").read_text(encoding="utf-8")
         albums = (ROOT / "app/templates/marketplace_albums.html").read_text(encoding="utf-8")
+        detail = (ROOT / "app/templates/album_detail.html").read_text(encoding="utf-8")
         self.assertIn("/marketplace", producer)
         self.assertIn("/marketplace", albums)
+        self.assertIn("/marketplace/albums", detail)
         self.assertIn("Open producer store", producer)
         self.assertIn("Open release", albums)
+
+    def test_album_detail_uses_one_release_cover_and_no_track_art(self):
+        source = (ROOT / "app/templates/album_detail.html").read_text(encoding="utf-8")
+        self.assertIn('class="album-art"', source)
+        self.assertIn('class="track-row"', source)
+        self.assertIn('class="track-list"', source)
+        self.assertNotIn("track-mini-art", source)
+        self.assertNotIn("at.track.cover_art_url", source)
+        self.assertNotIn("at.track.cover_url", source)
+        self.assertNotIn("at.track.artwork_url", source)
+
+    def test_album_detail_keeps_tracks_as_vertical_rows(self):
+        source = (ROOT / "app/templates/album_detail.html").read_text(encoding="utf-8")
+        self.assertIn("/track/{{ track.slug }}", source)
+        self.assertIn("{{ track.title }}", source)
+        self.assertIn("Inside this release", source)
+        self.assertIn("TRACKLIST", source)
+
+    def test_album_detail_route_exists(self):
+        source = (ROOT / "app/routers/album.py").read_text(encoding="utf-8")
+        self.assertIn('@router.get("/album/{slug}")', source)
+        self.assertIn('"album_detail.html"', source)
 
     def test_main_route_still_exists_and_marketplace_is_reachable_from_legacy_entry(self):
         pages_source = (ROOT / "app/routers/pages.py").read_text(encoding="utf-8")
@@ -120,6 +145,7 @@ class TrackMarketplaceTests(unittest.TestCase):
         for relative in (
             "app/models/music.py",
             "app/routers/marketplace.py",
+            "app/routers/album.py",
             "app/routers/track_catalog.py",
             "app/routers/beat_catalog.py",
             "app/routers/music_publish.py",
