@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}BeatHub — The Home of Beats{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/style.css">
-  <link rel="stylesheet" href="/static/css/notifications.css">
+  <link rel="stylesheet" href="/static/css/notifications.css?v=20260904">
   {% block extra_head %}{% endblock %}
   <style>
     .beathub-community{position:relative;max-width:1120px;margin:18px auto 34px;padding:28px 30px;overflow:hidden;border:1px solid rgba(212,175,55,.22);border-radius:22px;background:radial-gradient(circle at 92% 10%,rgba(212,175,55,.14),transparent 30%),linear-gradient(145deg,rgba(212,175,55,.065),rgba(255,255,255,.018) 52%,rgba(212,175,55,.025));box-shadow:0 22px 55px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.025)}
@@ -22,7 +22,6 @@
     .beathub-community-link:hover{transform:translateY(-2px);border-color:rgba(240,216,120,.55);background:rgba(212,175,55,.08);box-shadow:0 10px 25px rgba(0,0,0,.22);color:#fff}
     .beathub-community-icon{width:27px;height:27px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(240,216,120,.22);border-radius:8px;background:rgba(212,175,55,.08);color:#f0d878;font-size:13px;font-weight:950}
     .beathub-community-arrow{color:#777;font-size:13px}
-
     .beathub-notice-wrap{position:fixed;top:76px;right:22px;z-index:9999;width:min(430px,calc(100vw - 30px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
     .beathub-notice{position:relative;display:flex;align-items:flex-start;gap:11px;padding:14px 42px 14px 15px;border-radius:13px;border:1px solid rgba(212,175,55,.28);background:rgba(13,13,13,.96);box-shadow:0 18px 45px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.025);color:#eee;font-size:13px;line-height:1.45;pointer-events:auto;overflow:hidden;animation:beathubNoticeIn .28s ease both}
     .beathub-notice.success{border-color:rgba(120,205,145,.34)}
@@ -47,7 +46,6 @@
     @keyframes beathubNoticeOut{from{opacity:1;transform:translateY(0);max-height:120px;margin-bottom:0}to{opacity:0;transform:translateY(-6px) translateX(12px);max-height:0;padding-top:0;padding-bottom:0;margin-bottom:-10px}}
     @keyframes beathubNoticeProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
     @keyframes beathubLegacyProgress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
-
     .beathub-creator-tabs{display:flex;align-items:center;gap:7px;margin:18px auto 22px;padding:7px;max-width:1400px;overflow-x:auto;border:1px solid rgba(212,175,55,.16);border-radius:15px;background:rgba(13,13,13,.86);box-shadow:0 12px 30px rgba(0,0,0,.16);scrollbar-width:thin}
     .beathub-creator-tabs a{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px;border:1px solid transparent;border-radius:10px;color:#999;text-decoration:none;font-size:11px;font-weight:850;white-space:nowrap;transition:.18s ease}
     .beathub-creator-tabs a:hover{color:#fff;background:rgba(255,255,255,.045);border-color:#303030}
@@ -111,7 +109,6 @@
     {% endif %}
     <footer>&copy; {{ current_year }} BeatHub. All rights reserved. <a href="/support" style="margin-left:10px;color:#f0d878;text-decoration:none;font-weight:800;">Contact Support</a></footer>
   </div>
-
   <script src="/static/js/notifications.js?v=20260904" defer></script>
   <script>
   (function () {
