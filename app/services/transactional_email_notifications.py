@@ -69,8 +69,7 @@ def notify_buyer_purchase(order, item_name: str, creator_name: str) -> bool:
     amount = _money(getattr(order, "gross_amount", ""), getattr(order, "currency", "KES"))
     dashboard_url = f"{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/account"
     body = (
-        f"Hi {getattr(buyer, 'username', '') or 'there'},\n\n"
-        "Your BeatHub purchase was completed successfully.\n\n"
+        f"Hi {getattr(buyer, 'username', '') or 'there'},\n\nYour BeatHub purchase was completed successfully.\n\n"
         f"Item: {item_name}\nCreator: {creator_name}\nOrder: {order_number}\nAmount: {amount}\n\n"
         "Your purchase and license are now recorded on your BeatHub account.\n"
         f"Account: {dashboard_url}\n\n"
@@ -92,12 +91,7 @@ def notify_creator_sale(order, item_name: str, creator_name: str, creator_email:
         "The payment has been verified and your creator earnings have been recorded.\n"
         f"Creator dashboard: {dashboard_url}\n\nKeep creating.\n\nBeatHub"
     )
-    return _deliver(
-        creator_email,
-        "BeatHub — You made a sale",
-        body,
-        f"creator-sale:{order_id}:{creator_email.strip().lower()}",
-    )
+    return _deliver(creator_email, "BeatHub — You made a sale", body, f"creator-sale:{order_id}:{creator_email.strip().lower()}")
 
 
 def notify_failed_payment(email: str, order_number: str, reason: str = "") -> bool:
@@ -111,22 +105,10 @@ def notify_failed_payment(email: str, order_number: str, reason: str = "") -> bo
     return _deliver(email, "BeatHub — Payment not completed", body, f"payment-failed:{order_number}")
 
 
-def notify_completed_music_sale(
-    order_id: str,
-    order_number: str,
-    gross_amount: Any,
-    net_amount: Any,
-    currency: str,
-    buyer_email: str,
-    buyer_name: str,
-    creator_email: str,
-    creator_name: str,
-    item_name: str,
-) -> tuple[bool, bool]:
+def notify_completed_music_sale(order_id: str, order_number: str, gross_amount: Any, net_amount: Any, currency: str, buyer_email: str, buyer_name: str, creator_email: str, creator_name: str, item_name: str) -> tuple[bool, bool]:
     """Deliver both sides of a completed music sale from immutable event data."""
     class EventOrder:
         pass
-
     order = EventOrder()
     order.id = order_id
     order.order_number = order_number
@@ -140,32 +122,15 @@ def notify_completed_music_sale(
     )
 
 
-def notify_completed_merch_sale(
-    order_id: str,
-    order_number: str,
-    total_amount: Any,
-    buyer_email: str,
-    buyer_name: str,
-    creator_email: str,
-    creator_name: str,
-    product_name: str,
-    quantity: int = 1,
-    currency: str = "KES",
-) -> tuple[bool, bool]:
+def notify_completed_merch_sale(order_id: str, order_number: str, total_amount: Any, buyer_email: str, buyer_name: str, creator_email: str, creator_name: str, product_name: str, quantity: int = 1, currency: str = "KES") -> tuple[bool, bool]:
     """Deliver buyer confirmation and creator sale notice for paid merchandise."""
     buyer_body = (
         f"Hi {buyer_name or 'there'},\n\nYour BeatHub merchandise order has been paid successfully.\n\n"
         f"Product: {product_name}\nQuantity: {quantity}\nCreator: {creator_name or 'BeatHub Creator'}\n"
         f"Order: {order_number}\nTotal: {_money(total_amount, currency)}\n\n"
-        "Your order is now recorded. The creator will handle fulfillment according to their store arrangements.\n\n"
-        "BeatHub Support"
+        "Your order is now recorded. The creator will handle fulfillment according to their store arrangements.\n\nBeatHub Support"
     )
-    buyer_sent = _deliver(
-        buyer_email,
-        "BeatHub — Your merch order is confirmed",
-        buyer_body,
-        f"merch-buyer-purchase:{order_id}",
-    )
+    buyer_sent = _deliver(buyer_email, "BeatHub — Your merch order is confirmed", buyer_body, f"merch-buyer-purchase:{order_id}")
 
     creator_body = (
         f"Hi {creator_name or 'Creator'},\n\nYou made a merchandise sale on BeatHub.\n\n"
@@ -175,10 +140,36 @@ def notify_completed_merch_sale(
         f"Creator dashboard: {str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/dashboard\n\n"
         "Please proceed with fulfillment according to your store arrangements.\n\nBeatHub"
     )
-    creator_sent = _deliver(
-        creator_email,
-        "BeatHub — You made a merch sale",
-        creator_body,
-        f"merch-creator-sale:{order_id}:{creator_email.strip().lower()}",
-    )
+    creator_sent = _deliver(creator_email, "BeatHub — You made a merch sale", creator_body, f"merch-creator-sale:{order_id}:{creator_email.strip().lower()}")
     return buyer_sent, creator_sent
+
+
+def notify_withdrawal_requested(withdrawal_id: str, amount: Any, phone_number: str, creator_email: str, creator_name: str) -> bool:
+    """Confirm that a creator withdrawal request was recorded."""
+    body = (
+        f"Hi {creator_name or 'Creator'},\n\nYour BeatHub withdrawal request has been received.\n\n"
+        f"Amount: {_money(amount)}\nM-Pesa number: {phone_number}\nRequest: {withdrawal_id}\n\n"
+        "Your request is now awaiting review. We will email you when its status changes.\n\nBeatHub Support"
+    )
+    return _deliver(creator_email, "BeatHub — Withdrawal request received", body, f"withdrawal-requested:{withdrawal_id}")
+
+
+def notify_withdrawal_status(withdrawal_id: str, amount: Any, phone_number: str, status: str, creator_email: str, creator_name: str, note: str = "", payout_reference: str = "") -> bool:
+    """Notify a creator when their withdrawal reaches a new status."""
+    normalized = str(status or "").strip().lower()
+    labels = {
+        "approved": ("Withdrawal approved", "Your withdrawal has been approved and is ready for payout processing."),
+        "processing": ("Withdrawal processing", "Your withdrawal is currently being processed."),
+        "paid": ("Withdrawal paid", "Your withdrawal has been paid successfully."),
+        "rejected": ("Withdrawal rejected", "Your withdrawal was rejected."),
+    }
+    subject_text, intro = labels.get(normalized, ("Withdrawal status updated", f"Your withdrawal status is now {normalized or 'updated'}."))
+    reference_line = f"Payout reference: {payout_reference}\n" if payout_reference else ""
+    note_line = f"Note: {note}\n" if note else ""
+    body = (
+        f"Hi {creator_name or 'Creator'},\n\n{intro}\n\n"
+        f"Amount: {_money(amount)}\nM-Pesa number: {phone_number}\nRequest: {withdrawal_id}\n"
+        f"Status: {normalized.upper()}\n{reference_line}{note_line}\n"
+        f"Creator dashboard: {str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/dashboard\n\nBeatHub Support"
+    )
+    return _deliver(creator_email, f"BeatHub — {subject_text}", body, f"withdrawal-status:{withdrawal_id}:{normalized}")
