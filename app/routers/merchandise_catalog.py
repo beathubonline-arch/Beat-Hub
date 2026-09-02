@@ -23,25 +23,25 @@ def _group_products(products: list[dict]) -> tuple[list[dict], list[dict]]:
         group = groups.setdefault(creator_id, {
             "creator_name": product.get("creator_name") or "BeatHub Creator",
             "creator_slug": product.get("creator_slug"),
-            "items": [],
+            "products": [],
         })
-        group["items"].append(product)
+        group["products"].append(product)
 
     collections = []
     standalone = []
     for group in groups.values():
-        items = sorted(group["items"], key=lambda item: item.get("created_at") or "", reverse=True)
+        items = sorted(group["products"], key=lambda item: item.get("created_at") or "", reverse=True)
         if len(items) >= 2:
             collections.append({
                 "creator_name": group["creator_name"],
                 "creator_slug": group["creator_slug"],
-                "items": items,
+                "products": items,
                 "item_count": len(items),
             })
         else:
             standalone.extend(items)
 
-    collections.sort(key=lambda item: item["items"][0].get("created_at") or "", reverse=True)
+    collections.sort(key=lambda item: item["products"][0].get("created_at") or "", reverse=True)
     standalone.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return collections[:60], standalone[:120]
 
