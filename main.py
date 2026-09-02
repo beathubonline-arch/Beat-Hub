@@ -102,7 +102,7 @@ class HomepageMotionMiddleware:
 
 
 class GlobalFrontendAssetsMiddleware:
-    SCRIPT = b'<script defer src="/static/js/notifications.js?v=20260902"></script><script defer src="/static/js/beathub-push.js?v=20260902"></script>'
+    SCRIPT = b'<script defer src="/static/js/notifications.js?v=20260903"></script><script defer src="/static/js/beathub-push.js?v=20260903"></script>'
     def __init__(self, app): self.app = app
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
