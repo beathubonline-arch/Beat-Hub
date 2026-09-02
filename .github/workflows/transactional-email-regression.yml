@@ -1,0 +1,23 @@
+name: Transactional email regression
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  transactional-email-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile application and tests
+        run: python -m compileall -q app tests
+      - name: Run transactional email regression tests
+        run: python -m unittest discover -s tests -p 'test_transactional_email_notifications.py' -v
