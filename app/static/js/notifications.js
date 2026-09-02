@@ -3,10 +3,20 @@
 
   function initNotifications() {
     var nav = document.querySelector('.nav-actions');
-    if (!nav || document.querySelector('.bh-notification')) return;
+    if (!nav) return;
 
-    var wrap = document.createElement('div');
-    wrap.className = 'bh-notification';
+    var wrap = document.querySelector('[data-notification-center]');
+    if (!wrap) {
+      if (document.querySelector('.bh-notification')) return;
+      wrap = document.createElement('div');
+      wrap.className = 'bh-notification';
+      nav.insertBefore(wrap, nav.firstChild);
+    } else if (!wrap.classList.contains('bh-notification')) {
+      wrap.classList.add('bh-notification');
+    }
+
+    if (wrap.dataset.ready === 'true') return;
+    wrap.dataset.ready = 'true';
     wrap.innerHTML = '<button type="button" class="bh-notification-bell" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">' +
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>' +
       '<span class="bh-notification-badge" hidden>0</span></button>' +
@@ -15,8 +25,6 @@
         '<div class="bh-notification-list"><div class="bh-notification-empty">Loading notifications…</div></div>' +
         '<div class="bh-notification-foot"><a href="/notifications">View all notifications</a></div>' +
       '</div>';
-
-    nav.insertBefore(wrap, nav.firstChild);
 
     var bell = wrap.querySelector('.bh-notification-bell');
     var badge = wrap.querySelector('.bh-notification-badge');
