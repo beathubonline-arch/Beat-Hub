@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+import os
 import re
 import secrets
 import uuid
@@ -275,6 +276,29 @@ def login_page(request: Request, next: str = "", error: str = "", success: str =
 def login_submit(request: Request, identifier: str = Form(""), email: str = Form(""), password: str = Form(...), next: str = Form(""), db: Session = Depends(get_db)):
     requested_next = next or request.query_params.get("next", ""); safe_next = _safe_next_url(requested_next); login_identifier = (identifier or email).strip().lower()
     user = db.query(User).filter(or_(func.lower(User.email) == login_identifier, func.lower(User.username) == login_identifier)).first()
+
+    # Production admin bootstrap: the Render ADMIN_PASSWORD is never stored in
+    # GitHub or the database. On the first login using ADMIN_EMAIL + ADMIN_PASSWORD,
+    # create the dedicated verified admin account. Existing accounts are untouched.
+    admin_email = str(getattr(settings, "ADMIN_EMAIL", "admin@mybeathub.com") or "").strip().lower()
+    admin_password = str(getattr(settings, "ADMIN_PASSWORD", "") or os.getenv("ADMIN_PASSWORD", "")).strip()
+    if user is None and login_identifier == admin_email and admin_password and password == admin_password:
+        user = User(
+            id=str(uuid.uuid4()),
+            email=admin_email,
+            username="admin",
+            hashed_password=hash_password(admin_password),
+            role=UserRole.ADMIN,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        try:
+            db.commit()
+            db.refresh(user)
+        except IntegrityError:
+            db.rollback()
+            user = db.query(User).filter(func.lower(User.email) == admin_email).first()
     if not user and login_identifier:
         profile = db.query(Profile).filter(func.lower(Profile.slug) == slugify(login_identifier)).first()
         if profile: user = db.query(User).filter(User.id == profile.user_id).first()
