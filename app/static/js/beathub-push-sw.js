@@ -4,8 +4,6 @@ self.addEventListener('push', function (event) {
   var title = data.title || 'BeatHub';
   var options = {
     body: data.body || 'You have a new BeatHub notification.',
-    icon: '/static/img/beathub-icon-192.png',
-    badge: '/static/img/beathub-badge-72.png',
     data: {link: data.link || '/notifications'},
     tag: data.tag || 'beathub-notification',
     renotify: true
