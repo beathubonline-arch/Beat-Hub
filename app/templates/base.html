@@ -77,7 +77,6 @@
         {% endif %}
       </div>
     </nav>
-
     {% set is_creator_dashboard = request.url.path.startswith('/dashboard') and current_user and current_user.role.value == 'creator' %}
     {% if is_creator_dashboard %}
       {% set dashboard_path = request.url.path %}
@@ -92,140 +91,50 @@
         <span class="tab-manage">Creator Studio</span>
       </nav>
     {% endif %}
-
     {% set query_error = request.query_params.get('error') %}
     {% set query_success = request.query_params.get('success') %}
     {% if query_error or query_success %}
       <div class="beathub-notice-wrap" id="beathub-notice-wrap" aria-live="polite">
-        {% if query_success %}
-          <div class="beathub-notice success" role="status" data-notice-duration="5000" tabindex="0">
-            <span class="beathub-notice-icon" aria-hidden="true">✓</span>
-            <div class="beathub-notice-text">{{ query_success }}</div>
-            <button type="button" class="beathub-notice-close" aria-label="Dismiss notification">×</button>
-            <span class="beathub-notice-progress" aria-hidden="true"></span>
-          </div>
-        {% endif %}
-        {% if query_error %}
-          <div class="beathub-notice error" role="alert" data-notice-duration="8000" tabindex="0">
-            <span class="beathub-notice-icon" aria-hidden="true">!</span>
-            <div class="beathub-notice-text">{{ query_error }}</div>
-            <button type="button" class="beathub-notice-close" aria-label="Dismiss notification">×</button>
-            <span class="beathub-notice-progress" aria-hidden="true"></span>
-          </div>
-        {% endif %}
+        {% if query_success %}<div class="beathub-notice success" role="status" data-notice-duration="5000" tabindex="0"><span class="beathub-notice-icon" aria-hidden="true">✓</span><div class="beathub-notice-text">{{ query_success }}</div><button type="button" class="beathub-notice-close" aria-label="Dismiss notification">×</button><span class="beathub-notice-progress" aria-hidden="true"></span></div>{% endif %}
+        {% if query_error %}<div class="beathub-notice error" role="alert" data-notice-duration="8000" tabindex="0"><span class="beathub-notice-icon" aria-hidden="true">!</span><div class="beathub-notice-text">{{ query_error }}</div><button type="button" class="beathub-notice-close" aria-label="Dismiss notification">×</button><span class="beathub-notice-progress" aria-hidden="true"></span></div>{% endif %}
       </div>
     {% endif %}
-
     {% block content %}{% endblock %}
-
     {% set is_creator_store_page = request.url.path.startswith('/p/') or request.url.path.startswith('/creator/') or request.url.path.startswith('/store/') or request.url.path.startswith('/profile/') %}
     {% if is_creator_store_page %}
       <section class="beathub-community" aria-label="BeatHub community">
         <div class="beathub-community-inner">
-          <div class="beathub-community-copy">
-            <div class="beathub-community-eyebrow">BeatHub Community</div>
-            <h2>Connect with the BeatHub Community</h2>
-            <p>Meet artists, producers and music creators, stay up to date with BeatHub, and be part of the community beyond the marketplace.</p>
-          </div>
-          <div class="beathub-community-links">
-            <a class="beathub-community-link" href="https://discord.gg/R4m7hkrdn" target="_blank" rel="noopener noreferrer" aria-label="Join the BeatHub Discord community">
-              <span class="beathub-community-icon">⌁</span><span>Join Discord</span><span class="beathub-community-arrow">↗</span>
-            </a>
-            <a class="beathub-community-link" href="https://www.youtube.com/channel/UCj0OSnxkdYsuhMipfKqLKnw" target="_blank" rel="noopener noreferrer" aria-label="Visit the BeatHub YouTube channel">
-              <span class="beathub-community-icon">▶</span><span>YouTube</span><span class="beathub-community-arrow">↗</span>
-            </a>
-          </div>
+          <div class="beathub-community-copy"><div class="beathub-community-eyebrow">BeatHub Community</div><h2>Connect with the BeatHub Community</h2><p>Meet artists, producers and music creators, stay up to date with BeatHub, and be part of the community beyond the marketplace.</p></div>
+          <div class="beathub-community-links"><a class="beathub-community-link" href="https://discord.gg/R4m7hkrdn" target="_blank" rel="noopener noreferrer" aria-label="Join the BeatHub Discord community"><span class="beathub-community-icon">⌁</span><span>Join Discord</span><span class="beathub-community-arrow">↗</span></a><a class="beathub-community-link" href="https://www.youtube.com/channel/UCj0OSnxkdYsuhMipfKqLKnw" target="_blank" rel="noopener noreferrer" aria-label="Visit the BeatHub YouTube channel"><span class="beathub-community-icon">▶</span><span>YouTube</span><span class="beathub-community-arrow">↗</span></a></div>
         </div>
       </section>
     {% endif %}
-
     <footer>&copy; {{ current_year }} BeatHub. All rights reserved. <a href="/support" style="margin-left:10px;color:#f0d878;text-decoration:none;font-weight:800;">Contact Support</a></footer>
   </div>
 
-  <script src="/static/js/notifications.js" defer></script>
+  <script src="/static/js/notifications.js?v=20260904" defer></script>
   <script>
   (function () {
     const notices = Array.from(document.querySelectorAll('.beathub-notice'));
     const legacyAlerts = Array.from(document.querySelectorAll('.alert:not(.beathub-notice):not(.beathub-legacy-notice)'));
-
     function dismissElement(element, duration) {
-      let timer = null;
-      let startedAt = Date.now();
-      let remaining = duration;
-      let removed = false;
-      element.classList.add('beathub-legacy-notice');
-      element.style.setProperty('--legacy-duration', duration + 'ms');
-      element.style.maxHeight = element.scrollHeight + 'px';
-
-      const bar = document.createElement('span');
-      bar.className = 'beathub-legacy-notice-progress';
-      bar.setAttribute('aria-hidden', 'true');
-      element.appendChild(bar);
-
-      function remove() {
-        if (removed) return;
-        removed = true;
-        if (timer) clearTimeout(timer);
-        element.classList.add('leaving');
-        window.setTimeout(function () {
-          if (element.parentNode) element.parentNode.removeChild(element);
-        }, 260);
-      }
-      function start() {
-        if (removed) return;
-        startedAt = Date.now();
-        timer = window.setTimeout(remove, remaining);
-        bar.style.animationPlayState = 'running';
-      }
-      function pause() {
-        if (removed || !timer) return;
-        clearTimeout(timer);
-        timer = null;
-        remaining = Math.max(1000, remaining - (Date.now() - startedAt));
-        bar.style.animationPlayState = 'paused';
-      }
-      element.addEventListener('mouseenter', pause);
-      element.addEventListener('mouseleave', start);
-      element.addEventListener('focusin', pause);
-      element.addEventListener('focusout', function(event){ if (!element.contains(event.relatedTarget)) start(); });
-      start();
+      let timer = null; let startedAt = Date.now(); let remaining = duration; let removed = false;
+      element.classList.add('beathub-legacy-notice'); element.style.setProperty('--legacy-duration', duration + 'ms'); element.style.maxHeight = element.scrollHeight + 'px';
+      const bar = document.createElement('span'); bar.className = 'beathub-legacy-notice-progress'; bar.setAttribute('aria-hidden', 'true'); element.appendChild(bar);
+      function remove() { if (removed) return; removed = true; if (timer) clearTimeout(timer); element.classList.add('leaving'); window.setTimeout(function () { if (element.parentNode) element.parentNode.removeChild(element); }, 260); }
+      function start() { if (removed) return; startedAt = Date.now(); timer = window.setTimeout(remove, remaining); bar.style.animationPlayState = 'running'; }
+      function pause() { if (removed || !timer) return; clearTimeout(timer); timer = null; remaining = Math.max(1000, remaining - (Date.now() - startedAt)); bar.style.animationPlayState = 'paused'; }
+      element.addEventListener('mouseenter', pause); element.addEventListener('mouseleave', start); element.addEventListener('focusin', pause); element.addEventListener('focusout', function(event){ if (!element.contains(event.relatedTarget)) start(); }); start();
     }
-
-    legacyAlerts.forEach(function(alert){
-      const isError = alert.classList.contains('alert-error') || alert.classList.contains('error') || alert.getAttribute('role') === 'alert';
-      dismissElement(alert, isError ? 8000 : 5000);
-    });
-
+    legacyAlerts.forEach(function(alert){ const isError = alert.classList.contains('alert-error') || alert.classList.contains('error') || alert.getAttribute('role') === 'alert'; dismissElement(alert, isError ? 8000 : 5000); });
     notices.forEach(function (notice) {
-      const duration = Math.max(5000, Number(notice.dataset.noticeDuration || 5000));
-      notice.style.setProperty('--notice-duration', duration + 'ms');
-      let remaining = duration;
-      let startedAt = Date.now();
-      let timer = null;
-      let removed = false;
-      function removeNotice() {
-        if (removed) return;
-        removed = true;
-        if (timer) clearTimeout(timer);
-        notice.classList.add('leaving');
-        window.setTimeout(function () { if (notice.parentNode) notice.parentNode.removeChild(notice); }, 240);
-      }
+      const duration = Math.max(5000, Number(notice.dataset.noticeDuration || 5000)); notice.style.setProperty('--notice-duration', duration + 'ms'); let remaining = duration; let startedAt = Date.now(); let timer = null; let removed = false;
+      function removeNotice() { if (removed) return; removed = true; if (timer) clearTimeout(timer); notice.classList.add('leaving'); window.setTimeout(function () { if (notice.parentNode) notice.parentNode.removeChild(notice); }, 240); }
       function startTimer() { if (removed) return; startedAt = Date.now(); timer = window.setTimeout(removeNotice, remaining); notice.classList.remove('paused'); }
       function pauseTimer() { if (removed || !timer) return; clearTimeout(timer); timer = null; remaining = Math.max(1000, remaining - (Date.now() - startedAt)); notice.classList.add('paused'); }
-      const close = notice.querySelector('.beathub-notice-close');
-      if (close) close.addEventListener('click', removeNotice);
-      notice.addEventListener('mouseenter', pauseTimer);
-      notice.addEventListener('mouseleave', startTimer);
-      notice.addEventListener('focusin', pauseTimer);
-      notice.addEventListener('focusout', function (event) { if (!notice.contains(event.relatedTarget)) startTimer(); });
-      startTimer();
+      const close = notice.querySelector('.beathub-notice-close'); if (close) close.addEventListener('click', removeNotice); notice.addEventListener('mouseenter', pauseTimer); notice.addEventListener('mouseleave', startTimer); notice.addEventListener('focusin', pauseTimer); notice.addEventListener('focusout', function (event) { if (!notice.contains(event.relatedTarget)) startTimer(); }); startTimer();
     });
-
-    if (window.history && window.history.replaceState && (new URLSearchParams(window.location.search).has('success') || new URLSearchParams(window.location.search).has('error'))) {
-      const params = new URLSearchParams(window.location.search);
-      const cleanUrl = window.location.pathname + (params.has('next') ? '?next=' + encodeURIComponent(params.get('next')) : '') + window.location.hash;
-      window.history.replaceState({}, document.title, cleanUrl);
-    }
+    if (window.history && window.history.replaceState && (new URLSearchParams(window.location.search).has('success') || new URLSearchParams(window.location.search).has('error'))) { const params = new URLSearchParams(window.location.search); const cleanUrl = window.location.pathname + (params.has('next') ? '?next=' + encodeURIComponent(params.get('next')) : '') + window.location.hash; window.history.replaceState({}, document.title, cleanUrl); }
   })();
   </script>
 </body>
