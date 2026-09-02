@@ -69,6 +69,7 @@ def _ext(filename: str) -> str:
 def _r2_client():
     try:
         import boto3
+        from botocore.config import Config
     except ImportError as exc:
         raise RuntimeError("R2 storage requires boto3. Add boto3 to requirements.txt.") from exc
     endpoint = _r2_endpoint()
@@ -82,6 +83,12 @@ def _r2_client():
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         region_name="auto",
+        config=Config(
+            connect_timeout=10,
+            read_timeout=120,
+            retries={"max_attempts": 3, "mode": "adaptive"},
+            max_pool_connections=20,
+        ),
     )
 
 def _parse_r2_path(path: str):
@@ -231,15 +238,25 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     try:
         client = _r2_client()
         file.file.seek(0)
-        # boto3's managed transfer uses multipart uploads for larger files.
-        # Run the blocking S3 transfer in a worker thread so an audio upload
-        # cannot freeze FastAPI's event loop.
+        # boto3's managed transfer performs multipart uploads in worker threads
+        # when appropriate. Explicit settings make large audio transfers use
+        # parallel 8 MiB parts while the whole blocking SDK call remains off
+        # FastAPI's event loop.
+        from boto3.s3.transfer import TransferConfig
+
+        transfer_config = TransferConfig(
+            multipart_threshold=8 * 1024 * 1024,
+            multipart_chunksize=8 * 1024 * 1024,
+            max_concurrency=10,
+            use_threads=True,
+        )
         await asyncio.to_thread(
             client.upload_fileobj,
             file.file,
             bucket,
             key,
             ExtraArgs={"ContentType": content_type},
+            Config=transfer_config,
         )
     except Exception as exc:
         raise RuntimeError(f"R2 upload failed: {exc}") from exc
@@ -263,12 +280,15 @@ async def save_upload(file: UploadFile, subfolder: str, allowed_extensions: set[
     full_path = folder / unique_name
     file.file.seek(0)
     try:
-        with open(full_path, "wb") as output:
-            while True:
-                chunk = file.file.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
+        def _write_local():
+            with open(full_path, "wb") as output:
+                while True:
+                    chunk = file.file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+
+        await asyncio.to_thread(_write_local)
     finally:
         try:
             file.file.seek(0)
