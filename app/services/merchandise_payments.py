@@ -90,14 +90,16 @@ def complete_merchandise_payment(db: Session, order_id: str, reference: str, dat
     )
     db.commit()
 
-    if event.get("buyer_email") and event.get("creator_email"):
+    # Email delivery happens only after the payment commit. Missing creator
+    # email must never suppress the buyer confirmation, and vice versa.
+    if event.get("buyer_email") or event.get("creator_email"):
         notify_completed_merch_sale(
             order_id=str(event.get("id") or order_id),
             order_number=str(event.get("order_number") or order_id),
             total_amount=event.get("total_amount") or row["total_amount"],
-            buyer_email=str(event["buyer_email"]),
+            buyer_email=str(event.get("buyer_email") or ""),
             buyer_name=str(event.get("buyer_name") or "there"),
-            creator_email=str(event["creator_email"]),
+            creator_email=str(event.get("creator_email") or ""),
             creator_name=str(event.get("creator_name") or "BeatHub Creator"),
             product_name=str(event.get("product_name") or "Merchandise"),
             quantity=int(event.get("quantity") or 1),
