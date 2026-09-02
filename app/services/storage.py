@@ -8,6 +8,7 @@ entire audio file into Python memory first.
 
 import os
 import uuid
+import asyncio
 from pathlib import Path
 from typing import Optional
 
@@ -230,7 +231,11 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     try:
         client = _r2_client()
         file.file.seek(0)
-        client.upload_fileobj(
+        # boto3's managed transfer uses multipart uploads for larger files.
+        # Run the blocking S3 transfer in a worker thread so an audio upload
+        # cannot freeze FastAPI's event loop.
+        await asyncio.to_thread(
+            client.upload_fileobj,
             file.file,
             bucket,
             key,
@@ -249,15 +254,26 @@ async def save_upload(file: UploadFile, subfolder: str, allowed_extensions: set[
     if _r2_is_configured():
         return await save_upload_to_r2(file, subfolder, allowed_extensions)
     ext = _validate(file, allowed_extensions)
-    contents = await file.read()
-    if len(contents) > _max_upload_bytes():
+    size = _stream_size(file)
+    if size > _max_upload_bytes():
         raise UploadValidationError(f"File exceeds the {settings.MAX_UPLOAD_MB}MB upload limit.")
     folder = Path(settings.MEDIA_ROOT) / subfolder
     folder.mkdir(parents=True, exist_ok=True)
     unique_name = f"{uuid.uuid4().hex}{ext}"
     full_path = folder / unique_name
-    with open(full_path, "wb") as output:
-        output.write(contents)
+    file.file.seek(0)
+    try:
+        with open(full_path, "wb") as output:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                output.write(chunk)
+    finally:
+        try:
+            file.file.seek(0)
+        except Exception:
+            pass
     return f"{subfolder.strip('/')}/{unique_name}"
 
 def storage_exists(path: Optional[str]) -> bool:
