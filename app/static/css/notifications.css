@@ -20,6 +20,10 @@
 .bh-notification-item-message{margin-top:3px;color:#858585;font-size:10px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .bh-notification-time{margin-top:5px;color:#666;font-size:9px;font-weight:700}
 .bh-notification-empty{padding:30px 16px;text-align:center;color:#777;font-size:11px;line-height:1.5}
+.bh-notification-push{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0;padding:10px 9px;border-top:1px solid rgba(255,255,255,.06);color:#888;font-size:10px;line-height:1.4}
+.bh-notification-push button{border:1px solid rgba(212,175,55,.3);border-radius:8px;background:rgba(212,175,55,.08);color:#f0d878;font-size:10px;font-weight:850;padding:7px 10px;cursor:pointer}
+.bh-notification-push button:hover{background:rgba(212,175,55,.14);border-color:rgba(240,216,120,.55)}
+.bh-notification-push button:disabled{opacity:.55;cursor:wait}
 .bh-notification-foot{display:flex;justify-content:center;padding:7px 4px 3px;border-top:1px solid rgba(255,255,255,.06)}
 .bh-notification-foot a{color:#f0d878;text-decoration:none;font-size:10px;font-weight:850;padding:7px 12px;border-radius:8px}
 .bh-notification-foot a:hover{background:rgba(212,175,55,.07)}
