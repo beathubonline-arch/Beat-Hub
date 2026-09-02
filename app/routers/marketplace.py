@@ -62,7 +62,7 @@ def _producer_cards(db: Session, beat_tracks: list[Track], limit: int = 12) -> l
     return result[:limit]
 
 
-def _merchandise(db: Session, limit: int = 12) -> list[dict]:
+def _merchandise(db: Session, limit: int = 120) -> list[dict]:
     try:
         rows = db.execute(text(
             f"SELECT id, creator_profile_id, name, slug, description, price, image_path, created_at "
@@ -78,6 +78,7 @@ def _merchandise(db: Session, limit: int = 12) -> list[dict]:
         owner = profiles.get(str(item.get("creator_profile_id")))
         item["creator"] = owner
         item["creator_name"] = getattr(owner, "stage_name", None) or "BeatHub Creator"
+        item["creator_slug"] = getattr(owner, "slug", None)
         item["creator_store_url"] = f"/store/{owner.slug}" if owner and getattr(owner, "slug", None) else None
         try:
             item["image_url"] = media_url(item.get("image_path")) if item.get("image_path") else None
@@ -85,6 +86,45 @@ def _merchandise(db: Session, limit: int = 12) -> list[dict]:
             item["image_url"] = None
         result.append(item)
     return result
+
+
+def _merch_collections(merch: list[dict], limit: int = 12) -> tuple[list[dict], list[dict]]:
+    """Return creator merch collections and standalone tees separately.
+
+    Creators with two or more merch items are represented by one collection card;
+    creators with a single item keep that item as a normal product card.
+    """
+    grouped: dict[str, dict] = {}
+    for item in merch:
+        creator_id = str(item.get("creator_profile_id") or "")
+        if not creator_id:
+            continue
+        group = grouped.setdefault(creator_id, {
+            "creator": item.get("creator"),
+            "creator_name": item.get("creator_name") or "BeatHub Creator",
+            "creator_slug": item.get("creator_slug"),
+            "store_url": item.get("creator_store_url"),
+            "items": [],
+        })
+        group["items"].append(item)
+
+    collections: list[dict] = []
+    standalone: list[dict] = []
+    for group in grouped.values():
+        items = group["items"]
+        if len(items) >= 2:
+            collections.append({
+                **group,
+                "item_count": len(items),
+                "preview_items": items[:4],
+                "cover_image_url": next((x.get("image_url") for x in items if x.get("image_url")), None),
+            })
+        else:
+            standalone.extend(items)
+
+    collections.sort(key=lambda x: max((i.get("created_at") for i in x["items"] if i.get("created_at")), default=""), reverse=True)
+    standalone.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return collections[:limit], standalone[:limit]
 
 
 def _album_cards(albums: list[Album]) -> list[dict]:
@@ -119,11 +159,12 @@ def _hot_picks(beats: list[Track], tracks: list[Track], merch: list[dict]) -> li
         item = _catalog_item(track)
         picks.append({"kind": "Track", "title": item["title"], "creator": item["producer"], "price": item["price"], "image_url": item["artwork_url"], "url": item["url"]})
     for item in merch[:1]:
-        picks.append({"kind": "Merch", "title": item.get("name") or "BeatHub Merch", "creator": item.get("creator_name") or "BeatHub Creator", "price": item.get("price") or 0, "image_url": item.get("image_url"), "url": f"/merch/{item.get('slug')}" if item.get("slug") else "/merch"})
+        picks.append({"kind": "Tee", "title": item.get("name") or "BeatHub Tee", "creator": item.get("creator_name") or "BeatHub Creator", "price": item.get("price") or 0, "image_url": item.get("image_url"), "url": f"/merch/{item.get('slug')}" if item.get("slug") else "/merch"})
     return picks[:6]
 
 
 def _context(request: Request, user, beats: list[Track], tracks: list[Track], producers: list[dict], merch: list[dict]):
+    merch_collections, standalone_merch = _merch_collections(merch)
     return {
         "request": request,
         "current_user": user,
@@ -136,6 +177,8 @@ def _context(request: Request, user, beats: list[Track], tracks: list[Track], pr
         "beat_preview": [_catalog_item(track) for track in beats[:4]],
         "track_preview": [_catalog_item(track) for track in tracks[:4]],
         "merchandise": merch[:4],
+        "merch_collections": merch_collections,
+        "standalone_merch": standalone_merch,
         "hot_picks": _hot_picks(beats, tracks, merch),
     }
 
