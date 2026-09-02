@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -108,21 +109,21 @@ def _merch_collections(merch: list[dict], limit: int = 12) -> tuple[list[dict], 
         })
         group["items"].append(item)
 
-    collections: list[dict] = []
+    collections: list[object] = []
     standalone: list[dict] = []
     for group in grouped.values():
         items = group["items"]
         if len(items) >= 2:
-            collections.append({
+            collections.append(SimpleNamespace(
                 **group,
-                "item_count": len(items),
-                "preview_items": items[:4],
-                "cover_image_url": next((x.get("image_url") for x in items if x.get("image_url")), None),
-            })
+                item_count=len(items),
+                preview_items=items[:4],
+                cover_image_url=next((x.get("image_url") for x in items if x.get("image_url")), None),
+            ))
         else:
             standalone.extend(items)
 
-    collections.sort(key=lambda x: max((i.get("created_at") for i in x["items"] if i.get("created_at")), default=""), reverse=True)
+    collections.sort(key=lambda x: max((i.get("created_at") for i in x.items if i.get("created_at")), default=""), reverse=True)
     standalone.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     return collections[:limit], standalone[:limit]
 
