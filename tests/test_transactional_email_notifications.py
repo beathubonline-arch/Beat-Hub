@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from app.services.transactional_email_notifications import (
     notify_buyer_purchase,
+    notify_completed_merch_sale,
     notify_completed_music_sale,
     notify_creator_sale,
     notify_failed_payment,
@@ -98,6 +99,34 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertEqual(args[3], "BeatHub — Payment not completed")
         self.assertIn("Cancelled by customer", args[4])
         self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
+
+    def test_completed_merch_sale_sends_buyer_and_creator_emails(self):
+        with patch(
+            "app.services.transactional_email_notifications.send_email",
+            return_value=True,
+        ) as send:
+            result = notify_completed_merch_sale(
+                "merch-order-1",
+                "BMABC123",
+                Decimal("3000.00"),
+                "buyer@example.com",
+                "Buyer One",
+                "creator@example.com",
+                "Creator One",
+                "Creator Tee",
+                quantity=2,
+            )
+
+        self.assertEqual(result, (True, True))
+        self.assertEqual(send.call_count, 2)
+        recipients = [call.args[2] for call in send.call_args_list]
+        self.assertEqual(recipients, ["buyer@example.com", "creator@example.com"])
+        self.assertEqual(send.call_args_list[0].args[3], "BeatHub — Your merch order is confirmed")
+        self.assertEqual(send.call_args_list[1].args[3], "BeatHub — You made a merch sale")
+        self.assertIn("Quantity: 2", send.call_args_list[0].args[4])
+        self.assertIn("KES 3,000.00", send.call_args_list[0].args[4])
+        keys = [call.kwargs["idempotency_key"] for call in send.call_args_list]
+        self.assertEqual(len(set(keys)), 2)
 
 
 if __name__ == "__main__":
