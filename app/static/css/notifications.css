@@ -60,3 +60,21 @@
 .hero h1{max-width:820px}
 @media(max-width:760px){.hero::after{top:16px;right:16px;font-size:8px}.hero{padding-top:54px}}
 @media(prefers-reduced-motion:reduce){.hero{box-shadow:var(--shadow)}}
+
+/* Premium creator organization for the public merch catalogue. */
+.bh-merch-organized{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+.bh-merch-creator-folder{min-width:0;overflow:hidden;border:1px solid rgba(212,175,55,.18);border-radius:22px;background:linear-gradient(145deg,rgba(20,20,22,.98),rgba(9,9,11,.99));box-shadow:0 18px 50px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025)}
+.bh-merch-folder-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px 18px;border-bottom:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(25,24,20,.98),rgba(15,15,15,.98))}
+.bh-merch-folder-title{display:flex;align-items:center;gap:11px;min-width:0}
+.bh-merch-folder-icon{width:36px;height:32px;display:grid;place-items:center;flex:0 0 auto;border:1px solid rgba(240,216,120,.25);border-radius:9px;background:rgba(212,175,55,.07);color:#f0d878;font-size:15px}
+.bh-merch-folder-name{display:block;min-width:0;color:#f4f4f2;font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bh-merch-folder-count{display:block;margin-top:3px;color:#777;font-size:10px}
+.bh-merch-folder-latest{color:#f0d878;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.bh-merch-folder-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding:14px}
+.bh-merch-folder-items .bh-merch-card{width:100%;min-width:0;margin:0;border-radius:15px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
+.bh-merch-folder-items .bh-merch-card:hover{transform:translateY(-3px)}
+.bh-merch-singleton{min-width:0}
+.bh-merch-singleton .bh-merch-card{width:100%;max-width:300px;margin:0 auto}
+@media(max-width:900px){.bh-merch-organized{grid-template-columns:1fr}.bh-merch-folder-items{max-width:680px}}
+@media(max-width:560px){.bh-merch-organized{gap:14px}.bh-merch-folder-head{padding:14px}.bh-merch-folder-items{grid-template-columns:1fr;max-width:330px;padding:12px}.bh-merch-folder-items .bh-merch-card{max-width:310px}.bh-merch-folder-latest{display:none}.bh-merch-singleton .bh-merch-card{max-width:330px}}
+@media(prefers-reduced-motion:reduce){.bh-merch-folder-items .bh-merch-card{transition:none}}
