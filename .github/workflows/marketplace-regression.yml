@@ -29,3 +29,9 @@ jobs:
 
       - name: Marketplace regression pass 2
         run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return tests.test_creator_merchandise_dashboard tests.test_creator_sales_history
+
+      - name: Upload performance regression pass 1
+        run: pytest -q tests/test_upload_performance.py
+
+      - name: Upload performance regression pass 2
+        run: pytest -q tests/test_upload_performance.py
