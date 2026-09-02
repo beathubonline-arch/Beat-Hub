@@ -101,6 +101,35 @@ class HomepageMotionMiddleware:
         await send(start_message); await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
+class GlobalFrontendAssetsMiddleware:
+    SCRIPT = b'<script defer src="/static/js/notifications.js?v=20260902"></script><script defer src="/static/js/beathub-push.js?v=20260902"></script>'
+    def __init__(self, app): self.app = app
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send); return
+        start_message = None; body_chunks = []
+        async def capture(message):
+            nonlocal start_message
+            if message.get("type") == "http.response.start":
+                start_message = dict(message); start_message["headers"] = list(message.get("headers", []))
+            elif message.get("type") == "http.response.body": body_chunks.append(bytes(message.get("body", b"")))
+            else: await send(message)
+        await self.app(scope, receive, capture)
+        if start_message is None: return
+        headers = list(start_message.get("headers", [])); content_type = ""
+        for key, value in headers:
+            if key.lower() == b"content-type": content_type = value.decode("latin-1").lower(); break
+        body = b"".join(body_chunks)
+        if content_type.startswith("text/html") and b"/static/js/notifications.js" not in body:
+            marker = b"</body>"; marker_index = body.lower().find(marker)
+            if marker_index >= 0:
+                body = body[:marker_index] + self.SCRIPT + body[marker_index:]
+                headers = [(key, value) for key, value in headers if key.lower() != b"content-length"]
+                headers.append((b"cache-control", b"no-cache, no-store, must-revalidate"))
+        start_message["headers"] = headers
+        await send(start_message); await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
@@ -167,6 +196,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AbuseRateLimitMiddleware)
 app.add_middleware(MerchandiseLoginRedirectMiddleware)
 app.add_middleware(CreatorPayoutPolicyMiddleware)
+app.add_middleware(GlobalFrontendAssetsMiddleware)
 app.add_middleware(HomepageMotionMiddleware)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
