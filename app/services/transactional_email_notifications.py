@@ -123,3 +123,32 @@ def notify_failed_payment(email: str, order_number: str, reason: str = "") -> bo
         "BeatHub Support"
     )
     return _deliver(email, "BeatHub — Payment not completed", body, f"payment-failed:{order_number}")
+
+
+def notify_completed_music_sale(
+    order_id: str,
+    order_number: str,
+    gross_amount: Any,
+    net_amount: Any,
+    currency: str,
+    buyer_email: str,
+    buyer_name: str,
+    creator_email: str,
+    creator_name: str,
+    item_name: str,
+) -> tuple[bool, bool]:
+    """Deliver both sides of a completed music sale from immutable event data."""
+    class EventOrder:
+        pass
+
+    order = EventOrder()
+    order.id = order_id
+    order.order_number = order_number
+    order.gross_amount = gross_amount
+    order.net_amount = net_amount
+    order.currency = currency
+    order.buyer = type("Buyer", (), {"email": buyer_email, "username": buyer_name})()
+
+    buyer_sent = notify_buyer_purchase(order, item_name, creator_name)
+    creator_sent = notify_creator_sale(order, item_name, creator_name, creator_email)
+    return buyer_sent, creator_sent
