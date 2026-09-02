@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BeatHub</title>
+  <desc id="desc">BeatHub multicolor equalizer logo</desc>
+  <defs>
+    <clipPath id="round"><rect x="8" y="8" width="496" height="496" rx="92"/></clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect width="512" height="512" fill="#171321"/>
+    <g transform="translate(-8 0)">
+      <path d="M-20 8h94L30 48h-94z" fill="#00c9a7"/>
+      <path d="M54 8h94l-44 40H10z" fill="#ffca0a"/>
+      <path d="M128 8h94l-44 40H84z" fill="#ff3f72"/>
+      <path d="M202 8h94l-44 40h-94z" fill="#ffca0a"/>
+      <path d="M276 8h94l-44 40h-94z" fill="#00c9a7"/>
+      <path d="M350 8h94l-44 40h-94z" fill="#ff3f72"/>
+      <path d="M424 8h94l-44 40h-94z" fill="#ffca0a"/>
+    </g>
+    <rect x="8" y="8" width="496" height="496" rx="92" fill="none" stroke="#2b2538" stroke-width="4"/>
+    <g>
+      <rect x="96" y="360" width="42" height="104" rx="11" fill="#ffca0a"/>
+      <rect x="174" y="282" width="42" height="182" rx="11" fill="#00c9a7"/>
+      <rect x="252" y="166" width="42" height="298" rx="11" fill="#ff3f72"/>
+      <rect x="330" y="266" width="42" height="198" rx="11" fill="#ffca0a"/>
+      <rect x="408" y="210" width="42" height="254" rx="11" fill="#00c9a7"/>
+    </g>
+  </g>
+</svg>
