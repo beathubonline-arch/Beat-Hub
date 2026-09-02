@@ -11,12 +11,14 @@ from . import creator_sales_history
 from . import admin_reconciliation
 from . import admin
 from . import admin_paystack_reconciliation
+from . import merchandise_catalog
 
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
 
 # Register canonical public marketplace discovery before the legacy catalog.
 pages.router.include_router(music_publish.router)
+pages.router.include_router(merchandise_catalog.router)
 pages.router.include_router(marketplace.router)
 pages.router.include_router(beat_catalog.router)
 pages.router.include_router(album.router)
