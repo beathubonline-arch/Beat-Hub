@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}BeatHub — The Home of Beats{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/notifications.css">
   {% block extra_head %}{% endblock %}
   <style>
     .beathub-community{position:relative;max-width:1120px;margin:18px auto 34px;padding:28px 30px;overflow:hidden;border:1px solid rgba(212,175,55,.22);border-radius:22px;background:radial-gradient(circle at 92% 10%,rgba(212,175,55,.14),transparent 30%),linear-gradient(145deg,rgba(212,175,55,.065),rgba(255,255,255,.018) 52%,rgba(212,175,55,.025));box-shadow:0 22px 55px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.025)}
@@ -66,6 +67,7 @@
       </div>
       <div class="nav-actions">
         {% if current_user %}
+          <div class="bh-notification" data-notification-center></div>
           {% if current_user.role.value == 'creator' %}<a href="/dashboard" class="btn btn-outline">Dashboard</a>
           {% elif current_user.role.value == 'admin' %}<a href="/admin" class="btn btn-outline">Admin</a>
           {% else %}<a href="/account" class="btn btn-outline">My Account</a>{% endif %}
@@ -140,6 +142,7 @@
     <footer>&copy; {{ current_year }} BeatHub. All rights reserved. <a href="/support" style="margin-left:10px;color:#f0d878;text-decoration:none;font-weight:800;">Contact Support</a></footer>
   </div>
 
+  <script src="/static/js/notifications.js" defer></script>
   <script>
   (function () {
     const notices = Array.from(document.querySelectorAll('.beathub-notice'));
