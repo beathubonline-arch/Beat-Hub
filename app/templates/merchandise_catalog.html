@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}BeatHub Merch — Creator Collections{% endblock %}
+{% block content %}
+<style>
+  .bh-catalog{padding:28px 0 76px}
+  .bh-catalog-hero{position:relative;overflow:hidden;padding:42px 44px;margin-bottom:34px;border:1px solid rgba(212,175,55,.24);border-radius:26px;background:radial-gradient(circle at 86% 14%,rgba(240,216,120,.16),transparent 28%),linear-gradient(135deg,#10100d,#0a0a0b 70%);box-shadow:0 26px 70px rgba(0,0,0,.34)}
+  .bh-catalog-kicker{color:#f0d878;font-size:10px;font-weight:950;letter-spacing:.19em;text-transform:uppercase}.bh-catalog-hero h1{margin:12px 0 0;color:#fff;font-size:clamp(40px,6vw,70px);line-height:.94;letter-spacing:-.06em}.bh-catalog-hero h1 span{color:#e7bd55}.bh-catalog-hero p{max-width:650px;margin:16px 0 0;color:#9999a2;font-size:13px;line-height:1.7}
+  .bh-catalog-stats{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.bh-catalog-stat{padding:8px 11px;border:1px solid rgba(212,175,55,.18);border-radius:999px;background:rgba(0,0,0,.22);color:#aaa;font-size:10px;font-weight:800}.bh-catalog-stat b{color:#f0d878}
+  .bh-catalog-head{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:17px}.bh-catalog-head h2{margin:4px 0 0;color:#fff;font-size:25px;letter-spacing:-.04em}.bh-catalog-head p{margin:5px 0 0;color:#777;font-size:11px}.bh-catalog-label{color:#f0d878;font-size:9px;font-weight:950;letter-spacing:.17em;text-transform:uppercase}
+  .bh-folders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.bh-folder{overflow:hidden;border:1px solid rgba(212,175,55,.18);border-radius:22px;background:linear-gradient(145deg,#151513,#0a0a0b);box-shadow:0 18px 50px rgba(0,0,0,.28)}.bh-folder-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px 18px;border-bottom:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,#191915,#11110f)}.bh-folder-name{display:flex;align-items:center;gap:11px;min-width:0}.bh-folder-icon{width:36px;height:32px;display:grid;place-items:center;border:1px solid rgba(240,216,120,.25);border-radius:9px;background:rgba(212,175,55,.07);color:#f0d878;font-size:15px}.bh-folder-name strong{display:block;min-width:0;color:#f4f4f2;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bh-folder-name small{display:block;margin-top:3px;color:#777;font-size:10px}.bh-folder-latest{color:#f0d878;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}.bh-folder-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding:14px}
+  .bh-product{min-width:0;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:15px;background:#101014;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}.bh-product:hover{transform:translateY(-3px);border-color:rgba(212,175,55,.32);box-shadow:0 16px 35px rgba(0,0,0,.3)}.bh-product-art{aspect-ratio:1/1;overflow:hidden;background:#171714}.bh-product-art img{width:100%;height:100%;display:block;object-fit:cover}.bh-product-fallback{width:100%;height:100%;display:grid;place-items:center;color:#777;font-size:26px}.bh-product-body{padding:12px}.bh-product-creator{color:#777;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bh-product-name{margin-top:5px;color:#f4f4f2;font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bh-product-bottom{display:flex;justify-content:space-between;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07)}.bh-product-price{color:#f0d878;font-size:11px;font-weight:950}.bh-product-view{color:#aaa;font-size:9px;font-weight:900}
+  .bh-singles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.bh-empty{padding:45px 20px;border:1px dashed rgba(212,175,55,.2);border-radius:20px;color:#777;text-align:center}
+  @media(max-width:900px){.bh-folders{grid-template-columns:1fr}.bh-singles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:560px){.bh-catalog{padding-top:18px}.bh-catalog-hero{padding:30px 22px;border-radius:21px}.bh-catalog-head{align-items:flex-start;flex-direction:column}.bh-folder-items{grid-template-columns:1fr;max-width:330px}.bh-singles{grid-template-columns:1fr}.bh-folder-head{padding:14px}.bh-folder-latest{display:none}}
+</style>
+<section class="bh-catalog">
+  <header class="bh-catalog-hero"><div class="bh-catalog-kicker">Creator Merchandise</div><h1>Wear the <span>Sound.</span></h1><p>Explore official BeatHub merchandise organized around the creators behind it. Multiple drops from one creator stay together in one collection instead of being scattered across the marketplace.</p><div class="bh-catalog-stats"><span class="bh-catalog-stat"><b>{{ total_products }}</b> products</span><span class="bh-catalog-stat"><b>{{ collection_count }}</b> creator collections</span><span class="bh-catalog-stat">Newest drops first</span></div></header>
+  {% if collections %}
+  <section>
+    <div class="bh-catalog-head"><div><div class="bh-catalog-label">Creator collections</div><h2>Shop by creator</h2><p>Two or more products from a creator are kept together.</p></div></div>
+    <div class="bh-folders">
+      {% for collection in collections %}
+      <section class="bh-folder">
+        <div class="bh-folder-head"><div class="bh-folder-name"><span class="bh-folder-icon">✦</span><span><strong>{{ collection.creator_name }}</strong><small>{{ collection.item_count }} merch items</small></span></div><span class="bh-folder-latest">Newest first</span></div>
+        <div class="bh-folder-items">
+          {% for product in collection.items %}
+          <article class="bh-product"><a href="/merch/{{ product.slug }}" aria-label="View {{ product.name }}"><div class="bh-product-art">{% if product.image_url %}<img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">{% else %}<div class="bh-product-fallback">🛍️</div>{% endif %}</div><div class="bh-product-body"><div class="bh-product-creator">{{ product.creator_name }}</div><div class="bh-product-name">{{ product.name }}</div><div class="bh-product-bottom"><span class="bh-product-price">KSh {{ '%.2f'|format(product.price|float) }}</span><span class="bh-product-view">View ↗</span></div></div></a></article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if standalone_products %}
+  <section style="margin-top:38px"><div class="bh-catalog-head"><div><div class="bh-catalog-label">Individual drops</div><h2>Latest tees</h2><p>Creators with one merch item are shown directly as products.</p></div></div><div class="bh-singles">
+    {% for product in standalone_products %}<article class="bh-product"><a href="/merch/{{ product.slug }}" aria-label="View {{ product.name }}"><div class="bh-product-art">{% if product.image_url %}<img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy">{% else %}<div class="bh-product-fallback">🛍️</div>{% endif %}</div><div class="bh-product-body"><div class="bh-product-creator">{{ product.creator_name }}</div><div class="bh-product-name">{{ product.name }}</div><div class="bh-product-bottom"><span class="bh-product-price">KSh {{ '%.2f'|format(product.price|float) }}</span><span class="bh-product-view">View ↗</span></div></div></a></article>{% endfor %}
+  </div></section>
+  {% endif %}
+
+  {% if not collections and not standalone_products %}<div class="bh-empty">No merchandise is available yet.</div>{% endif %}
+</section>
+{% endblock %}
