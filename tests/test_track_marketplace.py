@@ -45,7 +45,9 @@ class TrackMarketplaceTests(unittest.TestCase):
             "Hot picks",
             "Featured producers",
             "Tracks worth hearing",
-            "Merch, kept simple.",
+            "Creator Tees",
+            "Creator Collection",
+            "Latest tees",
             "/marketplace/beats",
             "/tracks",
             "/marketplace/albums",
@@ -64,6 +66,17 @@ class TrackMarketplaceTests(unittest.TestCase):
         self.assertIn('== "track"', source)
         self.assertIn("beathub_merchandise", source)
         self.assertIn("/store/", source)
+
+    def test_creator_merch_is_grouped_and_singletons_remain_products(self):
+        source = (ROOT / "app/routers/marketplace.py").read_text(encoding="utf-8")
+        self.assertIn("def _merch_collections", source)
+        self.assertIn("len(items) >= 2", source)
+        self.assertIn('"merch_collections"', source)
+        self.assertIn('"standalone_merch"', source)
+        template = (ROOT / "app/templates/marketplace.html").read_text(encoding="utf-8")
+        self.assertIn("collection-grid", template)
+        self.assertIn("standalone_merch", template)
+        self.assertIn("/store/{{", template)
 
     def test_dedicated_category_templates_exist(self):
         for relative in (
