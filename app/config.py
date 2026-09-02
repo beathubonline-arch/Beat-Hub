@@ -39,7 +39,6 @@ class Settings(BaseSettings):
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
     FACEBOOK_URL: str = ""
 
-    # Transactional email — Resend uses HTTPS/API, avoiding SMTP egress limits.
     EMAIL_ENABLED: bool = False
     EMAIL_PROVIDER: str = "resend"
     EMAIL_FROM: str = ""
@@ -66,7 +65,11 @@ class Settings(BaseSettings):
     R2_PUBLIC_URL: str = ""
     R2_PUBLIC_URL_EXPIRES: int = 3600
     R2_DOWNLOAD_URL_EXPIRES: int = 900
-    MAX_UPLOAD_MB: int = 50
+
+    # Audio masters can be much larger than 50MB. Keep the application default
+    # high enough for lossless WAV/FLAC uploads while allowing deployment
+    # operators to lower it explicitly through MAX_UPLOAD_MB if required.
+    MAX_UPLOAD_MB: int = 500
 
     @property
     def r2_enabled(self) -> bool:
