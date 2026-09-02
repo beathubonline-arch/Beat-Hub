@@ -145,13 +145,14 @@
   }
 
   function initBeatCreatorFolders() {
-    if (window.location.pathname !== '/beats') return;
-
+    // The marketplace's beat grid is the authoritative signal. Do not
+    // depend on a pathname because the same marketplace template can be
+    // reached through compatibility routes or rewritten URLs.
     var grid = document.querySelector('.market-grid');
-    if (!grid || grid.dataset.creatorFoldersReady === 'true') return;
+    if (!grid || grid.dataset.creatorFoldersReady === 'true') return false;
 
     var cards = Array.prototype.slice.call(grid.querySelectorAll('.beat-card'));
-    if (!cards.length) return;
+    if (!cards.length) return false;
 
     var groups = new Map();
     cards.forEach(function (card) {
@@ -163,26 +164,28 @@
       groups.get(producer).push(card);
     });
 
-    if (!groups.size) return;
+    if (!groups.size) return false;
 
-    var style = document.createElement('style');
-    style.id = 'bh-beat-folder-styles';
-    style.textContent = [
-      '.bh-beat-folders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}',
-      '.bh-beat-folder{overflow:hidden;border:1px solid #292929;border-radius:20px;background:linear-gradient(145deg,#141414,#0b0b0b);box-shadow:0 18px 50px rgba(0,0,0,.28)}',
-      '.bh-beat-folder-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid #252525;background:linear-gradient(180deg,#171714,#10100f)}',
-      '.bh-beat-folder-title{display:flex;align-items:center;gap:12px;min-width:0}',
-      '.bh-beat-folder-icon{width:38px;height:32px;display:grid;place-items:center;flex:0 0 auto;border:1px solid rgba(244,211,94,.28);border-radius:9px;background:#1b1b17;color:#f4d35e;font-size:17px}',
-      '.bh-beat-folder-name{min-width:0;color:#f2f2ef;font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.bh-beat-folder-count{margin-top:3px;color:#777;font-size:11px}',
-      '.bh-beat-folder-latest{color:#f4d35e;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}',
-      '.bh-beat-folder-beats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px}',
-      '.bh-beat-folder-beats .beat-card{min-width:0}',
-      '.bh-beat-folder-beats .beat-card:hover{transform:translateY(-3px)}',
-      '@media(max-width:900px){.bh-beat-folders{grid-template-columns:1fr}}',
-      '@media(max-width:560px){.bh-beat-folder-beats{grid-template-columns:1fr}.bh-beat-folder-head{padding:15px}.bh-beat-folder-latest{display:none}}'
-    ].join('');
-    document.head.appendChild(style);
+    if (!document.getElementById('bh-beat-folder-styles')) {
+      var style = document.createElement('style');
+      style.id = 'bh-beat-folder-styles';
+      style.textContent = [
+        '.bh-beat-folders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}',
+        '.bh-beat-folder{overflow:hidden;border:1px solid #292929;border-radius:20px;background:linear-gradient(145deg,#141414,#0b0b0b);box-shadow:0 18px 50px rgba(0,0,0,.28)}',
+        '.bh-beat-folder-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid #252525;background:linear-gradient(180deg,#171714,#10100f)}',
+        '.bh-beat-folder-title{display:flex;align-items:center;gap:12px;min-width:0}',
+        '.bh-beat-folder-icon{width:38px;height:32px;display:grid;place-items:center;flex:0 0 auto;border:1px solid rgba(244,211,94,.28);border-radius:9px;background:#1b1b17;color:#f4d35e;font-size:17px}',
+        '.bh-beat-folder-name{min-width:0;color:#f2f2ef;font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.bh-beat-folder-count{margin-top:3px;color:#777;font-size:11px}',
+        '.bh-beat-folder-latest{color:#f4d35e;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}',
+        '.bh-beat-folder-beats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px}',
+        '.bh-beat-folder-beats .beat-card{min-width:0}',
+        '.bh-beat-folder-beats .beat-card:hover{transform:translateY(-3px)}',
+        '@media(max-width:900px){.bh-beat-folders{grid-template-columns:1fr}}',
+        '@media(max-width:560px){.bh-beat-folder-beats{grid-template-columns:1fr}.bh-beat-folder-head{padding:15px}.bh-beat-folder-latest{display:none}}'
+      ].join('');
+      document.head.appendChild(style);
+    }
 
     var folderGrid = document.createElement('div');
     folderGrid.className = 'bh-beat-folders';
@@ -218,11 +221,20 @@
 
     grid.replaceWith(folderGrid);
     folderGrid.dataset.creatorFoldersReady = 'true';
+    return true;
   }
 
   function init() {
     initNotifications();
-    initBeatCreatorFolders();
+    if (initBeatCreatorFolders()) return;
+
+    // Give server-rendered/late-inserted marketplace cards a short second
+    // chance without polling the page indefinitely.
+    var attempts = 0;
+    var retry = window.setInterval(function () {
+      attempts += 1;
+      if (initBeatCreatorFolders() || attempts >= 10) window.clearInterval(retry);
+    }, 100);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
