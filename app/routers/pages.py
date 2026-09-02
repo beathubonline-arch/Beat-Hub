@@ -150,6 +150,11 @@ def terms(request: Request, current_user: Optional[User] = Depends(get_optional_
     return templates.TemplateResponse(request, "terms.html", ctx(request, current_user))
 
 
+@router.get("/support")
+def support(request: Request, current_user: Optional[User] = Depends(get_optional_user)):
+    return templates.TemplateResponse(request, "support.html", ctx(request, current_user))
+
+
 @router.get("/account")
 def account(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
     role = get_role_name(current_user)
