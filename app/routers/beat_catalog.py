@@ -14,6 +14,14 @@ router = APIRouter(tags=["beat-catalog"])
 templates = Jinja2Templates(directory="app/templates")
 
 
+def _is_beat(track: Track) -> bool:
+    """Accept both current string values and legacy enum-style values."""
+    value = getattr(track, "content_type", None)
+    value = getattr(value, "value", value)
+    raw = str(value or "beat").strip().lower()
+    return raw in {"beat", "trackcontenttype.beat", "trackcontenttype_beat"}
+
+
 @router.get("/marketplace/beats")
 def beats_catalog(
     request: Request,
@@ -37,8 +45,7 @@ def beats_catalog(
     )
     tracks = [
         track for track in tracks
-        if _track_is_public(track)
-        and str(getattr(track, "content_type", "beat") or "beat").strip().lower() == "beat"
+        if _track_is_public(track) and _is_beat(track)
     ]
 
     total = len(tracks)
