@@ -6,9 +6,10 @@ def test_dashboard_upload_routes_use_canonical_publisher():
         route
         for route in app.routes
         if getattr(route, "path", "") == "/dashboard/upload"
+        and "POST" in getattr(route, "methods", set())
     ]
 
-    assert upload_routes, "dashboard upload route is not registered"
+    assert upload_routes, "dashboard POST upload route is not registered"
     assert upload_routes[0].endpoint.__module__ == "app.routers.music_publish"
     assert upload_routes[0].endpoint.__name__ == "publish_tracks"
 
