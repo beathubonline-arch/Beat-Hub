@@ -15,11 +15,9 @@ from app.utils.deps import require_creator
 from app.utils.text import unique_slug
 router=APIRouter(tags=["music-publishing"])
 templates=Jinja2Templates(directory="app/templates")
-def _error(request,user,message):
-    return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026,"error":message},status_code=400)
+def _error(request,user,message): return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026,"error":message},status_code=400)
 @router.get("/dashboard/upload")
-def upload_page(request:Request,user:User=Depends(require_creator)):
-    return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026})
+def upload_page(request:Request,user:User=Depends(require_creator)): return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026})
 @router.post("/dashboard/upload/sign")
 async def sign_direct_upload(request:Request,user:User=Depends(require_creator)):
     if not _r2_is_configured(): raise HTTPException(status_code=503,detail="Direct storage upload is unavailable.")
@@ -31,10 +29,10 @@ async def sign_direct_upload(request:Request,user:User=Depends(require_creator))
     except UploadValidationError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
 def _form_values(form,name:str)->List[str]: return [str(value or "") for value in form.getlist(name)]
 def _form_file_slots(form,name:str): return [value if isinstance(value,UploadFile) and value.filename else None for value in form.getlist(name)]
-def _direct_paths(form,name:str)->List[str]:
+def _direct_paths(form,name:str,preserve_empty:bool=False)->List[str]:
     values=_form_values(form,name)
     if len(values)==1 and "\n" in values[0]: values=values[0].splitlines()
-    return [v.strip() for v in values if v.strip()]
+    return [v.strip() for v in values] if preserve_empty else [v.strip() for v in values if v.strip()]
 @router.post("/dashboard/upload")
 async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=Depends(require_creator)):
     profile=getattr(user,"profile",None)
@@ -42,7 +40,7 @@ async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=De
     try: form=await request.form()
     except ClientDisconnect: return _error(request,user,"The upload connection was interrupted before BeatHub received the form. Please retry; your original audio is not partially published.")
     titles=_form_values(form,"titles"); descriptions=_form_values(form,"descriptions"); genres=_form_values(form,"genres"); bpms=_form_values(form,"bpms"); tags_list=_form_values(form,"tags_list"); prices=_form_values(form,"prices"); currencies=_form_values(form,"currencies"); sales_models=_form_values(form,"sales_models"); content_types=_form_values(form,"content_types")
-    audio_refs=_direct_paths(form,"audio_r2_paths"); direct_covers=_direct_paths(form,"cover_r2_paths")
+    audio_refs=_direct_paths(form,"audio_r2_paths"); direct_covers=_direct_paths(form,"cover_r2_paths",preserve_empty=True)
     audio_slots=_form_file_slots(form,"audio_files"); cover_slots=_form_file_slots(form,"cover_files"); audio_files=[f for f in audio_slots if f is not None]
     expected=len(audio_refs) if audio_refs else len(audio_files)
     if not expected: return _error(request,user,"Please select at least one audio file.")
@@ -76,10 +74,10 @@ async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=De
             else:
                 audio_file=audio_files[i]; audio_path=await save_upload_to_r2(audio_file,"audio",ALLOWED_AUDIO_EXT) if _r2_is_configured() else await save_upload(audio_file,"audio",ALLOWED_AUDIO_EXT)
             cover_path=None
-            if i<len(direct_covers):
+            if i<len(direct_covers) and direct_covers[i]:
                 cover_path=direct_covers[i]; meta=r2_object_head(cover_path)
                 if int(meta.get("ContentLength") or 0)<=0: raise UploadValidationError("Cover art is empty.")
-            elif i<len(cover_slots) and cover_slots[i] is not None:
+            elif not audio_refs and i<len(cover_slots) and cover_slots[i] is not None:
                 cover_path=await save_upload_to_r2(cover_slots[i],"covers",ALLOWED_IMAGE_EXT) if _r2_is_configured() else await save_upload(cover_slots[i],"covers",ALLOWED_IMAGE_EXT)
             track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=descriptions[i].strip() or None,genre=genres[i].strip() or None,bpm=bpm_value,tags=tags_list[i].strip() or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=sales_model,content_type=content_raw,is_published=True)
             db.add(track); created.append(track)
