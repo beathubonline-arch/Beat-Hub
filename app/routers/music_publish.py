@@ -6,6 +6,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
+from starlette.requests import ClientDisconnect
 
 from app.database import get_db
 from app.models.music import SalesModel, Track, TrackContentType
@@ -16,6 +17,8 @@ from app.services.storage import (
     ALLOWED_IMAGE_EXT,
     UploadValidationError,
     _r2_is_configured,
+    r2_object_head,
+    r2_presigned_upload,
     save_upload,
     save_upload_to_r2,
 )
@@ -30,12 +33,7 @@ def _error(request: Request, user: User, message: str):
     return templates.TemplateResponse(
         request,
         "upload_track.html",
-        {
-            "request": request,
-            "current_user": user,
-            "current_year": 2026,
-            "error": message,
-        },
+        {"request": request, "current_user": user, "current_year": 2026, "error": message},
         status_code=400,
     )
 
@@ -49,12 +47,30 @@ def upload_page(request: Request, user: User = Depends(require_creator)):
     )
 
 
+@router.post("/dashboard/upload/sign")
+async def sign_direct_upload(request: Request, user: User = Depends(require_creator)):
+    """Sign a short-lived R2 PUT URL so large files bypass Render's request body."""
+    if not _r2_is_configured():
+        raise HTTPException(status_code=503, detail="Direct storage upload is unavailable.")
+    try:
+        payload = await request.json()
+        filename = str(payload.get("filename") or "")
+        content_type = str(payload.get("content_type") or "application/octet-stream")
+        kind = str(payload.get("kind") or "audio").lower()
+        if kind not in {"audio", "covers"}:
+            raise HTTPException(status_code=400, detail="Invalid upload type.")
+        if not filename:
+            raise HTTPException(status_code=400, detail="Filename is required.")
+        return r2_presigned_upload(filename, content_type, kind)
+    except UploadValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def _form_values(form, name: str) -> List[str]:
     return [str(value or "") for value in form.getlist(name)]
 
 
 def _form_file_slots(form, name: str):
-    """Keep one slot per dynamic upload card, including empty optional slots."""
     return [
         value if isinstance(value, UploadFile) and value.filename else None
         for value in form.getlist(name)
@@ -67,12 +83,23 @@ async def publish_tracks(
     db: Session = Depends(get_db),
     user: User = Depends(require_creator),
 ):
-    """Publish one or more music items from the dynamic multipart form."""
+    """Publish music. Large files may already be in R2, leaving this request tiny."""
     profile = getattr(user, "profile", None)
     if not profile:
         raise HTTPException(status_code=400, detail="Creator profile missing.")
 
-    form = await request.form()
+    try:
+        form = await request.form()
+    except ClientDisconnect:
+        # This should only occur for the legacy multipart path. The browser now
+        # uploads large media directly to R2 before posting metadata here.
+        return _error(
+            request,
+            user,
+            "The upload connection was interrupted before BeatHub received the form. "
+            "Please retry; your original audio is not partially published.",
+        )
+
     titles = _form_values(form, "titles")
     descriptions = _form_values(form, "descriptions")
     genres = _form_values(form, "genres")
@@ -82,14 +109,22 @@ async def publish_tracks(
     currencies = _form_values(form, "currencies")
     sales_models = _form_values(form, "sales_models")
     content_types = _form_values(form, "content_types")
+
+    direct_audio = _form_values(form, "audio_r2_paths")
+    direct_covers = _form_values(form, "cover_r2_paths")
     audio_slots = _form_file_slots(form, "audio_files")
     cover_slots = _form_file_slots(form, "cover_files")
     audio_files = [file for file in audio_slots if file is not None]
 
-    if not audio_files:
+    if direct_audio:
+        audio_refs = [p.strip() for p in direct_audio if p.strip()]
+    else:
+        audio_refs = []
+
+    expected = len(audio_refs) if audio_refs else len(audio_files)
+    if not expected:
         return _error(request, user, "Please select at least one audio file.")
 
-    expected = len(audio_files)
     fields = {
         "titles": titles,
         "descriptions": descriptions,
@@ -100,40 +135,22 @@ async def publish_tracks(
         "sales_models": sales_models,
         "content_types": content_types,
     }
-    mismatches = {
-        name: len(values)
-        for name, values in fields.items()
-        if len(values) != expected
-    }
+    mismatches = {name: len(values) for name, values in fields.items() if len(values) != expected}
     if mismatches:
         details = ", ".join(f"{name}={count}" for name, count in mismatches.items())
-        return _error(
-            request,
-            user,
-            f"Upload form data is incomplete ({details}; audio_files={expected}). "
-            "Please refresh the page and try again.",
-        )
-
+        return _error(request, user, f"Upload form data is incomplete ({details}; audio={expected}). Please refresh and try again.")
     if bpms and len(bpms) != expected:
-        return _error(
-            request,
-            user,
-            "The BPM fields do not match the selected audio files. Please refresh and try again.",
-        )
+        return _error(request, user, "The BPM fields do not match the selected audio files. Please refresh and try again.")
 
     created = []
     try:
-        audio_index = 0
         for i in range(expected):
             title = titles[i].strip()
             if not title:
                 return _error(request, user, "Every upload needs a title.")
 
             content_raw = content_types[i].strip().lower()
-            if content_raw not in {
-                TrackContentType.BEAT.value,
-                TrackContentType.TRACK.value,
-            }:
+            if content_raw not in {TrackContentType.BEAT.value, TrackContentType.TRACK.value}:
                 return _error(request, user, f"Choose Beat or Track for '{title}'.")
 
             try:
@@ -145,11 +162,7 @@ async def publish_tracks(
             bpm_value = None
             if bpm_raw:
                 if not bpm_raw.isdigit() or not 1 <= int(bpm_raw) <= 999:
-                    return _error(
-                        request,
-                        user,
-                        f"BPM for '{title}' must be a whole number between 1 and 999.",
-                    )
+                    return _error(request, user, f"BPM for '{title}' must be a whole number between 1 and 999.")
                 bpm_value = int(bpm_raw)
 
             try:
@@ -162,33 +175,32 @@ async def publish_tracks(
             model_raw = sales_models[i].strip().lower() or "non_exclusive"
             if model_raw not in {"exclusive", "non_exclusive"}:
                 return _error(request, user, f"Sales model for '{title}' is invalid.")
-            sales_model = (
-                SalesModel.EXCLUSIVE
-                if model_raw == "exclusive"
-                else SalesModel.NON_EXCLUSIVE
-            )
+            sales_model = SalesModel.EXCLUSIVE if model_raw == "exclusive" else SalesModel.NON_EXCLUSIVE
 
-            audio_file = audio_files[audio_index]
-            audio_index += 1
-            if _r2_is_configured():
-                audio_path = await save_upload_to_r2(
-                    audio_file, "audio", ALLOWED_AUDIO_EXT
-                )
+            if audio_refs:
+                audio_path = audio_refs[i]
+                meta = r2_object_head(audio_path)
+                size = int(meta.get("ContentLength") or 0)
+                if size <= 0 or size > 1000 * 1024 * 1024:
+                    raise UploadValidationError("Audio file is empty or exceeds the 1000MB upload limit.")
             else:
-                audio_path = await save_upload(
-                    audio_file, "audio", ALLOWED_AUDIO_EXT
-                )
+                audio_file = audio_files[i]
+                if _r2_is_configured():
+                    audio_path = await save_upload_to_r2(audio_file, "audio", ALLOWED_AUDIO_EXT)
+                else:
+                    audio_path = await save_upload(audio_file, "audio", ALLOWED_AUDIO_EXT)
 
             cover_path = None
-            if i < len(cover_slots) and cover_slots[i] is not None:
+            if i < len(direct_covers) and direct_covers[i].strip():
+                cover_path = direct_covers[i].strip()
+                meta = r2_object_head(cover_path)
+                if int(meta.get("ContentLength") or 0) <= 0:
+                    raise UploadValidationError("Cover art is empty.")
+            elif i < len(cover_slots) and cover_slots[i] is not None:
                 if _r2_is_configured():
-                    cover_path = await save_upload_to_r2(
-                        cover_slots[i], "covers", ALLOWED_IMAGE_EXT
-                    )
+                    cover_path = await save_upload_to_r2(cover_slots[i], "covers", ALLOWED_IMAGE_EXT)
                 else:
-                    cover_path = await save_upload(
-                        cover_slots[i], "covers", ALLOWED_IMAGE_EXT
-                    )
+                    cover_path = await save_upload(cover_slots[i], "covers", ALLOWED_IMAGE_EXT)
 
             track = Track(
                 creator_profile_id=profile.id,
@@ -219,7 +231,4 @@ async def publish_tracks(
 
     item_word = "item" if len(created) == 1 else "items"
     message = f"{len(created)} {item_word} published successfully."
-    return RedirectResponse(
-        url="/dashboard?success=" + message.replace(" ", "%20"),
-        status_code=303,
-    )
+    return RedirectResponse(url="/dashboard?success=" + message.replace(" ", "%20"), status_code=303)
