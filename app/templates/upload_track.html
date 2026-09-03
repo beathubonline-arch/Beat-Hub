@@ -40,25 +40,36 @@
  function setFile(row,file){const input=row.querySelector('[name="audio_files"]');try{const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;}catch(e){}const title=row.querySelector('[name="titles"]');if(!title.value)title.value=file.name.replace(/\.[^/.]+$/,'').replace(/[_-]+/g,' ').trim();}
  function addRow(file){rows.appendChild(tpl.content.cloneNode(true));const row=rows.lastElementChild;wire(row,rows.querySelectorAll('.track-row').length-1);if(file)setFile(row,file);renumber();}
  function setProgress(percent,label,title){const safe=Math.max(0,Math.min(100,Math.round(percent)));statusBox.classList.add('visible');progressBar.style.width=safe+'%';progressPercent.textContent=safe+'%';progressLabel.textContent=label;statusTitle.textContent=title;}
- window.addTrackRow=addRow;
- addButton.onclick=()=>addRow();
+ async function signAndUpload(file,kind){
+   const sign=await fetch('/dashboard/upload/sign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,content_type:file.type||'application/octet-stream',kind})});
+   if(!sign.ok){let detail='Could not prepare storage upload.';try{detail=(await sign.json()).detail||detail;}catch(e){}throw new Error(detail);}
+   const info=await sign.json();
+   await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',info.url,true);xhr.setRequestHeader('Content-Type',file.type||'application/octet-stream');xhr.upload.onprogress=e=>{if(e.lengthComputable)window.__directProgress=(e.loaded/e.total)*100;};xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error('Storage upload failed ('+xhr.status+').'));xhr.onerror=()=>reject(new Error('Network connection to storage was interrupted.'));xhr.onabort=()=>reject(new Error('Storage upload was cancelled.'));xhr.send(file);});
+   return info.path;
+ }
  picker.onchange=()=>{rows.innerHTML='';Array.from(picker.files).forEach(addRow);status.textContent=picker.files.length+' file(s) selected.';};
- form.addEventListener('submit',function(event){
-   if(submitting)return;
-   event.preventDefault();
-   if(!form.reportValidity())return;
+ addButton.onclick=()=>addRow();
+ form.addEventListener('submit',async function(event){
+   event.preventDefault();if(submitting)return;if(!form.reportValidity())return;
    submitting=true;publish.disabled=true;addButton.disabled=true;picker.disabled=true;
-   setProgress(0,'Starting upload…','Uploading your music');
-   const xhr=new XMLHttpRequest();xhr.open('POST',form.action,true);xhr.responseType='text';
-   xhr.upload.addEventListener('progress',function(e){if(e.lengthComputable){const p=(e.loaded/e.total)*100;setProgress(p,p<100?'Uploading audio and artwork…':'Upload received — processing…',p<100?'Uploading your music':'Processing your upload');}});
-   xhr.addEventListener('load',function(){
-     if(xhr.status>=200&&xhr.status<400){setProgress(100,'Upload complete. Redirecting…','Published successfully');window.location.href=xhr.responseURL||'/dashboard';return;}
-     submitting=false;publish.disabled=false;addButton.disabled=false;picker.disabled=false;setProgress(0,'Upload failed — please try again.','Upload could not be completed');
-     try{const doc=new DOMParser().parseFromString(xhr.responseText,'text/html');const message=doc.body&&doc.body.innerText?doc.body.innerText.trim():'';if(message)statusTitle.textContent='Upload failed';}catch(e){}
-   });
-   xhr.addEventListener('error',function(){submitting=false;publish.disabled=false;addButton.disabled=false;picker.disabled=false;setProgress(0,'Network connection interrupted. Please try again.','Upload failed');});
-   xhr.addEventListener('abort',function(){submitting=false;publish.disabled=false;addButton.disabled=false;picker.disabled=false;setProgress(0,'Upload cancelled.','Upload cancelled');});
-   xhr.send(new FormData(form));
+   try{
+     const items=Array.from(rows.querySelectorAll('.track-row'));const totalFiles=items.reduce((n,row)=>n+(row.querySelector('[name="audio_files"]').files[0]?1:0)+(row.querySelector('[name="cover_files"]').files[0]?1:0),0);let done=0;
+     const audioPaths=[],coverPaths=[];
+     for(const row of items){
+       const audio=row.querySelector('[name="audio_files"]').files[0];if(!audio)throw new Error('Every item needs an audio file.');
+       setProgress(0,'Uploading '+audio.name+' directly to storage…','Uploading your music');
+       const ap=await signAndUpload(audio,'audio');audioPaths.push(ap);done++;setProgress(totalFiles?(done/totalFiles)*100:'0','Audio uploaded — continuing…','Uploading your music');
+       const cover=row.querySelector('[name="cover_files"]').files[0];if(cover){const cp=await signAndUpload(cover,'covers');coverPaths.push(cp);done++;}else coverPaths.push('');
+       if(cover) setProgress(totalFiles?(done/totalFiles)*100:'0','Artwork uploaded — continuing…','Uploading your music');
+     }
+     const data=new FormData(form);
+     data.append('audio_r2_paths',audioPaths.join('\n'));data.append('cover_r2_paths',coverPaths.join('\n'));
+     items.forEach(row=>{row.querySelector('[name="audio_files"]').disabled=true;row.querySelector('[name="cover_files"]').disabled=true;});
+     setProgress(100,'Files safely stored. Publishing metadata…','Finalizing your upload');
+     const response=await fetch(form.action,{method:'POST',body:data,redirect:'follow'});
+     if(!response.ok)throw new Error('BeatHub could not finalize the upload ('+response.status+').');
+     window.location.href=response.url||'/dashboard';
+   }catch(err){submitting=false;publish.disabled=false;addButton.disabled=false;picker.disabled=false;setProgress(0,err.message||'Upload failed — please try again.','Upload failed');}
  });
  addRow();
 })();
