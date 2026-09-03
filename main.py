@@ -102,6 +102,7 @@ class HomepageMotionMiddleware:
 
 
 class GlobalFrontendAssetsMiddleware:
+    FAVICON = b'<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=20260904"><link rel="shortcut icon" href="/static/favicon.svg?v=20260904"><meta name="theme-color" content="#171321">'
     SCRIPT = b'<script defer src="/static/js/notifications.js?v=20260903"></script><script defer src="/static/js/beathub-push.js?v=20260903"></script>'
     def __init__(self, app): self.app = app
     async def __call__(self, scope, receive, send):
@@ -120,10 +121,19 @@ class GlobalFrontendAssetsMiddleware:
         for key, value in headers:
             if key.lower() == b"content-type": content_type = value.decode("latin-1").lower(); break
         body = b"".join(body_chunks)
-        if content_type.startswith("text/html") and b"/static/js/notifications.js" not in body:
-            marker = b"</body>"; marker_index = body.lower().find(marker)
-            if marker_index >= 0:
-                body = body[:marker_index] + self.SCRIPT + body[marker_index:]
+        if content_type.startswith("text/html"):
+            changed = False
+            if b"/static/favicon.svg" not in body:
+                marker = b"</head>"; marker_index = body.lower().find(marker)
+                if marker_index >= 0:
+                    body = body[:marker_index] + self.FAVICON + body[marker_index:]
+                    changed = True
+            if b"/static/js/notifications.js" not in body:
+                marker = b"</body>"; marker_index = body.lower().find(marker)
+                if marker_index >= 0:
+                    body = body[:marker_index] + self.SCRIPT + body[marker_index:]
+                    changed = True
+            if changed:
                 headers = [(key, value) for key, value in headers if key.lower() != b"content-length"]
                 headers.append((b"cache-control", b"no-cache, no-store, must-revalidate"))
         start_message["headers"] = headers
