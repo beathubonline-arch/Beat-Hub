@@ -22,8 +22,17 @@ MERCH_TABLE = "beathub_merchandise"
 
 
 def _track_type(track: Track) -> str:
+    """Normalize Track.content_type so legacy/enum representations still classify correctly."""
     value = getattr(track, "content_type", None)
-    return str(getattr(value, "value", value) or "beat").strip().lower()
+    value = getattr(value, "value", value)
+    raw = str(value or "beat").strip().lower()
+    if raw in {"trackcontenttype.beat", "trackcontenttype_beat", "beat"}:
+        return "beat"
+    if raw in {"trackcontenttype.track", "trackcontenttype_track", "track", "song"}:
+        return "track"
+    # Older records may have an empty/unknown content type. Tracks historically
+    # represented beats, so keep them visible in the beat marketplace.
+    return "beat"
 
 
 def _public_tracks(db: Session) -> list[Track]:
