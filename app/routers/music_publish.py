@@ -1,16 +1,15 @@
 from decimal import Decimal, InvalidOperation
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from starlette.datastructures import UploadFile
 from starlette.requests import ClientDisconnect
 from app.database import get_db
 from app.models.music import SalesModel, Track, TrackContentType
 from app.models.user import User
 from app.services.pricing import normalize_currency
-from app.services.storage import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, UploadValidationError, _r2_is_configured, r2_object_head, r2_presigned_upload, save_upload, save_upload_to_r2
+from app.services.storage import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, UploadValidationError, _r2_is_configured, r2_object_head, r2_presigned_upload, save_upload_to_r2
 from app.utils.deps import require_creator
 from app.utils.text import unique_slug
 router=APIRouter(tags=["music-publishing"])
@@ -32,13 +31,8 @@ async def sign_direct_upload(request:Request,user:User=Depends(require_creator))
     except UploadValidationError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
 
 @router.post("/dashboard/upload/blob")
-async def upload_blob_fallback(request:Request,file:UploadFile,kind:str="audio",user:User=Depends(require_creator)):
-    """Same-origin fallback when browser CORS blocks a direct R2 PUT.
-
-    Normal uploads still use direct-to-R2. This endpoint exists so a creator
-    is never stranded by an R2 bucket CORS misconfiguration or restrictive
-    browser/network policy.
-    """
+async def upload_blob_fallback(file:UploadFile,kind:str="audio",user:User=Depends(require_creator)):
+    """Same-origin fallback when browser CORS blocks a direct R2 PUT."""
     kind=str(kind or "audio").strip().lower()
     allowed=ALLOWED_AUDIO_EXT if kind=="audio" else ALLOWED_IMAGE_EXT if kind=="covers" else None
     if allowed is None: raise HTTPException(status_code=400,detail="Invalid upload type.")
@@ -50,7 +44,6 @@ async def upload_blob_fallback(request:Request,file:UploadFile,kind:str="audio",
     except Exception as exc: raise HTTPException(status_code=503,detail="Storage upload failed. Please retry.") from exc
 
 def _form_values(form,name:str)->List[str]: return [str(value or "") for value in form.getlist(name)]
-def _form_file_slots(form,name:str): return [value if isinstance(value,UploadFile) and value.filename else None for value in form.getlist(name)]
 def _direct_paths(form,name:str,preserve_empty:bool=False)->List[str]:
     values=_form_values(form,name)
     if len(values)==1 and "\n" in values[0]: values=values[0].splitlines()
@@ -99,7 +92,6 @@ def _publish_data(request,user,db,data):
 
 @router.post("/dashboard/upload")
 async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=Depends(require_creator)):
-    """Direct-upload clients send JSON metadata only, so Render never parses the audio multipart body."""
     content_type=request.headers.get("content-type","").lower()
     if content_type.startswith("application/json"):
         try: data=await request.json()
