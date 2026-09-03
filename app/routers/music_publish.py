@@ -30,6 +30,25 @@ async def sign_direct_upload(request:Request,user:User=Depends(require_creator))
         if not filename: raise HTTPException(status_code=400,detail="Filename is required.")
         return r2_presigned_upload(filename,content_type,kind)
     except UploadValidationError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+
+@router.post("/dashboard/upload/blob")
+async def upload_blob_fallback(request:Request,file:UploadFile,kind:str="audio",user:User=Depends(require_creator)):
+    """Same-origin fallback when browser CORS blocks a direct R2 PUT.
+
+    Normal uploads still use direct-to-R2. This endpoint exists so a creator
+    is never stranded by an R2 bucket CORS misconfiguration or restrictive
+    browser/network policy.
+    """
+    kind=str(kind or "audio").strip().lower()
+    allowed=ALLOWED_AUDIO_EXT if kind=="audio" else ALLOWED_IMAGE_EXT if kind=="covers" else None
+    if allowed is None: raise HTTPException(status_code=400,detail="Invalid upload type.")
+    if not _r2_is_configured(): raise HTTPException(status_code=503,detail="Storage is not configured.")
+    try:
+        path=await save_upload_to_r2(file,kind,allowed)
+        return {"path":path}
+    except UploadValidationError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+    except Exception as exc: raise HTTPException(status_code=503,detail="Storage upload failed. Please retry.") from exc
+
 def _form_values(form,name:str)->List[str]: return [str(value or "") for value in form.getlist(name)]
 def _form_file_slots(form,name:str): return [value if isinstance(value,UploadFile) and value.filename else None for value in form.getlist(name)]
 def _direct_paths(form,name:str,preserve_empty:bool=False)->List[str]:
