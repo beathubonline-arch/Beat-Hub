@@ -23,6 +23,6 @@ jobs:
       - name: Compile application
         run: python -m compileall -q app main.py
       - name: Upload regression pass 1
-        run: python -m pytest -q tests/test_storage_upload_validation.py tests/test_upload_route_registration.py tests/test_music_content_types.py
+        run: python -m pytest -q tests/test_storage_upload_validation.py tests/test_upload_route_registration.py tests/test_music_content_types.py tests/test_direct_r2_upload.py
       - name: Upload regression pass 2
-        run: python -m pytest -q tests/test_storage_upload_validation.py tests/test_upload_route_registration.py tests/test_music_content_types.py
+        run: python -m pytest -q tests/test_storage_upload_validation.py tests/test_upload_route_registration.py tests/test_music_content_types.py tests/test_direct_r2_upload.py
