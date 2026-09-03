@@ -12,11 +12,12 @@ def test_direct_paths_splits_multi_upload_payload():
     ]
 
 
-def test_upload_template_uses_direct_r2_endpoint():
+def test_upload_template_uses_direct_r2_and_json_finalize():
     from pathlib import Path
 
     html = Path("app/templates/upload_track.html").read_text(encoding="utf-8")
     assert "/dashboard/upload/sign" in html
     assert "PUT" in html
-    assert "audio_r2_paths" in html
-    assert "cover_r2_paths" in html
+    assert "Content-Type':'application/json'" in html or 'Content-Type":"application/json"' in html
+    assert "JSON.stringify({items:payload})" in html
+    assert "FormData" not in html
