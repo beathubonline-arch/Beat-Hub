@@ -9,11 +9,24 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.routers.dashboard import _dashboard_context
+from app.routers.dashboard import _dashboard_context, router as dashboard_router
+from app.routers import music_publish
 from app.utils.deps import require_creator
 
 router = APIRouter(tags=["dashboard-analytics"])
 templates = Jinja2Templates(directory="app/templates")
+
+
+# The upload page is owned by music_publish because it persists the
+# selected Beat/Track content type. Remove the legacy upload routes from
+# the dashboard router and place the canonical publishing routes first.
+_upload_paths = {"/dashboard/upload"}
+_existing_dashboard_routes = [
+    route for route in dashboard_router.routes
+    if getattr(route, "path", "") not in _upload_paths
+]
+_publish_routes = list(music_publish.router.routes)
+dashboard_router.routes[:] = _publish_routes + _existing_dashboard_routes
 
 
 @router.get("/dashboard/analytics")
