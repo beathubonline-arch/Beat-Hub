@@ -22,11 +22,12 @@ class MusicContentTypeTests(unittest.TestCase):
         source = (ROOT / "app/routers/music_publish.py").read_text(encoding="utf-8")
         self.assertIn("content_types", source)
         upload = (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8")
-        self.assertIn('name="content_types"', upload)
+        self.assertIn('data-field="content_type"', upload)
         self.assertIn('data-kind="beat"', upload)
         self.assertIn('data-kind="track"', upload)
         self.assertIn('value="beat"', upload)
         self.assertIn('value="track"', upload)
+        self.assertIn('content_type:r.querySelector', upload)
 
     def test_upload_router_is_registered_before_legacy_dashboard_router(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
@@ -51,8 +52,8 @@ class MusicContentTypeTests(unittest.TestCase):
         paths = [getattr(route, "path", "") for route in beat_catalog.router.routes]
         self.assertIn("/marketplace/beats", paths)
         source = (ROOT / "app/routers/beat_catalog.py").read_text(encoding="utf-8")
-        self.assertIn('content_type", "beat")', source)
-        self.assertIn('== "beat"', source)
+        self.assertIn('getattr(Track, "content_type", "beat")', source)
+        self.assertIn('_is_beat(track)', source)
 
     def test_store_template_has_separate_sections(self):
         source = (ROOT / "app/templates/creator_store.html").read_text(encoding="utf-8")
@@ -63,10 +64,10 @@ class MusicContentTypeTests(unittest.TestCase):
 
     def test_upload_template_submits_content_type_per_item(self):
         source = (ROOT / "app/templates/upload_track.html").read_text(encoding="utf-8")
-        self.assertIn('name="content_types"', source)
+        self.assertIn('data-field="content_type"', source)
         self.assertIn('data-kind="beat"', source)
         self.assertIn('data-kind="track"', source)
-        self.assertIn("content_type_radio_", source)
+        self.assertIn("content_type:r.querySelector", source)
         self.assertIn("select.value=r.dataset.kind", source)
 
     def test_album_template_filters_tracks_by_project_type(self):
