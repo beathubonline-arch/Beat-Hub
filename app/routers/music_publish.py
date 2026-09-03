@@ -1,10 +1,11 @@
 from decimal import Decimal, InvalidOperation
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile
 
 from app.database import get_db
 from app.models.music import SalesModel, Track, TrackContentType
