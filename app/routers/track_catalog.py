@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.music import Track
 from app.routers.music import _catalog_item, _query_catalog, _track_is_public
 from app.utils.deps import get_optional_user
-from app.routers import beat_catalog, marketplace, upload_api
+from app.routers import beat_catalog, marketplace
 
 logger = logging.getLogger("beathub.track_catalog")
 router = APIRouter(tags=["track-catalog"])
@@ -111,9 +111,9 @@ def tracks_catalog(
     )
 
 
-# main.py already includes track_catalog.router. Keep the marketplace,
-# beat-catalog, and direct-to-R2 upload endpoints mounted through it so the
-# production application actually exposes all three route groups.
+# The marketplace routers were previously present in the repository but were
+# not mounted by main.py. Mount them through this already-included router so
+# /marketplace and /marketplace/beats are actually reachable in production.
+# This also keeps the main application router wiring unchanged.
 router.include_router(marketplace.router)
 router.include_router(beat_catalog.router)
-router.include_router(upload_api.router)
