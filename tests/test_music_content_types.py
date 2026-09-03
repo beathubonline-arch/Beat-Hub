@@ -28,6 +28,12 @@ class MusicContentTypeTests(unittest.TestCase):
         self.assertIn('value="beat"', upload)
         self.assertIn('value="track"', upload)
 
+    def test_upload_router_is_registered_before_legacy_dashboard_router(self):
+        source = (ROOT / "main.py").read_text(encoding="utf-8")
+        publish_pos = source.index("app.include_router(music_publish.router)")
+        dashboard_pos = source.index("app.include_router(dashboard.router)")
+        self.assertLess(publish_pos, dashboard_pos)
+
     def test_album_creation_endpoint_requires_project_type(self):
         route = next(route for route in album.router.routes if getattr(route, "path", "") == "/dashboard/albums/new" and "POST" in getattr(route, "methods", set()))
         dependency_names = {parameter.name for parameter in route.dependant.body_params}
@@ -86,7 +92,7 @@ class MusicContentTypeTests(unittest.TestCase):
             self.assertIn(expected, source)
 
     def test_python_files_compile_as_ast(self):
-        paths = [ROOT / "app/models/music.py", ROOT / "app/routers/marketplace.py", ROOT / "app/routers/music_publish.py", ROOT / "app/routers/beat_catalog.py", ROOT / "app/routers/album.py"]
+        paths = [ROOT / "main.py", ROOT / "app/models/music.py", ROOT / "app/routers/marketplace.py", ROOT / "app/routers/music_publish.py", ROOT / "app/routers/beat_catalog.py", ROOT / "app/routers/album.py"]
         for path in paths:
             ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
