@@ -5,9 +5,7 @@ import unittest
 from app.models.music import AlbumContentType, TrackContentType
 from app.routers import album, beat_catalog, marketplace, music_publish
 
-
 ROOT = Path(__file__).resolve().parents[1]
-
 
 class MusicContentTypeTests(unittest.TestCase):
     def test_track_content_types_are_explicit(self):
@@ -68,7 +66,7 @@ class MusicContentTypeTests(unittest.TestCase):
         self.assertIn('data-kind="beat"', source)
         self.assertIn('data-kind="track"', source)
         self.assertIn("content_type:r.querySelector", source)
-        self.assertIn("select.value=r.dataset.kind", source)
+        self.assertIn("r.onchange=()=>sel.value=r.dataset.kind", source)
 
     def test_album_template_filters_tracks_by_project_type(self):
         source = (ROOT / "app/templates/upload_album.html").read_text(encoding="utf-8")
@@ -79,24 +77,13 @@ class MusicContentTypeTests(unittest.TestCase):
 
     def test_marketplace_template_has_required_discovery_sections(self):
         source = (ROOT / "app/templates/marketplace.html").read_text(encoding="utf-8")
-        for expected in (
-            "Hot picks",
-            "Featured producers",
-            "Tracks worth hearing",
-            "Creator Tees",
-            "/marketplace/beats",
-            "/tracks",
-            "/marketplace/albums",
-            "/merch",
-            "/marketplace/producers",
-        ):
+        for expected in ("Hot picks", "Featured producers", "Tracks worth hearing", "Creator Tees", "/marketplace/beats", "/tracks", "/marketplace/albums", "/merch", "/marketplace/producers"):
             self.assertIn(expected, source)
 
     def test_python_files_compile_as_ast(self):
         paths = [ROOT / "main.py", ROOT / "app/models/music.py", ROOT / "app/routers/marketplace.py", ROOT / "app/routers/music_publish.py", ROOT / "app/routers/beat_catalog.py", ROOT / "app/routers/album.py"]
         for path in paths:
             ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-
 
 if __name__ == "__main__":
     unittest.main()
