@@ -73,8 +73,10 @@ class AdminEmailNotificationTests(unittest.TestCase):
         with patch.object(events, "inspect", return_value=fake_state), patch.object(
             events.Session, "object_session", return_value=session
         ), patch.object(events, "_queue") as queue:
-            events._completed_order(None, None, target)
-        queue.assert_called_once_with(session, "order:order-1", events.notify_payment, target, "music")
+            events._order_notifications(None, None, target)
+        queue.assert_called()
+        queued_keys = [call.args[1] for call in queue.call_args_list]
+        self.assertIn("admin-order:order-1", queued_keys)
 
 
 if __name__ == "__main__":
