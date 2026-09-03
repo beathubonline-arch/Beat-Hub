@@ -82,7 +82,7 @@ class MusicContentTypeTests(unittest.TestCase):
             "Hot picks",
             "Featured producers",
             "Tracks worth hearing",
-            "Merch, kept simple.",
+            "Creator Tees",
             "/marketplace/beats",
             "/tracks",
             "/marketplace/albums",
