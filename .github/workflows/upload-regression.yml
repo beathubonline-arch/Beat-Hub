@@ -22,7 +22,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Compile application
         run: python -m compileall -q app main.py
-      - name: Upload validation pass 1
-        run: python -m pytest -q tests/test_storage_upload_validation.py
-      - name: Upload validation pass 2
-        run: python -m pytest -q tests/test_storage_upload_validation.py
+      - name: Upload regression pass 1
+        run: python -m pytest -q tests/test_storage_upload_validation.py tests/test_upload_route_registration.py tests/test_music_content_types.py
+      - name: Upload regression pass 2
+        run: python -m pytest -q tests/test_storage_upload_validation.py tests/test_upload_route_registration.py tests/test_music_content_types.py
