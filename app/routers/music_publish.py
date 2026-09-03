@@ -1,7 +1,7 @@
 from decimal import Decimal, InvalidOperation
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
@@ -15,7 +15,10 @@ from app.utils.deps import require_creator
 from app.utils.text import unique_slug
 router=APIRouter(tags=["music-publishing"])
 templates=Jinja2Templates(directory="app/templates")
-def _error(request,user,message): return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026,"error":message},status_code=400)
+def _error(request,user,message):
+    if request.headers.get("content-type","").lower().startswith("application/json"):
+        return JSONResponse({"detail":message},status_code=400)
+    return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026,"error":message},status_code=400)
 @router.get("/dashboard/upload")
 def upload_page(request:Request,user:User=Depends(require_creator)): return templates.TemplateResponse(request,"upload_track.html",{"request":request,"current_user":user,"current_year":2026})
 @router.post("/dashboard/upload/sign")
