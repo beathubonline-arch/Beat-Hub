@@ -52,11 +52,11 @@ def _form_values(form, name: str) -> List[str]:
     return [str(value or "") for value in form.getlist(name)]
 
 
-def _form_files(form, name: str) -> List[UploadFile]:
+def _form_file_slots(form, name: str):
+    """Keep one slot per dynamic upload card, including empty optional slots."""
     return [
-        value
+        value if isinstance(value, UploadFile) and value.filename else None
         for value in form.getlist(name)
-        if isinstance(value, UploadFile) and value.filename
     ]
 
 
@@ -81,8 +81,9 @@ async def publish_tracks(
     currencies = _form_values(form, "currencies")
     sales_models = _form_values(form, "sales_models")
     content_types = _form_values(form, "content_types")
-    audio_files = _form_files(form, "audio_files")
-    cover_files = _form_files(form, "cover_files")
+    audio_slots = _form_file_slots(form, "audio_files")
+    cover_slots = _form_file_slots(form, "cover_files")
+    audio_files = [file for file in audio_slots if file is not None]
 
     if not audio_files:
         return _error(request, user, "Please select at least one audio file.")
@@ -121,7 +122,8 @@ async def publish_tracks(
 
     created = []
     try:
-        for i, audio_file in enumerate(audio_files):
+        audio_index = 0
+        for i in range(expected):
             title = titles[i].strip()
             if not title:
                 return _error(request, user, "Every upload needs a title.")
@@ -165,6 +167,8 @@ async def publish_tracks(
                 else SalesModel.NON_EXCLUSIVE
             )
 
+            audio_file = audio_files[audio_index]
+            audio_index += 1
             if _r2_is_configured():
                 audio_path = await save_upload_to_r2(
                     audio_file, "audio", ALLOWED_AUDIO_EXT
@@ -175,14 +179,14 @@ async def publish_tracks(
                 )
 
             cover_path = None
-            if i < len(cover_files):
+            if i < len(cover_slots) and cover_slots[i] is not None:
                 if _r2_is_configured():
                     cover_path = await save_upload_to_r2(
-                        cover_files[i], "covers", ALLOWED_IMAGE_EXT
+                        cover_slots[i], "covers", ALLOWED_IMAGE_EXT
                     )
                 else:
                     cover_path = await save_upload(
-                        cover_files[i], "covers", ALLOWED_IMAGE_EXT
+                        cover_slots[i], "covers", ALLOWED_IMAGE_EXT
                     )
 
             track = Track(
