@@ -184,9 +184,10 @@ def _content_matches_extension(header: bytes, ext: str) -> bool:
             len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0
         )
     if ext == ".m4a":
-        return len(header) >= 12 and header[4:8] == b"ftyp" and header[8:12] in {
-            b"M4A ", b"M4B ", b"isom", b"iso2", b"mp41", b"mp42", b"MSNV"
-        }
+        # M4A is an ISO Base Media File (MP4) container. The major brand
+        # varies between encoders, so checking for the required `ftyp` box
+        # is safer than maintaining a brittle allow-list of brand names.
+        return len(header) >= 12 and header[4:8] == b"ftyp"
     if ext in {".jpg", ".jpeg"}:
         return header.startswith(b"\xff\xd8\xff")
     if ext == ".png":
@@ -238,10 +239,6 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
     try:
         client = _r2_client()
         file.file.seek(0)
-        # boto3's managed transfer performs multipart uploads in worker threads
-        # when appropriate. Explicit settings make large audio transfers use
-        # parallel 8 MiB parts while the whole blocking SDK call remains off
-        # FastAPI's event loop.
         from boto3.s3.transfer import TransferConfig
 
         transfer_config = TransferConfig(
