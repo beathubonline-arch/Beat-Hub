@@ -88,6 +88,7 @@ def _r2_client():
             read_timeout=120,
             retries={"max_attempts": 3, "mode": "adaptive"},
             max_pool_connections=20,
+            signature_version="s3v4",
         ),
     )
 
@@ -184,9 +185,6 @@ def _content_matches_extension(header: bytes, ext: str) -> bool:
             len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0
         )
     if ext == ".m4a":
-        # M4A is an ISO Base Media File (MP4) container. The major brand
-        # varies between encoders, so checking for the required `ftyp` box
-        # is safer than maintaining a brittle allow-list of brand names.
         return len(header) >= 12 and header[4:8] == b"ftyp"
     if ext in {".jpg", ".jpeg"}:
         return header.startswith(b"\xff\xd8\xff")
@@ -217,6 +215,42 @@ def _stream_size(file: UploadFile) -> int:
         except Exception:
             pass
 
+
+def r2_presigned_upload(filename: str, content_type: str, subfolder: str) -> dict:
+    """Create a short-lived browser upload URL and an opaque R2 path.
+
+    Large audio files no longer need to pass through Render. The browser PUTs
+    directly to R2, then submits only the resulting r2:// path to the app.
+    """
+    if not _r2_is_configured():
+        raise RuntimeError("Direct R2 upload is not configured.")
+    ext = _ext(filename)
+    allowed = ALLOWED_AUDIO_EXT if subfolder == "audio" else ALLOWED_IMAGE_EXT
+    if ext not in allowed:
+        raise UploadValidationError(
+            f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(allowed))}"
+        )
+    bucket = _r2_bucket()
+    key = f"{subfolder.strip('/')}/{uuid.uuid4().hex}{ext}"
+    safe_type = content_type or "application/octet-stream"
+    url = _r2_client().generate_presigned_url(
+        "put_object",
+        Params={"Bucket": bucket, "Key": key, "ContentType": safe_type},
+        ExpiresIn=900,
+        HttpMethod="PUT",
+    )
+    return {"url": url, "path": f"r2://{bucket}/{key}", "key": key}
+
+
+def r2_object_head(path: str) -> dict:
+    bucket, key = _parse_r2_path(path)
+    if not bucket or not key:
+        raise UploadValidationError("Invalid R2 upload path.")
+    try:
+        return _r2_client().head_object(Bucket=bucket, Key=key)
+    except Exception as exc:
+        raise UploadValidationError("The uploaded file could not be verified in storage.") from exc
+
 async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions: set[str]) -> str:
     ext = _validate(file, allowed_extensions)
     size = _stream_size(file)
@@ -227,41 +261,26 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
         raise RuntimeError("R2 bucket is not configured.")
     key = f"{subfolder.strip('/')}/{uuid.uuid4().hex}{ext}"
     content_type = {
-        ".mp3": "audio/mpeg",
-        ".wav": "audio/wav",
-        ".m4a": "audio/mp4",
-        ".flac": "audio/flac",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
+        ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
     }.get(ext, "application/octet-stream")
     try:
         client = _r2_client()
         file.file.seek(0)
         from boto3.s3.transfer import TransferConfig
-
         transfer_config = TransferConfig(
-            multipart_threshold=8 * 1024 * 1024,
-            multipart_chunksize=8 * 1024 * 1024,
-            max_concurrency=10,
-            use_threads=True,
+            multipart_threshold=8 * 1024 * 1024, multipart_chunksize=8 * 1024 * 1024,
+            max_concurrency=10, use_threads=True,
         )
         await asyncio.to_thread(
-            client.upload_fileobj,
-            file.file,
-            bucket,
-            key,
-            ExtraArgs={"ContentType": content_type},
-            Config=transfer_config,
+            client.upload_fileobj, file.file, bucket, key,
+            ExtraArgs={"ContentType": content_type}, Config=transfer_config,
         )
     except Exception as exc:
         raise RuntimeError(f"R2 upload failed: {exc}") from exc
     finally:
-        try:
-            file.file.seek(0)
-        except Exception:
-            pass
+        try: file.file.seek(0)
+        except Exception: pass
     return f"r2://{bucket}/{key}"
 
 async def save_upload(file: UploadFile, subfolder: str, allowed_extensions: set[str]) -> str:
@@ -281,70 +300,47 @@ async def save_upload(file: UploadFile, subfolder: str, allowed_extensions: set[
             with open(full_path, "wb") as output:
                 while True:
                     chunk = file.file.read(1024 * 1024)
-                    if not chunk:
-                        break
+                    if not chunk: break
                     output.write(chunk)
-
         await asyncio.to_thread(_write_local)
     finally:
-        try:
-            file.file.seek(0)
-        except Exception:
-            pass
+        try: file.file.seek(0)
+        except Exception: pass
     return f"{subfolder.strip('/')}/{unique_name}"
 
 def storage_exists(path: Optional[str]) -> bool:
-    if not path:
-        return False
+    if not path: return False
     value = str(path).strip()
     bucket, key = _parse_r2_path(value)
     if bucket is not None:
-        if not bucket or not key:
-            return False
+        if not bucket or not key: return False
         try:
-            _r2_client().head_object(Bucket=bucket, Key=key)
-            return True
-        except Exception:
-            return False
+            _r2_client().head_object(Bucket=bucket, Key=key); return True
+        except Exception: return False
     clean = value.replace("\\", "/").lstrip("/")
     media_root = Path(settings.MEDIA_ROOT).resolve()
-    if clean.startswith("media/"):
-        clean = clean[6:]
+    if clean.startswith("media/"): clean = clean[6:]
     candidate = (media_root / clean).resolve()
-    try:
-        candidate.relative_to(media_root)
-    except ValueError:
-        return False
+    try: candidate.relative_to(media_root)
+    except ValueError: return False
     return candidate.exists() and candidate.is_file()
 
 def delete_r2_object(path: Optional[str]) -> bool:
-    if not path:
-        return False
+    if not path: return False
     bucket, key = _parse_r2_path(str(path))
-    if not bucket or not key:
-        return False
-    try:
-        _r2_client().delete_object(Bucket=bucket, Key=key)
-        return True
-    except Exception:
-        return False
+    if not bucket or not key: return False
+    try: _r2_client().delete_object(Bucket=bucket, Key=key); return True
+    except Exception: return False
 
 def delete_local_object(path: Optional[str]) -> bool:
-    if not path:
-        return False
+    if not path: return False
     value = str(path).replace("\\", "/").lstrip("/")
-    if value.startswith("media/"):
-        value = value[6:]
+    if value.startswith("media/"): value = value[6:]
     media_root = Path(settings.MEDIA_ROOT).resolve()
     target = (media_root / value).resolve()
+    try: target.relative_to(media_root)
+    except ValueError: return False
     try:
-        target.relative_to(media_root)
-    except ValueError:
-        return False
-    try:
-        if target.exists() and target.is_file():
-            target.unlink()
-            return True
-    except Exception:
-        pass
+        if target.exists() and target.is_file(): target.unlink(); return True
+    except Exception: pass
     return False
