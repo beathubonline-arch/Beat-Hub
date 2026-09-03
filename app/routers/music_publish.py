@@ -33,56 +33,62 @@ def _direct_paths(form,name:str,preserve_empty:bool=False)->List[str]:
     values=_form_values(form,name)
     if len(values)==1 and "\n" in values[0]: values=values[0].splitlines()
     return [v.strip() for v in values] if preserve_empty else [v.strip() for v in values if v.strip()]
-@router.post("/dashboard/upload")
-async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=Depends(require_creator)):
+
+def _publish_data(request,user,db,data):
+    if not isinstance(data,dict): return _error(request,user,"Invalid upload data. Please refresh and try again.")
+    items=data.get("items")
+    if not isinstance(items,list) or not items: return _error(request,user,"Please select at least one audio file.")
     profile=getattr(user,"profile",None)
     if not profile: raise HTTPException(status_code=400,detail="Creator profile missing.")
-    try: form=await request.form()
-    except ClientDisconnect: return _error(request,user,"The upload connection was interrupted before BeatHub received the form. Please retry; your original audio is not partially published.")
-    titles=_form_values(form,"titles"); descriptions=_form_values(form,"descriptions"); genres=_form_values(form,"genres"); bpms=_form_values(form,"bpms"); tags_list=_form_values(form,"tags_list"); prices=_form_values(form,"prices"); currencies=_form_values(form,"currencies"); sales_models=_form_values(form,"sales_models"); content_types=_form_values(form,"content_types")
-    audio_refs=_direct_paths(form,"audio_r2_paths"); direct_covers=_direct_paths(form,"cover_r2_paths",preserve_empty=True)
-    audio_slots=_form_file_slots(form,"audio_files"); cover_slots=_form_file_slots(form,"cover_files"); audio_files=[f for f in audio_slots if f is not None]
-    expected=len(audio_refs) if audio_refs else len(audio_files)
-    if not expected: return _error(request,user,"Please select at least one audio file.")
-    fields={"titles":titles,"descriptions":descriptions,"genres":genres,"tags":tags_list,"prices":prices,"currencies":currencies,"sales_models":sales_models,"content_types":content_types}
-    mismatches={name:len(values) for name,values in fields.items() if len(values)!=expected}
-    if mismatches: return _error(request,user,"Upload form data is incomplete ("+", ".join(f"{n}={c}" for n,c in mismatches.items())+f"; audio={expected}). Please refresh and try again.")
-    if bpms and len(bpms)!=expected: return _error(request,user,"The BPM fields do not match the selected audio files. Please refresh and try again.")
     created=[]
     try:
-        for i in range(expected):
-            title=titles[i].strip()
-            if not title: return _error(request,user,"Every upload needs a title.")
-            content_raw=content_types[i].strip().lower()
-            if content_raw not in {TrackContentType.BEAT.value,TrackContentType.TRACK.value}: return _error(request,user,f"Choose Beat or Track for '{title}'.")
-            try: currency=normalize_currency(currencies[i])
-            except ValueError as exc: return _error(request,user,f"Currency for '{title}' is invalid: {exc}")
-            bpm_raw=bpms[i].strip() if bpms else ""; bpm_value=None
+        for item in items:
+            if not isinstance(item,dict): raise UploadValidationError("Invalid upload item.")
+            title=str(item.get("title") or "").strip()
+            if not title: raise UploadValidationError("Every upload needs a title.")
+            description=str(item.get("description") or "").strip(); genre=str(item.get("genre") or "").strip(); tags=str(item.get("tags") or "").strip(); content_raw=str(item.get("content_type") or "").strip().lower()
+            if content_raw not in {TrackContentType.BEAT.value,TrackContentType.TRACK.value}: raise UploadValidationError(f"Choose Beat or Track for '{title}'.")
+            try: currency=normalize_currency(str(item.get("currency") or ""))
+            except ValueError as exc: raise UploadValidationError(f"Currency for '{title}' is invalid: {exc}") from exc
+            bpm_raw=str(item.get("bpm") or "").strip(); bpm_value=None
             if bpm_raw:
-                if not bpm_raw.isdigit() or not 1<=int(bpm_raw)<=999: return _error(request,user,f"BPM for '{title}' must be a whole number between 1 and 999.")
+                if not bpm_raw.isdigit() or not 1<=int(bpm_raw)<=999: raise UploadValidationError(f"BPM for '{title}' must be a whole number between 1 and 999.")
                 bpm_value=int(bpm_raw)
             try:
-                price_value=Decimal(prices[i].strip() or "0")
+                price_value=Decimal(str(item.get("price") or "0"))
                 if not price_value.is_finite() or price_value<0: raise InvalidOperation
-            except (InvalidOperation,ValueError): return _error(request,user,f"Price for '{title}' is invalid.")
-            model_raw=sales_models[i].strip().lower() or "non_exclusive"
-            if model_raw not in {"exclusive","non_exclusive"}: return _error(request,user,f"Sales model for '{title}' is invalid.")
-            sales_model=SalesModel.EXCLUSIVE if model_raw=="exclusive" else SalesModel.NON_EXCLUSIVE
-            if audio_refs:
-                audio_path=audio_refs[i]; meta=r2_object_head(audio_path); size=int(meta.get("ContentLength") or 0)
-                if size<=0 or size>1000*1024*1024: raise UploadValidationError("Audio file is empty or exceeds the 1000MB upload limit.")
-            else:
-                audio_file=audio_files[i]; audio_path=await save_upload_to_r2(audio_file,"audio",ALLOWED_AUDIO_EXT) if _r2_is_configured() else await save_upload(audio_file,"audio",ALLOWED_AUDIO_EXT)
-            cover_path=None
-            if i<len(direct_covers) and direct_covers[i]:
-                cover_path=direct_covers[i]; meta=r2_object_head(cover_path)
+            except (InvalidOperation,ValueError): raise UploadValidationError(f"Price for '{title}' is invalid.")
+            model_raw=str(item.get("sales_model") or "non_exclusive").strip().lower()
+            if model_raw not in {"exclusive","non_exclusive"}: raise UploadValidationError(f"Sales model for '{title}' is invalid.")
+            audio_path=str(item.get("audio_r2_path") or "").strip()
+            if not audio_path: raise UploadValidationError(f"Audio upload is missing for '{title}'.")
+            meta=r2_object_head(audio_path); size=int(meta.get("ContentLength") or 0)
+            if size<=0 or size>1000*1024*1024: raise UploadValidationError("Audio file is empty or exceeds the 1000MB upload limit.")
+            cover_path=str(item.get("cover_r2_path") or "").strip() or None
+            if cover_path:
+                meta=r2_object_head(cover_path)
                 if int(meta.get("ContentLength") or 0)<=0: raise UploadValidationError("Cover art is empty.")
-            elif not audio_refs and i<len(cover_slots) and cover_slots[i] is not None:
-                cover_path=await save_upload_to_r2(cover_slots[i],"covers",ALLOWED_IMAGE_EXT) if _r2_is_configured() else await save_upload(cover_slots[i],"covers",ALLOWED_IMAGE_EXT)
-            track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=descriptions[i].strip() or None,genre=genres[i].strip() or None,bpm=bpm_value,tags=tags_list[i].strip() or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=sales_model,content_type=content_raw,is_published=True)
+            track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=description or None,genre=genre or None,bpm=bpm_value,tags=tags or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=SalesModel.EXCLUSIVE if model_raw=="exclusive" else SalesModel.NON_EXCLUSIVE,content_type=content_raw,is_published=True)
             db.add(track); created.append(track)
         db.commit()
     except UploadValidationError as exc: db.rollback(); return _error(request,user,str(exc))
     except Exception: db.rollback(); raise
-    item_word="item" if len(created)==1 else "items"; message=f"{len(created)} {item_word} published successfully."
-    return RedirectResponse(url="/dashboard?success="+message.replace(" ","%20"),status_code=303)
+    return RedirectResponse(url="/dashboard?success="+f"{len(created)} {'item' if len(created)==1 else 'items'} published successfully.".replace(" ","%20"),status_code=303)
+
+@router.post("/dashboard/upload")
+async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=Depends(require_creator)):
+    """Direct-upload clients send JSON metadata only, so Render never parses the audio multipart body."""
+    content_type=request.headers.get("content-type","").lower()
+    if content_type.startswith("application/json"):
+        try: data=await request.json()
+        except Exception: return _error(request,user,"The upload metadata could not be read. Please refresh and try again.")
+        return _publish_data(request,user,db,data)
+    try: form=await request.form()
+    except ClientDisconnect: return _error(request,user,"The upload connection was interrupted before BeatHub received the form. Please retry.")
+    titles=_form_values(form,"titles"); descriptions=_form_values(form,"descriptions"); genres=_form_values(form,"genres"); bpms=_form_values(form,"bpms"); tags_list=_form_values(form,"tags_list"); prices=_form_values(form,"prices"); currencies=_form_values(form,"currencies"); sales_models=_form_values(form,"sales_models"); content_types=_form_values(form,"content_types")
+    audio_refs=_direct_paths(form,"audio_r2_paths"); direct_covers=_direct_paths(form,"cover_r2_paths",preserve_empty=True)
+    expected=len(audio_refs)
+    if not expected: return _error(request,user,"Please select at least one audio file.")
+    fields={"titles":titles,"descriptions":descriptions,"genres":genres,"tags":tags_list,"prices":prices,"currencies":currencies,"sales_models":sales_models,"content_types":content_types}
+    if any(len(values)!=expected for values in fields.values()): return _error(request,user,"Upload form data is incomplete. Please refresh and try again.")
+    return _publish_data(request,user,db,{"items":[{"title":titles[i],"description":descriptions[i],"genre":genres[i],"bpm":bpms[i] if i<len(bpms) else "","tags":tags_list[i],"price":prices[i],"currency":currencies[i],"sales_model":sales_models[i],"content_type":content_types[i],"audio_r2_path":audio_refs[i],"cover_r2_path":direct_covers[i] if i<len(direct_covers) else ""} for i in range(expected)]})
