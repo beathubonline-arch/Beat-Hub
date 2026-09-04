@@ -168,9 +168,11 @@ class SameOriginMiddleware:
                 if start_message is not None:
                     response_headers = []
                     status_code = int(start_message.get("status", 200))
+                    redirected = False
                     is_verification_redirect = False
                     for key, value in start_message.get("headers", []):
                         if key.lower() == b"location" and 300 <= status_code < 400:
+                            redirected = True
                             location = value.decode("latin-1")
                             if urlparse(location).path == "/verify-email":
                                 # Signup is not complete until email verification
@@ -184,10 +186,15 @@ class SameOriginMiddleware:
                                 value = stored_next.encode("latin-1")
                         response_headers.append((key, value))
 
-                    if not is_verification_redirect:
+                    if is_verification_redirect:
+                        # Refresh the TTL while the user is entering the code.
+                        response_headers.append(_set_cookie_header(stored_next, max_age=RETURN_TO_MAX_AGE))
+                    elif redirected:
                         response_headers.append(_set_cookie_header("", max_age=0, delete=True))
                     else:
-                        # Refresh the TTL while the user is entering the code.
+                        # Validation errors render the signup form again. Keep
+                        # the destination so a corrected submission still returns
+                        # to the exact product/checkout page.
                         response_headers.append(_set_cookie_header(stored_next, max_age=RETURN_TO_MAX_AGE))
                     start_message["headers"] = response_headers
                 await self._send_captured(send, start_message, body_messages)
