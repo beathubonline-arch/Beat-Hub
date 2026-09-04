@@ -82,12 +82,23 @@ def _set_cookie_header(value: str, *, max_age: int, delete: bool = False) -> tup
     return b"set-cookie", "; ".join(parts).encode("latin-1")
 
 
+def _location_with_next(location: str, next_path: str) -> str:
+    """Add a safe continuation target to a verification redirect."""
+    separator = "&" if "?" in location else "?"
+    return f"{location}{separator}next={quote(next_path, safe='')}"
+
+
 class SameOriginMiddleware:
     """Reject cross-site browser state changes in production.
 
     A missing Origin/Referer is rejected rather than treated as safe. This
     closes the metadata-less request gap while preserving webhook and bearer
     API compatibility.
+
+    The return-to cookie is deliberately kept alive while a new account moves
+    through email verification. Consuming it on the initial /signup redirect
+    would send the browser to the product before authentication exists and
+    would lose the original purchase destination.
     """
 
     def __init__(self, app):
@@ -157,11 +168,27 @@ class SameOriginMiddleware:
                 if start_message is not None:
                     response_headers = []
                     status_code = int(start_message.get("status", 200))
+                    is_verification_redirect = False
                     for key, value in start_message.get("headers", []):
                         if key.lower() == b"location" and 300 <= status_code < 400:
-                            value = stored_next.encode("latin-1")
+                            location = value.decode("latin-1")
+                            if urlparse(location).path == "/verify-email":
+                                # Signup is not complete until email verification
+                                # and the subsequent login. Keep the destination
+                                # in both the verification URL and the cookie.
+                                value = _location_with_next(location, stored_next).encode("latin-1")
+                                is_verification_redirect = True
+                            else:
+                                # For a true post-signup destination, consume the
+                                # continuation exactly once.
+                                value = stored_next.encode("latin-1")
                         response_headers.append((key, value))
-                    response_headers.append(_set_cookie_header("", max_age=0, delete=True))
+
+                    if not is_verification_redirect:
+                        response_headers.append(_set_cookie_header("", max_age=0, delete=True))
+                    else:
+                        # Refresh the TTL while the user is entering the code.
+                        response_headers.append(_set_cookie_header(stored_next, max_age=RETURN_TO_MAX_AGE))
                     start_message["headers"] = response_headers
                 await self._send_captured(send, start_message, body_messages)
                 return
