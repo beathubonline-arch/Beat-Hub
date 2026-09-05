@@ -22,7 +22,6 @@ from app.routers import (
     admin_mpesa_payout,
     admin_unified_sales,
     api_v1,
-    api_downloads,
     audio_preview,
     auth,
     checkout,
@@ -79,59 +78,168 @@ class HomepageMotionMiddleware:
     INLINE = b'<style data-beathub-home-motion-inline="1">@keyframes beathub-vinyl-spin-inline{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}.vinyl{animation:beathub-vinyl-spin-inline 12s linear infinite !important;transform-origin:center center !important;will-change:transform}</style>'
     def __init__(self, app): self.app = app
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope.get("type") != "http" or scope.get("path") != "/":
             await self.app(scope, receive, send); return
-        body_parts=[]
-        async def send_wrapper(message):
-            if message["type"] == "http.response.body" and message.get("body"):
-                body_parts.append(message["body"])
-                if not message.get("more_body", False):
-                    body=b"".join(body_parts)
-                    headers=dict(message.get("headers", []))
-                    content_type=dict(headers).get(b"content-type", b"").lower()
-                    if b"text/html" in content_type:
-                        body=body.replace(b"</head>", self.LINK+self.INLINE+b"</head>")
-                    message=dict(message); message["body"]=body; message.setdefault("headers",[])
-                    message["headers"]=[(k,v) for k,v in message["headers"] if k.lower() not in {b"content-length",b"content-encoding"}]
-                    message["headers"].append((b"content-length",str(len(body)).encode()))
-            await send(message)
-        await self.app(scope, receive, send_wrapper)
+        start_message = None; body_chunks = []
+        async def capture(message):
+            nonlocal start_message
+            if message.get("type") == "http.response.start":
+                start_message = dict(message); start_message["headers"] = list(message.get("headers", []))
+            elif message.get("type") == "http.response.body": body_chunks.append(bytes(message.get("body", b"")))
+            else: await send(message)
+        await self.app(scope, receive, capture)
+        if start_message is None: return
+        headers = list(start_message.get("headers", [])); content_type = ""
+        for key, value in headers:
+            if key.lower() == b"content-type": content_type = value.decode("latin-1").lower(); break
+        body = b"".join(body_chunks)
+        if content_type.startswith("text/html"):
+            marker = b"</head>"; marker_index = body.lower().find(marker)
+            if marker_index >= 0 and b"data-beathub-home-motion-inline=" not in body:
+                body = body[:marker_index] + self.LINK + self.INLINE + body[marker_index:]
+                headers = [(key, value) for key, value in headers if key.lower() != b"content-length"]
+                headers.append((b"cache-control", b"no-cache, no-store, must-revalidate")); headers.append((b"x-beathub-home-motion", b"loaded"))
+        start_message["headers"] = headers
+        await send(start_message); await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
-app.add_middleware(HomepageMotionMiddleware)
-app.add_middleware(
-    BaseHTTPMiddleware,
-    dispatch=lambda request, call_next: call_next(request),
-)
+class GlobalFrontendAssetsMiddleware:
+    FAVICON = b'<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=20260904"><link rel="shortcut icon" href="/static/favicon.svg?v=20260904"><meta name="theme-color" content="#171321">'
+    SCRIPT = b'<script defer src="/static/js/notifications.js?v=20260903"></script><script defer src="/static/js/beathub-push.js?v=20260903"></script>'
+    def __init__(self, app): self.app = app
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send); return
+        start_message = None; body_chunks = []
+        async def capture(message):
+            nonlocal start_message
+            if message.get("type") == "http.response.start":
+                start_message = dict(message); start_message["headers"] = list(message.get("headers", []))
+            elif message.get("type") == "http.response.body": body_chunks.append(bytes(message.get("body", b"")))
+            else: await send(message)
+        await self.app(scope, receive, capture)
+        if start_message is None: return
+        headers = list(start_message.get("headers", [])); content_type = ""
+        for key, value in headers:
+            if key.lower() == b"content-type": content_type = value.decode("latin-1").lower(); break
+        body = b"".join(body_chunks)
+        if content_type.startswith("text/html"):
+            changed = False
+            if b"/static/favicon.svg" not in body:
+                marker = b"</head>"; marker_index = body.lower().find(marker)
+                if marker_index >= 0:
+                    body = body[:marker_index] + self.FAVICON + body[marker_index:]
+                    changed = True
+            if b"/static/js/notifications.js" not in body:
+                marker = b"</body>"; marker_index = body.lower().find(marker)
+                if marker_index >= 0:
+                    body = body[:marker_index] + self.SCRIPT + body[marker_index:]
+                    changed = True
+            if changed:
+                headers = [(key, value) for key, value in headers if key.lower() != b"content-length"]
+                headers.append((b"cache-control", b"no-cache, no-store, must-revalidate"))
+        start_message["headers"] = headers
+        await send(start_message); await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        if settings.is_production: response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
+
+
+class AbuseRateLimitMiddleware(BaseHTTPMiddleware):
+    RULES = {("POST", "/login"): (10, 60), ("POST", "/signup"): (5, 300), ("POST", "/forgot-password"): (5, 900), ("POST", "/reset-password"): (10, 900)}
+    def __init__(self, app): super().__init__(app); self._events = defaultdict(deque)
+    @staticmethod
+    def _client_key(request): return str(getattr(getattr(request, "client", None), "host", "unknown") or "unknown")
+    async def dispatch(self, request, call_next):
+        rule = self.RULES.get((request.method.upper(), request.url.path))
+        if not rule: return await call_next(request)
+        limit, window = rule; key = (self._client_key(request), request.method.upper(), request.url.path); now = time.monotonic(); events = self._events[key]
+        while events and events[0] <= now - window: events.popleft()
+        if len(events) >= limit:
+            return JSONResponse({"detail": "Too many attempts. Please try again later."}, status_code=429, headers={"Retry-After": str(max(1, int(window - (now - events[0])))), "Cache-Control": "no-store"})
+        events.append(now)
+        return await call_next(request)
+
+
+class MerchandiseLoginRedirectMiddleware:
+    SESSION_COOKIE = "beathub_session"
+    def __init__(self, app): self.app = app
+    @staticmethod
+    def _has_session_cookie(headers):
+        raw_cookie = ""
+        for key, value in headers:
+            if key.lower() == b"cookie": raw_cookie = value.decode("latin-1", errors="ignore"); break
+        if not raw_cookie: return False
+        cookie = SimpleCookie()
+        try: cookie.load(raw_cookie)
+        except Exception: return False
+        morsel = cookie.get(MerchandiseLoginRedirectMiddleware.SESSION_COOKIE)
+        return bool(morsel and morsel.value)
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and scope.get("method", "").upper() == "POST" and scope.get("path", "").startswith("/merch/") and scope.get("path", "").endswith("/buy"):
+            parts = [part for part in scope.get("path", "").split("/") if part]
+            if len(parts) == 3 and not self._has_session_cookie(scope.get("headers", [])):
+                slug = parts[1]; next_url = f"/merch/{slug}"
+                location = f"/login?next={quote(next_url, safe='')}&error={quote('Please sign in to continue with your merchandise purchase.') }"
+                await RedirectResponse(url=location, status_code=303)(scope, receive, send); return
+        await self.app(scope, receive, send)
+
+
+class CreatorPayoutPolicyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.method != "POST" or request.url.path != "/dashboard/withdraw": return await call_next(request)
+        try:
+            body = await request.body(); parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True); amount = Decimal((parsed.get("amount") or [""])[0].strip()); valid_amount = amount.is_finite() and amount >= PAYOUT_MINIMUM
+        except (InvalidOperation, TypeError, UnicodeDecodeError): valid_amount = False
+        if not valid_amount: return RedirectResponse(url="/dashboard/withdraw?error=" + quote(f"The minimum creator withdrawal is KSh {PAYOUT_MINIMUM:,}."), status_code=303)
+        return await call_next(request)
+
+
 app.add_middleware(SameOriginMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AbuseRateLimitMiddleware)
+app.add_middleware(MerchandiseLoginRedirectMiddleware)
+app.add_middleware(CreatorPayoutPolicyMiddleware)
+app.add_middleware(GlobalFrontendAssetsMiddleware)
+app.add_middleware(HomepageMotionMiddleware)
 
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-MEDIA_DIR = Path(getattr(settings, "MEDIA_ROOT", BASE_DIR / "media"))
-MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz_get(): return JSONResponse({"status": "ok"})
+
+@app.head("/healthz", include_in_schema=False)
+async def healthz_head(): return JSONResponse({"status": "ok"})
+
+@app.get("/merchandise", include_in_schema=False)
+async def merchandise_legacy_alias(): return RedirectResponse(url="/merch", status_code=307)
 
 app.include_router(api_v1.router)
-app.include_router(api_downloads.router)
 app.include_router(auth.router)
-app.include_router(checkout.router)
 app.include_router(creator_store.router)
+app.include_router(pages.router)
+app.include_router(audio_preview.router)
+app.include_router(music.router)
+app.include_router(track_catalog.router)
+app.include_router(checkout.router)
+app.include_router(paystack_checkout.router)
+app.include_router(music_publish.router)
 app.include_router(dashboard.router)
 app.include_router(dashboard_analytics.router)
+app.include_router(admin_unified_sales.router)
+app.include_router(admin_mpesa_payout.router)
+app.include_router(admin.router)
+app.include_router(payout_admin.router)
 app.include_router(merchandise.router)
 app.include_router(merchandise_account.router)
-app.include_router(music.router)
-app.include_router(music_publish.router)
 app.include_router(notifications.router)
-app.include_router(pages.router)
-app.include_router(paystack_checkout.router)
-app.include_router(payout_admin.router)
-app.include_router(track_catalog.router)
-app.include_router(admin.router)
-app.include_router(admin_mpesa_payout.router)
-app.include_router(admin_unified_sales.router)
-app.include_router(audio_preview.router)
-
-
-@app.get("/healthz")
-def healthz():
-    return {"status": "ok"}
