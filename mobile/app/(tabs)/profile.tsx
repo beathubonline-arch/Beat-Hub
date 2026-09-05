@@ -1,0 +1,6 @@
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { useAuth } from '../../src/auth/AuthContext';
+
+export default function Profile(){const {user,logout}=useAuth();return <SafeAreaView style={s.safe}><View style={s.container}><Text style={s.title}>Profile</Text><View style={s.card}><Text style={s.name}>{user?.stage_name||user?.username}</Text><Text style={s.email}>{user?.email}</Text><Text style={s.role}>{user?.role}</Text></View><Pressable style={s.logout} onPress={async()=>{await logout();router.replace('/(auth)/login')}}><Text style={s.logoutText}>Sign out</Text></Pressable></View></SafeAreaView>}
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:'#0d0b12'},container:{padding:24},title:{fontSize:30,fontWeight:'800',color:'#fff',marginTop:15,marginBottom:22},card:{backgroundColor:'#181520',borderRadius:18,padding:20},name:{color:'#fff',fontSize:21,fontWeight:'700'},email:{color:'#918b9b',marginTop:7},role:{color:'#fff',marginTop:14,textTransform:'capitalize'},logout:{marginTop:24,padding:16,borderRadius:12,borderWidth:1,borderColor:'#302b38',alignItems:'center'},logoutText:{color:'#fff',fontWeight:'700'}});
