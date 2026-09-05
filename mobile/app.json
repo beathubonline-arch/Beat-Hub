@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "BeatHub",
+    "slug": "beathub",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "beathub",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router"],
+    "android": { "package": "com.beathub.app" },
+    "ios": { "bundleIdentifier": "com.beathub.app" },
+    "extra": { "apiBaseUrl": "https://mybeathub.com/api/v1" }
+  }
+}
