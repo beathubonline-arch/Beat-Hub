@@ -21,6 +21,7 @@ from app.routers import (
     admin,
     admin_mpesa_payout,
     admin_unified_sales,
+    api_v1,
     audio_preview,
     auth,
     checkout,
@@ -223,6 +224,7 @@ async def healthz_head(): return JSONResponse({"status": "ok"})
 @app.get("/merchandise", include_in_schema=False)
 async def merchandise_legacy_alias(): return RedirectResponse(url="/merch", status_code=307)
 
+app.include_router(api_v1.router)
 app.include_router(auth.router)
 app.include_router(creator_store.router)
 app.include_router(pages.router)
