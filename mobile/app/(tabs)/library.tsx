@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import * as Linking from 'expo-linking';
-import { ActivityIndicator, Alert, FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { api, Order } from '../../src/api';
+import { ActivityIndicator, Alert, FlatList, Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { api, API_BASE_URL, getToken, Order } from '../../src/api';
 
 export default function Library(){
   const [items,setItems]=useState<Order[]>([]);
@@ -27,9 +26,9 @@ export default function Library(){
     if(order.status!=='completed') return;
     setDownloading(order.id);
     try{
-      const token=await (await import('../../src/api')).getToken();
+      const token=await getToken();
       if(!token) throw new Error('Please sign in again to download your purchase.');
-      const response=await fetch(`${(await import('../../src/api')).API_BASE_URL}/orders/${encodeURIComponent(order.id)}/download`,{
+      const response=await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(order.id)}/download`,{
         headers:{Authorization:`Bearer ${token}`},
         redirect:'follow',
       });
