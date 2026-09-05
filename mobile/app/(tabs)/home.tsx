@@ -1,0 +1,6 @@
+import { router } from 'expo-router';
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '../../src/auth/AuthContext';
+
+export default function Home() { const {user}=useAuth(); return <SafeAreaView style={s.safe}><View style={s.container}><Text style={s.greeting}>Welcome{user?.stage_name?`, ${user.stage_name}`:''}</Text><Text style={s.title}>Find your next sound.</Text><Text style={s.sub}>Discover beats and tracks from BeatHub creators.</Text><Pressable style={s.card} onPress={()=>router.push('/(tabs)/beats')}><Text style={s.cardTitle}>Explore beats</Text><Text style={s.cardSub}>Browse the latest marketplace releases →</Text></Pressable><Pressable style={s.card} onPress={()=>router.push('/(tabs)/library')}><Text style={s.cardTitle}>Your library</Text><Text style={s.cardSub}>Purchased music and licenses →</Text></Pressable></View></SafeAreaView> }
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:'#0d0b12'},container:{padding:24},greeting:{color:'#aaa3b4',fontSize:15,marginTop:20},title:{color:'#fff',fontSize:32,fontWeight:'800',marginTop:8},sub:{color:'#aaa3b4',fontSize:16,lineHeight:23,marginTop:10,marginBottom:28},card:{backgroundColor:'#181520',borderRadius:18,padding:20,marginBottom:14},cardTitle:{color:'#fff',fontSize:19,fontWeight:'700'},cardSub:{color:'#918b9b',marginTop:7}});
