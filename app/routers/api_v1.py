@@ -70,6 +70,11 @@ def _available(track):
     sales = getattr(getattr(track,"sales_model",None),"value",track.sales_model)
     return str(sales) != SalesModel.EXCLUSIVE.value or not track.is_sold
 
+def _creator_required(user: User) -> User:
+    if _role(user) != "creator":
+        raise HTTPException(403, "Creator access is required.")
+    return user
+
 @router.get("/health")
 def api_health(): return {"status":"ok","api":"v1"}
 
@@ -121,6 +126,16 @@ def api_resend_verification(payload:ResendVerificationIn,db:Session=Depends(get_
 
 @router.get("/me")
 def api_me(user:User=Depends(require_user)): return {"user":_user_payload(user)}
+
+@router.get("/creator/dashboard")
+def api_creator_dashboard(db:Session=Depends(get_db), user:User=Depends(require_user)):
+    _creator_required(user)
+    profile=getattr(user,"profile",None)
+    if not profile: raise HTTPException(400,"Creator profile missing.")
+    from app.routers.dashboard import _creator_stats
+    stats=_creator_stats(db,profile.id)
+    tracks=db.query(Track).filter(Track.creator_profile_id==profile.id).order_by(Track.created_at.desc()).limit(50).all()
+    return {"profile":{"stage_name":profile.stage_name,"slug":profile.slug,"store_url":_absolute_url(f"/creator/{profile.slug}")},"stats":{"total_sales":stats["total_sales"],"gross_revenue":float(stats["gross_revenue"]),"platform_commission":float(stats["platform_commission"]),"net_earnings":float(stats["net_earnings"]),"available_balance":float(stats["available_balance"]),"pending_withdrawal":float(stats["pending_withdrawal"])},"tracks":[_track_payload(t) for t in tracks]}
 
 @router.get("/catalog")
 def api_catalog(q:str="",genre:str="",page:int=1,limit:int=20,db:Session=Depends(get_db)):
