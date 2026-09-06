@@ -42,7 +42,7 @@
 
   <section class="section">
     <div class="sectionhead"><div><div class="kicker">Fresh discovery</div><h2>Hot picks</h2><p>The first things worth seeing when you enter the Marketplace.</p></div></div>
-    {% if hot_picks %}<div class="hot">{% for item in hot_picks[:3] %}<a class="hotcard" href="{{ item.url }}"><div class="hotart">{% if item.image_url %}<img src="{{ item.image_url }}" alt="{{ item.title }}">{% endif %}</div><div class="hotinfo"><span class="badge">{{ item.kind }}</span><div class="hottitle">{{ item.title }}</div><div class="hotby">{{ item.creator }}</div><div class="hotprice">KSh {{ "%.0f"|format(item.price or 0) }}</div></div></a>{% endfor %}</div>{% else %}<div class="empty">The Marketplace is waiting for its next release.</div>{% endif %}
+    {% if hot_picks %}<div class="hot">{% for item in hot_picks[:3] %}<a class="hotcard" href="{{ item.url }}"><div class="hotart">{% if item.image_url %}<img src="{{ item.image_url }}" alt="{{ item.title }}">{% endif %}</div><div class="hotinfo"><span class="badge">{{ item.kind }}</span><div class="hottitle">{{ item.title }}</div><div class="hotby">{{ item.creator }}</div><div class="hotprice">{{ '$' if (item.currency|default('KES')) == 'USD' else 'KSh' }} {{ "%.2f"|format(item.price or 0) }} {{ item.currency|default('KES') }}</div></div></a>{% endfor %}</div>{% else %}<div class="empty">The Marketplace is waiting for its next release.</div>{% endif %}
   </section>
 
   <section class="section">
@@ -52,7 +52,7 @@
 
   <section class="section">
     <div class="sectionhead"><div><div class="kicker">Finished music</div><h2>Tracks worth hearing</h2><p>Finished releases from BeatHub creators.</p></div><a class="more" href="/tracks">Browse tracks →</a></div>
-    {% if track_preview %}<div class="mini-grid">{% for item in track_preview %}<a class="card" href="{{ item.url }}"><div class="art">{% if item.artwork_url %}<img src="{{ item.artwork_url }}" alt="{{ item.title }}">{% endif %}</div><div class="body"><div class="title">{{ item.title }}</div><div class="by">{{ item.producer }}</div><div class="bottom"><span class="price">KSh {{ "%.0f"|format(item.price or 0) }}</span><span class="view">View →</span></div></div></a>{% endfor %}</div>{% else %}<div class="empty">No finished tracks have been published yet.</div>{% endif %}
+    {% if track_preview %}<div class="mini-grid">{% for item in track_preview %}<a class="card" href="{{ item.url }}"><div class="art">{% if item.artwork_url %}<img src="{{ item.artwork_url }}" alt="{{ item.title }}">{% endif %}</div><div class="body"><div class="title">{{ item.title }}</div><div class="by">{{ item.producer }}</div><div class="bottom"><span class="price">{{ '$' if (item.currency|default('KES')) == 'USD' else 'KSh' }} {{ "%.2f"|format(item.price or 0) }} {{ item.currency|default('KES') }}</span><span class="view">View →</span></div></div></a>{% endfor %}</div>{% else %}<div class="empty">No finished tracks have been published yet.</div>{% endif %}
   </section>
 
   <section class="section" id="creator-tees">
