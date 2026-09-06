@@ -3,7 +3,7 @@
 {% block content %}
 <div class="bh-history">
 <style>
-.bh-history{max-width:1200px;margin:0 auto;padding:26px 0 70px;color:#f5f5f5}.bh-hero{padding:30px;border-radius:24px;background:linear-gradient(135deg,#171717,#0b0b0b);border:1px solid rgba(245,200,75,.2);margin-bottom:16px}.bh-hero h1{margin:0 0 7px}.muted{color:#999;font-size:13px}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:18px}.card{padding:17px;border:1px solid #252525;border-radius:15px;background:#111}.label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.08em}.value{font-size:23px;font-weight:900;margin-top:5px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;padding:14px;border:1px solid #252525;border-radius:15px;background:#111;margin-bottom:12px}.toolbar input,.toolbar select{padding:11px 12px;border:1px solid #333;border-radius:10px;background:#0c0c0c;color:#fff}.toolbar input{flex:1;min-width:220px}.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid #333;background:#151515;color:#eee;text-decoration:none;font-weight:800;cursor:pointer}.btn.primary{background:#f5c84b;color:#111;border-color:#f5c84b}.sale{border:1px solid #252525;border-radius:14px;background:#0d0d0d;margin:9px 0;overflow:hidden}.sale summary{list-style:none;cursor:pointer;padding:16px;display:grid;grid-template-columns:1.5fr 1fr .8fr auto;gap:14px;align-items:center}.sale summary::-webkit-details-marker{display:none}.sale summary:hover{background:#131313}.buyer{font-weight:900}.product{font-weight:800}.meta{font-size:12px;color:#999;margin-top:4px}.amount{text-align:right;font-weight:900}.pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#182014;color:#bfe8b4;font-size:11px;font-weight:900}.details{border-top:1px solid #252525;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.detail{padding:12px;border-radius:10px;background:#111;border:1px solid #222}.detail strong{display:block;margin-top:4px}.pager{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:18px}.empty{padding:40px;text-align:center;border:1px dashed #333;border-radius:14px;color:#999}@media(max-width:700px){.sale summary{grid-template-columns:1fr auto}.amount{text-align:left}.sale summary .date{display:none}}
+.bh-history{max-width:1200px;margin:0 auto;padding:26px 0 70px;color:#f5f5f5}.bh-hero{padding:30px;border-radius:24px;background:linear-gradient(135deg,#171717,#0b0b0b);border:1px solid rgba(245,200,75,.2);margin-bottom:16px}.bh-hero h1{margin:0 0 7px}.muted{color:#999;font-size:13px}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:18px}.card{padding:17px;border:1px solid #252525;border-radius:15px;background:#111}.label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.08em}.value{font-size:23px;font-weight:900;margin-top:5px}.currency-line{display:block;margin-top:5px;font-size:12px;color:#aaa}.toolbar{display:flex;gap:10px;flex-wrap:wrap;padding:14px;border:1px solid #252525;border-radius:15px;background:#111;margin-bottom:12px}.toolbar input,.toolbar select{padding:11px 12px;border:1px solid #333;border-radius:10px;background:#0c0c0c;color:#fff}.toolbar input{flex:1;min-width:220px}.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid #333;background:#151515;color:#eee;text-decoration:none;font-weight:800;cursor:pointer}.btn.primary{background:#f5c84b;color:#111;border-color:#f5c84b}.sale{border:1px solid #252525;border-radius:14px;background:#0d0d0d;margin:9px 0;overflow:hidden}.sale summary{list-style:none;cursor:pointer;padding:16px;display:grid;grid-template-columns:1.5fr 1fr .8fr auto;gap:14px;align-items:center}.sale summary::-webkit-details-marker{display:none}.sale summary:hover{background:#131313}.buyer{font-weight:900}.product{font-weight:800}.meta{font-size:12px;color:#999;margin-top:4px}.amount{text-align:right;font-weight:900}.pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#182014;color:#bfe8b4;font-size:11px;font-weight:900}.details{border-top:1px solid #252525;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.detail{padding:12px;border-radius:10px;background:#111;border:1px solid #222}.detail strong{display:block;margin-top:4px}.pager{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:18px}.empty{padding:40px;text-align:center;border:1px dashed #333;border-radius:14px;color:#999}@media(max-width:700px){.sale summary{grid-template-columns:1fr auto}.amount{text-align:left}.sale summary .date{display:none}}
 </style>
 <div class="bh-hero">
   <div class="muted">{{ profile.display_name or profile.stage_name or 'Creator' }} · Creator Sales</div>
@@ -11,9 +11,11 @@
   <div class="muted">Every completed beat, track, and merchandise sale connected to your creator account.</div>
   <div class="summary">
     <div class="card"><div class="label">Total Sales</div><div class="value">{{ total_count }}</div></div>
-    <div class="card"><div class="label">Gross Revenue</div><div class="value">KSh {{ total_gross }}</div></div>
-    <div class="card"><div class="label">BeatHub Commission</div><div class="value">KSh {{ total_commission }}</div></div>
-    <div class="card"><div class="label">Your Earnings</div><div class="value">KSh {{ total_net }}</div></div>
+    {% for currency, totals in currency_totals|dictsort %}
+      <div class="card"><div class="label">Gross Revenue</div><div class="value">{{ '$' if currency == 'USD' else 'KSh' }} {{ '%.2f'|format(totals.gross) }} <span class="currency-line">{{ currency }}</span></div></div>
+      <div class="card"><div class="label">BeatHub Commission</div><div class="value">{{ '$' if currency == 'USD' else 'KSh' }} {{ '%.2f'|format(totals.commission) }} <span class="currency-line">{{ currency }}</span></div></div>
+      <div class="card"><div class="label">Your Earnings</div><div class="value">{{ '$' if currency == 'USD' else 'KSh' }} {{ '%.2f'|format(totals.net) }} <span class="currency-line">{{ currency }}</span></div></div>
+    {% endfor %}
   </div>
 </div>
 <div class="toolbar">
@@ -35,7 +37,7 @@
     <summary>
       <div><div class="buyer">👤 {{ sale.buyer }}</div><div class="meta">{{ sale.order_number }}</div></div>
       <div><div class="product">{{ sale.product }}</div><div class="meta">{{ sale.type_label }}{% if sale.quantity > 1 %} · Qty {{ sale.quantity }}{% endif %}</div></div>
-      <div class="amount">KSh {{ sale.net }}<div class="meta">creator earnings</div></div>
+      <div class="amount">{{ '$' if sale.currency == 'USD' else 'KSh' }} {{ '%.2f'|format(sale.net) }}<div class="meta">{{ sale.currency }} · creator earnings</div></div>
       <div><span class="pill">{{ sale.status }}</span></div>
     </summary>
     <div class="details">
@@ -43,9 +45,9 @@
       <div class="detail"><div class="label">Product</div><strong>{{ sale.product }}</strong></div>
       <div class="detail"><div class="label">Type</div><strong>{{ sale.type_label }}</strong></div>
       <div class="detail"><div class="label">Quantity</div><strong>{{ sale.quantity }}</strong></div>
-      <div class="detail"><div class="label">Purchase Amount</div><strong>KSh {{ sale.gross }}</strong></div>
-      <div class="detail"><div class="label">BeatHub Commission</div><strong>KSh {{ sale.commission }}</strong></div>
-      <div class="detail"><div class="label">Your Earnings</div><strong>KSh {{ sale.net }}</strong></div>
+      <div class="detail"><div class="label">Purchase Amount</div><strong>{{ '$' if sale.currency == 'USD' else 'KSh' }} {{ '%.2f'|format(sale.gross) }} {{ sale.currency }}</strong></div>
+      <div class="detail"><div class="label">BeatHub Commission</div><strong>{{ '$' if sale.currency == 'USD' else 'KSh' }} {{ '%.2f'|format(sale.commission) }} {{ sale.currency }}</strong></div>
+      <div class="detail"><div class="label">Your Earnings</div><strong>{{ '$' if sale.currency == 'USD' else 'KSh' }} {{ '%.2f'|format(sale.net) }} {{ sale.currency }}</strong></div>
       <div class="detail"><div class="label">Purchased</div><strong>{{ sale.date.strftime('%b %d, %Y · %I:%M %p') if sale.date else '—' }}</strong></div>
     </div>
   </details>
