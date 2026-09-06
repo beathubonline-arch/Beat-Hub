@@ -30,7 +30,8 @@ from app.utils.deps import require_user
 router = APIRouter(tags=["paystack"])
 logger = logging.getLogger("beathub.paystack")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-PAYSTACK_MINIMUMS = {"KES": Decimal("3.00"), "USD": Decimal("1.00")}
+# Paystack's current documented minimums are KES 3 and USD 2.
+PAYSTACK_MINIMUMS = {"KES": Decimal("3.00"), "USD": Decimal("2.00")}
 
 
 def _headers() -> dict:
@@ -59,6 +60,16 @@ def _available(track: Track) -> bool:
 
 def _verified_currency(data: dict, expected: str) -> bool:
     return str(data.get("currency") or "").strip().upper() == expected
+
+
+def _paystack_channels(currency: str) -> list[str]:
+    """Return channels compatible with the transaction currency.
+
+    Mobile money is a Kenya-supported Paystack channel, but USD is an
+    international currency and should not be initialized with the KES-specific
+    mobile-money option. Cards remain available for both currencies.
+    """
+    return ["card", "mobile_money"] if currency == "KES" else ["card"]
 
 
 async def _verify_reference(reference: str) -> dict:
@@ -180,7 +191,7 @@ async def paystack_checkout(
         "currency": currency,
         "reference": order.order_number,
         "callback_url": callback_url,
-        "channels": ["card", "mobile_money"],
+        "channels": _paystack_channels(currency),
         "metadata": {
             "beathub_order_id": order.id,
             "beathub_track_slug": track.slug,
@@ -200,13 +211,27 @@ async def paystack_checkout(
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
             response = await client.post(f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/initialize", headers=_headers(), json=payload)
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            data = {"status": False, "message": "Paystack returned a non-JSON response."}
     except Exception:
         db.rollback()
         logger.exception("Paystack initialization failed for order %s", order.id)
         raise HTTPException(status_code=502, detail="Paystack could not be reached. Please try again.")
 
     if response.status_code >= 400 or not data.get("status"):
+        # Safe diagnostics: never log Authorization headers, secrets, or customer data.
+        logger.error(
+            "Paystack initialization rejected: http_status=%s paystack_status=%s message=%s currency=%s amount_subunit=%s channels=%s order=%s",
+            response.status_code,
+            data.get("status"),
+            data.get("message") or "unknown",
+            currency,
+            _amount_subunit(price),
+            payload["channels"],
+            order.id,
+        )
         message = data.get("message") or "Paystack could not initialize checkout."
         db.rollback()
         raise HTTPException(status_code=400, detail=message)
@@ -214,6 +239,7 @@ async def paystack_checkout(
     authorization = data.get("data", {}).get("authorization_url")
     reference = data.get("data", {}).get("reference") or order.order_number
     if not authorization:
+        logger.error("Paystack initialization returned no authorization URL for order %s", order.id)
         db.rollback()
         raise HTTPException(status_code=400, detail="Paystack did not return a checkout URL.")
 
