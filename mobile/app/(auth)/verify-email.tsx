@@ -25,7 +25,7 @@ export default function VerifyEmail() {
   async function resend() {
     setResending(true); setError(''); setMessage('');
     try {
-      const r = await api<{ message: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: email.trim(), password: 'verification-request' }) });
+      const r = await api<{ message: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email: email.trim() }) });
       setMessage(r.message);
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to resend the code.'); }
     finally { setResending(false); }
