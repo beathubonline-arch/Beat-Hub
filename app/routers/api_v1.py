@@ -7,14 +7,14 @@ import hashlib
 import hmac
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, Form, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.music import Track, SalesModel
+from app.models.music import Track, SalesModel, ProductCurrency
 from app.models.order import Order, OrderStatus, License
 from app.models.payment import PaymentTransaction, PaymentStatus
 from app.models.profile import Profile
@@ -63,7 +63,7 @@ def _absolute_url(path: str | None) -> str | None:
 def _track_payload(track):
     profile = getattr(track, "creator_profile", None)
     sales = getattr(getattr(track, "sales_model", None), "value", track.sales_model)
-    return {"id": track.id, "title": track.title, "slug": track.slug, "description": track.description, "genre": track.genre, "bpm": track.bpm, "price": float(track.price), "currency": normalize_currency(track.currency), "sales_model": str(sales), "is_sold": bool(track.is_sold), "artwork_url": _absolute_url(f"/track/{track.slug}/artwork"), "preview_url": _absolute_url(f"/track/{track.slug}/preview"), "track_url": _absolute_url(f"/track/{track.slug}"), "producer": getattr(profile,"stage_name",None), "producer_slug": getattr(profile,"slug",None)}
+    return {"id": track.id, "title": track.title, "slug": track.slug, "description": track.description, "genre": track.genre, "bpm": track.bpm, "price": float(track.price), "currency": normalize_currency(track.currency), "sales_model": str(sales), "is_sold": bool(track.is_sold), "is_published": bool(track.is_published), "artwork_url": _absolute_url(f"/track/{track.slug}/artwork"), "preview_url": _absolute_url(f"/track/{track.slug}/preview"), "track_url": _absolute_url(f"/track/{track.slug}"), "producer": getattr(profile,"stage_name",None), "producer_slug": getattr(profile,"slug",None)}
 
 def _available(track):
     if not track or not track.is_published or Decimal(str(track.price)) <= 0: return False
@@ -136,6 +136,55 @@ def api_creator_dashboard(db:Session=Depends(get_db), user:User=Depends(require_
     stats=_creator_stats(db,profile.id)
     tracks=db.query(Track).filter(Track.creator_profile_id==profile.id).order_by(Track.created_at.desc()).limit(50).all()
     return {"profile":{"stage_name":profile.stage_name,"slug":profile.slug,"store_url":_absolute_url(f"/creator/{profile.slug}")},"stats":{"total_sales":stats["total_sales"],"gross_revenue":float(stats["gross_revenue"]),"platform_commission":float(stats["platform_commission"]),"net_earnings":float(stats["net_earnings"]),"available_balance":float(stats["available_balance"]),"pending_withdrawal":float(stats["pending_withdrawal"])},"tracks":[_track_payload(t) for t in tracks]}
+
+@router.post("/creator/tracks", status_code=201)
+async def api_creator_track_upload(
+    title: str = Form(...),
+    description: str = Form(""),
+    genre: str = Form(""),
+    bpm: str = Form(""),
+    tags: str = Form(""),
+    price: str = Form(...),
+    currency: str = Form("KES"),
+    sales_model: str = Form("non_exclusive"),
+    audio_file: UploadFile = File(...),
+    cover_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _creator_required(user)
+    profile=getattr(user,"profile",None)
+    if not profile: raise HTTPException(400,"Creator profile missing.")
+    title=title.strip()
+    if not title: raise HTTPException(400,"A track title is required.")
+    try: price_value=Decimal(price.strip())
+    except Exception: raise HTTPException(400,"Price is invalid.")
+    if price_value <= 0: raise HTTPException(400,"Price must be greater than zero.")
+    currency_raw=currency.strip().upper()
+    if currency_raw not in {ProductCurrency.KES.value, ProductCurrency.USD.value}: raise HTTPException(400,"Currency must be KES or USD.")
+    model=SalesModel.EXCLUSIVE if sales_model.strip().lower()=="exclusive" else SalesModel.NON_EXCLUSIVE
+    bpm_value=None
+    if bpm.strip():
+        if not bpm.strip().isdigit() or not 1 <= int(bpm.strip()) <= 999: raise HTTPException(400,"BPM must be between 1 and 999.")
+        bpm_value=int(bpm.strip())
+    from app.services.storage import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, UploadValidationError, save_upload, save_upload_to_r2, _r2_is_configured
+    try:
+        if _r2_is_configured(): audio_path=await save_upload_to_r2(audio_file,"audio",ALLOWED_AUDIO_EXT)
+        else: audio_path=await save_upload(audio_file,"audio",ALLOWED_AUDIO_EXT)
+        cover_path=None
+        if cover_file and cover_file.filename:
+            if _r2_is_configured(): cover_path=await save_upload_to_r2(cover_file,"covers",ALLOWED_IMAGE_EXT)
+            else: cover_path=await save_upload(cover_file,"covers",ALLOWED_IMAGE_EXT)
+    except UploadValidationError as exc: raise HTTPException(400,str(exc))
+    except Exception: raise HTTPException(500,"The uploaded files could not be stored.")
+    slug_base=re.sub(r"[^a-zA-Z0-9]+","-",title.lower()).strip("-") or "track"
+    slug=slug_base; n=2
+    while db.query(Track).filter(Track.slug==slug).first(): slug=f"{slug_base}-{n}"; n+=1
+    track=Track(creator_profile_id=profile.id,title=title,slug=slug,description=description.strip() or None,genre=genre.strip() or None,bpm=bpm_value,tags=tags.strip() or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency_raw,sales_model=model,is_published=True)
+    db.add(track)
+    try: db.commit(); db.refresh(track)
+    except Exception: db.rollback(); raise HTTPException(500,"The track could not be saved.")
+    return {"message":"Track uploaded successfully.","track":_track_payload(track)}
 
 @router.get("/catalog")
 def api_catalog(q:str="",genre:str="",page:int=1,limit:int=20,db:Session=Depends(get_db)):
