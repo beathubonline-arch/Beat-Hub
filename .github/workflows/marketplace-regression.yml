@@ -27,10 +27,10 @@ jobs:
         run: python -m compileall -q app main.py tests
 
       - name: Marketplace regression pass 1
-        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return tests.test_creator_merchandise_dashboard tests.test_creator_sales_history
+        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return tests.test_creator_merchandise_dashboard tests.test_creator_sales_history tests.test_currency_display
 
       - name: Marketplace regression pass 2
-        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return tests.test_creator_merchandise_dashboard tests.test_creator_sales_history
+        run: python -m unittest tests.test_music_content_types tests.test_track_marketplace tests.test_product_login_return tests.test_creator_merchandise_dashboard tests.test_creator_sales_history tests.test_currency_display
 
       - name: Upload performance regression pass 1
         run: pytest -q tests/test_upload_performance.py
