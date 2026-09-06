@@ -164,12 +164,12 @@ def _hot_picks(beats: list[Track], tracks: list[Track], merch: list[dict]) -> li
     picks: list[dict] = []
     for track in beats[:3]:
         item = _catalog_item(track)
-        picks.append({"kind": "Beat", "title": item["title"], "creator": item["producer"], "price": item["price"], "image_url": item["artwork_url"], "url": item["url"]})
+        picks.append({"kind": "Beat", "title": item["title"], "creator": item["producer"], "price": item["price"], "currency": item["currency"], "image_url": item["artwork_url"], "url": item["url"]})
     for track in tracks[:2]:
         item = _catalog_item(track)
-        picks.append({"kind": "Track", "title": item["title"], "creator": item["producer"], "price": item["price"], "image_url": item["artwork_url"], "url": item["url"]})
+        picks.append({"kind": "Track", "title": item["title"], "creator": item["producer"], "price": item["price"], "currency": item["currency"], "image_url": item["artwork_url"], "url": item["url"]})
     for item in merch[:1]:
-        picks.append({"kind": "Tee", "title": item.get("name") or "BeatHub Tee", "creator": item.get("creator_name") or "BeatHub Creator", "price": item.get("price") or 0, "image_url": item.get("image_url"), "url": f"/merch/{item.get('slug')}" if item.get("slug") else "/merch"})
+        picks.append({"kind": "Tee", "title": item.get("name") or "BeatHub Tee", "creator": item.get("creator_name") or "BeatHub Creator", "price": item.get("price") or 0, "currency": item.get("currency") or "KES", "image_url": item.get("image_url"), "url": f"/merch/{item.get('slug')}" if item.get("slug") else "/merch"})
     return picks[:6]
 
 
