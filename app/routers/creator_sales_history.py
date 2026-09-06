@@ -38,6 +38,11 @@ def _money(value) -> Decimal:
         return Decimal("0")
 
 
+def _currency(value) -> str:
+    value = str(value or "KES").strip().upper()
+    return value if value in {"KES", "USD"} else "KES"
+
+
 def _buyer_name(user: User | None) -> str:
     if user is None:
         return "Buyer"
@@ -73,6 +78,7 @@ def _music_sales(db: Session, profile_id: str, search: str):
             "gross": _money(order.gross_amount),
             "commission": _money(order.commission_amount),
             "net": _money(order.net_amount),
+            "currency": _currency(getattr(order, "currency", None) or getattr(order.track, "currency", None)),
             "status": "Completed",
             "date": completed,
             "quantity": 1,
@@ -127,11 +133,23 @@ def _merch_sales(db: Session, profile_id: str, search: str):
             "gross": _money(row["total_amount"]),
             "commission": _money(row["commission_amount"]),
             "net": _money(row["net_amount"]),
+            "currency": "KES",
             "status": "Paid",
             "date": completed,
             "quantity": int(row["quantity"] or 1),
         })
     return result
+
+
+def _currency_totals(sales: list[dict]) -> dict[str, dict[str, Decimal]]:
+    totals: dict[str, dict[str, Decimal]] = {}
+    for item in sales:
+        currency = _currency(item.get("currency"))
+        bucket = totals.setdefault(currency, {"gross": Decimal("0"), "commission": Decimal("0"), "net": Decimal("0")})
+        bucket["gross"] += item["gross"]
+        bucket["commission"] += item["commission"]
+        bucket["net"] += item["net"]
+    return totals
 
 
 def build_sales_history(db: Session, profile_id: str, page: int = 1, sale_type: str = "all", search: str = ""):
@@ -152,10 +170,8 @@ def build_sales_history(db: Session, profile_id: str, page: int = 1, sale_type: 
         sales.extend(_merch_sales(db, profile_id, search))
 
     sales.sort(key=lambda item: item["date"] or datetime.min, reverse=True)
+    currency_totals = _currency_totals(sales)
     total_count = len(sales)
-    total_gross = sum((item["gross"] for item in sales), Decimal("0"))
-    total_commission = sum((item["commission"] for item in sales), Decimal("0"))
-    total_net = sum((item["net"] for item in sales), Decimal("0"))
     total_pages = max(1, (total_count + PER_PAGE - 1) // PER_PAGE)
     page = min(page, total_pages)
     start = (page - 1) * PER_PAGE
@@ -164,9 +180,7 @@ def build_sales_history(db: Session, profile_id: str, page: int = 1, sale_type: 
     return {
         "sales": visible,
         "total_count": total_count,
-        "total_gross": total_gross,
-        "total_commission": total_commission,
-        "total_net": total_net,
+        "currency_totals": currency_totals,
         "page": page,
         "total_pages": total_pages,
         "per_page": PER_PAGE,
