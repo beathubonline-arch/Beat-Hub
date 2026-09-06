@@ -51,7 +51,7 @@
 
         <div class="track-price">
           <div class="track-price-label">Price</div>
-          <div class="track-price-value">KSh {{ '%.2f'|format(track.price or 0) }}</div>
+          <div class="track-price-value">{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }} {{ track.currency|default('KES') }}</div>
         </div>
 
         <div class="track-actions">
