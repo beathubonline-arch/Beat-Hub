@@ -147,7 +147,7 @@
               </div>
 
               <div class="card-bottom">
-                <div class="card-price">KSh {{ '%.2f'|format(track.price or 0) }}</div>
+                <div class="card-price">{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }} {{ track.currency|default('KES') }}</div>
                 <div class="card-actions">
                   <a class="view-btn" href="/track/{{ track.slug }}">View</a>
 
@@ -204,7 +204,7 @@
             </div>
             <div class="card-kind">{{ album.genre or 'Album' }}</div>
             <h3>{{ album.title }}</h3>
-            {% if album.description %}<p>{{ album.description[:150] }}{% if album.description|length > 150 %}...{% endif %}</p>{% endif %}
+            {% if album.description %}<p>{{ album.description[:150] }}{% if album.description|length > 150 %}...</p>{% endif %}</p>{% endif %}
             <a class="album-btn" href="/album/{{ album.slug }}">View Album</a>
           </article>
         {% endfor %}
