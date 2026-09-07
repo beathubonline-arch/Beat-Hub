@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { AppState, AppStateStatus, Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { api } from '../../src/api';
 
@@ -7,11 +7,13 @@ export default function Checkout() {
   const { orderId, url, reference } = useLocalSearchParams<{ orderId: string; url?: string; reference?: string }>();
   const [status, setStatus] = useState('pending');
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
   const verifying = useRef(false);
 
-  async function verifyPayment() {
+  const verifyPayment = useCallback(async () => {
     if (!reference || verifying.current) return;
     verifying.current = true;
+    setChecking(true);
     try {
       const result = await api<{ status: string; completed: boolean; failed?: boolean }>(
         `/payments/paystack/verify/${encodeURIComponent(reference)}`,
@@ -19,30 +21,50 @@ export default function Checkout() {
       );
       setStatus(result.status);
     } catch {
-      // Paystack may still be processing. The status poll below remains authoritative.
+      // Paystack may still be processing. The order status check remains authoritative.
     } finally {
       verifying.current = false;
+      setChecking(false);
     }
-  }
+  }, [reference]);
+
+  const checkOrder = useCallback(async () => {
+    try {
+      await verifyPayment();
+      const r = await api<{ status: string }>(`/orders/${orderId}/status`);
+      setStatus(r.status);
+    } catch {
+      // Keep the current UI state while the provider is processing.
+    }
+  }, [orderId, verifyPayment]);
 
   useEffect(() => {
     let active = true;
     const poll = async () => {
-      try {
-        await verifyPayment();
-        const r = await api<{ status: string }>(`/orders/${orderId}/status`);
-        if (active) setStatus(r.status);
-      } catch {
-        // Keep the current UI state while the provider is processing.
-      }
+      if (!active) return;
+      await checkOrder();
     };
+
     poll();
     const timer = setInterval(poll, 4000);
+
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [orderId, reference]);
+  }, [checkOrder]);
+
+  useEffect(() => {
+    const handleAppState = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        // Paystack opens outside the app. Re-check immediately when the buyer returns.
+        checkOrder();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppState);
+    return () => subscription.remove();
+  }, [checkOrder]);
 
   async function open() {
     if (!url) return;
@@ -75,18 +97,30 @@ export default function Checkout() {
           </Text>
         </View>
         {!completed && !failed && (
-          <Pressable style={s.button} onPress={open} disabled={busy}>
-            <Text style={s.buttonText}>{busy ? 'Opening…' : 'Open Paystack'}</Text>
-          </Pressable>
+          <>
+            <Pressable style={s.button} onPress={open} disabled={busy}>
+              <Text style={s.buttonText}>{busy ? 'Opening…' : 'Open Paystack'}</Text>
+            </Pressable>
+            <Pressable style={s.secondary} onPress={checkOrder} disabled={checking}>
+              <Text style={s.secondaryText}>{checking ? 'Checking payment…' : 'Check payment again'}</Text>
+            </Pressable>
+          </>
         )}
         {completed && (
           <Pressable style={s.button} onPress={() => router.replace('/(tabs)/library')}>
             <Text style={s.buttonText}>Go to Library & Download</Text>
           </Pressable>
         )}
-        <Pressable style={s.secondary} onPress={() => router.replace('/(tabs)/library')}>
-          <Text style={s.secondaryText}>Go to Library</Text>
-        </Pressable>
+        {!completed && !failed && (
+          <Pressable style={s.secondary} onPress={() => router.replace('/(tabs)/library')}>
+            <Text style={s.secondaryText}>Go to Library</Text>
+          </Pressable>
+        )}
+        {failed && (
+          <Pressable style={s.secondary} onPress={() => router.replace('/(tabs)/beats')}>
+            <Text style={s.secondaryText}>Back to Marketplace</Text>
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
   );
