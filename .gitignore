@@ -11,3 +11,4 @@ media/covers/
 media/artwork/
 .DS_Store
 *.log
+.expo/
