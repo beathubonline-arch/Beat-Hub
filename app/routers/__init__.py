@@ -15,6 +15,7 @@ from . import merchandise_catalog
 
 # Mobile creator endpoints extend the canonical /api/v1 router.
 from . import mobile_creator_extensions
+from . import api_payments
 
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
