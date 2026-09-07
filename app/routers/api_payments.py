@@ -15,7 +15,7 @@ from app.models.user import User
 from app.routers.paystack_checkout import _complete_verified_payment, _verify_reference
 from app.utils.deps import require_user
 
-router = APIRouter(prefix="/api/v1", tags=["mobile-payments"])
+router = APIRouter(tags=["mobile-payments"])
 
 
 @router.post("/payments/paystack/verify/{reference}")
@@ -47,11 +47,7 @@ async def verify_paystack_payment(
         raise HTTPException(404, "Payment order not found.")
 
     if order.status.value == "completed" and payment.status.value == "completed":
-        return {
-            "status": "completed",
-            "completed": True,
-            "download_available": True,
-        }
+        return {"status": "completed", "completed": True, "download_available": True}
 
     try:
         data = await _verify_reference(reference)
