@@ -2,6 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const API_BASE_URL = 'https://mybeathub.com/api/v1';
 const TOKEN_KEY = 'beathub_access_token';
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
 
 export async function getToken() {
   return AsyncStorage.getItem(TOKEN_KEY);
@@ -35,6 +40,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (!response.ok) {
     if (response.status === 401) {
       await setToken(null);
+      unauthorizedHandler?.();
       throw new Error('Your session has expired. Please sign in again.');
     }
     const detail = data?.detail;
