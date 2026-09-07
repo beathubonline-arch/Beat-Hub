@@ -21,12 +21,12 @@ export default function CreatorDashboard(){
  const kes=stats('KES'); const usd=stats('USD');
  return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load();}} />}>
   <Text style={s.eyebrow}>CREATOR STUDIO</Text><Text style={s.title}>{data.profile.stage_name||user?.stage_name||'Creator'}</Text><Text style={s.muted}>Manage your music, sales and earnings.</Text>
+  <View style={s.actions}><Pressable style={s.action} onPress={()=>router.push('/creator-profile')}><Text style={s.actionText}>Edit profile</Text></Pressable><Pressable style={s.action} onPress={()=>router.push('/creator-finances')}><Text style={s.actionText}>Sales & withdrawals</Text></Pressable></View>
   <Text style={s.section}>Earnings</Text>
   <View style={s.earnCard}><Text style={s.cardLabel}>KES</Text><Text style={s.big}>{money('KES',kes.available)}</Text><Text style={s.cardMeta}>Available to withdraw · {kes.sales} sales</Text><Text style={s.small}>Net earned: {money('KES',kes.net)} · Pending: {money('KES',kes.pending_withdrawal)}</Text></View>
   <View style={s.earnCard}><Text style={s.cardLabel}>USD</Text><Text style={s.big}>{money('USD',usd.available)}</Text><Text style={s.cardMeta}>{usd.sales} sales · USD balance is kept separate</Text><Text style={s.small}>Net earned: {money('USD',usd.net)}</Text></View>
   <View style={s.grid}><View style={s.stat}><Text style={s.label}>Total sales</Text><Text style={s.value}>{data.stats.total_sales}</Text></View><View style={s.stat}><Text style={s.label}>Tracks</Text><Text style={s.value}>{data.tracks.length}</Text></View></View>
-  <View style={s.actions}><Pressable style={s.action} onPress={()=>router.push('/creator-finances')}><Text style={s.actionText}>Sales & withdrawals</Text></Pressable><Pressable style={s.action} onPress={()=>router.push('/notifications')}><Text style={s.actionText}>Notifications</Text></Pressable></View>
-  <Pressable style={s.secondary} onPress={()=>router.push('/(tabs)/beats')}><Text style={s.secondaryText}>View marketplace</Text></Pressable>
+  <Pressable style={s.secondary} onPress={()=>router.push('/notifications')}><Text style={s.secondaryText}>Notifications</Text></Pressable><Pressable style={s.secondary} onPress={()=>router.push('/(tabs)/beats')}><Text style={s.secondaryText}>View marketplace</Text></Pressable>
   <Text style={s.section}>Your tracks</Text>{data.tracks.length===0?<Text style={s.muted}>No tracks uploaded yet.</Text>:data.tracks.slice(0,12).map(t=><View key={t.id} style={s.track}><View style={{flex:1}}><Text style={s.trackTitle}>{t.title}</Text><Text style={s.trackMeta}>{t.currency} {t.price.toFixed(2)}{t.is_sold?' · Sold':''}</Text></View></View>)}
  </ScrollView></SafeAreaView>;
 }
