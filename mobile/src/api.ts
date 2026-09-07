@@ -16,14 +16,34 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const token = await getToken();
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  } catch {
+    throw new Error('Unable to reach BeatHub. Check your internet connection and try again.');
+  }
+
   const text = await response.text();
   let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text }; }
-  if (!response.ok) throw new Error(data?.detail || `Request failed (${response.status})`);
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await setToken(null);
+      throw new Error('Your session has expired. Please sign in again.');
+    }
+    const detail = data?.detail;
+    const message = Array.isArray(detail)
+      ? detail.map((item: any) => item?.msg || item?.message).filter(Boolean).join('\n')
+      : typeof detail === 'string' ? detail : null;
+    throw new Error(message || `Request failed (${response.status})`);
+  }
+
   return data as T;
 }
 
