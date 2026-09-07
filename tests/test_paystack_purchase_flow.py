@@ -21,6 +21,9 @@ class FakeDB:
     def get(self, model, key):
         return self.order
 
+    def rollback(self):
+        return None
+
 
 class FakeQuery:
     def __init__(self, value):
