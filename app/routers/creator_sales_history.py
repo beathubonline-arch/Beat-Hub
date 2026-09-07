@@ -177,10 +177,23 @@ def build_sales_history(db: Session, profile_id: str, page: int = 1, sale_type: 
     start = (page - 1) * PER_PAGE
     visible = sales[start : start + PER_PAGE]
 
+    currencies = set(currency_totals)
+    single_currency = next(iter(currencies)) if len(currencies) == 1 else None
+    if single_currency:
+        aggregate = currency_totals[single_currency]
+        total_gross = aggregate["gross"]
+        total_commission = aggregate["commission"]
+        total_net = aggregate["net"]
+    else:
+        total_gross = total_commission = total_net = None
+
     return {
         "sales": visible,
         "total_count": total_count,
         "currency_totals": currency_totals,
+        "total_gross": total_gross,
+        "total_commission": total_commission,
+        "total_net": total_net,
         "page": page,
         "total_pages": total_pages,
         "per_page": PER_PAGE,
