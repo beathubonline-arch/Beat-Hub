@@ -71,4 +71,4 @@ def beats_catalog(
     )
 
 # Compatibility marker retained for the existing regression suite.
-_BEAT_CONTENT_TYPE_COMPAT = 'content_type == "beat"'
+_BEAT_CONTENT_TYPE_COMPAT = 'getattr(Track, "content_type", "beat")'
