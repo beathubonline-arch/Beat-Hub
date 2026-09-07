@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { api, getToken, setToken, User } from '../api';
+import { api, getToken, setToken, setUnauthorizedHandler, User } from '../api';
 
 type AuthContextValue = {
   user: User | null;
@@ -15,6 +15,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
+  useEffect(() => {
     (async () => {
       try {
         if (await getToken()) {
@@ -23,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         await setToken(null);
+        setUser(null);
       } finally {
         setLoading(false);
       }
