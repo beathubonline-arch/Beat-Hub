@@ -36,7 +36,7 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         self.assertEqual(args[2], "buyer@example.com")
         self.assertEqual(args[3], "BeatHub — Your purchase is complete")
         self.assertIn("Midnight Beat", args[4])
-        self.assertIn("1500.00", args[4])
+        self.assertIn("1,500.00", args[4])
         self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
 
     def test_creator_sale_email_contains_earnings(self):
@@ -88,7 +88,7 @@ class TransactionalEmailNotificationTests(unittest.TestCase):
         args, kwargs = send.call_args
         self.assertEqual(args[2], "creator@example.com")
         self.assertEqual(args[3], "BeatHub — Withdrawal request received")
-        self.assertIn("KSh 1,200.00", args[4])
+        self.assertIn("KES 1,200.00", args[4])
         self.assertIn("0712345678", args[4])
         self.assertTrue(kwargs["idempotency_key"].startswith("transactional-"))
 
