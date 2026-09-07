@@ -17,6 +17,10 @@ from . import merchandise_catalog
 from . import mobile_creator_extensions
 from . import api_payments
 
+# Mobile payment verification must live under the existing /api/v1 prefix.
+from . import api_v1 as _api_v1_module
+_api_v1_module.router.include_router(api_payments.router)
+
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
 
