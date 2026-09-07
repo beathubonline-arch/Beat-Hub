@@ -1,5 +1,8 @@
 """Additional mobile creator endpoints registered on the v1 API router."""
+from decimal import Decimal
+
 from fastapi import Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -48,6 +51,86 @@ def mobile_creator_sales(
             for order in orders
         ]
     }
+
+
+@router.get("/creator/financial-summary")
+def mobile_creator_financial_summary(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return creator earnings split by currency.
+
+    Orders carry their transaction currency, while creator withdrawals are
+    currently M-Pesa/KES. Never combine KES and USD into one numeric balance.
+    """
+    _creator_required(user)
+    profile = getattr(user, "profile", None)
+    if not profile:
+        raise HTTPException(400, "Creator profile missing.")
+
+    rows = (
+        db.query(
+            Order.currency,
+            func.coalesce(func.sum(Order.gross_amount), 0),
+            func.coalesce(func.sum(Order.commission_amount), 0),
+            func.coalesce(func.sum(Order.net_amount), 0),
+            func.count(Order.id),
+        )
+        .join(Order.track)
+        .filter(
+            Order.status == OrderStatus.COMPLETED,
+            Order.track.has(creator_profile_id=profile.id),
+        )
+        .group_by(Order.currency)
+        .all()
+    )
+
+    withdrawn_kes = db.query(
+        func.coalesce(func.sum(WithdrawalRequest.amount), 0)
+    ).filter(
+        WithdrawalRequest.creator_profile_id == profile.id,
+        WithdrawalRequest.status.in_(["approved", "processing", "paid"]),
+    ).scalar()
+
+    pending_kes = db.query(
+        func.coalesce(func.sum(WithdrawalRequest.amount), 0)
+    ).filter(
+        WithdrawalRequest.creator_profile_id == profile.id,
+        WithdrawalRequest.status == "pending",
+    ).scalar()
+
+    withdrawn_kes = Decimal(str(withdrawn_kes or 0))
+    pending_kes = Decimal(str(pending_kes or 0))
+
+    currencies = {}
+    for currency, gross, commission, net, sales in rows:
+        code = str(currency or "KES").upper()
+        gross_d = Decimal(str(gross or 0))
+        commission_d = Decimal(str(commission or 0))
+        net_d = Decimal(str(net or 0))
+        available_d = net_d - withdrawn_kes - pending_kes if code == "KES" else net_d
+        if available_d < 0:
+            available_d = Decimal("0")
+        currencies[code] = {
+            "sales": int(sales or 0),
+            "gross": float(gross_d),
+            "commission": float(commission_d),
+            "net": float(net_d),
+            "available": float(available_d),
+            "pending_withdrawal": float(pending_kes) if code == "KES" else 0.0,
+        }
+
+    for code in ("KES", "USD"):
+        currencies.setdefault(code, {
+            "sales": 0,
+            "gross": 0.0,
+            "commission": 0.0,
+            "net": 0.0,
+            "available": 0.0,
+            "pending_withdrawal": 0.0,
+        })
+
+    return {"currencies": currencies}
 
 
 @router.get("/creator/withdrawals")
