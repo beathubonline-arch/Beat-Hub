@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.growth_runs import GrowthAgentRun
-from app.services.growth_worker_v3 import run_once
+from app.services.growth_worker_v4 import run_once
 from app.utils.deps import require_admin
 
 router = APIRouter(prefix="/admin/growth-runner", tags=["growth-agent-runner"])
