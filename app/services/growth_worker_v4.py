@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.database import SessionLocal
 from app.models.growth_runs import GrowthAgentRun
 from app.services.growth_agent import build_snapshot, run_growth_agent
+from app.services.growth_payment_recovery import reconcile_recent_payments
 
 logger = logging.getLogger("beathub.growth_worker")
 LOCK_KEY = 734820261
@@ -41,8 +42,13 @@ def run_once(force: bool = False) -> dict:
             run = GrowthAgentRun(id=hashlib.sha256(f"{key}:{now.timestamp()}".encode()).hexdigest()[:32], run_key=key, started_at=now, status="running", mode="local")
             db.add(run)
         db.commit()
+
+        # Reconcile existing checkout intent before taking a growth decision.
+        # This only verifies existing Paystack references; it never creates or retries charges.
+        payment_recovery = asyncio.run(reconcile_recent_payments(db, days=14, limit=20))
         snapshot = build_snapshot(db)
         plan = asyncio.run(run_growth_agent(snapshot))
+        plan["payment_recovery"] = payment_recovery
         run.finished_at = datetime.now(timezone.utc)
         run.status = "completed"
         run.priority = str(plan.get("priority") or "")
