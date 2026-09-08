@@ -25,11 +25,8 @@ _api_v1_module.router.include_router(api_payments.router)
 
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
+admin.router.include_router(admin_auth.router)
 admin.router.include_router(growth_agent.router)
-
-# Canonical administrator authentication routes.
-# Kept separate from the large admin router so session/login fixes can be
-# tested and evolved without changing financial/admin business logic.
 
 # Register canonical public marketplace discovery before the legacy catalog.
 pages.router.include_router(music_publish.router)
