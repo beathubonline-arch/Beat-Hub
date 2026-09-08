@@ -28,14 +28,23 @@ class TestGrowthAgentV1(unittest.TestCase):
         self.assertIn("purchase", result["success_condition"])
         self.assertIn("COLORS", result["daily_targets"][1])
 
-    def test_payment_intent_takes_priority_when_orders_exist_but_none_complete(self):
+    def test_payment_intent_takes_priority_when_orders_are_still_pending(self):
         result = asyncio.run(run_growth_agent({
             "totals": {"users": 10, "creators": 8, "published_tracks": 6, "completed_orders_all_time": 0},
-            "last_7_days": {"new_users": 3, "orders": 4, "completed_orders": 0},
+            "last_7_days": {"new_users": 3, "orders": 4, "pending_orders": 4, "failed_orders": 0, "completed_orders": 0},
             "latest_tracks": [],
         }))
         self.assertEqual(result["bottleneck"], "payment_completion")
-        self.assertIn("checkout", result["job_to_do_today"])
+        self.assertIn("still-pending", result["job_to_do_today"])
+
+    def test_failed_checkouts_do_not_look_like_a_payment_blocker(self):
+        result = asyncio.run(run_growth_agent({
+            "totals": {"users": 10, "creators": 8, "published_tracks": 6, "completed_orders_all_time": 0},
+            "last_7_days": {"new_users": 10, "orders": 5, "pending_orders": 0, "failed_orders": 5, "completed_orders": 0},
+            "latest_tracks": [{"title": "COLORS", "genre": "Dancehall", "id": "t1"}],
+        }))
+        self.assertEqual(result["bottleneck"], "activation_to_purchase")
+        self.assertIn("failed checkout attempts", " ".join(result["daily_targets"]))
 
     def test_zero_catalog_prioritizes_supply(self):
         result = asyncio.run(run_growth_agent({
