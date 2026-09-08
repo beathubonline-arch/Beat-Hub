@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import asyncio
 from collections import defaultdict, deque
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -39,7 +40,9 @@ from app.routers import (
     payout_admin,
     track_catalog,
 )
+from app.routers.growth_runner_v4 import router as growth_runner_router
 from app.services.payout_policy import PAYOUT_MINIMUM
+from app.services.growth_scheduler import growth_scheduler_loop
 
 logger = logging.getLogger("beathub")
 BASE_DIR = Path(__file__).resolve().parent
@@ -245,3 +248,12 @@ app.include_router(payout_admin.router)
 app.include_router(merchandise.router)
 app.include_router(merchandise_account.router)
 app.include_router(notifications.router)
+app.include_router(growth_runner_router)
+
+
+@app.on_event("startup")
+async def start_zero_budget_growth_agent():
+    """Run the local Growth OS automatically inside the existing web service."""
+    if getattr(app.state, "growth_scheduler_task", None) is None:
+        app.state.growth_scheduler_task = asyncio.create_task(growth_scheduler_loop())
+        logger.info("[BeatHub Growth Agent] zero-budget scheduler started")
