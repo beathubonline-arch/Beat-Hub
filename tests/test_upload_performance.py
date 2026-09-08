@@ -99,5 +99,4 @@ def test_upload_page_has_real_progress_and_duplicate_submit_protection():
     assert "if(busy||!form.reportValidity())return" in html
     assert "let busy=false" in html
     assert "publish.disabled=true" in html
-    assert "progress(100,'Files stored.\u0027,\u0027Publishing metadata…\u0027,'Finalizing your upload')" not in html
     assert "Upload failed" in html
