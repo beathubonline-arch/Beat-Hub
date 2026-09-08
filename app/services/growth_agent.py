@@ -93,9 +93,12 @@ def _parse_json_response(data: dict, label: str) -> dict:
     if not text:
         raise GrowthAgentError(f"{label} returned no usable output.")
     try:
-        return json.loads(text)
+        result = json.loads(text)
     except json.JSONDecodeError as exc:
         raise GrowthAgentError(f"{label} returned malformed JSON.") from exc
+    if not isinstance(result, dict):
+        raise GrowthAgentError(f"{label} returned an invalid JSON object.")
+    return result
 
 
 async def run_growth_agent(snapshot: dict) -> dict:
@@ -120,8 +123,24 @@ Return ONLY JSON: {{"prospects":[{{"name":"","type":"artist|producer|dj|creator|
 At most {limit} prospects. Use only public professional/creator information; never include private contact details, addresses or sensitive data.
 Prefer active prospects with evidence of music activity. Do not invent URLs or facts. Recommended angle must be human and non-spammy."""
     result = _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=query, web_search=True), "Prospect Scout")
-    if not isinstance(result.get("prospects"), list): raise GrowthAgentError("Prospect Scout returned an invalid prospect list.")
-    result["prospects"] = result["prospects"][:limit]; result["query"] = query; result["location"] = location
+    prospects = result.get("prospects")
+    if not isinstance(prospects, list): raise GrowthAgentError("Prospect Scout returned an invalid prospect list.")
+    clean = []
+    seen_urls = set()
+    for prospect in prospects:
+        if not isinstance(prospect, dict):
+            continue
+        public_url = str(prospect.get("public_url", "")).strip()
+        name = str(prospect.get("name", "")).strip()
+        if not name or not public_url.startswith(("https://", "http://")) or public_url in seen_urls:
+            continue
+        seen_urls.add(public_url)
+        clean.append(prospect)
+        if len(clean) >= limit:
+            break
+    result["prospects"] = clean
+    result["query"] = query
+    result["location"] = location
     return result
 
 
@@ -129,16 +148,38 @@ async def match_beats(artist_request: str, tracks: list[dict], limit: int = 5) -
     api_key, model = _require_ai_config()
     limit = max(1, min(int(limit or 5), 10))
     if len((artist_request or '').strip()) < 3: raise GrowthAgentError("Artist request must be at least 3 characters.")
+    catalog = [t for t in tracks if isinstance(t, dict) and str(t.get("id", "")).strip()]
+    allowed_ids = {str(t["id"]) for t in catalog}
     instructions = f"""You are BeatHub Match. Match an artist's described sound to BeatHub's available beats.
 Do not invent tracks. Only recommend IDs/titles present in the supplied catalog. Return JSON: {{"matches":[{{"track_id":"","title":"","score":0,"reason":"","next_step":""}}]}}.
 Rank by musical fit, not price. At most {limit} matches."""
-    result = _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=json.dumps({"artist_request": artist_request, "catalog": tracks}, ensure_ascii=False)), "Beat Matcher")
-    result["matches"] = result.get("matches", [])[:limit]
+    result = _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=json.dumps({"artist_request": artist_request, "catalog": catalog}, ensure_ascii=False)), "Beat Matcher")
+    raw_matches = result.get("matches", [])
+    if not isinstance(raw_matches, list):
+        raise GrowthAgentError("Beat Matcher returned an invalid match list.")
+    clean = []
+    seen_ids = set()
+    for match in raw_matches:
+        if not isinstance(match, dict):
+            continue
+        track_id = str(match.get("track_id", "")).strip()
+        if track_id not in allowed_ids or track_id in seen_ids:
+            continue
+        seen_ids.add(track_id)
+        clean.append(match)
+        if len(clean) >= limit:
+            break
+    result["matches"] = clean
     return result
 
 
 async def generate_outreach(prospect: dict, matches: list[dict]) -> dict:
     api_key, model = _require_ai_config()
+    if not isinstance(prospect, dict):
+        raise GrowthAgentError("Prospect context is required.")
+    public_url = str(prospect.get("public_url", "")).strip()
+    if not public_url.startswith(("https://", "http://")):
+        raise GrowthAgentError("Outreach requires a public prospect URL for human review.")
     instructions = """You write respectful, personalized BeatHub outreach for a founder.
 Use only the supplied public prospect context and beat matches. Never claim you listened to something unless supplied.
 Never pressure, impersonate, spam, or invent facts. Return JSON with keys: context, message_short, message_warm, follow_up."""
