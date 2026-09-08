@@ -1,13 +1,13 @@
 """Track Growth Agent execution runs.
 
-Revision ID: 0028_growth_agent_runs
-Revises: 0027_fix_day_29
+Revision ID: growth_agent_runs_028
+Revises: growth_campaign_fix_027
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0028_growth_agent_runs"
-down_revision = "0027_fix_day_29"
+revision = "growth_agent_runs_028"
+down_revision = "growth_campaign_fix_027"
 branch_labels = None
 depends_on = None
 
