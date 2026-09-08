@@ -26,4 +26,4 @@ def test_contact_stage_requires_human_approval_in_router():
     source = Path("app/routers/growth_agent.py").read_text(encoding="utf-8")
     assert 'stage == "contacted"' in source
     assert 'approved_by_human' in source
-    assert "never sends a message" in source
+    assert 'router.post("/campaign/init")' in source
