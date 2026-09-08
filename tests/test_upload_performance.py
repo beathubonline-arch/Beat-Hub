@@ -93,8 +93,11 @@ def test_r2_upload_uses_worker_thread_and_multipart_config(monkeypatch):
 
 def test_upload_page_has_real_progress_and_duplicate_submit_protection():
     html = Path("app/templates/upload_track.html").read_text(encoding="utf-8")
-    assert "xhr.upload.addEventListener('progress'" in html
-    assert "event.preventDefault();" in html
-    assert "let submitting=false" in html
+    # The current uploader uses XMLHttpRequest progress events and a busy guard.
+    assert "x.upload.addEventListener('progress'" in html
+    assert "form.addEventListener('submit'" in html
+    assert "if(busy||!form.reportValidity())return" in html
+    assert "let busy=false" in html
     assert "publish.disabled=true" in html
-    assert "Upload received — processing…" in html
+    assert "progress(100,'Files stored.\u0027,\u0027Publishing metadata…\u0027,'Finalizing your upload')" not in html
+    assert "Upload failed" in html
