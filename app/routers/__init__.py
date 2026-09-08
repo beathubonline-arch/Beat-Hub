@@ -14,6 +14,7 @@ from . import admin_auth
 from . import admin_paystack_reconciliation
 from . import merchandise_catalog
 from . import growth_agent
+from . import growth_run_proxy
 
 # Mobile creator endpoints extend the canonical /api/v1 router.
 from . import mobile_creator_extensions
@@ -26,6 +27,11 @@ _api_v1_module.router.include_router(api_payments.router)
 dashboard.router.include_router(creator_sales_history.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
 admin.router.include_router(admin_auth.router)
+
+# Register the persisted Growth OS worker endpoint before the legacy
+# /admin/growth/run route so the visible Run Agent button uses the same
+# auditable zero-budget worker as the scheduler and admin runner.
+admin.router.include_router(growth_run_proxy.router)
 admin.router.include_router(growth_agent.router)
 
 # Register canonical public marketplace discovery before the legacy catalog.
