@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BeatHub Growth Agent</title>
+  <style>
+    body{font-family:Inter,system-ui,sans-serif;margin:0;background:#0f0d16;color:#f7f4ff}
+    main{max-width:1100px;margin:0 auto;padding:32px 20px 60px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.card{background:#181522;border:1px solid #2c2738;border-radius:16px;padding:18px}.muted{color:#a9a2b8}.big{font-size:30px;font-weight:800}.hero{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}button{border:0;border-radius:12px;padding:12px 18px;font-weight:800;cursor:pointer;background:#fff;color:#111}.pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#292337;color:#cfc6df;margin:3px}pre{white-space:pre-wrap;background:#0a0910;border-radius:12px;padding:16px;overflow:auto;line-height:1.5}.status{margin-top:12px;color:#bcb3ca}
+  </style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div><div class="muted">BEATHUB GROWTH OS · V1</div><h1>Growth Agent</h1><p class="muted">Turns live BeatHub data into the next 24-hour zero-budget growth plan.</p></div>
+    <button id="run">Run agent</button>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="muted">Users</div><div class="big">{{ snapshot.totals.users }}</div></div>
+    <div class="card"><div class="muted">Creators</div><div class="big">{{ snapshot.totals.creators }}</div></div>
+    <div class="card"><div class="muted">Published tracks</div><div class="big">{{ snapshot.totals.published_tracks }}</div></div>
+    <div class="card"><div class="muted">New users · 7d</div><div class="big">{{ snapshot.last_7_days.new_users }}</div></div>
+    <div class="card"><div class="muted">Completed orders · 7d</div><div class="big">{{ snapshot.last_7_days.completed_orders }}</div></div>
+    <div class="card"><div class="muted">GMV · 7d</div><div class="big">{{ snapshot.last_7_days.completed_gmv }}</div></div>
+  </div>
+  <section class="card" style="margin-top:18px"><h2>Latest BeatHub inventory</h2><div>{% for t in snapshot.latest_tracks %}<span class="pill">{{ t.title }}{% if t.genre %} · {{ t.genre }}{% endif %}</span>{% else %}<span class="muted">No published tracks found.</span>{% endfor %}</div></section>
+  <section class="card" style="margin-top:18px"><h2>Agent plan</h2><div id="status" class="status">Press Run agent. The first version is read-only: it cannot send messages or publish content.</div><pre id="output" style="display:none"></pre></section>
+</main>
+<script>
+const run=document.getElementById('run'), status=document.getElementById('status'), output=document.getElementById('output');
+run.addEventListener('click', async()=>{run.disabled=true;run.textContent='Thinking…';status.textContent='Analyzing BeatHub data…';output.style.display='none';try{const r=await fetch('/admin/growth/run',{method:'POST',headers:{'Accept':'application/json'}});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Agent failed');output.textContent=JSON.stringify(d.plan,null,2);output.style.display='block';status.textContent='Plan generated from live BeatHub data.';}catch(e){status.textContent=e.message;}finally{run.disabled=false;run.textContent='Run agent';}});
+</script>
+</body>
+</html>
