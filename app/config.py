@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # AI Growth Agent. Keep the API key only in Render/environment secrets.
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = ""
+    OPENAI_MODEL: str = "gpt-6-astra"
 
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
