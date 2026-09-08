@@ -1,8 +1,5 @@
-from datetime import datetime, timezone
-
-
 def test_growth_worker_is_local_and_importable():
-    from app.services.growth_worker_v2 import LOCK_KEY, run_once
+    from app.services.growth_worker_v4 import LOCK_KEY, run_once
     assert LOCK_KEY > 0
     assert callable(run_once)
 
