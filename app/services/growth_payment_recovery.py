@@ -11,13 +11,17 @@ from datetime import datetime, timedelta
 
 from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
-from app.routers.paystack_checkout import _complete_verified_payment, _verify_reference
 
 logger = logging.getLogger("beathub.growth_payment_recovery")
 
 
 async def reconcile_recent_payments(db, days: int = 14, limit: int = 20) -> dict:
     """Verify recent pending Paystack payments and return an auditable report."""
+    # Local import is deliberate: paystack_checkout is itself imported by the
+    # router package, so importing it at module load would create a cycle when
+    # the Growth worker is imported.
+    from app.routers.paystack_checkout import _complete_verified_payment, _verify_reference
+
     since = datetime.utcnow() - timedelta(days=max(1, min(int(days or 14), 30)))
     limit = max(1, min(int(limit or 20), 50))
     rows = (
