@@ -7,15 +7,25 @@ def test_campaign_model_and_migrations_exist():
     tree = ast.parse(model)
     names = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
     assert "GrowthCampaignDay" in names
+
     migration = Path("alembic/versions/0024_growth_campaign.py").read_text(encoding="utf-8")
     assert 'revision = "growth_campaign_024"' in migration
     assert 'down_revision = "growth_funnel_023"' in migration
     assert "DROP TABLE" not in migration.upper()
+
     final_day = Path("alembic/versions/0025_growth_campaign_day30.py").read_text(encoding="utf-8")
     assert 'revision = "growth_campaign_day30_025"' in final_day
     assert 'down_revision = "growth_campaign_024"' in final_day
     assert '"day_number": 30' in final_day
     assert "DROP TABLE" not in final_day.upper()
+
+    repair = Path("alembic/versions/0026_seed_growth_campaign_days_1_29.py").read_text(encoding="utf-8")
+    assert 'revision = "growth_campaign_seed_026"' in repair
+    assert 'down_revision = "growth_campaign_day30_025"' in repair
+    assert "range(DAYS" not in repair
+    assert repair.count('(\"') >= 29
+    assert "WHERE NOT EXISTS" in repair
+    assert "DROP TABLE" not in repair.upper()
 
 
 def test_campaign_defines_29_generated_days_plus_persistent_day_30():
