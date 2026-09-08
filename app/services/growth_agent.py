@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -26,28 +26,6 @@ def _money(value):
         return 0.0
 
 
-def _extract_output_text(data: dict) -> str:
-    text = data.get("output_text")
-    if text:
-        return str(text).strip()
-    chunks = []
-    for item in data.get("output", []):
-        for content in item.get("content", []):
-            if content.get("type") == "output_text":
-                chunks.append(content.get("text", ""))
-    return "\n".join(chunks).strip()
-
-
-def _require_ai_config() -> tuple[str, str]:
-    api_key = str(getattr(settings, "OPENAI_API_KEY", "") or "").strip()
-    model = str(getattr(settings, "OPENAI_MODEL", "") or "").strip()
-    if not api_key:
-        raise GrowthAgentError("OPENAI_API_KEY is not configured.")
-    if not model:
-        raise GrowthAgentError("OPENAI_MODEL is not configured.")
-    return api_key, model
-
-
 def build_snapshot(db: Session) -> dict:
     """Build a small, privacy-safe growth snapshot from BeatHub's live DB."""
     since = datetime.utcnow() - timedelta(days=7)
@@ -60,135 +38,205 @@ def build_snapshot(db: Session) -> dict:
     recent_orders = db.query(func.count(Order.id)).filter(Order.created_at >= since).scalar() or 0
     recent_completed = db.query(func.count(Order.id)).filter(Order.created_at >= since, Order.status == OrderStatus.COMPLETED).scalar() or 0
     recent_gmv = db.query(func.coalesce(func.sum(Order.gross_amount), 0)).filter(Order.created_at >= since, Order.status == OrderStatus.COMPLETED).scalar() or 0
-
     latest_tracks = db.query(Track).filter(Track.is_published.is_(True)).order_by(Track.created_at.desc()).limit(20).all()
     track_items = [
-        {"id": str(t.id), "title": t.title, "genre": t.genre, "bpm": t.bpm, "currency": t.currency, "price": _money(t.price), "sales_model": getattr(t.sales_model, "value", t.sales_model), "created_at": t.created_at.isoformat() if t.created_at else None}
+        {"id": str(t.id), "title": t.title, "genre": t.genre, "bpm": t.bpm, "currency": t.currency,
+         "price": _money(t.price), "sales_model": getattr(t.sales_model, "value", t.sales_model),
+         "created_at": t.created_at.isoformat() if t.created_at else None}
         for t in latest_tracks
     ]
-
-    return {"generated_at": datetime.utcnow().isoformat() + "Z", "window": "last_7_days", "base_url": settings.BASE_URL,
-            "totals": {"users": users, "creators": creators, "published_tracks": tracks, "profiles": profiles, "completed_orders_all_time": completed},
-            "last_7_days": {"new_users": recent_users, "orders": recent_orders, "completed_orders": recent_completed, "completed_gmv": _money(recent_gmv)},
-            "latest_tracks": track_items}
-
-
-async def _responses_call(*, api_key: str, model: str, instructions: str, input_text: str, web_search: bool = False) -> dict:
-    payload = {"model": model, "instructions": instructions, "input": input_text, "store": False}
-    if web_search:
-        payload["tools"] = [{"type": "web_search"}]
-        payload["include"] = ["web_search_call.action.sources"]
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        response = await client.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload)
-    if response.status_code >= 400:
-        detail = ""
-        try: detail = str(response.json().get("error", {}).get("message", ""))[:300]
-        except Exception: pass
-        raise GrowthAgentError(f"OpenAI request failed ({response.status_code}). {detail}".strip())
-    return response.json()
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z", "window": "last_7_days", "base_url": settings.BASE_URL,
+        "totals": {"users": users, "creators": creators, "published_tracks": tracks, "profiles": profiles, "completed_orders_all_time": completed},
+        "last_7_days": {"new_users": recent_users, "orders": recent_orders, "completed_orders": recent_completed, "completed_gmv": _money(recent_gmv)},
+        "latest_tracks": track_items,
+    }
 
 
-def _parse_json_response(data: dict, label: str) -> dict:
-    text = _extract_output_text(data)
-    if not text:
-        raise GrowthAgentError(f"{label} returned no usable output.")
-    try:
-        result = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise GrowthAgentError(f"{label} returned malformed JSON.") from exc
-    if not isinstance(result, dict):
-        raise GrowthAgentError(f"{label} returned an invalid JSON object.")
-    return result
+def _catalog_terms(track: dict) -> set[str]:
+    text = " ".join(str(track.get(k, "") or "") for k in ("title", "genre", "sales_model"))
+    return {x for x in re.findall(r"[a-z0-9]+", text.lower()) if len(x) > 2}
+
+
+def _request_terms(text: str) -> set[str]:
+    return {x for x in re.findall(r"[a-z0-9]+", str(text or "").lower()) if len(x) > 2}
+
+
+def _zero_budget_plan(snapshot: dict) -> dict:
+    totals = snapshot.get("totals", {})
+    recent = snapshot.get("last_7_days", {})
+    tracks = snapshot.get("latest_tracks", [])
+    published = int(totals.get("published_tracks", 0) or 0)
+    users = int(totals.get("users", 0) or 0)
+    recent_users = int(recent.get("new_users", 0) or 0)
+    recent_orders = int(recent.get("completed_orders", 0) or 0)
+    if recent_orders == 0:
+        priority = "Get the first qualified buyer conversation and prove the offer before chasing scale."
+    elif published < 10:
+        priority = "Increase useful catalog depth while turning existing users into repeat sharers."
+    else:
+        priority = "Double down on the content and referral loop producing qualified marketplace visits."
+    beat = tracks[0].get("title") if tracks else "the strongest current BeatHub beat"
+    return {
+        "mode": "zero_budget",
+        "diagnosis": f"BeatHub has {users} total users, {recent_users} new users in 7 days, {published} published tracks and {recent_orders} completed orders in 7 days.",
+        "priority": priority,
+        "daily_targets": [
+            "Publish one useful creator-facing post with a single BeatHub CTA.",
+            "Research 5 public, relevant creators manually and save only strong fits.",
+            "Start 3 genuine conversations; no bulk or automated DMs.",
+            "Ask every interested creator to play one specific beat and give feedback.",
+        ],
+        "prospects_to_seek": ["Independent artists actively releasing music", "Producers with public catalogs", "DJs and creator communities where music discovery is appropriate"],
+        "content_experiments": [
+            f"Beat-first short: use {beat} and show the sound before explaining BeatHub.",
+            "Founder/product clip: explain in one sentence who BeatHub is for and what happens after purchase.",
+            "Education clip: explain one licensing or beat-selection mistake independent artists make.",
+        ],
+        "outreach_angles": ["Personalized beat recommendation", "Useful answer to a public creator question", "Invitation to participate in a small creator challenge"],
+        "product_loops": ["Producer shares their public store", "Artist shares a beat they discovered", "Post-purchase buyer shares the track/license outcome"],
+        "metrics_to_watch": ["qualified visits", "signups", "beat plays", "checkout starts", "completed purchases", "referrals"],
+        "kill_list": ["paid ads", "mass DMs", "bought followers", "automated unsolicited outreach", "scraping private data"],
+        "tomorrow_test": "Run one beat-first short and one educational short; keep the winner based on qualified clicks, not vanity views.",
+        "note": "This plan is generated locally from BeatHub's own database. No OpenAI API call, API key, or paid service is required.",
+    }
 
 
 async def run_growth_agent(snapshot: dict) -> dict:
-    api_key, model = _require_ai_config()
-    instructions = """You are BeatHub Growth Agent, a ruthless zero-budget growth operator for an early music marketplace.
-Turn the supplied first-party snapshot into an actionable 24-hour plan. Never invent metrics. Never recommend buying ads/followers,
-spam, scraping private data, unsolicited automated DMs, credential sharing or platform-rule evasion.
-Prefer creator-to-creator loops, personalized outreach, UGC, short-form experiments, community participation and measurable referrals.
-Return JSON keys: diagnosis, priority, daily_targets, prospects_to_seek, content_experiments, outreach_angles, product_loops,
-metrics_to_watch, kill_list, tomorrow_test."""
-    return _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=json.dumps(snapshot, ensure_ascii=False)), "Growth Agent")
+    """Zero-budget Growth OS. Never requires an external AI API."""
+    return _zero_budget_plan(snapshot)
 
 
 async def scout_prospects(query: str, location: str = "Kenya", limit: int = 10) -> dict:
-    api_key, model = _require_ai_config()
+    """Return a manual scouting brief instead of paid/web scraping.
+
+    We deliberately do not invent prospects or silently scrape private information.
+    The admin can research public profiles manually and save verified URLs through /growth/prospects.
+    """
     query, location = (query or "").strip(), (location or "Kenya").strip()
     limit = max(1, min(int(limit or 10), 20))
-    if len(query) < 3: raise GrowthAgentError("Scout query must be at least 3 characters.")
-    instructions = f"""You are BeatHub Prospect Scout. Find public, relevant music-industry prospects using web search.
-Target independent artists, producers, DJs, music creators, studios, campus artists and music communities. Location: {location}.
-Return ONLY JSON: {{"prospects":[{{"name":"","type":"artist|producer|dj|creator|studio|community","platform":"","public_url":"","fit_score":0,"why_fit":"","recommended_angle":""}}]}}.
-At most {limit} prospects. Use only public professional/creator information; never include private contact details, addresses or sensitive data.
-Prefer active prospects with evidence of music activity. Do not invent URLs or facts. Recommended angle must be human and non-spammy."""
-    result = _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=query, web_search=True), "Prospect Scout")
-    prospects = result.get("prospects")
-    if not isinstance(prospects, list): raise GrowthAgentError("Prospect Scout returned an invalid prospect list.")
-    clean = []
-    seen_urls = set()
-    for prospect in prospects:
-        if not isinstance(prospect, dict):
-            continue
-        public_url = str(prospect.get("public_url", "")).strip()
-        name = str(prospect.get("name", "")).strip()
-        if not name or not public_url.startswith(("https://", "http://")) or public_url in seen_urls:
-            continue
-        seen_urls.add(public_url)
-        clean.append(prospect)
-        if len(clean) >= limit:
-            break
-    result["prospects"] = clean
-    result["query"] = query
-    result["location"] = location
-    return result
+    if len(query) < 3:
+        raise GrowthAgentError("Scout query must be at least 3 characters.")
+    return {
+        "prospects": [],
+        "query": query,
+        "location": location,
+        "limit": limit,
+        "mode": "zero_budget",
+        "search_brief": [
+            f"Search public artist/producer profiles for: {query}",
+            f"Prioritize active creators in or relevant to {location}.",
+            "Verify recent music activity and use only public creator/professional URLs.",
+            "Save only prospects with a clear BeatHub fit; do not invent contacts or URLs.",
+        ],
+        "note": "Zero-budget mode does not call a paid AI/web-search API. Add verified public prospects manually after research.",
+    }
 
 
 async def match_beats(artist_request: str, tracks: list[dict], limit: int = 5) -> dict:
-    api_key, model = _require_ai_config()
+    """Deterministically match the supplied request to the supplied catalog."""
+    request = (artist_request or "").strip()
+    if len(request) < 3:
+        raise GrowthAgentError("Artist request must be at least 3 characters.")
     limit = max(1, min(int(limit or 5), 10))
-    if len((artist_request or '').strip()) < 3: raise GrowthAgentError("Artist request must be at least 3 characters.")
-    catalog = [t for t in tracks if isinstance(t, dict) and str(t.get("id", "")).strip()]
-    allowed_ids = {str(t["id"]) for t in catalog}
-    instructions = f"""You are BeatHub Match. Match an artist's described sound to BeatHub's available beats.
-Do not invent tracks. Only recommend IDs/titles present in the supplied catalog. Return JSON: {{"matches":[{{"track_id":"","title":"","score":0,"reason":"","next_step":""}}]}}.
-Rank by musical fit, not price. At most {limit} matches."""
-    result = _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=json.dumps({"artist_request": artist_request, "catalog": catalog}, ensure_ascii=False)), "Beat Matcher")
-    raw_matches = result.get("matches", [])
-    if not isinstance(raw_matches, list):
-        raise GrowthAgentError("Beat Matcher returned an invalid match list.")
-    clean = []
-    seen_ids = set()
-    for match in raw_matches:
-        if not isinstance(match, dict):
+    request_terms = _request_terms(request)
+    bpm_numbers = {int(x) for x in re.findall(r"\b([6-9][0-9]|1[0-9]{2})\s*bpm\b", request.lower())}
+    ranked = []
+    for track in tracks:
+        if not isinstance(track, dict) or not str(track.get("id", "")).strip():
             continue
-        track_id = str(match.get("track_id", "")).strip()
-        if track_id not in allowed_ids or track_id in seen_ids:
-            continue
-        seen_ids.add(track_id)
-        clean.append(match)
-        if len(clean) >= limit:
-            break
-    result["matches"] = clean
-    return result
+        terms = _catalog_terms(track)
+        score = len(request_terms & terms) * 20
+        genre = str(track.get("genre", "") or "").lower()
+        if genre and any(term in genre for term in request_terms):
+            score += 15
+        bpm = track.get("bpm")
+        try:
+            bpm_int = int(bpm) if bpm is not None else None
+        except (TypeError, ValueError):
+            bpm_int = None
+        if bpm_int and bpm_numbers:
+            distance = min(abs(bpm_int - target) for target in bpm_numbers)
+            score += max(0, 20 - min(distance, 20))
+        ranked.append((score, track))
+    ranked.sort(key=lambda item: (item[0], str(item[1].get("created_at", ""))), reverse=True)
+    matches = []
+    for score, track in ranked[:limit]:
+        matches.append({
+            "track_id": str(track["id"]),
+            "title": track.get("title", "Untitled"),
+            "score": min(100, max(1, score or 1)),
+            "reason": "Catalog metadata matched the artist request; review the beat manually before recommending it.",
+            "next_step": "Open the beat, listen, then send a personalized recommendation if it genuinely fits.",
+        })
+    return {"mode": "zero_budget", "matches": matches, "artist_request": request}
 
 
 async def generate_outreach(prospect: dict, matches: list[dict]) -> dict:
-    api_key, model = _require_ai_config()
+    """Generate simple local outreach copy for human review."""
     if not isinstance(prospect, dict):
         raise GrowthAgentError("Prospect context is required.")
     public_url = str(prospect.get("public_url", "")).strip()
     if not public_url.startswith(("https://", "http://")):
         raise GrowthAgentError("Outreach requires a public prospect URL for human review.")
-    instructions = """You write respectful, personalized BeatHub outreach for a founder.
-Use only the supplied public prospect context and beat matches. Never claim you listened to something unless supplied.
-Never pressure, impersonate, spam, or invent facts. Return JSON with keys: context, message_short, message_warm, follow_up."""
-    return _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=json.dumps({"prospect": prospect, "matches": matches}, ensure_ascii=False)), "Outreach Generator")
+    name = str(prospect.get("name", "there")).strip() or "there"
+    title = "a BeatHub beat"
+    if matches and isinstance(matches[0], dict):
+        title = str(matches[0].get("title") or title)
+    short = f"Hey {name}, came across your work publicly and thought {title} might be worth a listen. No pressure — if the sound fits what you're making, I'd be happy to share the BeatHub link."
+    warm = f"Hey {name} — I found your public profile while looking for independent creators whose sound could fit BeatHub. I had {title} in mind as a possible fit. If you want, have a listen and tell me honestly whether it's useful for your next record."
+    return {
+        "mode": "zero_budget",
+        "context": "Generated locally from the supplied public prospect and catalog match; verify personalization before sending.",
+        "message_short": short,
+        "message_warm": warm,
+        "follow_up": "One respectful follow-up after a reasonable interval only if the conversation is welcome; otherwise stop.",
+    }
 
 
 async def generate_content(track: dict) -> dict:
-    api_key, model = _require_ai_config()
-    instructions = """You are BeatHub Content Engine. Turn one beat into organic short-form experiments.
-Return JSON keys: hooks (10), video_concepts (10), captions (5), ctas (5), creator_prompt. Avoid copyrighted artist impersonation and deceptive claims.
-Optimize for curiosity, participation and creator-to-creator discovery rather than generic advertising."""
-    return _parse_json_response(await _responses_call(api_key=api_key, model=model, instructions=instructions, input_text=json.dumps(track, ensure_ascii=False)), "Content Engine")
+    """Generate reusable content prompts locally from track metadata."""
+    if not isinstance(track, dict):
+        raise GrowthAgentError("Track context is required.")
+    title = str(track.get("title") or "this beat")
+    genre = str(track.get("genre") or "music")
+    bpm = track.get("bpm")
+    bpm_text = f" at {bpm} BPM" if bpm else ""
+    hooks = [
+        f"If you're making {genre}, listen to the first 5 seconds of {title}.",
+        f"Would you rap, sing or dance on {title}?",
+        f"{title}: keep scrolling or press play?",
+        f"This {genre} beat deserves an artist — is it you?",
+        "Artists: what would you do with this sound?",
+        "Producer drop: one beat, one challenge.",
+        "Stop searching for a beat for 10 seconds and hear this.",
+        f"Rate this {genre} beat from 1–10.",
+        f"What kind of record would you make over {title}?",
+        "Open verse challenge: your turn.",
+    ]
+    concepts = [
+        f"Beat-first reveal of {title}{bpm_text}; put the strongest musical moment first.",
+        f"Show an artist-style writing prompt over {title} without imitating a real artist.",
+        f"Explain why {title} fits a {genre} record.",
+        "A/B test two hooks over the same beat.",
+        "Show search → listen → license → download as a simple creator workflow.",
+        "Ask viewers to name the mood they hear.",
+        "Producer breakdown: explain one production choice.",
+        "30-second licensing explainer using this beat.",
+        "Founder reaction to a first-time listener's feedback.",
+        "Community challenge using the beat and a clear participation prompt.",
+    ]
+    return {
+        "mode": "zero_budget",
+        "hooks": hooks,
+        "video_concepts": concepts,
+        "captions": [
+            f"{title} is live on BeatHub. Listen first, then decide if it fits your next record.",
+            f"New {genre} energy. What would you create over {title}?",
+            "Independent creators: discover, listen and license beats in one place.",
+            "Your next record might start with one play.",
+            "Producers upload. Artists discover. BeatHub connects the two.",
+        ],
+        "ctas": ["Listen on BeatHub", "Find your sound", "Open the beat", "Share with an artist", "Upload your next beat"],
+        "creator_prompt": f"Create a short around {title}: lead with the sound, ask one specific creator question, then use one clear BeatHub CTA.",
+    }
