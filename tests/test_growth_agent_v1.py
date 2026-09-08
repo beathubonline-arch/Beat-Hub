@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -5,19 +6,17 @@ import pytest
 from app.services.growth_agent import GrowthAgentError, run_growth_agent
 
 
-@pytest.mark.asyncio
-async def test_growth_agent_requires_explicit_openai_configuration(monkeypatch):
+def test_growth_agent_requires_explicit_openai_configuration(monkeypatch):
     from app.services import growth_agent
 
     monkeypatch.setattr(growth_agent.settings, "OPENAI_API_KEY", "", raising=False)
     monkeypatch.setattr(growth_agent.settings, "OPENAI_MODEL", "", raising=False)
 
     with pytest.raises(GrowthAgentError, match="OPENAI_API_KEY"):
-        await run_growth_agent({"totals": {}, "last_7_days": {}})
+        asyncio.run(run_growth_agent({"totals": {}, "last_7_days": {}}))
 
 
-@pytest.mark.asyncio
-async def test_growth_agent_parses_responses_api_json(monkeypatch):
+def test_growth_agent_parses_responses_api_json(monkeypatch):
     from app.services import growth_agent
 
     monkeypatch.setattr(growth_agent.settings, "OPENAI_API_KEY", "test-key", raising=False)
@@ -45,6 +44,6 @@ async def test_growth_agent_parses_responses_api_json(monkeypatch):
 
     monkeypatch.setattr(growth_agent.httpx, "AsyncClient", lambda **kwargs: FakeClient())
 
-    result = await run_growth_agent({"totals": {}, "last_7_days": {}})
+    result = asyncio.run(run_growth_agent({"totals": {}, "last_7_days": {}}))
     assert result["priority"] == "creator referrals"
     assert result["daily_targets"] == [10]
