@@ -31,9 +31,11 @@ class Settings(BaseSettings):
     PAYSTACK_PUBLIC_KEY: str = ""
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
 
-    # AI Growth Agent. Keep the API key only in Render/environment secrets.
+    # AI Growth Agent. Configure OPENAI_API_KEY and OPENAI_MODEL in Render.
+    # No model name is hard-coded here so an unavailable model can never take
+    # the production application down or silently select the wrong model.
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-6-astra"
+    OPENAI_MODEL: str = ""
 
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
