@@ -68,25 +68,54 @@ def _zero_budget_plan(snapshot: dict) -> dict:
     tracks = snapshot.get("latest_tracks", [])
     published = int(totals.get("published_tracks", 0) or 0)
     users = int(totals.get("users", 0) or 0)
+    creators = int(totals.get("creators", 0) or 0)
     recent_users = int(recent.get("new_users", 0) or 0)
-    recent_orders = int(recent.get("completed_orders", 0) or 0)
-    if recent_orders == 0:
-        priority = "Get the first qualified buyer conversation and prove the offer before chasing scale."
-    elif published < 10:
-        priority = "Increase useful catalog depth while turning existing users into repeat sharers."
+    recent_orders = int(recent.get("orders", 0) or 0)
+    recent_completed = int(recent.get("completed_orders", 0) or 0)
+    all_time_completed = int(totals.get("completed_orders_all_time", 0) or 0)
+
+    if published == 0:
+        bottleneck = "supply"
+        priority = "Publish the first usable catalog before spending effort on buyer acquisition."
+        job = "Get at least 3 quality beats published and make each one easy to preview and license."
+    elif recent_users == 0 and users == 0:
+        bottleneck = "acquisition"
+        priority = "Create the first qualified traffic loop; there is no user base to convert yet."
+        job = "Get the first 5 qualified visitors from creator communities and beat-focused content."
+    elif recent_orders > 0 and recent_completed == 0:
+        bottleneck = "payment_completion"
+        priority = "Recover checkout intent before creating more traffic."
+        job = "Investigate every recent incomplete order and remove the payment or checkout blocker."
+    elif recent_users > 0 and recent_completed == 0:
+        bottleneck = "activation_to_purchase"
+        priority = "Turn the existing new-user flow into the first completed purchase before chasing scale."
+        job = "Move real new users from signup → one relevant beat play → checkout → purchase."
     else:
-        priority = "Double down on the content and referral loop producing qualified marketplace visits."
+        bottleneck = "retention_and_referral"
+        priority = "Use proven buyers and creators to generate repeat usage and referrals."
+        job = "Identify the strongest existing loop and make one measurable referral or repeat-purchase test."
+
     beat = tracks[0].get("title") if tracks else "the strongest current BeatHub beat"
+    catalog_note = ""
+    if published < 10 and bottleneck != "supply":
+        catalog_note = f"Keep a secondary supply task running: grow the catalog from {published} toward 10 quality published beats without stealing focus from conversion."
+
+    daily_targets = [
+        job,
+        f"Use {beat} as the primary concrete beat example and send only personalized recommendations that genuinely fit.",
+        "Review the next user action after each conversation; record the real blocker instead of guessing.",
+        "Make one product/content change tied directly to the bottleneck, then measure the next 24–48 hours.",
+    ]
+    if catalog_note:
+        daily_targets.append(catalog_note)
+
     return {
         "mode": "zero_budget",
-        "diagnosis": f"BeatHub has {users} total users, {recent_users} new users in 7 days, {published} published tracks and {recent_orders} completed orders in 7 days.",
+        "diagnosis": f"BeatHub has {users} total users, {creators} creators, {recent_users} new users in 7 days, {published} published tracks, {recent_orders} orders in 7 days and {recent_completed} completed orders in 7 days.",
+        "bottleneck": bottleneck,
         "priority": priority,
-        "daily_targets": [
-            "Publish one useful creator-facing post with a single BeatHub CTA.",
-            "Research 5 public, relevant creators manually and save only strong fits.",
-            "Start 3 genuine conversations; no bulk or automated DMs.",
-            "Ask every interested creator to play one specific beat and give feedback.",
-        ],
+        "job_to_do_today": job,
+        "daily_targets": daily_targets,
         "prospects_to_seek": ["Independent artists actively releasing music", "Producers with public catalogs", "DJs and creator communities where music discovery is appropriate"],
         "content_experiments": [
             f"Beat-first short: use {beat} and show the sound before explaining BeatHub.",
@@ -95,9 +124,11 @@ def _zero_budget_plan(snapshot: dict) -> dict:
         ],
         "outreach_angles": ["Personalized beat recommendation", "Useful answer to a public creator question", "Invitation to participate in a small creator challenge"],
         "product_loops": ["Producer shares their public store", "Artist shares a beat they discovered", "Post-purchase buyer shares the track/license outcome"],
-        "metrics_to_watch": ["qualified visits", "signups", "beat plays", "checkout starts", "completed purchases", "referrals"],
-        "kill_list": ["paid ads", "mass DMs", "bought followers", "automated unsolicited outreach", "scraping private data"],
-        "tomorrow_test": "Run one beat-first short and one educational short; keep the winner based on qualified clicks, not vanity views.",
+        "metrics_to_watch": ["new users", "qualified visits", "beat plays", "checkout starts", "incomplete orders", "completed purchases", "GMV", "referrals"],
+        "success_condition": "The next cycle must produce evidence that the bottleneck moved: for activation, a real checkout/purchase; for payment, completed payment; for acquisition, qualified visits; for supply, quality published beats.",
+        "all_time_completed_orders": all_time_completed,
+        "kill_list": ["paid ads", "mass DMs", "bought followers", "automated unsolicited outreach", "scraping private data", "creating more generic content when the measured bottleneck is checkout or activation"],
+        "tomorrow_test": "Run one beat-first short and one educational short; keep the winner based on qualified clicks and downstream beat plays/checkouts, not vanity views.",
         "note": "This plan is generated locally from BeatHub's own database. No OpenAI API call, API key, or paid service is required.",
     }
 
