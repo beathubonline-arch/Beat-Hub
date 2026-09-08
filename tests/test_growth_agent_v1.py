@@ -1,5 +1,4 @@
 import asyncio
-import json
 import unittest
 from unittest.mock import patch
 
@@ -7,67 +6,56 @@ from app.services.growth_agent import GrowthAgentError, generate_content, genera
 
 
 class TestGrowthAgentV1(unittest.TestCase):
-    def _fake_client(self, payload):
-        class FakeResponse:
-            status_code = 200
-            def json(self):
-                return {"output_text": json.dumps(payload)}
-
-        class FakeClient:
-            async def __aenter__(self): return self
-            async def __aexit__(self, *args): return False
-            async def post(self, *args, **kwargs):
-                self.payload = kwargs["json"]
-                return FakeResponse()
-
-        return FakeClient()
-
-    def test_requires_explicit_openai_configuration(self):
+    def test_growth_plan_never_requires_openai(self):
         from app.services import growth_agent
         with patch.object(growth_agent.settings, "OPENAI_API_KEY", "", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "", create=True):
-            with self.assertRaisesRegex(GrowthAgentError, "OPENAI_API_KEY"):
-                asyncio.run(run_growth_agent({"totals": {}, "last_7_days": {}}))
+            result = asyncio.run(run_growth_agent({
+                "totals": {"users": 10, "published_tracks": 6},
+                "last_7_days": {"new_users": 10, "completed_orders": 0},
+                "latest_tracks": [{"title": "Night", "genre": "Afro", "id": "t1"}],
+            }))
+        self.assertEqual(result["mode"], "zero_budget")
+        self.assertIn("OpenAI API", result["note"])
 
-    def test_growth_plan_response(self):
-        from app.services import growth_agent
-        client = self._fake_client({"priority": "creator referrals", "daily_targets": [10]})
-        with patch.object(growth_agent.settings, "OPENAI_API_KEY", "test-key", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "gpt-6-astra", create=True), patch.object(growth_agent.httpx, "AsyncClient", return_value=client):
-            result = asyncio.run(run_growth_agent({"totals": {}, "last_7_days": {}}))
-        self.assertEqual(result["priority"], "creator referrals")
-        self.assertEqual(client.payload["model"], "gpt-6-astra")
-        self.assertNotIn("tools", client.payload)
+    def test_scout_does_not_invent_or_scrape_prospects(self):
+        result = asyncio.run(scout_prospects("Kenyan independent artists", "Kenya", 5))
+        self.assertEqual(result["mode"], "zero_budget")
+        self.assertEqual(result["prospects"], [])
+        self.assertEqual(len(result["search_brief"]), 4)
 
-    def test_scout_enables_web_search_and_filters_invalid_results(self):
-        from app.services import growth_agent
-        prospects = [{"name": str(i), "public_url": f"https://example.com/{i}"} for i in range(20)] + [{"name": "bad", "public_url": "not-a-url"}]
-        client = self._fake_client({"prospects": prospects})
-        with patch.object(growth_agent.settings, "OPENAI_API_KEY", "test-key", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "gpt-6-astra", create=True), patch.object(growth_agent.httpx, "AsyncClient", return_value=client):
-            result = asyncio.run(scout_prospects("upcoming Kenyan artists looking for beats", "Kenya", 5))
-        self.assertEqual(len(result["prospects"]), 5)
-        self.assertEqual(client.payload["tools"], [{"type": "web_search"}])
-        self.assertIn("web_search_call.action.sources", client.payload["include"])
+    def test_scout_validates_query(self):
+        with self.assertRaisesRegex(GrowthAgentError, "at least 3"):
+            asyncio.run(scout_prospects("ab", "Kenya", 5))
 
-    def test_matcher_uses_only_supplied_catalog_ids(self):
-        from app.services import growth_agent
-        client = self._fake_client({"matches": [{"track_id": "t1", "title": "Night"}, {"track_id": "fake", "title": "Invented"}]})
-        with patch.object(growth_agent.settings, "OPENAI_API_KEY", "test-key", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "gpt-6-astra", create=True), patch.object(growth_agent.httpx, "AsyncClient", return_value=client):
-            result = asyncio.run(match_beats("dark 92 bpm afrobeat", [{"id": "t1", "title": "Night"}], 5))
-        self.assertEqual([m["track_id"] for m in result["matches"]], ["t1"])
+    def test_matcher_uses_only_supplied_catalog(self):
+        result = asyncio.run(match_beats(
+            "dark afro 92 bpm",
+            [
+                {"id": "t1", "title": "Dark Night", "genre": "Afro", "bpm": 92},
+                {"id": "t2", "title": "Sunny Club", "genre": "Dancehall", "bpm": 120},
+            ],
+            5,
+        ))
+        self.assertEqual(result["mode"], "zero_budget")
+        self.assertEqual(result["matches"][0]["track_id"], "t1")
+        self.assertNotIn("fake", [m["track_id"] for m in result["matches"]])
 
     def test_outreach_requires_public_prospect_context(self):
-        from app.services import growth_agent
-        with patch.object(growth_agent.settings, "OPENAI_API_KEY", "test-key", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "gpt-6-astra", create=True):
-            with self.assertRaisesRegex(GrowthAgentError, "public prospect URL"):
-                asyncio.run(generate_outreach({"name": "Artist"}, []))
+        with self.assertRaisesRegex(GrowthAgentError, "public prospect URL"):
+            asyncio.run(generate_outreach({"name": "Artist"}, []))
 
-    def test_outreach_and_content_json(self):
-        from app.services import growth_agent
-        client = self._fake_client({"message_short": "Hi", "hooks": ["Hook"]})
-        with patch.object(growth_agent.settings, "OPENAI_API_KEY", "test-key", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "gpt-6-astra", create=True), patch.object(growth_agent.httpx, "AsyncClient", return_value=client):
-            outreach = asyncio.run(generate_outreach({"name": "Artist", "public_url": "https://example.com/artist"}, [{"title": "Night"}]))
-            content = asyncio.run(generate_content({"title": "Night", "genre": "Afrobeats"}))
-        self.assertEqual(outreach["message_short"], "Hi")
-        self.assertEqual(content["hooks"], ["Hook"])
+    def test_outreach_and_content_are_local(self):
+        outreach = asyncio.run(generate_outreach(
+            {"name": "Artist", "public_url": "https://example.com/artist"},
+            [{"title": "Night"}],
+        ))
+        content = asyncio.run(generate_content({"title": "Night", "genre": "Afrobeats"}))
+        self.assertEqual(outreach["mode"], "zero_budget")
+        self.assertIn("Night", outreach["message_short"])
+        self.assertEqual(content["mode"], "zero_budget")
+        self.assertEqual(len(content["hooks"]), 10)
+        self.assertEqual(len(content["video_concepts"]), 10)
+        self.assertEqual(len(content["captions"]), 5)
 
 
 if __name__ == "__main__":
