@@ -12,11 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     APP_ENV: str = "development"
     APP_NAME: str = "BeatHub"
@@ -34,6 +30,10 @@ class Settings(BaseSettings):
     PAYSTACK_SECRET_KEY: str = ""
     PAYSTACK_PUBLIC_KEY: str = ""
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
+
+    # AI Growth Agent. Keep the API key only in Render/environment secrets.
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = ""
 
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
@@ -66,24 +66,15 @@ class Settings(BaseSettings):
     R2_PUBLIC_URL_EXPIRES: int = 3600
     R2_DOWNLOAD_URL_EXPIRES: int = 900
 
-    # Browser Web Push. Keep the private VAPID key only in the deployment environment.
     VAPID_PUBLIC_KEY: str = ""
     VAPID_PRIVATE_KEY: str = ""
     VAPID_SUBJECT: str = "mailto:support@mybeathub.com"
 
-    # Audio masters can be large lossless files. The default application
-    # limit is 1 GB; deployments can explicitly lower MAX_UPLOAD_MB if needed.
     MAX_UPLOAD_MB: int = 1000
 
     @property
     def r2_enabled(self) -> bool:
-        return (
-            self.MEDIA_STORAGE.lower() == "r2"
-            and bool(self.R2_ACCOUNT_ID)
-            and bool(self.R2_ACCESS_KEY_ID)
-            and bool(self.R2_SECRET_ACCESS_KEY)
-            and bool(self.R2_BUCKET_NAME)
-        )
+        return self.MEDIA_STORAGE.lower() == "r2" and bool(self.R2_ACCOUNT_ID) and bool(self.R2_ACCESS_KEY_ID) and bool(self.R2_SECRET_ACCESS_KEY) and bool(self.R2_BUCKET_NAME)
 
     @property
     def r2_endpoint_url(self) -> str:
@@ -100,29 +91,15 @@ class Settings(BaseSettings):
         return bool(self.VAPID_PUBLIC_KEY.strip() and self.VAPID_PRIVATE_KEY.strip() and self.VAPID_SUBJECT.strip())
 
     def validate_runtime_security(self) -> None:
-        """Fail closed when production security secrets are missing/default."""
         if not self.is_production:
             return
-
         invalid = []
-        if not self.SECRET_KEY or self.SECRET_KEY.strip() in {
-            "change-me-in-production",
-            "replace-this-with-a-long-random-string",
-        }:
+        if not self.SECRET_KEY or self.SECRET_KEY.strip() in {"change-me-in-production", "replace-this-with-a-long-random-string"}:
             invalid.append("SECRET_KEY")
-
-        if not self.SESSION_SECRET or self.SESSION_SECRET.strip() in {
-            "beathub-development-session-secret-change-me",
-            "replace-this-with-another-long-random-string",
-        }:
+        if not self.SESSION_SECRET or self.SESSION_SECRET.strip() in {"beathub-development-session-secret-change-me", "replace-this-with-another-long-random-string"}:
             invalid.append("SESSION_SECRET")
-
         if invalid:
-            raise RuntimeError(
-                "Production startup blocked: required security secret(s) "
-                f"missing or using a known/default value: {', '.join(invalid)}. "
-                "Set strong random values in the deployment environment."
-            )
+            raise RuntimeError(f"Production startup blocked: required security secret(s) missing or using a known/default value: {', '.join(invalid)}. Set strong random values in the deployment environment.")
 
 
 @lru_cache(maxsize=1)
