@@ -45,7 +45,7 @@ CAMPAIGN_BLUEPRINT = [
     ("Conversion test", "marketplace", "Improve buyer confidence", "Test a clearer CTA/message around licensing and download value.", "Prioritize high-intent prospects already engaging with relevant beats.", "Track checkout-start to purchase conversion."),
     ("Creator supply", "all", "Grow quality inventory", "Call attention to a producer onboarding opportunity.", "Find 5 producers with public evidence of active catalog creation.", "Track creator signups and published tracks."),
     ("Winner remix", "shorts", "Scale the winning creative", "Rework the best-performing short into two fresh variants.", "Use the winning audience/sound profile for prospect research.", "Track incremental visits and signups."),
-    ("Month review", "analytics", "Decide what deserves month 2", "Publish a transparent progress recap using real numbers only.", "Rank prospects by funnel progress and fit.", "Review the full funnel and identify one growth loop to double down on."),
+    ("Scale winners", "analytics", "Prepare the next growth loop", "Document the best-performing content, offer and acquisition source so the next month starts from evidence.", "Prioritize prospects and creators showing the strongest funnel progress for the next cycle.", "Measure which loop produced the strongest qualified visits, registrations and purchases."),
 ]
 
 
@@ -61,7 +61,12 @@ def campaign_snapshot(db: Session) -> list[dict]:
 
 def ensure_campaign(db: Session, start: date | None = None) -> list[dict]:
     existing = {r.day_number: r for r in db.query(GrowthCampaignDay).all()}
-    start = start or date.today()
+    if start is None:
+        existing_dates = [r.date for r in existing.values() if r.date]
+        if existing_dates:
+            start = min(existing_dates) - timedelta(days=min(existing) - 1)
+        else:
+            start = date.today()
     for idx, item in enumerate(CAMPAIGN_BLUEPRINT, start=1):
         if idx in existing:
             continue
