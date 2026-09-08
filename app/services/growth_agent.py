@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -36,6 +35,8 @@ def build_snapshot(db: Session) -> dict:
     completed = db.query(func.count(Order.id)).filter(Order.status == OrderStatus.COMPLETED).scalar() or 0
     recent_users = db.query(func.count(User.id)).filter(User.created_at >= since).scalar() or 0
     recent_orders = db.query(func.count(Order.id)).filter(Order.created_at >= since).scalar() or 0
+    recent_pending_orders = db.query(func.count(Order.id)).filter(Order.created_at >= since, Order.status == OrderStatus.PENDING).scalar() or 0
+    recent_failed_orders = db.query(func.count(Order.id)).filter(Order.created_at >= since, Order.status == OrderStatus.FAILED).scalar() or 0
     recent_completed = db.query(func.count(Order.id)).filter(Order.created_at >= since, Order.status == OrderStatus.COMPLETED).scalar() or 0
     recent_gmv = db.query(func.coalesce(func.sum(Order.gross_amount), 0)).filter(Order.created_at >= since, Order.status == OrderStatus.COMPLETED).scalar() or 0
     latest_tracks = db.query(Track).filter(Track.is_published.is_(True)).order_by(Track.created_at.desc()).limit(20).all()
@@ -48,7 +49,7 @@ def build_snapshot(db: Session) -> dict:
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z", "window": "last_7_days", "base_url": settings.BASE_URL,
         "totals": {"users": users, "creators": creators, "published_tracks": tracks, "profiles": profiles, "completed_orders_all_time": completed},
-        "last_7_days": {"new_users": recent_users, "orders": recent_orders, "completed_orders": recent_completed, "completed_gmv": _money(recent_gmv)},
+        "last_7_days": {"new_users": recent_users, "orders": recent_orders, "pending_orders": recent_pending_orders, "failed_orders": recent_failed_orders, "completed_orders": recent_completed, "completed_gmv": _money(recent_gmv)},
         "latest_tracks": track_items,
     }
 
@@ -71,6 +72,8 @@ def _zero_budget_plan(snapshot: dict) -> dict:
     creators = int(totals.get("creators", 0) or 0)
     recent_users = int(recent.get("new_users", 0) or 0)
     recent_orders = int(recent.get("orders", 0) or 0)
+    recent_pending = int(recent.get("pending_orders", 0) or 0)
+    recent_failed = int(recent.get("failed_orders", 0) or 0)
     recent_completed = int(recent.get("completed_orders", 0) or 0)
     all_time_completed = int(totals.get("completed_orders_all_time", 0) or 0)
 
@@ -82,14 +85,14 @@ def _zero_budget_plan(snapshot: dict) -> dict:
         bottleneck = "acquisition"
         priority = "Create the first qualified traffic loop; there is no user base to convert yet."
         job = "Get the first 5 qualified visitors from creator communities and beat-focused content."
-    elif recent_orders > 0 and recent_completed == 0:
+    elif recent_pending > 0 and recent_completed == 0:
         bottleneck = "payment_completion"
-        priority = "Recover checkout intent before creating more traffic."
-        job = "Investigate every recent incomplete order and remove the payment or checkout blocker."
+        priority = "Recover genuinely pending checkout intent before creating more traffic."
+        job = "Investigate every still-pending order and remove the payment or checkout blocker."
     elif recent_users > 0 and recent_completed == 0:
         bottleneck = "activation_to_purchase"
-        priority = "Turn the existing new-user flow into the first completed purchase before chasing scale."
-        job = "Move real new users from signup → one relevant beat play → checkout → purchase."
+        priority = "Turn existing traffic and new users into the first completed purchase before chasing scale."
+        job = "Move real new users from signup → one relevant beat play → checkout → purchase, and learn why failed attempts did not complete."
     else:
         bottleneck = "retention_and_referral"
         priority = "Use proven buyers and creators to generate repeat usage and referrals."
@@ -106,12 +109,14 @@ def _zero_budget_plan(snapshot: dict) -> dict:
         "Review the next user action after each conversation; record the real blocker instead of guessing.",
         "Make one product/content change tied directly to the bottleneck, then measure the next 24–48 hours.",
     ]
+    if recent_failed and recent_pending == 0:
+        daily_targets.append(f"Review the {recent_failed} recent failed checkout attempts for user-visible friction, but do not label them payment failures unless Paystack confirms a payment failure.")
     if catalog_note:
         daily_targets.append(catalog_note)
 
     return {
         "mode": "zero_budget",
-        "diagnosis": f"BeatHub has {users} total users, {creators} creators, {recent_users} new users in 7 days, {published} published tracks, {recent_orders} orders in 7 days and {recent_completed} completed orders in 7 days.",
+        "diagnosis": f"BeatHub has {users} total users, {creators} creators, {recent_users} new users in 7 days, {published} published tracks, {recent_orders} orders in 7 days, {recent_pending} still-pending orders, {recent_failed} failed orders and {recent_completed} completed orders in 7 days.",
         "bottleneck": bottleneck,
         "priority": priority,
         "job_to_do_today": job,
@@ -127,6 +132,8 @@ def _zero_budget_plan(snapshot: dict) -> dict:
         "metrics_to_watch": ["new users", "qualified visits", "beat plays", "checkout starts", "incomplete orders", "completed purchases", "GMV", "referrals"],
         "success_condition": "The next cycle must produce evidence that the bottleneck moved: for activation, a real checkout/purchase; for payment, completed payment; for acquisition, qualified visits; for supply, quality published beats.",
         "all_time_completed_orders": all_time_completed,
+        "recent_pending_orders": recent_pending,
+        "recent_failed_orders": recent_failed,
         "kill_list": ["paid ads", "mass DMs", "bought followers", "automated unsolicited outreach", "scraping private data", "creating more generic content when the measured bottleneck is checkout or activation"],
         "tomorrow_test": "Run one beat-first short and one educational short; keep the winner based on qualified clicks and downstream beat plays/checkouts, not vanity views.",
         "note": "This plan is generated locally from BeatHub's own database. No OpenAI API call, API key, or paid service is required.",
