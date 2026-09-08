@@ -11,11 +11,39 @@ class TestGrowthAgentV1(unittest.TestCase):
         with patch.object(growth_agent.settings, "OPENAI_API_KEY", "", create=True), patch.object(growth_agent.settings, "OPENAI_MODEL", "", create=True):
             result = asyncio.run(run_growth_agent({
                 "totals": {"users": 10, "published_tracks": 6},
-                "last_7_days": {"new_users": 10, "completed_orders": 0},
+                "last_7_days": {"new_users": 10, "completed_orders": 0, "orders": 0},
                 "latest_tracks": [{"title": "Night", "genre": "Afro", "id": "t1"}],
             }))
         self.assertEqual(result["mode"], "zero_budget")
         self.assertIn("OpenAI API", result["note"])
+
+    def test_current_beat_hub_state_prioritizes_activation_to_purchase(self):
+        result = asyncio.run(run_growth_agent({
+            "totals": {"users": 10, "creators": 8, "published_tracks": 6, "completed_orders_all_time": 0},
+            "last_7_days": {"new_users": 10, "orders": 0, "completed_orders": 0},
+            "latest_tracks": [{"title": "COLORS", "genre": "Dancehall", "id": "t1"}],
+        }))
+        self.assertEqual(result["bottleneck"], "activation_to_purchase")
+        self.assertIn("signup", result["job_to_do_today"])
+        self.assertIn("purchase", result["success_condition"])
+        self.assertIn("COLORS", result["daily_targets"][1])
+
+    def test_payment_intent_takes_priority_when_orders_exist_but_none_complete(self):
+        result = asyncio.run(run_growth_agent({
+            "totals": {"users": 10, "creators": 8, "published_tracks": 6, "completed_orders_all_time": 0},
+            "last_7_days": {"new_users": 3, "orders": 4, "completed_orders": 0},
+            "latest_tracks": [],
+        }))
+        self.assertEqual(result["bottleneck"], "payment_completion")
+        self.assertIn("checkout", result["job_to_do_today"])
+
+    def test_zero_catalog_prioritizes_supply(self):
+        result = asyncio.run(run_growth_agent({
+            "totals": {"users": 10, "creators": 8, "published_tracks": 0, "completed_orders_all_time": 0},
+            "last_7_days": {"new_users": 0, "orders": 0, "completed_orders": 0},
+            "latest_tracks": [],
+        }))
+        self.assertEqual(result["bottleneck"], "supply")
 
     def test_scout_does_not_invent_or_scrape_prospects(self):
         result = asyncio.run(scout_prospects("Kenyan independent artists", "Kenya", 5))
