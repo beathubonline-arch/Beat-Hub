@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
-from app.utils.deps import SESSION_COOKIE_NAME, ADMIN_SESSION_SUBJECT, get_role_name
+from app.utils.deps import SESSION_COOKIE_NAME, get_role_name
 from app.utils.security import create_access_token, verify_password
 
-router = APIRouter(prefix="/admin", tags=["admin-auth"])
+# Mounted inside the canonical /admin router. Keeping this router prefix-free
+# avoids creating /admin/admin/login when included by app/routers/__init__.py.
+router = APIRouter(tags=["admin-auth"])
 templates = Jinja2Templates(directory="app/templates")
 
 
