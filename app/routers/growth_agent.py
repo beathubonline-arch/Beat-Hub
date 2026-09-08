@@ -7,7 +7,8 @@ from app.database import get_db
 from app.services.growth_agent import GrowthAgentError, build_snapshot, run_growth_agent
 from app.utils.deps import require_admin
 
-router = APIRouter(prefix="/admin/growth", tags=["growth-agent"])
+# This router is mounted inside the existing /admin router in app/routers/__init__.py.
+router = APIRouter(prefix="/growth", tags=["growth-agent"])
 templates = Jinja2Templates(directory="app/templates")
 
 
