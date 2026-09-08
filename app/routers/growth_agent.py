@@ -54,6 +54,17 @@ def funnel_snapshot(db: Session) -> dict:
     return {stage: int(count) for stage, count in rows}
 
 
+def prospect_snapshot(db: Session) -> list[dict]:
+    rows = db.query(GrowthProspect).order_by(GrowthProspect.updated_at.desc(), GrowthProspect.created_at.desc()).limit(100).all()
+    return [{
+        "id": r.id, "name": r.name, "type": r.prospect_type, "platform": r.platform,
+        "public_url": r.public_url, "location": r.location, "fit_score": r.fit_score,
+        "why_fit": r.why_fit, "recommended_angle": r.recommended_angle, "status": r.status,
+        "matched_track_id": r.matched_track_id,
+        "matched_track_title": r.matched_track.title if r.matched_track else None,
+    } for r in rows]
+
+
 def campaign_snapshot(db: Session) -> list[dict]:
     rows = db.query(GrowthCampaignDay).order_by(GrowthCampaignDay.day_number.asc()).all()
     return [{"day_number": r.day_number, "date": r.date.isoformat() if r.date else None, "theme": r.theme, "primary_channel": r.primary_channel, "objective": r.objective, "content_action": r.content_action, "outreach_action": r.outreach_action, "measurement": r.measurement, "status": r.status, "notes": r.notes} for r in rows]
@@ -80,7 +91,7 @@ def ensure_campaign(db: Session, start: date | None = None) -> list[dict]:
 async def growth_dashboard(request: Request, db: Session = Depends(get_db), admin=Depends(require_admin)):
     snapshot = build_snapshot(db)
     campaign = ensure_campaign(db)
-    return templates.TemplateResponse(request, "growth_agent.html", {"request": request, "current_user": admin, "snapshot": snapshot, "funnel": funnel_snapshot(db), "campaign": campaign, "plan": None, "error": None})
+    return templates.TemplateResponse(request, "growth_agent.html", {"request": request, "current_user": admin, "snapshot": snapshot, "funnel": funnel_snapshot(db), "campaign": campaign, "prospects": prospect_snapshot(db), "plan": None, "error": None})
 
 
 @router.post("/campaign/init")
@@ -123,6 +134,11 @@ async def scout(q: str = Query(..., min_length=3, max_length=300), location: str
     except GrowthAgentError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
     return JSONResponse({"ok": True, **result})
+
+
+@router.get("/prospects")
+async def prospects(db: Session = Depends(get_db), admin=Depends(require_admin)):
+    return JSONResponse({"ok": True, "prospects": prospect_snapshot(db)})
 
 
 @router.post("/prospects")
