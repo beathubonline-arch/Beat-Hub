@@ -6,13 +6,13 @@
   <title>BeatHub Growth Agent</title>
   <style>
     body{font-family:Inter,system-ui,sans-serif;margin:0;background:#0f0d16;color:#f7f4ff}
-    main{max-width:1100px;margin:0 auto;padding:32px 20px 60px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.card{background:#181522;border:1px solid #2c2738;border-radius:16px;padding:18px}.muted{color:#a9a2b8}.big{font-size:30px;font-weight:800}.hero{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}button{border:0;border-radius:12px;padding:12px 18px;font-weight:800;cursor:pointer;background:#fff;color:#111}.pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#292337;color:#cfc6df;margin:3px}pre{white-space:pre-wrap;background:#0a0910;border-radius:12px;padding:16px;overflow:auto;line-height:1.5}.status{margin-top:12px;color:#bcb3ca}
+    main{max-width:1100px;margin:0 auto;padding:32px 20px 60px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.card{background:#181522;border:1px solid #2c2738;border-radius:16px;padding:18px}.muted{color:#a9a2b8}.big{font-size:30px;font-weight:800}.hero{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:24px}button{border:0;border-radius:12px;padding:12px 18px;font-weight:800;cursor:pointer;background:#fff;color:#111}input{width:100%;box-sizing:border-box;border:1px solid #393247;background:#0f0d16;color:#fff;border-radius:10px;padding:11px;margin:6px 0 10px}.row{display:grid;grid-template-columns:2fr 1fr auto;gap:10px;align-items:end}.pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#292337;color:#cfc6df;margin:3px}pre{white-space:pre-wrap;background:#0a0910;border-radius:12px;padding:16px;overflow:auto;line-height:1.5}.status{margin-top:12px;color:#bcb3ca}.prospect{border-top:1px solid #2c2738;padding:14px 0}.score{font-weight:800}.prospect a{color:#d9d0ff}
   </style>
 </head>
 <body>
 <main>
   <div class="hero">
-    <div><div class="muted">BEATHUB GROWTH OS · V1</div><h1>Growth Agent</h1><p class="muted">Turns live BeatHub data into the next 24-hour zero-budget growth plan.</p></div>
+    <div><div class="muted">BEATHUB GROWTH OS · V1.1</div><h1>Growth Agent</h1><p class="muted">Live marketplace intelligence + zero-budget growth planning + public prospect research.</p></div>
     <button id="run">Run agent</button>
   </div>
   <div class="grid">
@@ -23,12 +23,15 @@
     <div class="card"><div class="muted">Completed orders · 7d</div><div class="big">{{ snapshot.last_7_days.completed_orders }}</div></div>
     <div class="card"><div class="muted">GMV · 7d</div><div class="big">{{ snapshot.last_7_days.completed_gmv }}</div></div>
   </div>
+  <section class="card" style="margin-top:18px"><h2>Prospect Scout</h2><p class="muted">Research public music prospects. Nothing is messaged or published automatically.</p><div class="row"><label>Who should we find?<input id="scoutQuery" placeholder="e.g. upcoming Kenyan artists looking for beats"></label><label>Location<input id="scoutLocation" value="Kenya"></label><button id="scout">Scout</button></div><div id="scoutStatus" class="status"></div><div id="prospects"></div></section>
   <section class="card" style="margin-top:18px"><h2>Latest BeatHub inventory</h2><div>{% for t in snapshot.latest_tracks %}<span class="pill">{{ t.title }}{% if t.genre %} · {{ t.genre }}{% endif %}</span>{% else %}<span class="muted">No published tracks found.</span>{% endfor %}</div></section>
-  <section class="card" style="margin-top:18px"><h2>Agent plan</h2><div id="status" class="status">Press Run agent. The first version is read-only: it cannot send messages or publish content.</div><pre id="output" style="display:none"></pre></section>
+  <section class="card" style="margin-top:18px"><h2>Agent plan</h2><div id="status" class="status">Run the agent to generate a 24-hour plan from live BeatHub data.</div><pre id="output" style="display:none"></pre></section>
 </main>
 <script>
 const run=document.getElementById('run'), status=document.getElementById('status'), output=document.getElementById('output');
 run.addEventListener('click', async()=>{run.disabled=true;run.textContent='Thinking…';status.textContent='Analyzing BeatHub data…';output.style.display='none';try{const r=await fetch('/admin/growth/run',{method:'POST',headers:{'Accept':'application/json'}});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Agent failed');output.textContent=JSON.stringify(d.plan,null,2);output.style.display='block';status.textContent='Plan generated from live BeatHub data.';}catch(e){status.textContent=e.message;}finally{run.disabled=false;run.textContent='Run agent';}});
+
+document.getElementById('scout').addEventListener('click', async()=>{const q=document.getElementById('scoutQuery').value.trim(), loc=document.getElementById('scoutLocation').value.trim()||'Kenya', box=document.getElementById('prospects'), s=document.getElementById('scoutStatus'), b=document.getElementById('scout');if(q.length<3){s.textContent='Enter a specific search request first.';return;}b.disabled=true;b.textContent='Researching…';s.textContent='Searching public sources and qualifying prospects…';box.innerHTML='';try{const r=await fetch('/admin/growth/scout?q='+encodeURIComponent(q)+'&location='+encodeURIComponent(loc)+'&limit=10');const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Scout failed');s.textContent='Found '+d.prospects.length+' prospects. Review them before outreach.';for(const p of d.prospects){const el=document.createElement('div');el.className='prospect';el.innerHTML='<div class="score">'+(p.fit_score??0)+'/100 · '+(p.type||'prospect')+'</div><strong>'+((p.name||'Unnamed').replaceAll('<','&lt;'))+'</strong><div class="muted">'+((p.why_fit||'').replaceAll('<','&lt;'))+'</div><div>'+((p.recommended_angle||'').replaceAll('<','&lt;'))+'</div>'+(p.public_url?'<a href="'+encodeURI(p.public_url)+'" target="_blank" rel="noopener">Open public profile/source</a>':'');box.appendChild(el);}}catch(e){s.textContent=e.message;}finally{b.disabled=false;b.textContent='Scout';}});
 </script>
 </body>
 </html>
