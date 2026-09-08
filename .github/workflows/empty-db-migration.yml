@@ -36,7 +36,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Alembic from an empty PostgreSQL database
+      - name: Run Alembic from an empty PostgreSQL database - pass 1
+        env:
+          DATABASE_URL: postgresql+psycopg2://beathub_test:beathub_test@127.0.0.1:5432/beathub_test
+        run: alembic upgrade head
+
+      - name: Re-run Alembic for idempotence - pass 2
         env:
           DATABASE_URL: postgresql+psycopg2://beathub_test:beathub_test@127.0.0.1:5432/beathub_test
         run: alembic upgrade head
