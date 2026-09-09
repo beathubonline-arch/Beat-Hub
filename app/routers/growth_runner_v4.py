@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.growth import GrowthProspect, GrowthTouch
 from app.models.growth_runs import GrowthAgentRun
@@ -30,6 +31,7 @@ def _queue_rows(db: Session, include_progressed: bool = False) -> list[dict]:
         .limit(20)
         .all()
     )
+    base_url = str(getattr(settings, "BASE_URL", "https://mybeathub.com") or "https://mybeathub.com").rstrip("/")
     rows = []
     for prospect in prospects:
         draft = (
@@ -38,6 +40,9 @@ def _queue_rows(db: Session, include_progressed: bool = False) -> list[dict]:
             .order_by(GrowthTouch.created_at.desc())
             .first()
         )
+        track = prospect.matched_track
+        slug = str(getattr(track, "slug", "") or "").strip() if track else ""
+        beat_url = f"{base_url}/track/{slug}" if slug else f"{base_url}/marketplace"
         rows.append({
             "id": prospect.id,
             "prospect_id": prospect.id,
@@ -49,7 +54,8 @@ def _queue_rows(db: Session, include_progressed: bool = False) -> list[dict]:
             "why_fit": prospect.why_fit,
             "recommended_angle": prospect.recommended_angle,
             "matched_track_id": prospect.matched_track_id,
-            "matched_track_title": prospect.matched_track.title if prospect.matched_track else None,
+            "matched_track_title": track.title if track else None,
+            "beat_url": beat_url,
             "message": draft.note if draft else None,
             "draft": draft.note if draft else None,
             "status": prospect.status,
