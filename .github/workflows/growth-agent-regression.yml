@@ -22,10 +22,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Compile growth code
-        run: python -m compileall -q app tests/test_growth_agent_v1.py tests/test_growth_funnel_v2.py tests/test_growth_model_import.py tests/test_growth_campaign_v3.py tests/test_growth_worker_v4.py tests/test_growth_acquisition_v6.py
+        run: python -m compileall -q app tests/test_growth_agent_v1.py tests/test_growth_funnel_v2.py tests/test_growth_model_import.py tests/test_growth_campaign_v3.py tests/test_growth_worker_v4.py tests/test_growth_acquisition_v6.py tests/test_growth_verified_bootstrap.py
       - name: Import application
         run: python -c "import main; print('BeatHub application import OK')"
       - name: Growth regression pass 1
-        run: pytest -q tests/test_growth_agent_v1.py tests/test_growth_funnel_v2.py tests/test_growth_model_import.py tests/test_growth_campaign_v3.py tests/test_growth_worker_v4.py tests/test_growth_acquisition_v6.py
+        run: pytest -q tests/test_growth_agent_v1.py tests/test_growth_funnel_v2.py tests/test_growth_model_import.py tests/test_growth_campaign_v3.py tests/test_growth_worker_v4.py tests/test_growth_acquisition_v6.py tests/test_growth_verified_bootstrap.py
       - name: Growth regression pass 2
-        run: pytest -q tests/test_growth_agent_v1.py tests/test_growth_funnel_v2.py tests/test_growth_model_import.py tests/test_growth_campaign_v3.py tests/test_growth_worker_v4.py tests/test_growth_acquisition_v6.py
+        run: pytest -q tests/test_growth_agent_v1.py tests/test_growth_funnel_v2.py tests/test_growth_model_import.py tests/test_growth_campaign_v3.py tests/test_growth_worker_v4.py tests/test_growth_acquisition_v6.py tests/test_growth_verified_bootstrap.py
