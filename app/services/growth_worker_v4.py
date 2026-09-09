@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from app.database import SessionLocal
 from app.models.growth_runs import GrowthAgentRun
@@ -29,13 +30,44 @@ def _merge_existing_plan(run: GrowthAgentRun, acquisition: dict) -> None:
     run.finished_at = datetime.now(timezone.utc)
 
 
+def _recover_session(db) -> None:
+    """Discard a broken/idle DB connection so SQLAlchemy reconnects on next use."""
+    try:
+        db.rollback()
+    except Exception:
+        pass
+    try:
+        db.close()
+    except Exception:
+        pass
+
+
 def _build_acquisition(db) -> dict:
-    acquisition = run_acquisition_queue(db, location="Kenya", limit=8)
+    try:
+        acquisition = run_acquisition_queue(db, location="Kenya", limit=8)
+    except (OperationalError, DBAPIError) as exc:
+        logger.warning(
+            "[BeatHub Growth Agent] live acquisition lost DB connection (%s); reconnecting and using verified public bootstrap",
+            type(exc).__name__,
+        )
+        _recover_session(db)
+        return run_verified_bootstrap_queue(db, limit=8)
+    except Exception as exc:
+        logger.warning(
+            "[BeatHub Growth Agent] live acquisition failed (%s); using verified public bootstrap",
+            type(exc).__name__,
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return run_verified_bootstrap_queue(db, limit=8)
+
     if int(acquisition.get("qualified_queue", 0) or 0) == 0:
         logger.warning(
             "[BeatHub Growth Agent] live acquisition returned no qualified prospects; using verified public bootstrap"
         )
-        acquisition = run_verified_bootstrap_queue(db, limit=8)
+        return run_verified_bootstrap_queue(db, limit=8)
     return acquisition
 
 
@@ -54,8 +86,12 @@ def run_once(force: bool = False) -> dict:
         existing = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
         if existing and existing.status == "completed" and not force:
             acquisition = _build_acquisition(db)
-            _merge_existing_plan(existing, acquisition)
-            db.commit()
+            # _build_acquisition may recycle the session after a transient disconnect,
+            # so reload the row before persisting the refreshed queue.
+            existing = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
+            if existing:
+                _merge_existing_plan(existing, acquisition)
+                db.commit()
             logger.info(
                 "[BeatHub Growth Agent] refreshed acquisition queue: status=%s mode=%s qualified=%s",
                 acquisition.get("status"),
@@ -87,18 +123,19 @@ def run_once(force: bool = False) -> dict:
             db.add(run)
         db.commit()
 
-        # Verify existing checkout intent first; never create/retry a charge here.
         payment_recovery = asyncio.run(reconcile_recent_payments(db, days=14, limit=20))
         snapshot = build_snapshot(db)
         plan = asyncio.run(run_growth_agent(snapshot))
         plan["payment_recovery"] = payment_recovery
 
-        # Growth Agent V6: try live public discovery first. If Render cannot reach
-        # public search providers, use the small web-verified public-profile bootstrap.
-        # Neither path sends messages automatically; human approval remains required.
         acquisition = _build_acquisition(db)
         plan["acquisition_queue"] = acquisition
 
+        # The acquisition path can intentionally recycle the session after an idle
+        # SSL reset. Always reload today's run before writing final state.
+        run = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
+        if not run:
+            raise RuntimeError("GrowthAgentRun disappeared during acquisition cycle.")
         run.finished_at = datetime.now(timezone.utc)
         run.status = "completed"
         run.priority = str(plan.get("priority") or "")
@@ -121,7 +158,10 @@ def run_once(force: bool = False) -> dict:
             "ran_at": run.finished_at.isoformat(),
         }
     except Exception as exc:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            pass
         logger.exception("[BeatHub Growth Agent] failed")
         return {"ok": False, "status": "failed", "error": str(exc)[:4000]}
     finally:
@@ -130,5 +170,8 @@ def run_once(force: bool = False) -> dict:
                 db.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": LOCK_KEY})
                 db.commit()
             except Exception:
-                db.rollback()
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
         db.close()
