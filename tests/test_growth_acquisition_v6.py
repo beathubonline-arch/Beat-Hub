@@ -1,4 +1,10 @@
-from app.services.growth_acquisition_v6 import _host_allowed, _parse_results, _unwrap_ddg_url
+from app.services.growth_acquisition_v6 import (
+    _host_allowed,
+    _parse_bing_results,
+    _parse_lite_results,
+    _parse_results,
+    _unwrap_ddg_url,
+)
 
 
 def test_unwraps_duckduckgo_result_url():
@@ -31,3 +37,28 @@ def test_parser_returns_only_public_music_profiles():
     assert rows[0]["platform"] == "instagram"
     assert rows[0]["fit_score"] >= 45
     assert "Kenya" in rows[0]["location"]
+
+
+def test_bing_fallback_parser_returns_creator_profile():
+    markup = '''
+    <ol id="b_results">
+      <li class="b_algo">
+        <h2><a href="https://www.tiktok.com/@testartist">Test Artist | TikTok</a></h2>
+        <div class="b_caption"><p>Kenya singer and independent artist releasing new music in 2026.</p></div>
+      </li>
+    </ol>
+    '''
+    rows = _parse_bing_results(markup, "Kenya")
+    assert len(rows) == 1
+    assert rows[0]["platform"] == "tiktok"
+    assert rows[0]["fit_score"] >= 45
+
+
+def test_lite_fallback_filters_unsupported_urls():
+    markup = '''
+      <a href="https://www.youtube.com/@publicartist">Public Artist</a>
+      <a href="https://example.com/private">Unsupported</a>
+    '''
+    rows = _parse_lite_results(markup, "Kenya")
+    assert len(rows) == 1
+    assert rows[0]["platform"] == "youtube"
