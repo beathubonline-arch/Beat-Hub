@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 from app.database import SessionLocal
+from app.models.growth import GrowthProspect
 from app.models.growth_runs import GrowthAgentRun
 from app.services.growth_acquisition_v6 import run_acquisition_queue
 from app.services.growth_agent import build_snapshot, run_growth_agent
@@ -42,7 +43,28 @@ def _recover_session(db) -> None:
         pass
 
 
+def _ready_count(db) -> int:
+    return int(
+        db.query(GrowthProspect)
+        .filter(GrowthProspect.status == "outreach_ready")
+        .count()
+        or 0
+    )
+
+
 def _build_acquisition(db) -> dict:
+    # Cold-start deterministically from a small set of web-verified public music
+    # profiles. This gets today's queue ready immediately even when Render's
+    # outbound search providers are slow or blocked. No outreach is auto-sent.
+    try:
+        if _ready_count(db) == 0:
+            logger.info("[BeatHub Growth Agent] cold outreach queue; loading verified public bootstrap")
+            return run_verified_bootstrap_queue(db, limit=8)
+    except (OperationalError, DBAPIError):
+        _recover_session(db)
+        return run_verified_bootstrap_queue(db, limit=8)
+
+    # Once a queue exists, live public discovery is used to replenish it.
     try:
         acquisition = run_acquisition_queue(db, location="Kenya", limit=8)
     except (OperationalError, DBAPIError) as exc:
@@ -86,8 +108,6 @@ def run_once(force: bool = False) -> dict:
         existing = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
         if existing and existing.status == "completed" and not force:
             acquisition = _build_acquisition(db)
-            # _build_acquisition may recycle the session after a transient disconnect,
-            # so reload the row before persisting the refreshed queue.
             existing = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
             if existing:
                 _merge_existing_plan(existing, acquisition)
@@ -131,8 +151,6 @@ def run_once(force: bool = False) -> dict:
         acquisition = _build_acquisition(db)
         plan["acquisition_queue"] = acquisition
 
-        # The acquisition path can intentionally recycle the session after an idle
-        # SSL reset. Always reload today's run before writing final state.
         run = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
         if not run:
             raise RuntimeError("GrowthAgentRun disappeared during acquisition cycle.")
