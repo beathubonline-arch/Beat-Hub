@@ -4,7 +4,7 @@ import asyncio
 import html
 import logging
 import re
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import httpx
 from sqlalchemy.orm import Session
@@ -15,7 +15,9 @@ from app.services.growth_agent import generate_outreach, match_beats
 
 logger = logging.getLogger("beathub.growth_acquisition")
 
-SEARCH_URL = "https://html.duckduckgo.com/html/"
+DDG_URL = "https://html.duckduckgo.com/html/"
+DDG_LITE_URL = "https://lite.duckduckgo.com/lite/"
+BING_URL = "https://www.bing.com/search"
 ALLOWED_HOSTS = (
     "instagram.com",
     "tiktok.com",
@@ -135,6 +137,27 @@ def _fit_score(title: str, snippet: str, location: str) -> tuple[int, str]:
     return score, why
 
 
+def _result_item(raw_url: str, title: str, snippet: str, location: str) -> dict | None:
+    url = _unwrap_ddg_url(raw_url)
+    if not _host_allowed(url):
+        return None
+    normalized = url.split("?")[0].rstrip("/")
+    title = _strip_tags(title)
+    snippet = _strip_tags(snippet)
+    score, why = _fit_score(title, snippet, location)
+    return {
+        "name": _name_from_result(title, normalized),
+        "public_url": normalized,
+        "platform": _platform(normalized),
+        "prospect_type": "artist",
+        "location": location,
+        "fit_score": score,
+        "why_fit": why,
+        "recommended_angle": "Personalized beat recommendation based on recent public music activity.",
+        "snippet": snippet[:500],
+    }
+
+
 def _parse_results(markup: str, location: str) -> list[dict]:
     links = re.findall(
         r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
@@ -147,31 +170,64 @@ def _parse_results(markup: str, location: str) -> list[dict]:
         flags=re.I | re.S,
     )
     snippet_texts = [_strip_tags(a or b) for a, b in snippets]
-    results = []
-    seen = set()
+    results, seen = [], set()
     for idx, (raw_url, title_html) in enumerate(links):
-        url = _unwrap_ddg_url(raw_url)
-        if not _host_allowed(url):
+        item = _result_item(raw_url, title_html, snippet_texts[idx] if idx < len(snippet_texts) else "", location)
+        if not item or item["public_url"] in seen:
             continue
-        normalized = url.split("?")[0].rstrip("/")
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        title = _strip_tags(title_html)
-        snippet = snippet_texts[idx] if idx < len(snippet_texts) else ""
-        score, why = _fit_score(title, snippet, location)
-        results.append({
-            "name": _name_from_result(title, normalized),
-            "public_url": normalized,
-            "platform": _platform(normalized),
-            "prospect_type": "artist",
-            "location": location,
-            "fit_score": score,
-            "why_fit": why,
-            "recommended_angle": "Personalized beat recommendation based on recent public music activity.",
-            "snippet": snippet[:500],
-        })
+        seen.add(item["public_url"])
+        results.append(item)
     return results
+
+
+def _parse_bing_results(markup: str, location: str) -> list[dict]:
+    blocks = re.findall(r'<li[^>]+class="[^"]*b_algo[^"]*"[^>]*>(.*?)</li>', markup or "", flags=re.I | re.S)
+    results, seen = [], set()
+    for block in blocks:
+        link = re.search(r'<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, flags=re.I | re.S)
+        if not link:
+            continue
+        snippet_match = re.search(r'<p[^>]*>(.*?)</p>', block, flags=re.I | re.S)
+        item = _result_item(link.group(1), link.group(2), snippet_match.group(1) if snippet_match else "", location)
+        if not item or item["public_url"] in seen:
+            continue
+        seen.add(item["public_url"])
+        results.append(item)
+    return results
+
+
+def _parse_lite_results(markup: str, location: str) -> list[dict]:
+    links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', markup or "", flags=re.I | re.S)
+    results, seen = [], set()
+    for raw_url, title_html in links:
+        item = _result_item(raw_url, title_html, "", location)
+        if not item or item["public_url"] in seen:
+            continue
+        seen.add(item["public_url"])
+        results.append(item)
+    return results
+
+
+async def _search_query(client: httpx.AsyncClient, query: str, location: str) -> tuple[list[dict], str]:
+    providers = (
+        ("ddg_html", "POST", DDG_URL, {"data": {"q": query}}, _parse_results),
+        ("bing", "GET", BING_URL, {"params": {"q": query, "count": "20"}}, _parse_bing_results),
+        ("ddg_lite", "GET", f"{DDG_LITE_URL}?q={quote_plus(query)}", {}, _parse_lite_results),
+    )
+    failures = []
+    for name, method, url, kwargs, parser in providers:
+        try:
+            response = await client.request(method, url, **kwargs)
+            response.raise_for_status()
+            parsed = parser(response.text, location)
+            if parsed:
+                logger.info("[Growth Acquisition] provider=%s query=%r results=%s", name, query, len(parsed))
+                return parsed, name
+            failures.append(f"{name}:empty")
+        except Exception as exc:
+            failures.append(f"{name}:{type(exc).__name__}")
+    logger.warning("[Growth Acquisition] all providers failed/empty query=%r providers=%s", query, ",".join(failures))
+    return [], "none"
 
 
 async def discover_public_prospects(location: str = "Kenya", limit: int = 10) -> list[dict]:
@@ -182,27 +238,26 @@ async def discover_public_prospects(location: str = "Kenya", limit: int = 10) ->
         f'rapper singer {location} TikTok new music',
         f'musician {location} YouTube official artist 2026',
         f'artist {location} SoundCloud Audiomack new single',
+        f'site:instagram.com {location} rapper "new music"',
+        f'site:tiktok.com/@ {location} singer artist',
     ]
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; BeatHubGrowth/1.0; +https://mybeathub.com)",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
     }
     found: list[dict] = []
     seen: set[str] = set()
-    async with httpx.AsyncClient(timeout=12.0, follow_redirects=True, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=True, headers=headers) as client:
         for query in queries:
             if len(found) >= limit * 2:
                 break
-            try:
-                response = await client.post(SEARCH_URL, data={"q": query})
-                response.raise_for_status()
-                for item in _parse_results(response.text, location):
-                    if item["public_url"] in seen:
-                        continue
-                    seen.add(item["public_url"])
-                    found.append(item)
-            except Exception as exc:
-                logger.warning("[Growth Acquisition] search failed for %r: %s", query, exc)
+            rows, _provider = await _search_query(client, query, location)
+            for item in rows:
+                if item["public_url"] in seen:
+                    continue
+                seen.add(item["public_url"])
+                found.append(item)
     found.sort(key=lambda item: item.get("fit_score", 0), reverse=True)
     return found[:limit]
 
@@ -282,11 +337,7 @@ async def build_daily_acquisition_queue(db: Session, location: str = "Kenya", li
             note=f"Auto-matched to published track {best['track_id']}; human listen/review still required.",
         ))
         outreach = await generate_outreach(
-            {
-                "name": prospect.name,
-                "public_url": prospect.public_url,
-                "platform": prospect.platform,
-            },
+            {"name": prospect.name, "public_url": prospect.public_url, "platform": prospect.platform},
             match_list,
         )
         db.add(GrowthTouch(
