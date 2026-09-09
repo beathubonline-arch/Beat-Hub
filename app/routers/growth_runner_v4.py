@@ -1,7 +1,9 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +13,41 @@ from app.services.growth_worker_v4 import run_once
 from app.utils.deps import require_admin
 
 router = APIRouter(prefix="/admin/growth-runner", tags=["growth-agent-runner"])
+templates = Jinja2Templates(directory="app/templates")
+
+
+def _queue_rows(db: Session) -> list[dict]:
+    prospects = (
+        db.query(GrowthProspect)
+        .filter(GrowthProspect.status == "outreach_ready")
+        .order_by(GrowthProspect.fit_score.desc(), GrowthProspect.updated_at.desc())
+        .limit(20)
+        .all()
+    )
+    rows = []
+    for prospect in prospects:
+        draft = (
+            db.query(GrowthTouch)
+            .filter(
+                GrowthTouch.prospect_id == prospect.id,
+                GrowthTouch.stage == "outreach_ready",
+            )
+            .order_by(GrowthTouch.created_at.desc())
+            .first()
+        )
+        rows.append({
+            "prospect_id": prospect.id,
+            "name": prospect.name,
+            "platform": prospect.platform,
+            "public_url": prospect.public_url,
+            "fit_score": prospect.fit_score,
+            "why_fit": prospect.why_fit,
+            "matched_track_id": prospect.matched_track_id,
+            "matched_track_title": prospect.matched_track.title if prospect.matched_track else None,
+            "message": draft.note if draft else None,
+            "status": prospect.status,
+        })
+    return rows
 
 
 @router.post("/run-now")
@@ -42,6 +79,7 @@ async def run_status(db: Session = Depends(get_db), admin=Depends(require_admin)
         },
         "acquisition": {
             "status": acquisition.get("status"),
+            "mode": acquisition.get("mode"),
             "discovered": acquisition.get("discovered", 0),
             "qualified_queue": acquisition.get("qualified_queue", 0),
             "human_approval_required": acquisition.get("human_approval_required", True),
@@ -52,34 +90,15 @@ async def run_status(db: Session = Depends(get_db), admin=Depends(require_admin)
 
 @router.get("/queue")
 async def outreach_queue(db: Session = Depends(get_db), admin=Depends(require_admin)):
-    prospects = (
-        db.query(GrowthProspect)
-        .filter(GrowthProspect.status == "outreach_ready")
-        .order_by(GrowthProspect.fit_score.desc(), GrowthProspect.updated_at.desc())
-        .limit(20)
-        .all()
-    )
-    rows = []
-    for prospect in prospects:
-        draft = (
-            db.query(GrowthTouch)
-            .filter(
-                GrowthTouch.prospect_id == prospect.id,
-                GrowthTouch.stage == "outreach_ready",
-            )
-            .order_by(GrowthTouch.created_at.desc())
-            .first()
-        )
-        rows.append({
-            "prospect_id": prospect.id,
-            "name": prospect.name,
-            "platform": prospect.platform,
-            "public_url": prospect.public_url,
-            "fit_score": prospect.fit_score,
-            "why_fit": prospect.why_fit,
-            "matched_track_id": prospect.matched_track_id,
-            "matched_track_title": prospect.matched_track.title if prospect.matched_track else None,
-            "message": draft.note if draft else None,
-            "status": prospect.status,
-        })
+    rows = _queue_rows(db)
     return {"ok": True, "count": len(rows), "queue": rows, "human_approval_required": True}
+
+
+@router.get("/queue-ui", response_class=HTMLResponse)
+async def outreach_queue_ui(request: Request, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    rows = _queue_rows(db)
+    return templates.TemplateResponse(
+        request,
+        "growth_queue.html",
+        {"request": request, "current_user": admin, "queue": rows},
+    )
