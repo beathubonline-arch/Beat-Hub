@@ -13,6 +13,7 @@ from app.models.growth_runs import GrowthAgentRun
 from app.services.growth_acquisition_v6 import run_acquisition_queue
 from app.services.growth_agent import build_snapshot, run_growth_agent
 from app.services.growth_payment_recovery import reconcile_recent_payments
+from app.services.growth_verified_bootstrap import run_verified_bootstrap_queue
 
 logger = logging.getLogger("beathub.growth_worker")
 LOCK_KEY = 734820261
@@ -26,6 +27,16 @@ def _merge_existing_plan(run: GrowthAgentRun, acquisition: dict) -> None:
     plan["acquisition_queue"] = acquisition
     run.plan_json = json.dumps(plan, default=str)
     run.finished_at = datetime.now(timezone.utc)
+
+
+def _build_acquisition(db) -> dict:
+    acquisition = run_acquisition_queue(db, location="Kenya", limit=8)
+    if int(acquisition.get("qualified_queue", 0) or 0) == 0:
+        logger.warning(
+            "[BeatHub Growth Agent] live acquisition returned no qualified prospects; using verified public bootstrap"
+        )
+        acquisition = run_verified_bootstrap_queue(db, limit=8)
+    return acquisition
 
 
 def run_once(force: bool = False) -> dict:
@@ -42,12 +53,13 @@ def run_once(force: bool = False) -> dict:
 
         existing = db.query(GrowthAgentRun).filter(GrowthAgentRun.run_key == key).first()
         if existing and existing.status == "completed" and not force:
-            acquisition = run_acquisition_queue(db, location="Kenya", limit=8)
+            acquisition = _build_acquisition(db)
             _merge_existing_plan(existing, acquisition)
             db.commit()
             logger.info(
-                "[BeatHub Growth Agent] refreshed acquisition queue: status=%s qualified=%s",
+                "[BeatHub Growth Agent] refreshed acquisition queue: status=%s mode=%s qualified=%s",
                 acquisition.get("status"),
+                acquisition.get("mode"),
                 acquisition.get("qualified_queue", 0),
             )
             return {
@@ -81,9 +93,10 @@ def run_once(force: bool = False) -> dict:
         plan = asyncio.run(run_growth_agent(snapshot))
         plan["payment_recovery"] = payment_recovery
 
-        # Growth Agent V6: discover public creator profiles, qualify them, match
-        # BeatHub catalog items and create a human-approved outreach queue.
-        acquisition = run_acquisition_queue(db, location="Kenya", limit=8)
+        # Growth Agent V6: try live public discovery first. If Render cannot reach
+        # public search providers, use the small web-verified public-profile bootstrap.
+        # Neither path sends messages automatically; human approval remains required.
+        acquisition = _build_acquisition(db)
         plan["acquisition_queue"] = acquisition
 
         run.finished_at = datetime.now(timezone.utc)
@@ -93,9 +106,10 @@ def run_once(force: bool = False) -> dict:
         run.plan_json = json.dumps(plan, default=str)
         db.commit()
         logger.info(
-            "[BeatHub Growth Agent] completed daily cycle %s; acquisition status=%s qualified=%s",
+            "[BeatHub Growth Agent] completed daily cycle %s; acquisition status=%s mode=%s qualified=%s",
             key,
             acquisition.get("status"),
+            acquisition.get("mode"),
             acquisition.get("qualified_queue", 0),
         )
         return {
