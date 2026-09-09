@@ -66,8 +66,10 @@ def _host_allowed(url: str) -> bool:
             return False
         if host.endswith("tiktok.com") and "/@" not in path:
             return False
-        if host.endswith("instagram.com") and path.count("/") < 2:
-            return False
+        if host.endswith("instagram.com"):
+            segments = [segment for segment in path.split("/") if segment]
+            if len(segments) != 1 or segments[0] in {"accounts", "about", "developer", "legal"}:
+                return False
         return True
     except Exception:
         return False
