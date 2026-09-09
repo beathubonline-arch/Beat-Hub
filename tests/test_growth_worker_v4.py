@@ -19,6 +19,24 @@ def test_scheduler_is_zero_budget():
     assert callable(growth_scheduler_loop)
 
 
+def test_cold_queue_uses_verified_bootstrap_without_live_search(monkeypatch):
+    import app.services.growth_worker_v4 as worker
+
+    expected = {
+        "ok": True,
+        "status": "ready",
+        "mode": "verified_public_bootstrap",
+        "qualified_queue": 7,
+        "queue": [],
+    }
+
+    monkeypatch.setattr(worker, "_ready_count", lambda _db: 0)
+    monkeypatch.setattr(worker, "run_verified_bootstrap_queue", lambda _db, limit=8: expected)
+    monkeypatch.setattr(worker, "run_acquisition_queue", lambda *a, **k: (_ for _ in ()).throw(AssertionError("live search must not run on a cold queue")))
+
+    assert worker._build_acquisition(object()) == expected
+
+
 def test_acquisition_recovers_to_verified_bootstrap_after_db_disconnect(monkeypatch):
     import app.services.growth_worker_v4 as worker
 
@@ -46,6 +64,7 @@ def test_acquisition_recovers_to_verified_bootstrap_after_db_disconnect(monkeypa
         "queue": [],
     }
 
+    monkeypatch.setattr(worker, "_ready_count", lambda _db: 3)
     monkeypatch.setattr(worker, "run_acquisition_queue", fail_live)
     monkeypatch.setattr(worker, "run_verified_bootstrap_queue", lambda _db, limit=8: expected)
 
