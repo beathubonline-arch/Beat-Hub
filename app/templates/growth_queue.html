@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BeatHub · Today's Outreach Queue</title>
+  <style>
+    :root{color-scheme:dark}body{margin:0;background:#0e0c14;color:#f7f4ff;font-family:Inter,system-ui,sans-serif}.wrap{max-width:1180px;margin:auto;padding:28px 18px 60px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.muted{color:#aaa2b9}.card{background:#181522;border:1px solid #2d2839;border-radius:16px;padding:18px;margin-top:14px}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:18px 0}.stat{background:#181522;border:1px solid #2d2839;border-radius:14px;padding:14px}.big{font-size:28px;font-weight:850}.queue{display:grid;gap:14px}.prospect{background:#181522;border:1px solid #302a3e;border-radius:16px;padding:18px}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.tags{display:flex;gap:6px;flex-wrap:wrap}.tag{font-size:12px;padding:5px 8px;border-radius:999px;background:#292337;color:#ddd5ec}.score{font-weight:900}.why{line-height:1.45;margin:12px 0}.match{padding:10px 12px;background:#211d2c;border-radius:10px;margin:10px 0}.draft{white-space:pre-wrap;background:#0b0910;border:1px solid #282333;border-radius:10px;padding:13px;line-height:1.45}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}button,a.btn{border:0;border-radius:10px;padding:10px 13px;font-weight:800;cursor:pointer;text-decoration:none;background:#fff;color:#111}button.secondary,a.secondary{background:#292337;color:#fff}.done{opacity:.55}.status{margin-top:8px;font-size:13px;color:#bdb4cb}.warn{border-left:3px solid #fff;padding-left:12px}.empty{text-align:center;padding:32px}.nav{display:flex;gap:8px;flex-wrap:wrap}@media(max-width:700px){.actions button,.actions a{flex:1;text-align:center}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <div class="muted">BEATHUB GROWTH AGENT · V6</div>
+      <h1 style="margin:.3em 0">Today's Outreach Queue</h1>
+      <p class="muted" style="max-width:760px">The agent discovers or loads verified public creator profiles, matches them to published BeatHub beats, and drafts outreach. Nothing is sent automatically. Open the profile, verify the fit, send manually, then mark contacted.</p>
+    </div>
+    <div class="nav"><a class="btn secondary" href="/admin/growth">Growth OS</a><button id="run">Refresh agent</button></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="muted">Ready today</div><div class="big" id="readyCount">{{ queue|length }}</div></div>
+    <div class="stat"><div class="muted">Human approval</div><div class="big">Required</div></div>
+    <div class="stat"><div class="muted">Auto-send</div><div class="big">Off</div></div>
+  </div>
+
+  <div class="card warn"><strong>Target for today:</strong> review and contact the best 5 profiles. Personalize the draft after checking the public profile and listening to the matched beat. Stop outreach if it is not relevant or welcome.</div>
+
+  <div id="runStatus" class="status"></div>
+  <section id="queue" class="queue" style="margin-top:18px">
+    {% for p in queue %}
+    <article class="prospect" data-id="{{ p.prospect_id }}" data-platform="{{ p.platform or 'manual' }}">
+      <div class="head"><div><h2 style="margin:0 0 6px">{{ p.name }}</h2><div class="tags"><span class="tag">{{ p.platform or 'public web' }}</span><span class="tag score">{{ p.fit_score or 0 }}/100 fit</span><span class="tag">{{ p.status.replace('_',' ') }}</span></div></div></div>
+      <div class="why">{{ p.why_fit or 'Review the public profile before contact.' }}</div>
+      <div class="match"><strong>Matched BeatHub beat:</strong> {{ p.matched_track_title or p.matched_track_id or 'Review catalog match' }}</div>
+      <div class="draft">{{ p.message or 'Draft unavailable. Refresh the agent.' }}</div>
+      <div class="actions">
+        <a class="btn" href="{{ p.public_url }}" target="_blank" rel="noopener noreferrer">1. Open public profile</a>
+        <button class="secondary copy">2. Copy message</button>
+        <button class="contacted">3. Mark contacted</button>
+      </div>
+      <div class="status result"></div>
+    </article>
+    {% else %}
+    <div class="card empty"><h2>No outreach-ready prospects yet</h2><p class="muted">Use Refresh agent. The runner will try live public discovery first and then the verified public-profile bootstrap if search providers are unavailable.</p></div>
+    {% endfor %}
+  </section>
+</main>
+<script>
+const run=document.getElementById('run'),runStatus=document.getElementById('runStatus');
+async function api(url,options={}){const r=await fetch(url,{...options,headers:{Accept:'application/json',...(options.headers||{})}});let d={};try{d=await r.json()}catch(e){}if(!r.ok||d.ok===false)throw new Error(d.error||('Request failed ('+r.status+')'));return d}
+run.addEventListener('click',async()=>{run.disabled=true;run.textContent='Running…';runStatus.textContent='Refreshing acquisition queue…';try{const d=await api('/admin/growth-runner/run-now',{method:'POST'});const q=d.plan?.acquisition_queue||d.acquisition_queue||{};runStatus.textContent='Agent finished. '+(q.qualified_queue??0)+' prospects ready. Reloading…';location.reload();}catch(e){runStatus.textContent=e.message;}finally{run.disabled=false;run.textContent='Refresh agent';}});
+document.querySelectorAll('.prospect').forEach(card=>{
+  const result=card.querySelector('.result');
+  card.querySelector('.copy').addEventListener('click',async()=>{const text=card.querySelector('.draft').textContent.trim();try{await navigator.clipboard.writeText(text);result.textContent='Message copied. Review/personalize it before sending.';}catch(e){result.textContent='Copy failed — select the draft manually.';}});
+  card.querySelector('.contacted').addEventListener('click',async ev=>{if(!confirm('Only continue if you manually sent this message after reviewing the public profile. Mark contacted?'))return;ev.target.disabled=true;try{await api('/admin/growth/prospects/'+card.dataset.id+'/stage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:'contacted',approved_by_human:true,channel:card.dataset.platform,note:'Human-reviewed outreach sent manually from Growth Agent V6 queue.'})});result.textContent='Contacted ✓ — this prospect is now tracked in the funnel.';card.classList.add('done');}catch(e){result.textContent=e.message;ev.target.disabled=false;}});
+});
+</script>
+</body>
+</html>
