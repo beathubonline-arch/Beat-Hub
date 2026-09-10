@@ -1,0 +1,30 @@
+name: Growth Contact V7 Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/services/growth_contact_v7.py'
+      - 'app/services/growth_acquisition_v7.py'
+      - 'app/routers/growth_runner_v4.py'
+      - 'app/templates/growth_acquisition_v6.html'
+      - 'tests/test_growth_contact_v7.py'
+      - '.github/workflows/growth-contact-v7-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  growth-contact-v7:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Growth contact tests pass 1
+        run: pytest -q tests/test_growth_contact_v7.py
+      - name: Growth contact tests pass 2
+        run: pytest -q tests/test_growth_contact_v7.py
+      - name: Application import check
+        run: python -c "import main; print('app import ok')"
