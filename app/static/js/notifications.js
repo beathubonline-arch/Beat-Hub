@@ -47,7 +47,41 @@
       badge.textContent = count > 99 ? '99+' : String(count);
     }
 
+    function currentCount() {
+      if (badge.hidden) return 0;
+      var parsed = parseInt(badge.textContent, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
     function text(value) { return value == null ? '' : String(value); }
+
+    function markNotificationRead(item, anchor, event) {
+      if (!item || item.is_read || !item.id) return;
+
+      var destination = anchor.href;
+      var sameTab = !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button !== 1;
+      if (sameTab) event.preventDefault();
+
+      anchor.classList.remove('unread');
+      var dot = anchor.querySelector('.bh-notification-dot');
+      if (dot) dot.classList.add('read');
+      setCount(Math.max(0, currentCount() - 1));
+
+      fetch('/notifications/' + encodeURIComponent(item.id) + '/read', {
+        method: 'POST',
+        credentials: 'same-origin',
+        keepalive: true,
+        headers: { 'Accept': 'application/json' }
+      }).then(function (response) {
+        if (!response.ok) throw new Error('request failed');
+        item.is_read = true;
+        if (sameTab) window.location.href = destination;
+      }).catch(function () {
+        refresh().then(function () {
+          if (sameTab) window.location.href = destination;
+        });
+      });
+    }
 
     function render(items) {
       list.textContent = '';
@@ -77,7 +111,9 @@
         time.className = 'bh-notification-time';
         time.textContent = text(item.time_ago);
         copy.appendChild(title); copy.appendChild(message); copy.appendChild(time);
-        a.appendChild(dot); a.appendChild(copy); list.appendChild(a);
+        a.appendChild(dot); a.appendChild(copy);
+        a.addEventListener('click', function (event) { markNotificationRead(item, a, event); });
+        list.appendChild(a);
       });
     }
 
@@ -101,30 +137,6 @@
       });
     }
 
-    function markNotificationsRead() {
-      // Opening the notification center means the user has seen the alerts.
-      // Clear the badge immediately for responsive UI, then persist it server-side.
-      setCount(0);
-      return fetch('/notifications/read-all', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Accept': 'application/json' }
-      }).then(function (response) {
-        if (response.status === 401 || response.status === 403) throw new Error('unauthorized');
-        if (!response.ok) throw new Error('request failed');
-        return refresh();
-      }).catch(function (error) {
-        // If persistence failed, refresh restores the real unread count instead of
-        // leaving a false zero in the UI.
-        if (error.message === 'unauthorized') {
-          wrap.remove();
-          if (timer) clearInterval(timer);
-          return;
-        }
-        return refresh();
-      });
-    }
-
     function refreshPushState() {
       if (!window.BeatHubPush || !window.BeatHubPush.getState) return;
       window.BeatHubPush.getState().then(function (state) {
@@ -141,8 +153,8 @@
       if (open) {
         dropdown.classList.add('open');
         bell.setAttribute('aria-expanded', 'true');
+        refresh();
         refreshPushState();
-        markNotificationsRead();
       } else close();
     });
 
@@ -156,7 +168,9 @@
     });
 
     markAll.addEventListener('click', function () {
-      markNotificationsRead();
+      fetch('/notifications/read-all', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function () { return refresh(); })
+        .catch(function () {});
     });
 
     document.addEventListener('click', function (event) {
