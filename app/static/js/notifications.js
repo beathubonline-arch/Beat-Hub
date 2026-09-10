@@ -57,29 +57,22 @@
 
     function markNotificationRead(item, anchor, event) {
       if (!item || item.is_read || !item.id) return;
-
       var destination = anchor.href;
       var sameTab = !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button !== 1;
       if (sameTab) event.preventDefault();
-
       anchor.classList.remove('unread');
       var dot = anchor.querySelector('.bh-notification-dot');
       if (dot) dot.classList.add('read');
       setCount(Math.max(0, currentCount() - 1));
-
       fetch('/notifications/' + encodeURIComponent(item.id) + '/read', {
-        method: 'POST',
-        credentials: 'same-origin',
-        keepalive: true,
+        method: 'POST', credentials: 'same-origin', keepalive: true,
         headers: { 'Accept': 'application/json' }
       }).then(function (response) {
         if (!response.ok) throw new Error('request failed');
         item.is_read = true;
         if (sameTab) window.location.href = destination;
       }).catch(function () {
-        refresh().then(function () {
-          if (sameTab) window.location.href = destination;
-        });
+        refresh().then(function () { if (sameTab) window.location.href = destination; });
       });
     }
 
@@ -137,13 +130,28 @@
       });
     }
 
+    function markNotificationsRead() {
+      setCount(0);
+      return fetch('/notifications/read-all', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json' }
+      }).then(function (response) {
+        if (response.status === 401 || response.status === 403) throw new Error('unauthorized');
+        if (!response.ok) throw new Error('request failed');
+        return refresh();
+      }).catch(function (error) {
+        if (error.message === 'unauthorized') {
+          wrap.remove();
+          if (timer) clearInterval(timer);
+          return;
+        }
+        return refresh();
+      });
+    }
+
     function refreshPushState() {
       if (!window.BeatHubPush || !window.BeatHubPush.getState) return;
       window.BeatHubPush.getState().then(function (state) {
-        if (!state.enabled || state.subscribed || state.permission === 'denied') {
-          pushRow.hidden = true;
-          return;
-        }
+        if (!state.enabled || state.subscribed || state.permission === 'denied') { pushRow.hidden = true; return; }
         pushRow.hidden = false;
       }).catch(function () {});
     }
@@ -153,8 +161,8 @@
       if (open) {
         dropdown.classList.add('open');
         bell.setAttribute('aria-expanded', 'true');
-        refresh();
         refreshPushState();
+        markNotificationsRead();
       } else close();
     });
 
@@ -167,45 +175,29 @@
       }).catch(function () { pushButton.disabled = false; });
     });
 
-    markAll.addEventListener('click', function () {
-      fetch('/notifications/read-all', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-        .then(function () { return refresh(); })
-        .catch(function () {});
-    });
+    markAll.addEventListener('click', function () { markNotificationsRead(); });
 
-    document.addEventListener('click', function (event) {
-      if (!wrap.contains(event.target)) close();
-    });
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') close();
-    });
+    document.addEventListener('click', function (event) { if (!wrap.contains(event.target)) close(); });
+    document.addEventListener('keydown', function (event) { if (event.key === 'Escape') close(); });
 
     refresh();
     timer = window.setInterval(refresh, 45000);
   }
 
   function initBeatCreatorFolders() {
-    // The marketplace's beat grid is the authoritative signal. Do not
-    // depend on a pathname because the same marketplace template can be
-    // reached through compatibility routes or rewritten URLs.
     var grid = document.querySelector('.market-grid');
     if (!grid || grid.dataset.creatorFoldersReady === 'true') return false;
-
     var cards = Array.prototype.slice.call(grid.querySelectorAll('.beat-card'));
     if (!cards.length) return false;
-
     var groups = new Map();
     cards.forEach(function (card) {
       var nameNode = card.querySelector('.producer-name');
       var producer = nameNode ? nameNode.textContent.trim() : 'BeatHub Creator';
       if (!producer) producer = 'BeatHub Creator';
-
       if (!groups.has(producer)) groups.set(producer, []);
       groups.get(producer).push(card);
     });
-
     if (!groups.size) return false;
-
     if (!document.getElementById('bh-beat-folder-styles')) {
       var style = document.createElement('style');
       style.id = 'bh-beat-folder-styles';
@@ -229,53 +221,29 @@
       ].join('');
       document.head.appendChild(style);
     }
-
     var folderGrid = document.createElement('div');
     folderGrid.className = 'bh-beat-folders';
-
     groups.forEach(function (producerCards, producer) {
-      var folder = document.createElement('section');
-      folder.className = 'bh-beat-folder';
-
-      var head = document.createElement('div');
-      head.className = 'bh-beat-folder-head';
-
-      var title = document.createElement('div');
-      title.className = 'bh-beat-folder-title';
-      title.innerHTML = '<span class="bh-beat-folder-icon" aria-hidden="true">♫</span>' +
-        '<span><span class="bh-beat-folder-name"></span><span class="bh-beat-folder-count"></span></span>';
+      var folder = document.createElement('section'); folder.className = 'bh-beat-folder';
+      var head = document.createElement('div'); head.className = 'bh-beat-folder-head';
+      var title = document.createElement('div'); title.className = 'bh-beat-folder-title';
+      title.innerHTML = '<span class="bh-beat-folder-icon" aria-hidden="true">♫</span><span><span class="bh-beat-folder-name"></span><span class="bh-beat-folder-count"></span></span>';
       title.querySelector('.bh-beat-folder-name').textContent = producer;
       title.querySelector('.bh-beat-folder-count').textContent = producerCards.length + (producerCards.length === 1 ? ' beat' : ' beats');
-
-      var latest = document.createElement('span');
-      latest.className = 'bh-beat-folder-latest';
-      latest.textContent = 'Newest first';
-      head.appendChild(title);
-      head.appendChild(latest);
-
-      var beatGrid = document.createElement('div');
-      beatGrid.className = 'bh-beat-folder-beats';
+      var latest = document.createElement('span'); latest.className = 'bh-beat-folder-latest'; latest.textContent = 'Newest first';
+      head.appendChild(title); head.appendChild(latest);
+      var beatGrid = document.createElement('div'); beatGrid.className = 'bh-beat-folder-beats';
       producerCards.forEach(function (card) { beatGrid.appendChild(card); });
-
-      folder.appendChild(head);
-      folder.appendChild(beatGrid);
-      folderGrid.appendChild(folder);
+      folder.appendChild(head); folder.appendChild(beatGrid); folderGrid.appendChild(folder);
     });
-
-    grid.replaceWith(folderGrid);
-    folderGrid.dataset.creatorFoldersReady = 'true';
-    return true;
+    grid.replaceWith(folderGrid); folderGrid.dataset.creatorFoldersReady = 'true'; return true;
   }
 
   function initCreatorMerchFolders() {
-    // Only operate on the public merchandise catalogue. Detail pages do not
-    // contain .bh-merch-grid, so purchase/checkout UI is untouched.
     var grid = document.querySelector('.bh-merch-grid');
     if (!grid || grid.dataset.creatorFoldersReady === 'true') return false;
-
     var cards = Array.prototype.slice.call(grid.querySelectorAll('.bh-merch-card'));
     if (!cards.length) return false;
-
     var groups = new Map();
     cards.forEach(function (card) {
       var nameNode = card.querySelector('.bh-merch-creator');
@@ -284,68 +252,31 @@
       if (!groups.has(creator)) groups.set(creator, []);
       groups.get(creator).push(card);
     });
-
-    var organized = document.createElement('div');
-    organized.className = 'bh-merch-organized';
-
+    var organized = document.createElement('div'); organized.className = 'bh-merch-organized';
     groups.forEach(function (creatorCards, creator) {
       if (creatorCards.length === 1) {
-        var single = document.createElement('div');
-        single.className = 'bh-merch-singleton';
-        single.appendChild(creatorCards[0]);
-        organized.appendChild(single);
-        return;
+        var single = document.createElement('div'); single.className = 'bh-merch-singleton'; single.appendChild(creatorCards[0]); organized.appendChild(single); return;
       }
-
-      var folder = document.createElement('section');
-      folder.className = 'bh-merch-creator-folder';
-
-      var head = document.createElement('div');
-      head.className = 'bh-merch-folder-head';
-      var title = document.createElement('div');
-      title.className = 'bh-merch-folder-title';
-      var icon = document.createElement('span');
-      icon.className = 'bh-merch-folder-icon';
-      icon.setAttribute('aria-hidden', 'true');
-      icon.textContent = '✦';
+      var folder = document.createElement('section'); folder.className = 'bh-merch-creator-folder';
+      var head = document.createElement('div'); head.className = 'bh-merch-folder-head';
+      var title = document.createElement('div'); title.className = 'bh-merch-folder-title';
+      var icon = document.createElement('span'); icon.className = 'bh-merch-folder-icon'; icon.setAttribute('aria-hidden', 'true'); icon.textContent = '✦';
       var copy = document.createElement('span');
-      var name = document.createElement('span');
-      name.className = 'bh-merch-folder-name';
-      name.textContent = creator;
-      var count = document.createElement('span');
-      count.className = 'bh-merch-folder-count';
-      count.textContent = creatorCards.length + ' merch items';
-      copy.appendChild(name);
-      copy.appendChild(count);
-      title.appendChild(icon);
-      title.appendChild(copy);
-
-      var newest = document.createElement('span');
-      newest.className = 'bh-merch-folder-latest';
-      newest.textContent = 'Newest first';
-      head.appendChild(title);
-      head.appendChild(newest);
-
-      var cardGrid = document.createElement('div');
-      cardGrid.className = 'bh-merch-folder-items';
-      creatorCards.forEach(function (card) { cardGrid.appendChild(card); });
-      folder.appendChild(head);
-      folder.appendChild(cardGrid);
-      organized.appendChild(folder);
+      var name = document.createElement('span'); name.className = 'bh-merch-folder-name'; name.textContent = creator;
+      var count = document.createElement('span'); count.className = 'bh-merch-folder-count'; count.textContent = creatorCards.length + ' merch items';
+      copy.appendChild(name); copy.appendChild(count); title.appendChild(icon); title.appendChild(copy);
+      var newest = document.createElement('span'); newest.className = 'bh-merch-folder-latest'; newest.textContent = 'Newest first';
+      head.appendChild(title); head.appendChild(newest);
+      var cardGrid = document.createElement('div'); cardGrid.className = 'bh-merch-folder-items'; creatorCards.forEach(function (card) { cardGrid.appendChild(card); });
+      folder.appendChild(head); folder.appendChild(cardGrid); organized.appendChild(folder);
     });
-
-    grid.replaceWith(organized);
-    organized.dataset.creatorFoldersReady = 'true';
-    return true;
+    grid.replaceWith(organized); organized.dataset.creatorFoldersReady = 'true'; return true;
   }
 
   function init() {
     initNotifications();
     if (initBeatCreatorFolders()) return;
     if (initCreatorMerchFolders()) return;
-
-    // Give server-rendered/late-inserted marketplace cards a short second
-    // chance without polling the page indefinitely.
     var attempts = 0;
     var retry = window.setInterval(function () {
       attempts += 1;
