@@ -50,15 +50,16 @@ class NotificationServiceTests(unittest.TestCase):
         self.assertEqual(mark_all_read("u1"), 3)
         db.commit.assert_called_once()
 
-    def test_notification_bell_does_not_mark_everything_read(self):
+    def test_notification_bell_marks_all_read_when_opened(self):
         source = Path("app/static/js/notifications.js").read_text(encoding="utf-8")
         bell_start = source.index("bell.addEventListener('click'")
         bell_end = source.index("pushButton.addEventListener", bell_start)
         bell_handler = source[bell_start:bell_end]
 
-        self.assertIn("refresh();", bell_handler)
-        self.assertNotIn("/notifications/read-all", bell_handler)
-        self.assertNotIn("markNotificationsRead", bell_handler)
+        self.assertIn("markNotificationsRead();", bell_handler)
+        self.assertIn("function markNotificationsRead()", source)
+        self.assertIn("/notifications/read-all", source)
+        self.assertIn("setCount(0);", source)
 
     def test_opening_one_notification_uses_individual_read_endpoint(self):
         source = Path("app/static/js/notifications.js").read_text(encoding="utf-8")
