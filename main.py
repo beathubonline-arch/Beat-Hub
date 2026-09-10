@@ -38,6 +38,7 @@ from app.routers import (
     pages,
     paystack_checkout,
     payout_admin,
+    seo,
     track_catalog,
 )
 from app.routers.growth_runner_v4 import router as growth_runner_router
@@ -228,6 +229,7 @@ async def healthz_head(): return JSONResponse({"status": "ok"})
 @app.get("/merchandise", include_in_schema=False)
 async def merchandise_legacy_alias(): return RedirectResponse(url="/merch", status_code=307)
 
+app.include_router(seo.router)
 app.include_router(api_v1.router)
 app.include_router(api_downloads.router)
 app.include_router(auth.router)
