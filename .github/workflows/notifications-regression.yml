@@ -1,0 +1,36 @@
+name: Notification Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/static/js/notifications.js'
+      - 'app/routers/notifications.py'
+      - 'app/services/notifications.py'
+      - 'tests/test_notifications.py'
+      - '.github/workflows/notifications-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  notification-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Notification tests pass 1
+        run: python -m unittest tests.test_notifications -v
+
+      - name: Notification tests pass 2
+        run: python -m unittest tests.test_notifications -v
+
+      - name: Application import check
+        run: python -c "import main"
