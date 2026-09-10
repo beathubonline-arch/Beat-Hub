@@ -101,6 +101,30 @@
       });
     }
 
+    function markNotificationsRead() {
+      // Opening the notification center means the user has seen the alerts.
+      // Clear the badge immediately for responsive UI, then persist it server-side.
+      setCount(0);
+      return fetch('/notifications/read-all', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      }).then(function (response) {
+        if (response.status === 401 || response.status === 403) throw new Error('unauthorized');
+        if (!response.ok) throw new Error('request failed');
+        return refresh();
+      }).catch(function (error) {
+        // If persistence failed, refresh restores the real unread count instead of
+        // leaving a false zero in the UI.
+        if (error.message === 'unauthorized') {
+          wrap.remove();
+          if (timer) clearInterval(timer);
+          return;
+        }
+        return refresh();
+      });
+    }
+
     function refreshPushState() {
       if (!window.BeatHubPush || !window.BeatHubPush.getState) return;
       window.BeatHubPush.getState().then(function (state) {
@@ -114,8 +138,12 @@
 
     bell.addEventListener('click', function () {
       var open = !dropdown.classList.contains('open');
-      if (open) { dropdown.classList.add('open'); bell.setAttribute('aria-expanded', 'true'); refresh(); refreshPushState(); }
-      else close();
+      if (open) {
+        dropdown.classList.add('open');
+        bell.setAttribute('aria-expanded', 'true');
+        refreshPushState();
+        markNotificationsRead();
+      } else close();
     });
 
     pushButton.addEventListener('click', function () {
@@ -128,9 +156,7 @@
     });
 
     markAll.addEventListener('click', function () {
-      fetch('/notifications/read-all', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
-        .then(function () { return refresh(); })
-        .catch(function () {});
+      markNotificationsRead();
     });
 
     document.addEventListener('click', function (event) {
