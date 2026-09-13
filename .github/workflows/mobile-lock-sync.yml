@@ -1,0 +1,37 @@
+name: mobile-lock-sync
+
+on:
+  push:
+    branches: [mobile-production-ready]
+    paths:
+      - 'mobile/package.json'
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mobile-production-ready
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+      - name: Refresh package lock
+        working-directory: mobile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lock update
+        run: |
+          if git diff --quiet -- mobile/package-lock.json; then
+            echo "Lockfile already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package-lock.json
+          git commit -m "ci: refresh mobile package lock"
+          git pull --rebase origin mobile-production-ready
+          git push origin HEAD:mobile-production-ready

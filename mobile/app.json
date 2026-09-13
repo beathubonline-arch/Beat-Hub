@@ -6,9 +6,20 @@
     "orientation": "portrait",
     "scheme": "beathub",
     "userInterfaceStyle": "automatic",
-    "plugins": ["expo-router"],
-    "android": { "package": "com.beathub.app" },
-    "ios": { "bundleIdentifier": "com.beathub.app" },
-    "extra": { "apiBaseUrl": "https://mybeathub.com/api/v1" }
+    "plugins": [
+      "expo-router",
+      ["expo-audio", { "microphonePermission": false, "recordAudioAndroid": false, "enableBackgroundRecording": false, "enableBackgroundPlayback": false }]
+    ],
+    "android": {
+      "package": "com.beathub.app",
+      "versionCode": 1
+    },
+    "ios": {
+      "bundleIdentifier": "com.beathub.app",
+      "buildNumber": "1"
+    },
+    "extra": {
+      "apiBaseUrl": "https://mybeathub.com/api/v1"
+    }
   }
 }

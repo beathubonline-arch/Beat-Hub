@@ -1,0 +1,47 @@
+name: mobile-production-validation
+
+on:
+  push:
+    branches: [mobile-production-ready]
+    paths:
+      - 'mobile/**'
+      - 'app/routers/mobile_creator_extensions.py'
+      - '.github/workflows/mobile-production-validation.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'app/routers/mobile_creator_extensions.py'
+      - '.github/workflows/mobile-production-validation.yml'
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        pass: [1, 2]
+    name: validation-pass-${{ matrix.pass }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check backend mobile API syntax
+        run: python -m py_compile app/routers/mobile_creator_extensions.py
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+      - name: Bundle Android production JS
+        working-directory: mobile
+        run: npx expo export --platform android --output-dir dist-android-pass-${{ matrix.pass }}
+      - name: Bundle iOS production JS
+        working-directory: mobile
+        run: npx expo export --platform ios --output-dir dist-ios-pass-${{ matrix.pass }}
