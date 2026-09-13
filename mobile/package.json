@@ -10,6 +10,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "doctor": "npx expo-doctor",
     "validate": "npm run typecheck && npx expo export --platform android --output-dir dist-android && npx expo export --platform ios --output-dir dist-ios"
   },
   "dependencies": {
