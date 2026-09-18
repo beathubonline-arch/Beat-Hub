@@ -7,10 +7,14 @@ Creator Marketplace Dashboard V6 is deployed from the `main` branch.
 ## AI Cover Studio
 
 The creator dashboard includes an optional Higgsfield-powered cover generator.
-Add these server-side environment variables to enable it:
+Copy the combined credential shown by Higgsfield and add this server-side
+environment variable to enable it:
 
-- `HIGGSFIELD_API_KEY_ID`
-- `HIGGSFIELD_API_KEY_SECRET`
+- `HIGGSFIELD_API_KEY`
+
+BeatHub also supports the separate `HIGGSFIELD_API_KEY_ID` and
+`HIGGSFIELD_API_KEY_SECRET` variables for accounts that display the pair
+individually.
 
 Optional controls:
 

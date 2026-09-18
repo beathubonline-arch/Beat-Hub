@@ -74,3 +74,11 @@ def test_status_url_rejects_other_hosts():
         pass
     else:
         raise AssertionError("Untrusted status host was accepted")
+
+
+def test_combined_console_key_is_supported(monkeypatch):
+    monkeypatch.setattr(higgsfield.settings, "HIGGSFIELD_API_KEY", "key-id:key-secret")
+    monkeypatch.setattr(higgsfield.settings, "HIGGSFIELD_API_KEY_ID", "")
+    monkeypatch.setattr(higgsfield.settings, "HIGGSFIELD_API_KEY_SECRET", "")
+    assert higgsfield.is_configured() is True
+    assert higgsfield._headers()["Authorization"] == "Key key-id:key-secret"

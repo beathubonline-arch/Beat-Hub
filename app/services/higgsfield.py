@@ -25,19 +25,26 @@ class GeneratedCover:
     preview_url: str
 
 
+def _credential() -> str:
+    """Accept Higgsfield's combined key or the separately stored key pair."""
+    combined = str(getattr(settings, "HIGGSFIELD_API_KEY", "") or "").strip()
+    if combined:
+        return combined
+    key_id = str(getattr(settings, "HIGGSFIELD_API_KEY_ID", "") or "").strip()
+    secret = str(getattr(settings, "HIGGSFIELD_API_KEY_SECRET", "") or "").strip()
+    return f"{key_id}:{secret}" if key_id and secret else ""
+
+
 def is_configured() -> bool:
-    return bool(
-        str(getattr(settings, "HIGGSFIELD_API_KEY_ID", "") or "").strip()
-        and str(getattr(settings, "HIGGSFIELD_API_KEY_SECRET", "") or "").strip()
-    )
+    credential = _credential()
+    return bool(credential and ":" in credential and all(credential.split(":", 1)))
 
 
 def _headers() -> dict[str, str]:
-    key_id = str(getattr(settings, "HIGGSFIELD_API_KEY_ID", "") or "").strip()
-    secret = str(getattr(settings, "HIGGSFIELD_API_KEY_SECRET", "") or "").strip()
-    if not key_id or not secret:
+    credential = _credential()
+    if not credential or ":" not in credential or not all(credential.split(":", 1)):
         raise HiggsfieldError("AI Cover Studio is not configured yet.")
-    return {"Authorization": f"Key {key_id}:{secret}", "Content-Type": "application/json"}
+    return {"Authorization": f"Key {credential}", "Content-Type": "application/json"}
 
 
 def _api_url(path: str) -> str:
