@@ -1,5 +1,6 @@
 from . import album
 from . import album_upload
+from . import ai_cover_studio
 from . import beat_catalog
 from . import dashboard
 from . import dashboard_analytics
@@ -25,6 +26,7 @@ from . import api_v1 as _api_v1_module
 _api_v1_module.router.include_router(api_payments.router)
 
 dashboard.router.include_router(creator_sales_history.router)
+dashboard.router.include_router(ai_cover_studio.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
 admin.router.include_router(admin_auth.router)
 
