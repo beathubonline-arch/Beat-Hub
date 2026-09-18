@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}AI Cover Studio — BeatHub{% endblock %}
+{% block content %}
+<div class="ai-studio">
+<style>
+.ai-studio{max-width:1100px;margin:0 auto;padding:24px 0 70px;color:#f5f5f5}.ai-head,.ai-card{border:1px solid #292929;background:#101010;border-radius:22px;padding:26px}.ai-head{background:radial-gradient(circle at 90% 10%,rgba(245,200,75,.17),transparent 38%),#101010;margin-bottom:16px}.ai-head h1{margin:0 0 8px;font-size:clamp(28px,5vw,48px)}.ai-sub{color:#aaa;line-height:1.6}.ai-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.8fr);gap:16px}.ai-card h2{margin-top:0}.ai-field{display:grid;gap:7px;margin-bottom:16px}.ai-field label{font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.08em;color:#b8b8b8}.ai-field select,.ai-field textarea{width:100%;box-sizing:border-box;border:1px solid #383838;border-radius:12px;background:#090909;color:white;padding:13px;font:inherit}.ai-field textarea{min-height:145px;resize:vertical}.ai-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;border-radius:11px;background:#171717;color:#fff;padding:12px 17px;font-weight:850;text-decoration:none;cursor:pointer}.ai-btn.primary{background:#f5c84b;border-color:#f5c84b;color:#111}.ai-btn[disabled]{opacity:.45;cursor:not-allowed}.ai-actions{display:flex;gap:10px;flex-wrap:wrap}.ai-alert{padding:13px 15px;border-radius:12px;margin-bottom:16px}.ai-alert.error{border:1px solid #703434;background:#241111;color:#ffc0c0}.ai-alert.success{border:1px solid #536123;background:#18200f;color:#e9ffad}.ai-preview{aspect-ratio:1/1;width:100%;overflow:hidden;border-radius:16px;border:1px solid #333;background:#080808;display:flex;align-items:center;justify-content:center}.ai-preview img{width:100%;height:100%;object-fit:cover}.ai-empty{padding:34px;text-align:center;color:#777}.ai-note{font-size:12px;line-height:1.55;color:#888;margin-top:13px}.ai-back{display:inline-block;color:#ffe58a;text-decoration:none;font-weight:800;margin-bottom:14px}@media(max-width:800px){.ai-grid{grid-template-columns:1fr}.ai-head,.ai-card{padding:20px}}
+</style>
+<a class="ai-back" href="/dashboard">← Creator dashboard</a>
+<section class="ai-head"><h1>AI Cover Studio</h1><div class="ai-sub">Turn a track idea into square, release-ready artwork. Preview the result before replacing your current cover.</div></section>
+{% if request.query_params.get('error') %}<div class="ai-alert error">{{ request.query_params.get('error') }}</div>{% endif %}
+{% if error %}<div class="ai-alert error">{{ error }}</div>{% endif %}
+{% if success %}<div class="ai-alert success">{{ success }}</div>{% endif %}
+<div class="ai-grid">
+<section class="ai-card"><h2>Create artwork</h2>
+{% if not tracks %}<div class="ai-empty">Upload a beat or track first, then return here.</div><a class="ai-btn primary" href="/dashboard/upload">Upload music</a>
+{% else %}<form method="post" action="/dashboard/ai-cover-studio/generate" id="generateForm">
+<div class="ai-field"><label for="track_id">Track</label><select id="track_id" name="track_id" required><option value="">Choose a track</option>{% for track in tracks %}<option value="{{ track.id }}" {% if selected_track_id == track.id|string %}selected{% endif %}>{{ track.title }}{% if track.genre %} — {{ track.genre }}{% endif %}</option>{% endfor %}</select></div>
+<div class="ai-field"><label for="direction">Visual direction</label><textarea id="direction" name="direction" maxlength="700" required placeholder="Example: Neon Nairobi at night, purple and gold lighting, a confident futuristic mood, clean central composition">{{ direction }}</textarea></div>
+<button class="ai-btn primary" type="submit" id="generateButton" {% if not higgsfield_ready %}disabled{% endif %}>Generate cover</button>
+{% if not higgsfield_ready %}<p class="ai-note">The owner must add the Higgsfield API credentials before generation is enabled.</p>{% else %}<p class="ai-note">Generation uses BeatHub credits. Please submit once and wait; the button will lock while your cover is being created.</p>{% endif %}
+</form>{% endif %}</section>
+<section class="ai-card"><h2>Preview</h2>
+{% if generated_url %}<div class="ai-preview"><img src="{{ generated_url }}" alt="Generated cover preview"></div><div class="ai-actions" style="margin-top:14px"><form method="post" action="/dashboard/ai-cover-studio/apply"><input type="hidden" name="token" value="{{ apply_token }}"><button class="ai-btn primary" type="submit">Apply to {{ generated_track.title }}</button></form><a class="ai-btn" href="{{ generated_url }}" target="_blank" rel="noopener">Open / download</a></div><p class="ai-note">Applying changes the marketplace cover only. Your audio, pricing and sales settings stay untouched.</p>{% else %}<div class="ai-preview"><div class="ai-empty">Your generated cover will appear here.</div></div>{% endif %}
+</section></div>
+<script>document.getElementById('generateForm')?.addEventListener('submit',function(){const b=document.getElementById('generateButton');b.disabled=true;b.textContent='Creating your cover…';});</script>
+</div>
+{% endblock %}

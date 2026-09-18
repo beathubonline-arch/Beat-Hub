@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-6-astra"
 
+    # Server-only credentials for the creator AI Cover Studio.
+    HIGGSFIELD_API_KEY: str = ""
+    HIGGSFIELD_API_KEY_ID: str = ""
+    HIGGSFIELD_API_KEY_SECRET: str = ""
+    HIGGSFIELD_API_BASE_URL: str = "https://api.higgsfield.ai"
+    HIGGSFIELD_IMAGE_MODEL: str = "marketing-studio/image"
+    HIGGSFIELD_IMAGE_RESOLUTION: str = "1k"
+    HIGGSFIELD_GENERATIONS_PER_HOUR: int = 3
+
     YOUTUBE_CHANNEL_ID: str = "UCj0OSnxkdYsuhMipfKqLKnw"
     DISCORD_INVITE_URL: str = "https://discord.gg/R4m7hkrdn"
     FACEBOOK_URL: str = ""
