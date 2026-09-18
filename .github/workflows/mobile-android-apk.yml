@@ -47,7 +47,7 @@ jobs:
         run: |
           chmod +x android/gradlew
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - name: Verify and name APK
         run: |
@@ -56,14 +56,14 @@ jobs:
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose "$APK_PATH"
-          cp "$APK_PATH" BeatHub-Pulse.apk
-          ls -lh BeatHub-Pulse.apk
+          cp "$APK_PATH" BeatHub-Pulse-arm64.apk
+          ls -lh BeatHub-Pulse-arm64.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BeatHub-Pulse-Android
-          path: mobile/BeatHub-Pulse.apk
+          name: BeatHub-Pulse-Android-arm64
+          path: mobile/BeatHub-Pulse-arm64.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -74,9 +74,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="beathub-android-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" BeatHub-Pulse.apk \
+          gh release create "$TAG" BeatHub-Pulse-arm64.apk \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "BeatHub Android Preview ${GITHUB_RUN_NUMBER}" \
-            --notes "Installable Android preview built from the validated BeatHub Pulse branch." \
+            --notes "Smaller ARM64 Android preview for modern Android phones." \
             --prerelease
