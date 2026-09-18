@@ -102,8 +102,10 @@ export type Track = {
   is_sold: boolean;
   artwork_url?: string | null;
   preview_url?: string | null;
+  track_url?: string | null;
   producer?: string | null;
   producer_slug?: string | null;
+  producer_verified?: boolean;
 };
 
 export type Order = {
@@ -117,3 +119,4 @@ export type Order = {
   created_at?: string | null;
   completed_at?: string | null;
 };
+

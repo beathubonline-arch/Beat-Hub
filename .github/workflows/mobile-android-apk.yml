@@ -1,0 +1,82 @@
+name: mobile-android-apk
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build installable Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.1'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Android project
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build release APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Verify and name APK
+        run: |
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK_PATH"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK_PATH"
+          cp "$APK_PATH" BeatHub-Pulse.apk
+          ls -lh BeatHub-Pulse.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BeatHub-Pulse-Android
+          path: mobile/BeatHub-Pulse.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish phone download
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        working-directory: mobile
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="beathub-android-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" BeatHub-Pulse.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "BeatHub Android Preview ${GITHUB_RUN_NUMBER}" \
+            --notes "Installable Android preview built from the validated BeatHub Pulse branch." \
+            --prerelease

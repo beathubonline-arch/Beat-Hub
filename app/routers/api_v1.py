@@ -63,7 +63,8 @@ def _absolute_url(path: str | None) -> str | None:
 def _track_payload(track):
     profile = getattr(track, "creator_profile", None)
     sales = getattr(getattr(track, "sales_model", None), "value", track.sales_model)
-    return {"id": track.id, "title": track.title, "slug": track.slug, "description": track.description, "genre": track.genre, "bpm": track.bpm, "price": float(track.price), "currency": normalize_currency(track.currency), "sales_model": str(sales), "is_sold": bool(track.is_sold), "is_published": bool(track.is_published), "artwork_url": _absolute_url(f"/track/{track.slug}/artwork"), "preview_url": _absolute_url(f"/track/{track.slug}/preview"), "track_url": _absolute_url(f"/track/{track.slug}"), "producer": getattr(profile,"stage_name",None), "producer_slug": getattr(profile,"slug",None)}
+    creator_user = getattr(profile, "user", None)
+    return {"id": track.id, "title": track.title, "slug": track.slug, "description": track.description, "genre": track.genre, "bpm": track.bpm, "price": float(track.price), "currency": normalize_currency(track.currency), "sales_model": str(sales), "is_sold": bool(track.is_sold), "is_published": bool(track.is_published), "artwork_url": _absolute_url(f"/track/{track.slug}/artwork"), "preview_url": _absolute_url(f"/track/{track.slug}/preview"), "track_url": _absolute_url(f"/track/{track.slug}"), "producer": getattr(profile,"stage_name",None), "producer_slug": getattr(profile,"slug",None), "producer_verified": bool(getattr(creator_user, "is_verified", False))}
 
 def _available(track):
     if not track or not track.is_published or Decimal(str(track.price)) <= 0: return False
