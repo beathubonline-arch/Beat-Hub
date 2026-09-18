@@ -13,6 +13,13 @@ depends_on = None
 
 
 def upgrade():
+    # The baseline creates tables from the current SQLAlchemy metadata on a
+    # brand-new database. Existing databases still need this migration, so
+    # create the table only when it is absent.
+    bind = op.get_bind()
+    if "growth_agent_runs" in set(sa.inspect(bind).get_table_names()):
+        return
+
     op.create_table(
         "growth_agent_runs",
         sa.Column("id", sa.String(length=64), primary_key=True),
@@ -29,4 +36,6 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_table("growth_agent_runs")
+    bind = op.get_bind()
+    if "growth_agent_runs" in set(sa.inspect(bind).get_table_names()):
+        op.drop_table("growth_agent_runs")
