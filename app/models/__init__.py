@@ -1,6 +1,6 @@
 from app.models.user import User, UserRole
 from app.models.profile import Profile
-from app.models.music import Track, Album, AlbumTrack, SalesModel, ProductCurrency
+from app.models.music import Track, Album, AlbumTrack, SalesModel, ProductCurrency, CreationMethod
 from app.models.order import Order, OrderStatus, License
 from app.models.payment import PaymentTransaction, PaymentStatus
 from app.models.paystack_settlement import PaystackSettlement, PaystackSettlementTransaction
@@ -19,7 +19,7 @@ from app.models.growth_runs import GrowthAgentRun
 from app.models.session import SessionService, SessionBooking
 
 __all__ = [
-    "User", "UserRole", "Profile", "Track", "Album", "AlbumTrack", "SalesModel", "ProductCurrency",
+    "User", "UserRole", "Profile", "Track", "Album", "AlbumTrack", "SalesModel", "ProductCurrency", "CreationMethod",
     "Order", "OrderStatus", "License", "PaymentTransaction", "PaymentStatus", "PaystackSettlement", "PaystackSettlementTransaction",
     "Notification", "PushSubscription", "CreatorLedgerEntry", "PlatformLedgerEntry", "WithdrawalRequest", "WithdrawalStatus",
     "AdminWithdrawal", "AdminWithdrawalStatus", "GrowthProspect", "GrowthTouch", "GrowthExperiment", "GrowthAgentRun", "SessionService", "SessionBooking",
