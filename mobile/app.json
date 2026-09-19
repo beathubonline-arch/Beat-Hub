@@ -8,14 +8,28 @@
     "orientation": "portrait",
     "scheme": "beathub",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/beathub-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#08070D"
-    },
     "plugins": [
       "expo-router",
-      ["expo-audio", { "microphonePermission": false, "recordAudioAndroid": false, "enableBackgroundRecording": false, "enableBackgroundPlayback": false }]
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/beathub-brand.png",
+          "imageWidth": 320,
+          "resizeMode": "contain",
+          "backgroundColor": "#08070D"
+        }
+      ],
+      "expo-asset",
+      "expo-sharing"
     ],
     "android": {
       "package": "com.beathub.app",
