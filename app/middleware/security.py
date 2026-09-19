@@ -23,6 +23,12 @@ EXEMPT_POST_PATHS = {
 RETURN_TO_COOKIE = "beathub_return_to"
 RETURN_TO_MAX_AGE = 10 * 60
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+NATIVE_JSON_AUTH_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/signup",
+    "/api/v1/auth/verify-email",
+    "/api/v1/auth/resend-verification",
+}
 
 
 def _origin(value: str | None) -> str:
@@ -69,6 +75,22 @@ def _request_cookie(headers: dict[str, str], name: str) -> str:
         return ""
     morsel = cookie.get(name)
     return unquote(morsel.value) if morsel and morsel.value else ""
+
+
+def _is_native_json_auth_request(path: str, headers: dict[str, str]) -> bool:
+    """Identify credential-free native authentication requests safely.
+
+    Native clients do not send browser Origin/Referer metadata. Requiring JSON
+    and the absence of cookies keeps this exception outside the browser session
+    CSRF threat model; cross-site browser JSON requests still require a CORS
+    preflight and cannot use an existing BeatHub session cookie here.
+    """
+    content_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    return (
+        path in NATIVE_JSON_AUTH_PATHS
+        and content_type == "application/json"
+        and not headers.get("cookie", "").strip()
+    )
 
 
 def _set_cookie_header(value: str, *, max_age: int, delete: bool = False) -> tuple[bytes, bytes]:
@@ -204,6 +226,7 @@ class SameOriginMiddleware:
             not settings.is_production
             or method not in STATE_CHANGING_METHODS
             or path in EXEMPT_POST_PATHS
+            or _is_native_json_auth_request(path, headers)
         ):
             await self.app(scope, receive, send)
             return
