@@ -796,6 +796,29 @@
           </div>
         </section>
 
+        {% if current_user %}
+        <section class="sessions-section">
+          <div class="sessions-section-heading"><div class="sessions-section-label">MY SESSIONS</div><h2>{% if current_user.role.value == 'creator' %}Booking requests{% else %}Your bookings{% endif %}</h2><p>Track each request from pending through confirmation and completion.</p></div>
+          <div class="session-services">
+          {% for booking in bookings %}
+            <article class="session-service">
+              <div><div class="service-label">{{ booking.status }}</div><h3>{{ booking.service.title }}</h3><p>{{ booking.preferred_at.strftime('%d %b %Y · %H:%M') }}</p>{% if booking.note %}<p style="margin-top:8px">{{ booking.note }}</p>{% endif %}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
+              {% if current_user.role.value == 'creator' and booking.status == 'pending' %}
+                <form method="post" action="/sessions/bookings/{{ booking.id }}/accept"><button class="session-primary" type="submit">Accept</button></form>
+                <form method="post" action="/sessions/bookings/{{ booking.id }}/decline"><button class="session-secondary" type="submit">Decline</button></form>
+              {% elif current_user.role.value == 'creator' and booking.status == 'accepted' %}
+                <form method="post" action="/sessions/bookings/{{ booking.id }}/complete"><button class="session-primary" type="submit">Mark Complete</button></form>
+              {% elif current_user.role.value != 'creator' and booking.status == 'pending' %}
+                <form method="post" action="/sessions/bookings/{{ booking.id }}/cancel"><button class="session-secondary" type="submit">Cancel Request</button></form>
+              {% endif %}
+              </div>
+            </article>
+          {% else %}<div class="sessions-overview" style="grid-column:1/-1"><p>No session bookings yet.</p></div>{% endfor %}
+          </div>
+        </section>
+        {% endif %}
+
         <!-- ========================================================
              HOW IT WORKS
         ========================================================= -->
