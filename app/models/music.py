@@ -18,6 +18,12 @@ class TrackContentType(str, Enum):
     TRACK = "track"
 
 
+class CreationMethod(str, Enum):
+    HUMAN = "human"
+    AI_ASSISTED = "ai_assisted"
+    AI_GENERATED_LICENSED = "ai_generated_licensed"
+
+
 class AlbumContentType(str, Enum):
     BEAT_COLLECTION = "beat_collection"
     ALBUM = "album"
@@ -75,6 +81,10 @@ class Track(Base):
     currency = Column(String(3), nullable=False, default=ProductCurrency.KES.value, server_default="KES", index=True)
     sales_model = Column(SAEnum(SalesModel, name="salesmodel", native_enum=False), nullable=False, default=SalesModel.NON_EXCLUSIVE)
     content_type = Column(String(20), nullable=False, default=TrackContentType.BEAT.value, server_default="beat", index=True)
+    creation_method = Column(String(40), nullable=False, default=CreationMethod.HUMAN.value, server_default="human", index=True)
+    rights_declaration_accepted = Column(Boolean, nullable=False, default=False, server_default="0")
+    rights_notes = Column(Text, nullable=True)
+    rights_declared_at = Column(DateTime, nullable=True)
     is_sold = Column(Boolean, nullable=False, default=False, server_default="0")
     is_published = Column(Boolean, nullable=False, default=True, server_default="1")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
