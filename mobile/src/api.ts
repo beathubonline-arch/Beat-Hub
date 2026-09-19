@@ -106,6 +106,8 @@ export type Track = {
   producer?: string | null;
   producer_slug?: string | null;
   producer_verified?: boolean;
+  creation_method?: 'human' | 'ai_assisted' | 'ai_generated_licensed';
+  rights_declared?: boolean;
 };
 
 export type Order = {
