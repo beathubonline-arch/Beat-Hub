@@ -3,6 +3,7 @@
     "name": "BeatHub",
     "slug": "beathub",
     "version": "1.0.0",
+    "owner": "mybeathub.com",
     "icon": "./assets/beathub-icon.png",
     "orientation": "portrait",
     "scheme": "beathub",
@@ -29,7 +30,10 @@
       "buildNumber": "1"
     },
     "extra": {
-      "apiBaseUrl": "https://mybeathub.com/api/v1"
+      "apiBaseUrl": "https://mybeathub.com/api/v1",
+      "eas": {
+        "projectId": "c6327433-4a1a-4d40-a5c0-815b445cddc4"
+      }
     }
   }
 }
