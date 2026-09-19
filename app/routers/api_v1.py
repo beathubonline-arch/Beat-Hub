@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.music import Track, SalesModel, ProductCurrency
+from app.models.music import CreationMethod, Track, SalesModel, ProductCurrency
 from app.models.order import Order, OrderStatus, License
 from app.models.payment import PaymentTransaction, PaymentStatus
 from app.models.profile import Profile
@@ -64,7 +64,7 @@ def _track_payload(track):
     profile = getattr(track, "creator_profile", None)
     sales = getattr(getattr(track, "sales_model", None), "value", track.sales_model)
     creator_user = getattr(profile, "user", None)
-    return {"id": track.id, "title": track.title, "slug": track.slug, "description": track.description, "genre": track.genre, "bpm": track.bpm, "price": float(track.price), "currency": normalize_currency(track.currency), "sales_model": str(sales), "is_sold": bool(track.is_sold), "is_published": bool(track.is_published), "artwork_url": _absolute_url(f"/track/{track.slug}/artwork"), "preview_url": _absolute_url(f"/track/{track.slug}/preview"), "track_url": _absolute_url(f"/track/{track.slug}"), "producer": getattr(profile,"stage_name",None), "producer_slug": getattr(profile,"slug",None), "producer_verified": bool(getattr(creator_user, "is_verified", False))}
+    return {"id": track.id, "title": track.title, "slug": track.slug, "description": track.description, "genre": track.genre, "bpm": track.bpm, "price": float(track.price), "currency": normalize_currency(track.currency), "sales_model": str(sales), "is_sold": bool(track.is_sold), "is_published": bool(track.is_published), "artwork_url": _absolute_url(f"/track/{track.slug}/artwork"), "preview_url": _absolute_url(f"/track/{track.slug}/preview"), "track_url": _absolute_url(f"/track/{track.slug}"), "producer": getattr(profile,"stage_name",None), "producer_slug": getattr(profile,"slug",None), "producer_verified": bool(getattr(creator_user, "is_verified", False)), "creation_method": str(getattr(track,"creation_method",CreationMethod.HUMAN.value) or CreationMethod.HUMAN.value), "rights_declared": bool(getattr(track,"rights_declaration_accepted",False))}
 
 def _available(track):
     if not track or not track.is_published or Decimal(str(track.price)) <= 0: return False
@@ -148,6 +148,9 @@ async def api_creator_track_upload(
     price: str = Form(...),
     currency: str = Form("KES"),
     sales_model: str = Form("non_exclusive"),
+    creation_method: str = Form("human"),
+    rights_declaration: str = Form("false"),
+    rights_notes: str = Form(""),
     audio_file: UploadFile = File(...),
     cover_file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
@@ -164,6 +167,12 @@ async def api_creator_track_upload(
     currency_raw=currency.strip().upper()
     if currency_raw not in {ProductCurrency.KES.value, ProductCurrency.USD.value}: raise HTTPException(400,"Currency must be KES or USD.")
     model=SalesModel.EXCLUSIVE if sales_model.strip().lower()=="exclusive" else SalesModel.NON_EXCLUSIVE
+    creation_method_value=creation_method.strip().lower()
+    if creation_method_value not in {method.value for method in CreationMethod}: raise HTTPException(400,"Choose a valid creation method.")
+    rights_accepted=rights_declaration.strip().lower() in {"1","true","yes","on"}
+    if not rights_accepted: raise HTTPException(400,"Confirm that you control the rights before publishing.")
+    rights_notes_value=rights_notes.strip()
+    if creation_method_value==CreationMethod.AI_GENERATED_LICENSED.value and not rights_notes_value: raise HTTPException(400,"Add the AI tool or licence details.")
     bpm_value=None
     if bpm.strip():
         if not bpm.strip().isdigit() or not 1 <= int(bpm.strip()) <= 999: raise HTTPException(400,"BPM must be between 1 and 999.")
@@ -181,7 +190,7 @@ async def api_creator_track_upload(
     slug_base=re.sub(r"[^a-zA-Z0-9]+","-",title.lower()).strip("-") or "track"
     slug=slug_base; n=2
     while db.query(Track).filter(Track.slug==slug).first(): slug=f"{slug_base}-{n}"; n+=1
-    track=Track(creator_profile_id=profile.id,title=title,slug=slug,description=description.strip() or None,genre=genre.strip() or None,bpm=bpm_value,tags=tags.strip() or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency_raw,sales_model=model,is_published=True)
+    track=Track(creator_profile_id=profile.id,title=title,slug=slug,description=description.strip() or None,genre=genre.strip() or None,bpm=bpm_value,tags=tags.strip() or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency_raw,sales_model=model,creation_method=creation_method_value,rights_declaration_accepted=True,rights_notes=rights_notes_value or None,rights_declared_at=datetime.utcnow(),is_published=True)
     db.add(track)
     try: db.commit(); db.refresh(track)
     except Exception: db.rollback(); raise HTTPException(500,"The track could not be saved.")
