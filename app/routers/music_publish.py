@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
@@ -6,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.requests import ClientDisconnect
 from app.database import get_db
-from app.models.music import SalesModel, Track, TrackContentType
+from app.models.music import CreationMethod, SalesModel, Track, TrackContentType
 from app.models.user import User
 from app.services.pricing import normalize_currency
 from app.services.storage import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, UploadValidationError, _r2_is_configured, r2_object_head, r2_presigned_upload, save_upload_to_r2
@@ -63,6 +64,14 @@ def _publish_data(request,user,db,data):
             if not title: raise UploadValidationError("Every upload needs a title.")
             description=str(item.get("description") or "").strip(); genre=str(item.get("genre") or "").strip(); tags=str(item.get("tags") or "").strip(); content_raw=str(item.get("content_type") or "").strip().lower()
             if content_raw not in {TrackContentType.BEAT.value,TrackContentType.TRACK.value}: raise UploadValidationError(f"Choose Beat or Track for '{title}'.")
+            creation_method=str(item.get("creation_method") or CreationMethod.HUMAN.value).strip().lower()
+            allowed_methods={method.value for method in CreationMethod}
+            if creation_method not in allowed_methods: raise UploadValidationError(f"Choose a valid creation method for '{title}'.")
+            declaration_raw=item.get("rights_declaration")
+            rights_accepted=declaration_raw is True or str(declaration_raw or "").strip().lower() in {"1","true","yes","on"}
+            if not rights_accepted: raise UploadValidationError(f"Confirm that you control the rights for '{title}' before publishing.")
+            rights_notes=str(item.get("rights_notes") or "").strip()
+            if creation_method==CreationMethod.AI_GENERATED_LICENSED.value and not rights_notes: raise UploadValidationError(f"Add the AI tool or licence details for '{title}'.")
             try: currency=normalize_currency(str(item.get("currency") or ""))
             except ValueError as exc: raise UploadValidationError(f"Currency for '{title}' is invalid: {exc}") from exc
             bpm_raw=str(item.get("bpm") or "").strip(); bpm_value=None
@@ -83,7 +92,7 @@ def _publish_data(request,user,db,data):
             if cover_path:
                 meta=r2_object_head(cover_path)
                 if int(meta.get("ContentLength") or 0)<=0: raise UploadValidationError("Cover art is empty.")
-            track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=description or None,genre=genre or None,bpm=bpm_value,tags=tags or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=SalesModel.EXCLUSIVE if model_raw=="exclusive" else SalesModel.NON_EXCLUSIVE,content_type=content_raw,is_published=True)
+            track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=description or None,genre=genre or None,bpm=bpm_value,tags=tags or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=SalesModel.EXCLUSIVE if model_raw=="exclusive" else SalesModel.NON_EXCLUSIVE,content_type=content_raw,creation_method=creation_method,rights_declaration_accepted=True,rights_notes=rights_notes or None,rights_declared_at=datetime.utcnow(),is_published=True)
             db.add(track); created.append(track)
         db.commit()
     except UploadValidationError as exc: db.rollback(); return _error(request,user,str(exc))
@@ -99,10 +108,10 @@ async def publish_tracks(request:Request,db:Session=Depends(get_db),user:User=De
         return _publish_data(request,user,db,data)
     try: form=await request.form()
     except ClientDisconnect: return _error(request,user,"The upload connection was interrupted before BeatHub received the form. Please retry.")
-    titles=_form_values(form,"titles"); descriptions=_form_values(form,"descriptions"); genres=_form_values(form,"genres"); bpms=_form_values(form,"bpms"); tags_list=_form_values(form,"tags_list"); prices=_form_values(form,"prices"); currencies=_form_values(form,"currencies"); sales_models=_form_values(form,"sales_models"); content_types=_form_values(form,"content_types")
+    titles=_form_values(form,"titles"); descriptions=_form_values(form,"descriptions"); genres=_form_values(form,"genres"); bpms=_form_values(form,"bpms"); tags_list=_form_values(form,"tags_list"); prices=_form_values(form,"prices"); currencies=_form_values(form,"currencies"); sales_models=_form_values(form,"sales_models"); content_types=_form_values(form,"content_types"); creation_methods=_form_values(form,"creation_methods"); rights_declarations=_form_values(form,"rights_declarations"); rights_notes_list=_form_values(form,"rights_notes_list")
     audio_refs=_direct_paths(form,"audio_r2_paths"); direct_covers=_direct_paths(form,"cover_r2_paths",preserve_empty=True)
     expected=len(audio_refs)
     if not expected: return _error(request,user,"Please select at least one audio file.")
-    fields={"titles":titles,"descriptions":descriptions,"genres":genres,"tags":tags_list,"prices":prices,"currencies":currencies,"sales_models":sales_models,"content_types":content_types}
+    fields={"titles":titles,"descriptions":descriptions,"genres":genres,"tags":tags_list,"prices":prices,"currencies":currencies,"sales_models":sales_models,"content_types":content_types,"creation_methods":creation_methods,"rights_declarations":rights_declarations,"rights_notes":rights_notes_list}
     if any(len(values)!=expected for values in fields.values()): return _error(request,user,"Upload form data is incomplete. Please refresh and try again.")
-    return _publish_data(request,user,db,{"items":[{"title":titles[i],"description":descriptions[i],"genre":genres[i],"bpm":bpms[i] if i<len(bpms) else "","tags":tags_list[i],"price":prices[i],"currency":currencies[i],"sales_model":sales_models[i],"content_type":content_types[i],"audio_r2_path":audio_refs[i],"cover_r2_path":direct_covers[i] if i<len(direct_covers) else ""} for i in range(expected)]})
+    return _publish_data(request,user,db,{"items":[{"title":titles[i],"description":descriptions[i],"genre":genres[i],"bpm":bpms[i] if i<len(bpms) else "","tags":tags_list[i],"price":prices[i],"currency":currencies[i],"sales_model":sales_models[i],"content_type":content_types[i],"creation_method":creation_methods[i],"rights_declaration":rights_declarations[i],"rights_notes":rights_notes_list[i],"audio_r2_path":audio_refs[i],"cover_r2_path":direct_covers[i] if i<len(direct_covers) else ""} for i in range(expected)]})
