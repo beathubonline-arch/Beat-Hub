@@ -39,6 +39,7 @@ from app.routers import (
     paystack_checkout,
     payout_admin,
     seo,
+    sessions,
     track_catalog,
 )
 from app.routers.growth_runner_v4 import router as growth_runner_router
@@ -250,6 +251,7 @@ app.include_router(payout_admin.router)
 app.include_router(merchandise.router)
 app.include_router(merchandise_account.router)
 app.include_router(notifications.router)
+app.include_router(sessions.router)
 app.include_router(growth_runner_router)
 
 
