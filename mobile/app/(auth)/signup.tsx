@@ -1,48 +1,13 @@
 import { useState } from 'react';
 import { Link, router } from 'expo-router';
-import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api';
-
-export default function Signup() {
-  const [stageName, setStageName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'buyer'|'creator'|'artist'>('buyer');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  async function submit() {
-    setError('');
-    if (!stageName.trim() || !email.trim() || password.length < 8) {
-      setError('Enter your name, a valid email, and a password of at least 8 characters.');
-      return;
-    }
-    setBusy(true);
-    try {
-      await api('/auth/signup', {
-        method: 'POST',
-        body: JSON.stringify({ stage_name: stageName.trim(), email: email.trim(), password, role }),
-      });
-      router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase() } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to create account.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return <SafeAreaView style={s.safe}><View style={s.container}>
-    <Text style={s.logo}>BeatHub</Text>
-    <Text style={s.heading}>Create your account</Text>
-    <Text style={s.sub}>One account for web and mobile. We'll send a verification code after signup.</Text>
-    <TextInput style={s.input} placeholder="Stage / display name" placeholderTextColor="#8d8798" value={stageName} onChangeText={setStageName}/>
-    <TextInput style={s.input} placeholder="Email" placeholderTextColor="#8d8798" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail}/>
-    <TextInput style={s.input} placeholder="Password (8+ characters)" placeholderTextColor="#8d8798" secureTextEntry value={password} onChangeText={setPassword}/>
-    <View style={s.roles}>{(['buyer','creator','artist'] as const).map(r => <Pressable key={r} onPress={() => setRole(r)} style={[s.role, role === r && s.roleActive]}><Text style={role === r ? s.roleTextActive : s.roleText}>{r}</Text></Pressable>)}</View>
-    {!!error && <Text style={s.error}>{error}</Text>}
-    <Pressable style={s.button} onPress={submit} disabled={busy}>{busy ? <ActivityIndicator/> : <Text style={s.buttonText}>Create account</Text>}</Pressable>
-    <Link href="/(auth)/login" style={s.link}>Already have an account? Sign in</Link>
-  </View></SafeAreaView>;
+import { palette, radius } from '../../src/theme';
+import { BrandLockup, Field, PrimaryButton, ScreenHeading } from '../../src/ui';
+const roles=[{value:'buyer',label:'BUYER',copy:'Find and license sound',icon:'♪'},{value:'creator',label:'CREATOR',copy:'Sell beats and grow',icon:'♫'},{value:'artist',label:'ARTIST',copy:'Build your next release',icon:'★'}] as const;
+export default function Signup(){
+ const [stageName,setStageName]=useState('');const [email,setEmail]=useState('');const [password,setPassword]=useState('');const [role,setRole]=useState<'buyer'|'creator'|'artist'>('buyer');const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+ async function submit(){setError('');if(!stageName.trim()||!email.trim()||password.length<8){setError('Enter your name, a valid email and a password of at least 8 characters.');return;}setBusy(true);try{await api('/auth/signup',{method:'POST',body:JSON.stringify({stage_name:stageName.trim(),email:email.trim(),password,role})});router.replace({pathname:'/(auth)/verify-email',params:{email:email.trim().toLowerCase()}});}catch(e){setError(e instanceof Error?e.message:'Unable to create account.');}finally{setBusy(false);}}
+ return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled"><BrandLockup compact/><View style={s.heading}><ScreenHeading kicker="JOIN THE CULTURE" title="Create your BeatHub." copy="One account across web and mobile. Choose how you want to start."/></View><View style={s.roles}>{roles.map(item=><Pressable key={item.value} onPress={()=>setRole(item.value)} style={[s.role,role===item.value&&s.roleActive]}><Text style={[s.roleIcon,role===item.value&&s.roleIconActive]}>{item.icon}</Text><Text style={[s.roleLabel,role===item.value&&s.roleLabelActive]}>{item.label}</Text><Text style={s.roleCopy}>{item.copy}</Text></Pressable>)}</View><View style={s.form}><Text style={s.label}>STAGE OR DISPLAY NAME</Text><Field placeholder="How people will know you" value={stageName} onChangeText={setStageName}/><Text style={s.label}>EMAIL ADDRESS</Text><Field placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail}/><Text style={s.label}>PASSWORD</Text><Field placeholder="8+ characters" secureTextEntry value={password} onChangeText={setPassword}/>{!!error&&<Text style={s.error}>{error}</Text>}<PrimaryButton label="CREATE MY ACCOUNT" icon="→" onPress={submit} busy={busy}/></View><Link href="/(auth)/login" style={s.link}>Already on BeatHub? Sign in</Link></ScrollView></SafeAreaView>;
 }
-
-const s = StyleSheet.create({safe:{flex:1,backgroundColor:'#0d0b12'},container:{flex:1,justifyContent:'center',padding:28},logo:{fontSize:34,fontWeight:'800',color:'#fff',marginBottom:30},heading:{fontSize:27,fontWeight:'700',color:'#fff'},sub:{color:'#aaa3b4',marginTop:8,marginBottom:22,lineHeight:21},input:{backgroundColor:'#181520',borderRadius:12,padding:16,color:'#fff',marginBottom:11},roles:{flexDirection:'row',gap:8,marginVertical:5},role:{flex:1,padding:12,borderRadius:10,backgroundColor:'#181520',alignItems:'center'},roleActive:{backgroundColor:'#fff'},roleText:{color:'#aaa3b4'},roleTextActive:{color:'#0d0b12',fontWeight:'700'},button:{backgroundColor:'#fff',padding:16,borderRadius:12,alignItems:'center',marginTop:12},buttonText:{color:'#0d0b12',fontWeight:'700'},link:{color:'#fff',textAlign:'center',marginTop:20},error:{color:'#ff8f8f',marginTop:8}});
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:palette.canvas},container:{padding:22,paddingBottom:40},heading:{marginTop:28},roles:{flexDirection:'row',gap:8,marginTop:22},role:{flex:1,minHeight:116,padding:12,borderRadius:radius.md,backgroundColor:palette.surface,borderWidth:1,borderColor:palette.border},roleActive:{borderColor:palette.gold,backgroundColor:'#201812'},roleIcon:{color:palette.muted2,fontSize:22,fontWeight:'900'},roleIconActive:{color:palette.gold},roleLabel:{color:palette.muted,fontSize:9,fontWeight:'900',letterSpacing:1,marginTop:10},roleLabelActive:{color:palette.goldBright},roleCopy:{color:palette.muted2,fontSize:10,lineHeight:14,marginTop:5},form:{gap:10,marginTop:22},label:{color:palette.muted,fontSize:9,fontWeight:'900',letterSpacing:1.3,marginTop:5},error:{color:palette.danger,lineHeight:19,fontSize:12},link:{color:palette.white,textAlign:'center',marginTop:22,fontWeight:'800'}});
