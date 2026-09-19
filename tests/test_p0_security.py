@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.middleware.security import SameOriginMiddleware, _origin
+from app.middleware.security import SameOriginMiddleware, _is_native_json_auth_request, _origin
 from app.routers.auth import (
     _reset_token_digest,
     _send_email_resend,
@@ -43,6 +43,20 @@ class P0SecurityTests(unittest.TestCase):
         with patch("app.middleware.security.settings", settings):
             allowed = {"https://beathub.example"}
         self.assertNotIn("", allowed)
+
+    def test_native_json_login_without_cookie_bypasses_browser_csrf_check(self):
+        self.assertTrue(
+            _is_native_json_auth_request(
+                "/api/v1/auth/login",
+                {"content-type": "application/json", "accept": "application/json"},
+            )
+        )
+
+    def test_native_auth_exception_rejects_cookie_or_non_json_requests(self):
+        path = "/api/v1/auth/login"
+        self.assertFalse(_is_native_json_auth_request(path, {"content-type": "application/x-www-form-urlencoded"}))
+        self.assertFalse(_is_native_json_auth_request(path, {"content-type": "application/json", "cookie": "session=browser"}))
+        self.assertFalse(_is_native_json_auth_request("/api/v1/payments/paystack/initialize", {"content-type": "application/json"}))
 
     def test_verification_delivery_failure_message_is_provider_agnostic(self):
         message = _verification_delivery_error_message()
