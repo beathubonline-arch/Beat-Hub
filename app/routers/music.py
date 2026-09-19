@@ -805,6 +805,20 @@ def track_detail(
     """
     track = _get_track_by_slug(slug, db)
 
+    # Surface only this producer's active Sessions services on the track page.
+    from app.models.session import SessionService
+    session_services = []
+    if getattr(track, "creator_profile_id", None):
+        session_services = (
+            db.query(SessionService)
+            .filter(
+                SessionService.creator_profile_id == track.creator_profile_id,
+                SessionService.is_active.is_(True),
+            )
+            .order_by(SessionService.created_at.desc())
+            .all()
+        )
+
     purchased = False
     if current_user:
         try:
@@ -839,6 +853,7 @@ def track_detail(
             "purchased": purchased,
             "preview_url": f"/track/{slug}/preview",
             "artwork_url": f"/track/{slug}/artwork",
+            "session_services": session_services,
         },
     )
 
