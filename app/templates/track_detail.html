@@ -65,7 +65,7 @@
               <a class="track-buy" href="/checkout/track/{{ track.slug }}">Buy Now</a>
             {% endif %}
           {% endif %}
-          {% if session_services %}<button id="track-session-toggle" class="track-session" type="button">Work With {{ track.creator_profile.stage_name }}</button>{% endif %}
+          {% if session_services %}<button id="track-session-toggle" class="track-session" type="button">Book a Session</button>{% else %}<a class="track-session" href="/sessions?producer={{ track.creator_profile.slug if track.creator_profile else '' }}&from_track={{ track.slug }}">Book a Session</a>{% endif %}
           <a class="track-back" href="/store/{{ track.creator_profile.slug if track.creator_profile else '' }}">← Back to Store</a>
         </div>
 
