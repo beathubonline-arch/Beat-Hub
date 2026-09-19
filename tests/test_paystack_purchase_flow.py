@@ -21,6 +21,9 @@ class FakeDB:
     def get(self, model, key):
         return self.order
 
+    def execute(self, statement, *args, **kwargs):
+        return FakeQuery(None)
+
     def rollback(self):
         return None
 
@@ -37,6 +40,12 @@ class FakeQuery:
 
     def one_or_none(self):
         return self.value
+
+    def scalar_one_or_none(self):
+        return self.value
+
+    def mappings(self):
+        return self
 
     def first(self):
         return self.value

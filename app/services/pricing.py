@@ -23,7 +23,7 @@ def format_money(amount, currency: str | None = "KES") -> str:
     currency = normalize_currency(currency)
     value = Decimal(str(amount or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if currency == "USD":
-        return f"${value:,.2f}"
+        return f"$ {value:,.2f}"
     return f"KSh {value:,.2f}"
 
 
