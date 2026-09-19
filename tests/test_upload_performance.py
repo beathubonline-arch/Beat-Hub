@@ -100,3 +100,11 @@ def test_upload_page_has_real_progress_and_duplicate_submit_protection():
     assert "let busy=false" in html
     assert "publish.disabled=true" in html
     assert "Upload failed" in html
+
+
+def test_uploader_keeps_audio_and_cover_file_types_separate():
+    html = Path("app/templates/upload_track.html").read_text(encoding="utf-8")
+    assert 'accept="audio/*,.mp3,.mpeg,.mpga,.wav,.wave,.m4a,.aac,.flac,.ogg,.oga,.opus,.aiff,.aif,.wma"' in html
+    assert 'data-field="cover" type="file" accept=".jpg,.jpeg,.png,.webp"' in html
+    assert "kind==='covers'&&file&&file.type&&file.type.startsWith('audio/')" in html
+    assert "Cover art must be an image." in html
