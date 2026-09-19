@@ -7,6 +7,8 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.session import SessionService, SessionBooking
+from app.models.profile import Profile
+from app.models.music import Track
 from app.models.user import User
 from app.services.notifications import create_notification
 from app.utils.deps import get_optional_user, get_role_name, require_user, require_creator
@@ -18,14 +20,26 @@ STATUSES={"pending","accepted","declined","cancelled","completed"}
 
 @router.get("/sessions")
 def sessions(request:Request, db:Session=Depends(get_db), current_user=Depends(get_optional_user)):
-    services=db.query(SessionService).options(joinedload(SessionService.creator_profile)).filter(SessionService.is_active.is_(True)).order_by(SessionService.created_at.desc()).all()
+    producer_slug=(request.query_params.get("producer") or "").strip()
+    from_track_slug=(request.query_params.get("from_track") or "").strip()
+    selected_producer=None
+    source_track=None
+    service_query=db.query(SessionService).options(joinedload(SessionService.creator_profile)).filter(SessionService.is_active.is_(True))
+    if producer_slug:
+        selected_producer=db.query(Profile).filter(Profile.slug==producer_slug).first()
+        if not selected_producer:
+            raise HTTPException(404,"Producer not found.")
+        service_query=service_query.filter(SessionService.creator_profile_id==selected_producer.id)
+        if from_track_slug:
+            source_track=db.query(Track).filter(Track.slug==from_track_slug,Track.creator_profile_id==selected_producer.id).first()
+    services=service_query.order_by(SessionService.created_at.desc()).all()
     bookings=[]
     if current_user:
         if get_role_name(current_user)=="creator" and current_user.profile:
             bookings=db.query(SessionBooking).options(joinedload(SessionBooking.service),joinedload(SessionBooking.client)).join(SessionService).filter(SessionService.creator_profile_id==current_user.profile.id).order_by(SessionBooking.created_at.desc()).all()
         else:
             bookings=db.query(SessionBooking).options(joinedload(SessionBooking.service)).filter(SessionBooking.client_user_id==current_user.id).order_by(SessionBooking.created_at.desc()).all()
-    return templates.TemplateResponse(request,"sessions.html",{"request":request,"current_user":current_user,"user":current_user,"current_year":datetime.utcnow().year,"services":services,"bookings":bookings})
+    return templates.TemplateResponse(request,"sessions.html",{"request":request,"current_user":current_user,"user":current_user,"current_year":datetime.utcnow().year,"services":services,"bookings":bookings,"selected_producer":selected_producer,"source_track":source_track})
 
 @router.post("/sessions/services")
 def create_service(title:str=Form(...), service_type:str=Form(...), description:str=Form(""), price:str=Form(...), duration_minutes:int=Form(60), location_mode:str=Form("remote"), db:Session=Depends(get_db), user:User=Depends(require_creator)):
