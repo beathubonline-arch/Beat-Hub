@@ -19,8 +19,8 @@
   .track-meta{display:flex;flex-wrap:wrap;gap:8px;margin:15px 0}.track-pill{padding:7px 10px;border:1px solid rgba(255,255,255,.08);border-radius:999px;color:#aaa;font-size:10px;background:rgba(255,255,255,.02)}
   .track-price{margin-top:25px;padding:18px;border:1px solid rgba(212,175,55,.18);border-radius:14px;background:rgba(212,175,55,.05)}
   .track-price-label{color:#777;font-size:11px;margin-bottom:5px}.track-price-value{color:#f0d878;font-size:28px;font-weight:900}
-  .track-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.track-buy,.track-back{display:inline-flex;align-items:center;justify-content:center;border-radius:11px;padding:13px 18px;font-size:12px;font-weight:900;text-decoration:none}.track-buy{background:linear-gradient(135deg,#f0d878,#c39b2c);color:#080808}.track-back{border:1px solid rgba(255,255,255,.1);color:#ddd;background:rgba(255,255,255,.02)}
-  .preview-label{color:#666;font-size:11px;margin-top:14px}
+  .track-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.track-buy,.track-back{display:inline-flex;align-items:center;justify-content:center;border-radius:11px;padding:13px 18px;font-size:12px;font-weight:900;text-decoration:none}.track-buy{background:linear-gradient(135deg,#f0d878,#c39b2c);color:#080808}.track-session{display:inline-flex;align-items:center;justify-content:center;border-radius:11px;padding:13px 18px;font-size:12px;font-weight:900;text-decoration:none;border:1px solid #d4af37;color:#f0d878;background:rgba(212,175,55,.07);cursor:pointer}.track-back{border:1px solid rgba(255,255,255,.1);color:#ddd;background:rgba(255,255,255,.02)}
+  .preview-label{color:#666;font-size:11px;margin-top:14px}.session-drawer{margin-top:18px;padding:18px;border:1px solid rgba(212,175,55,.18);border-radius:14px;background:#0d0a10}.session-drawer[hidden]{display:none}.session-drawer h3{margin:0 0 5px;font-size:18px}.session-drawer>p{color:#888;font-size:12px;margin:0 0 14px}.session-option{padding:14px 0;border-top:1px solid rgba(255,255,255,.07)}.session-option-head{display:flex;justify-content:space-between;gap:15px}.session-option-price{color:#f0d878;font-weight:900}.session-option p{color:#777;font-size:11px;margin:5px 0 10px}.session-book-form{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.session-book-form input{min-width:0;border:1px solid rgba(255,255,255,.1);background:#08070a;color:#eee;border-radius:9px;padding:10px}.session-book-form button{border:0;border-radius:9px;background:#d4af37;color:#080808;font-weight:900;padding:10px 13px;cursor:pointer}@media(max-width:650px){.session-book-form{grid-template-columns:1fr}}
   @media(max-width:800px){.track-panel{grid-template-columns:1fr;padding:20px}.track-page{padding:22px 0 50px}}
 </style>
 
@@ -65,9 +65,16 @@
               <a class="track-buy" href="/checkout/track/{{ track.slug }}">Buy Now</a>
             {% endif %}
           {% endif %}
+          {% if session_services %}<button id="track-session-toggle" class="track-session" type="button">Work With {{ track.creator_profile.stage_name }}</button>{% endif %}
           <a class="track-back" href="/store/{{ track.creator_profile.slug if track.creator_profile else '' }}">← Back to Store</a>
         </div>
 
+        {% if session_services %}
+        <div id="track-session-drawer" class="session-drawer" hidden>
+          <h3>Work with {{ track.creator_profile.stage_name }}</h3><p>Like this sound? Request a creative session directly with this producer. Your request will mention {{ track.title }}.</p>
+          {% for service in session_services %}<div class="session-option"><div class="session-option-head"><strong>{{ service.title }}</strong><span class="session-option-price">KSh {{ '%.2f'|format(service.price) }}</span></div><p>{{ service.service_type|replace('_',' ')|title }} · {{ service.duration_minutes }} min · {{ service.location_mode|replace('_',' ')|title }}</p>
+          {% if current_user %}<form class="session-book-form" method="post" action="/sessions/{{ service.id }}/book"><input type="datetime-local" name="preferred_at" required><input type="text" name="note" maxlength="2000" value="I found you through {{ track.title }}." aria-label="Project note"><button type="submit">Request Session</button></form>{% else %}<a class="track-session" href="/login?next=/track/{{ track.slug }}">Sign in to request</a>{% endif %}</div>{% endfor %}
+        </div>{% endif %}
         <div class="preview-label">Preview the track before purchasing. Starting playback here does not require an account.</div>
       </div>
     </div>
@@ -81,6 +88,8 @@
   const player=document.getElementById('track-preview-player');
   if(!button||!player)return;
   const url={{ preview_url|tojson }};
+  const sessionToggle=document.getElementById('track-session-toggle'),sessionDrawer=document.getElementById('track-session-drawer');
+  if(sessionToggle&&sessionDrawer){sessionToggle.addEventListener('click',function(){sessionDrawer.hidden=!sessionDrawer.hidden;if(!sessionDrawer.hidden)sessionDrawer.scrollIntoView({behavior:'smooth',block:'nearest'});});}
   button.addEventListener('click',function(){
     if(!url)return;
     if(!player.paused){player.pause();button.textContent='▶';button.classList.remove('playing');return;}
