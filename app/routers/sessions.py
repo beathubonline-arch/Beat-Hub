@@ -19,8 +19,9 @@ TYPES={"recording","mix_master","production","songwriting"}
 STATUSES={"pending","accepted","declined","cancelled","completed"}
 
 @router.get("/sessions")
-def sessions(request:Request, db:Session=Depends(get_db), current_user=Depends(get_optional_user)):
-    producer_slug=(request.query_params.get("producer") or "").strip()
+@router.get("/sessions/producer/{producer_slug}")
+def sessions(request:Request, producer_slug:str="", db:Session=Depends(get_db), current_user=Depends(get_optional_user)):
+    producer_slug=(producer_slug or request.query_params.get("producer") or "").strip()
     from_track_slug=(request.query_params.get("from_track") or "").strip()
     selected_producer=None
     source_track=None
@@ -73,8 +74,9 @@ def book(service_id:str, preferred_at:str=Form(...), note:str=Form(""), db:Sessi
     if duplicate: raise HTTPException(409,"This booking request already exists.")
     booking=SessionBooking(service_id=service.id,client_user_id=user.id,preferred_at=when,note=note.strip()[:2000] or None)
     db.add(booking); db.commit(); db.refresh(booking)
-    create_notification(service.creator_profile.user_id,f"session-booking:{booking.id}","session","New session request",f"{user.username or user.email} requested {service.title}.","/sessions")
-    return RedirectResponse("/sessions?success="+quote("Booking request sent to the creator."),303)
+    create_notification(service.creator_profile.user_id,f"session-booking:{booking.id}","session","New session request",f"{user.username or user.email} requested {service.title}.",f"/sessions/producer/{service.creator_profile.slug}")
+    destination=f"/sessions/producer/{service.creator_profile.slug}?success="+quote("Booking request sent to the creator.")
+    return RedirectResponse(destination,303)
 
 @router.post("/sessions/bookings/{booking_id}/{action}")
 def booking_action(booking_id:str, action:str, db:Session=Depends(get_db), user:User=Depends(require_user)):
