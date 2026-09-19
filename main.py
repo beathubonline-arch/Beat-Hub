@@ -8,7 +8,7 @@ from pathlib import Path
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, quote
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -219,6 +219,23 @@ app.add_middleware(HomepageMotionMiddleware)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.exception_handler(HTTPException)
+async def browser_auth_error(request: Request, exc: HTTPException):
+    """Keep browser navigation on BeatHub pages instead of exposing raw JSON auth errors."""
+    accept = request.headers.get("accept", "").lower()
+    is_browser = "text/html" in accept
+    protected_page = request.url.path.startswith(("/dashboard", "/artist/studio", "/notifications"))
+    if exc.status_code == 401 and is_browser and protected_page:
+        next_url = request.url.path
+        if request.url.query:
+            next_url += "?" + request.url.query
+        return RedirectResponse(
+            url="/login?next=" + quote(next_url, safe="") + "&error=" + quote("Please sign in to continue.", safe=""),
+            status_code=303,
+        )
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers or {})
 
 
 @app.get("/healthz", include_in_schema=False)
