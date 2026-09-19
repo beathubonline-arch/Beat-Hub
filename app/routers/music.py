@@ -892,19 +892,3 @@ def track_preview(
         fallback_media_type="audio/mpeg",
     )
 
-
-@router.get("/sessions")
-def sessions_page(
-    request: Request,
-    current_user=Depends(get_optional_user),
-):
-    return templates.TemplateResponse(
-        request,
-        "sessions.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "user": current_user,
-            "current_year": 2026,
-        },
-    )
