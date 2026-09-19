@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import UploadFile
 from app.config import settings
 
-ALLOWED_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac"}
+ALLOWED_AUDIO_EXT = {".mp3", ".mpeg", ".mpga", ".wav", ".wave", ".m4a", ".aac", ".flac", ".ogg", ".oga", ".opus", ".aiff", ".aif", ".wma"}
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 class UploadValidationError(Exception):
@@ -176,14 +176,22 @@ def _content_matches_extension(header: bytes, ext: str) -> bool:
     if not header:
         return False
 
-    if ext == ".wav":
+    if ext in {".wav", ".wave"}:
         return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE"
     if ext == ".flac":
         return header.startswith(b"fLaC")
-    if ext == ".mp3":
+    if ext in {".mp3", ".mpeg", ".mpga"}:
         return header.startswith(b"ID3") or (
             len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0
         )
+    if ext == ".aac":
+        return len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xF6) == 0xF0
+    if ext in {".ogg", ".oga", ".opus"}:
+        return header.startswith(b"OggS")
+    if ext in {".aiff", ".aif"}:
+        return len(header) >= 12 and header[:4] == b"FORM" and header[8:12] in {b"AIFF", b"AIFC"}
+    if ext == ".wma":
+        return header.startswith(bytes.fromhex("3026b2758e66cf11a6d900aa0062ce6c"))
     if ext == ".m4a":
         return len(header) >= 12 and header[4:8] == b"ftyp"
     if ext in {".jpg", ".jpeg"}:
@@ -261,7 +269,10 @@ async def save_upload_to_r2(file: UploadFile, subfolder: str, allowed_extensions
         raise RuntimeError("R2 bucket is not configured.")
     key = f"{subfolder.strip('/')}/{uuid.uuid4().hex}{ext}"
     content_type = {
-        ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
+        ".mp3": "audio/mpeg", ".mpeg": "audio/mpeg", ".mpga": "audio/mpeg",
+        ".wav": "audio/wav", ".wave": "audio/wav", ".m4a": "audio/mp4", ".aac": "audio/aac",
+        ".flac": "audio/flac", ".ogg": "audio/ogg", ".oga": "audio/ogg", ".opus": "audio/ogg",
+        ".aiff": "audio/aiff", ".aif": "audio/aiff", ".wma": "audio/x-ms-wma",
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
     }.get(ext, "application/octet-stream")
     try:
