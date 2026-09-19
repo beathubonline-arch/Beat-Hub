@@ -65,7 +65,7 @@
               <a class="track-buy" href="/checkout/track/{{ track.slug }}">Buy Now</a>
             {% endif %}
           {% endif %}
-          <a class="track-session" href="/sessions?producer={{ track.creator_profile.slug if track.creator_profile else '' }}&from_track={{ track.slug }}">Book a Session</a>
+          <a class="track-session" href="/sessions/producer/{{ track.creator_profile.slug if track.creator_profile else '' }}?from_track={{ track.slug }}">Book a Session</a>
           <a class="track-back" href="/store/{{ track.creator_profile.slug if track.creator_profile else '' }}">← Back to Store</a>
         </div>
 
