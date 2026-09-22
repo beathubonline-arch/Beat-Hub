@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.music import Track
 from app.models.release_campaign import ReleaseCampaign
 from app.models.user import User
-from app.services.release_kit import build_release_kit
+from app.services.release_kit import build_release_kit\nfrom app.services.track_intelligence import analyse_track, campaign_angle
 from app.utils.deps import require_creator
 
 
@@ -50,7 +50,7 @@ def _decode(campaign: ReleaseCampaign | None):
         "rollout": json.loads(campaign.rollout_json),
         "promo_copy": json.loads(campaign.promo_copy_json),
         "checklist": json.loads(campaign.checklist_json),
-        "created_at": campaign.created_at,
+        "created_at": campaign.created_at,\n        "track_intelligence": json.loads(campaign.track_intelligence_json) if campaign.track_intelligence_json else {},
     }
 
 
@@ -88,7 +88,7 @@ def create_campaign(
     clean_goal = " ".join((goal or "").split())[:120]
     clean_audience = " ".join((audience or "").split())[:255]
     clean_date = " ".join((release_date or "").split())[:40]
-    kit = build_release_kit(track, goal=clean_goal, audience=clean_audience, release_date=clean_date)
+    intelligence = analyse_track(track)\n    intelligence["campaign_angle"] = campaign_angle(intelligence)\n    kit = build_release_kit(track, goal=clean_goal, audience=clean_audience, release_date=clean_date, intelligence=intelligence)
     item = ReleaseCampaign(
         creator_profile_id=user.profile.id,
         track_id=track.id,
@@ -101,7 +101,7 @@ def create_campaign(
         video_ideas_json=json.dumps(kit["video_ideas"]),
         rollout_json=json.dumps(kit["rollout"]),
         promo_copy_json=json.dumps(kit["promo_copy"]),
-        checklist_json=json.dumps(kit["checklist"]),
+        checklist_json=json.dumps(kit["checklist"]),\n        track_intelligence_json=json.dumps(intelligence),
     )
     db.add(item)
     db.commit()
