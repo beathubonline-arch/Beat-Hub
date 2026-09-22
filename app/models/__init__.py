@@ -17,10 +17,11 @@ from app.models.ledger import (
 from app.models.growth import GrowthProspect, GrowthTouch, GrowthExperiment
 from app.models.growth_runs import GrowthAgentRun
 from app.models.session import SessionService, SessionBooking
+from app.models.release_campaign import ReleaseCampaign
 
 __all__ = [
     "User", "UserRole", "Profile", "Track", "Album", "AlbumTrack", "SalesModel", "ProductCurrency",
     "Order", "OrderStatus", "License", "PaymentTransaction", "PaymentStatus", "PaystackSettlement", "PaystackSettlementTransaction",
     "Notification", "PushSubscription", "CreatorLedgerEntry", "PlatformLedgerEntry", "WithdrawalRequest", "WithdrawalStatus",
-    "AdminWithdrawal", "AdminWithdrawalStatus", "GrowthProspect", "GrowthTouch", "GrowthExperiment", "GrowthAgentRun", "SessionService", "SessionBooking",
+    "AdminWithdrawal", "AdminWithdrawalStatus", "GrowthProspect", "GrowthTouch", "GrowthExperiment", "GrowthAgentRun", "SessionService", "SessionBooking", "ReleaseCampaign",
 ]
