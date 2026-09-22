@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}AI Career Agent — BeatHub{% endblock %}
+{% block content %}
+<div class="career">
+<style>
+.career{max-width:1180px;margin:auto;padding:24px 0 70px;color:#f5f5f5}.hero,.card{background:#101010;border:1px solid #292929;border-radius:22px;padding:24px}.hero{background:radial-gradient(circle at 85% 15%,rgba(245,200,75,.18),transparent 40%),#101010;margin-bottom:16px}.hero h1{font-size:clamp(30px,5vw,50px);margin:0 0 8px}.muted{color:#aaa;line-height:1.6}.grid{display:grid;grid-template-columns:360px 1fr;gap:16px}.field{display:grid;gap:6px;margin:13px 0}.field label{font-size:12px;font-weight:850;text-transform:uppercase;color:#bbb}.field input,.field select{background:#090909;color:#fff;border:1px solid #383838;border-radius:11px;padding:12px;font:inherit}.btn{display:inline-flex;border:1px solid #444;border-radius:11px;padding:11px 15px;color:#fff;text-decoration:none;background:#171717;font-weight:850;cursor:pointer}.primary{background:#f5c84b;color:#111;border-color:#f5c84b}.section{border-top:1px solid #292929;padding-top:18px;margin-top:20px}.section h3{margin:0 0 10px}.item{background:#0a0a0a;border:1px solid #272727;border-radius:13px;padding:13px;margin:8px 0;line-height:1.5}.history a{display:block;color:#ffe58a;text-decoration:none;padding:8px 0}.back{color:#ffe58a;text-decoration:none;font-weight:800}.alert{padding:12px;border-radius:10px;margin:12px 0;background:#18200f;border:1px solid #536123}.error{background:#241111;border-color:#703434;color:#ffc0c0}@media(max-width:850px){.grid{grid-template-columns:1fr}}
+</style>
+<a class="back" href="/dashboard">← Creator dashboard</a>
+<section class="hero"><h1>AI Music Career Agent</h1><div class="muted">Turn one BeatHub track into a complete release campaign: positioning, hooks, promo concepts, captions, a 7-day rollout and launch checklist.</div></section>
+{% if request.query_params.get('error') %}<div class="alert error">{{ request.query_params.get('error') }}</div>{% endif %}
+{% if request.query_params.get('success') %}<div class="alert">{{ request.query_params.get('success') }}</div>{% endif %}
+<div class="grid">
+<aside class="card"><h2>Create Release Kit</h2>
+{% if tracks %}<form method="post" action="/dashboard/ai-career-agent/create">
+<div class="field"><label>Track</label><select name="track_id" required><option value="">Choose your track</option>{% for track in tracks %}<option value="{{ track.id }}">{{ track.title }}{% if track.genre %} — {{ track.genre }}{% endif %}</option>{% endfor %}</select></div>
+<div class="field"><label>Target audience</label><input name="audience" maxlength="255" placeholder="e.g. Kenyan Gen Z Afrobeats fans"></div>
+<div class="field"><label>Campaign goal</label><input name="goal" maxlength="120" placeholder="e.g. saves, shares and first 1,000 plays"></div>
+<div class="field"><label>Release date</label><input name="release_date" type="date"></div>
+<button class="btn primary">Create Release Campaign</button></form>
+{% else %}<p class="muted">Upload a track first, then come back to build its campaign.</p><a class="btn primary" href="/dashboard/upload">Upload music</a>{% endif %}
+<div class="section history"><h3>Saved campaigns</h3>{% for c in campaigns %}<a href="/dashboard/ai-career-agent?campaign={{ c.id }}">{{ c.track.title }} · {{ c.created_at.strftime('%d %b') }}</a>{% else %}<p class="muted">No campaigns yet.</p>{% endfor %}</div>
+<div class="section"><a class="btn" href="/dashboard/ai-cover-studio">Open AI Cover Studio</a></div>
+</aside>
+<main class="card">
+{% if campaign %}
+<h2>{{ campaign.track.title }} — Release Kit</h2><p class="muted">{{ campaign.positioning }}</p>
+<div class="section"><h3>5 hooks</h3>{% for x in campaign.hooks %}<div class="item">{{ x }}</div>{% endfor %}</div>
+<div class="section"><h3>Reels / TikTok concepts</h3>{% for x in campaign.video_ideas %}<div class="item">{{ x }}</div>{% endfor %}</div>
+<div class="section"><h3>Captions</h3>{% for x in campaign.captions %}<div class="item">{{ x }}</div>{% endfor %}</div>
+<div class="section"><h3>7-day rollout</h3>{% for x in campaign.rollout %}<div class="item"><strong>{{ x.day }}</strong> — {{ x.action }}</div>{% endfor %}</div>
+<div class="section"><h3>Promo copy</h3>{% for platform,copy in campaign.promo_copy.items() %}<div class="item"><strong>{{ platform|title }}</strong><br>{{ copy }}</div>{% endfor %}</div>
+<div class="section"><h3>Release checklist</h3>{% for x in campaign.checklist %}<div class="item">☐ {{ x }}</div>{% endfor %}</div>
+{% else %}<h2>Your release workspace</h2><p class="muted">Choose a track and create your first campaign. BeatHub will save it here so you can return throughout the release.</p>{% endif %}
+</main></div></div>
+{% endblock %}
