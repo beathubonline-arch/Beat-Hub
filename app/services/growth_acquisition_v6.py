@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import re
+import xml.etree.ElementTree as ET
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import httpx
@@ -196,6 +197,31 @@ def _parse_bing_results(markup: str, location: str) -> list[dict]:
     return results
 
 
+def _parse_bing_rss(markup: str, location: str) -> list[dict]:
+    """Parse Bing's RSS search output.
+
+    The RSS endpoint is intentionally preferred on server hosts where the
+    consumer HTML search pages return bot/interstitial markup with no b_algo
+    results. It is still public web search and feeds the same host allow-list
+    and human-approval gate as the HTML providers.
+    """
+    results, seen = [], set()
+    try:
+        root = ET.fromstring(markup or "")
+    except ET.ParseError:
+        return results
+    for node in root.findall(".//item"):
+        raw_url = (node.findtext("link") or "").strip()
+        title = node.findtext("title") or ""
+        snippet = node.findtext("description") or ""
+        item = _result_item(raw_url, title, snippet, location)
+        if not item or item["public_url"] in seen:
+            continue
+        seen.add(item["public_url"])
+        results.append(item)
+    return results
+
+
 def _parse_lite_results(markup: str, location: str) -> list[dict]:
     links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', markup or "", flags=re.I | re.S)
     results, seen = [], set()
@@ -210,8 +236,11 @@ def _parse_lite_results(markup: str, location: str) -> list[dict]:
 
 async def _search_query(client: httpx.AsyncClient, query: str, location: str) -> tuple[list[dict], str]:
     providers = (
-        ("ddg_html", "POST", DDG_URL, {"data": {"q": query}}, _parse_results),
+        # Bing RSS is substantially more reliable from cloud/server IPs than
+        # scraping the consumer HTML page and has a stable XML structure.
+        ("bing_rss", "GET", BING_URL, {"params": {"q": query, "format": "rss", "count": "20"}}, _parse_bing_rss),
         ("bing", "GET", BING_URL, {"params": {"q": query, "count": "20"}}, _parse_bing_results),
+        ("ddg_html", "POST", DDG_URL, {"data": {"q": query}}, _parse_results),
         ("ddg_lite", "GET", f"{DDG_LITE_URL}?q={quote_plus(query)}", {}, _parse_lite_results),
     )
     failures = []
