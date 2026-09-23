@@ -20,6 +20,8 @@ DDG_URL = "https://html.duckduckgo.com/html/"
 DDG_LITE_URL = "https://lite.duckduckgo.com/lite/"
 BING_URL = "https://www.bing.com/search"
 ROTATION_KE_URL = "https://www.rotation.africa/new-releases/this-month?country=ke"
+SAUTIKING_URL = "https://sautiking.com/"
+CITIMUZIK_URL = "https://www.citimuzik.com/category/new-audio"
 ALLOWED_HOSTS = (
     "instagram.com",
     "tiktok.com",
@@ -282,17 +284,76 @@ def _parse_rotation_ke(markup: str, location: str) -> list[dict]:
     return rows[:40]
 
 
+def _release_candidate(name: str, release: str, source_url: str, location: str) -> dict:
+    """Create a reviewable candidate even when search engines block profile resolution."""
+    source = source_url.split("?")[0].rstrip("/")
+    score, _ = _fit_score(f"{name} artist new music 2026", release, location)
+    return {
+        "name": name[:255],
+        "public_url": f"{source}#artist-{quote_plus(name.lower())}",
+        "platform": "web",
+        "prospect_type": "artist",
+        "location": location,
+        "fit_score": max(55, score),
+        "why_fit": f"Recent public music release: {name} — {release}.",
+        "recommended_angle": "Creator onboarding invitation based on recent public release activity.",
+        "snippet": f"Recent release: {release}",
+    }
+
+
+def _parse_headline_releases(markup: str, location: str, source_url: str) -> list[dict]:
+    """Parse simple Artist – Title release headlines from public music feeds."""
+    headings = re.findall(r"<h[1-4][^>]*>(.*?)</h[1-4]>", markup or "", flags=re.I | re.S)
+    rows, seen = [], set()
+    for raw in headings:
+        text = _strip_tags(raw)
+        if " – " in text:
+            artist, release = text.split(" – ", 1)
+        elif " - " in text:
+            artist, release = text.split(" - ", 1)
+        else:
+            continue
+        artist, release = artist.strip(), release.strip()
+        if not (2 <= len(artist) <= 100 and 1 <= len(release) <= 180):
+            continue
+        key = artist.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(_release_candidate(artist, release, source_url, location))
+    return rows
+
+
 async def _discover_release_feed(client: httpx.AsyncClient, location: str, limit: int) -> list[dict]:
     """Use fresh public release feeds to seed profile discovery."""
+    seeds = []
+    direct_candidates = []
     try:
         response = await client.get(ROTATION_KE_URL)
         response.raise_for_status()
         seeds = _parse_rotation_ke(response.text, location)
     except Exception as exc:
-        logger.info("[Growth Acquisition] release feed unavailable: %s", type(exc).__name__)
-        return []
+        logger.info("[Growth Acquisition] rotation feed unavailable: %s", type(exc).__name__)
+
+    # Independent public feeds give us candidates even when Bing/DDG block
+    # Render. These remain human-review-only until a contact route is verified.
+    for feed_url in (SAUTIKING_URL, CITIMUZIK_URL):
+        try:
+            response = await client.get(feed_url)
+            response.raise_for_status()
+            direct_candidates.extend(_parse_headline_releases(response.text, location, feed_url))
+        except Exception as exc:
+            logger.info("[Growth Acquisition] public feed unavailable url=%s error=%s", feed_url, type(exc).__name__)
 
     found, seen = [], set()
+    for item in direct_candidates:
+        if len(found) >= limit:
+            break
+        if item["public_url"] in seen:
+            continue
+        seen.add(item["public_url"])
+        found.append(item)
+    logger.info("[Growth Acquisition] direct release candidates=%s rotation_seeds=%s", len(direct_candidates), len(seeds))
     for seed in seeds:
         if len(found) >= limit:
             break
