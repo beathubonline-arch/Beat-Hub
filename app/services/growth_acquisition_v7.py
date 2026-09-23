@@ -11,7 +11,12 @@ from app.services.growth_contact_v7 import verify_public_contact
 
 async def verify_queue_contacts(db: Session, prospect_ids: list[str] | None = None) -> dict:
     query = db.query(GrowthProspect).filter(GrowthProspect.status.in_(["outreach_ready", "contact_research"]))
-    if prospect_ids:
+    # Never let an empty discovery batch broaden verification to every
+    # historical prospect. New web/release-feed candidates must pass this gate
+    # before they can remain outreach_ready.
+    if prospect_ids is not None:
+        if not prospect_ids:
+            return {"verified": 0, "contact_research": 0, "contacts": []}
         query = query.filter(GrowthProspect.id.in_(prospect_ids))
     prospects = query.all()
     verified = 0
