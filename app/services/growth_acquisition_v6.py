@@ -19,6 +19,7 @@ logger = logging.getLogger("beathub.growth_acquisition")
 DDG_URL = "https://html.duckduckgo.com/html/"
 DDG_LITE_URL = "https://lite.duckduckgo.com/lite/"
 BING_URL = "https://www.bing.com/search"
+ROTATION_KE_URL = "https://www.rotation.africa/new-releases/this-month?country=ke"
 ALLOWED_HOSTS = (
     "instagram.com",
     "tiktok.com",
@@ -259,6 +260,69 @@ async def _search_query(client: httpx.AsyncClient, query: str, location: str) ->
     return [], "none"
 
 
+def _parse_rotation_ke(markup: str, location: str) -> list[dict]:
+    """Extract recent Kenyan release names as discovery seeds.
+
+    Rotation is used only as a public release feed. We deliberately do not
+    treat the article/feed URL as a contact route; names are resolved to a
+    supported public creator profile by the existing search providers.
+    """
+    text = _strip_tags(markup)
+    # The page renders ranked releases as "#N Title Artist ... released YYYY-MM-DD".
+    pairs = re.findall(r"#\\d+\\s+(.{1,120}?)\\s+([A-Za-z0-9À-ž'’.&@ _-]{2,80})\\s+(?:KE flag|\\d+ charts?|released 20\\d{2}-)", text, flags=re.I)
+    rows, seen = [], set()
+    for title, artist in pairs:
+        artist = re.sub(r"\\s+", " ", artist).strip(" -–—")
+        title = re.sub(r"\\s+", " ", title).strip(" -–—")
+        key = artist.lower()
+        if not artist or key in seen:
+            continue
+        seen.add(key)
+        rows.append({"artist": artist[:120], "release": title[:160]})
+    return rows[:40]
+
+
+async def _discover_release_feed(client: httpx.AsyncClient, location: str, limit: int) -> list[dict]:
+    """Use fresh public release feeds to seed profile discovery."""
+    try:
+        response = await client.get(ROTATION_KE_URL)
+        response.raise_for_status()
+        seeds = _parse_rotation_ke(response.text, location)
+    except Exception as exc:
+        logger.info("[Growth Acquisition] release feed unavailable: %s", type(exc).__name__)
+        return []
+
+    found, seen = [], set()
+    for seed in seeds:
+        if len(found) >= limit:
+            break
+        artist = seed["artist"]
+        # Resolve the release name to a supported public profile; this keeps
+        # contact verification and the human approval gate unchanged.
+        queries = [
+            f'"{artist}" SoundCloud artist Kenya',
+            f'"{artist}" Instagram musician Kenya',
+            f'"{artist}" YouTube official artist Kenya',
+        ]
+        for query in queries:
+            rows, provider = await _search_query(client, query, location)
+            if not rows:
+                continue
+            for item in rows:
+                if item["public_url"] in seen:
+                    continue
+                seen.add(item["public_url"])
+                item["fit_score"] = min(100, max(int(item.get("fit_score") or 0), 65))
+                item["why_fit"] = f'Recent public release signal: {artist} — {seed["release"]}.'
+                item["recommended_angle"] = "Creator onboarding invitation based on a recent public release."
+                found.append(item)
+                logger.info("[Growth Acquisition] release_seed=%r provider=%s profile=%s", artist, provider, item["public_url"])
+                break
+            if len(found) >= limit or any(x.get("name") == item.get("name") for x in found[-1:]):
+                break
+    return found
+
+
 async def discover_public_prospects(location: str = "Kenya", limit: int = 10) -> list[dict]:
     """Discover public creator profiles without paid APIs or private-data scraping."""
     limit = max(1, min(int(limit or 10), 20))
@@ -278,6 +342,15 @@ async def discover_public_prospects(location: str = "Kenya", limit: int = 10) ->
     found: list[dict] = []
     seen: set[str] = set()
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=True, headers=headers) as client:
+        # Prefer fresh release activity over generic keyword search. This
+        # gives the agent a changing pool of active creators instead of a
+        # static bootstrap list.
+        feed_rows = await _discover_release_feed(client, location, limit * 2)
+        for item in feed_rows:
+            if item["public_url"] in seen:
+                continue
+            seen.add(item["public_url"])
+            found.append(item)
         for query in queries:
             if len(found) >= limit * 2:
                 break
