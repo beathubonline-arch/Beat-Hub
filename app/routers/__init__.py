@@ -5,6 +5,7 @@ from . import ai_career_agent
 from . import beat_catalog
 from . import dashboard
 from . import dashboard_analytics
+from . import content_experiments
 from . import marketplace
 from . import music_publish
 from . import pages
@@ -29,6 +30,7 @@ _api_v1_module.router.include_router(api_payments.router)
 dashboard.router.include_router(creator_sales_history.router)
 dashboard.router.include_router(ai_cover_studio.router)
 dashboard.router.include_router(ai_career_agent.router)
+dashboard.router.include_router(content_experiments.router)
 admin.router.include_router(admin_paystack_reconciliation.router)
 admin.router.include_router(admin_auth.router)
 
