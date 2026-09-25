@@ -54,7 +54,7 @@
                 </div>
               {% endif %}
             </div>
-            <div class="bh-license-footer"><div class="bh-owned-text">✓ Licensed to your BeatHub account</div>{% if license.track_id %}<a href="/account/download/{{ license.track_id }}" class="bh-download">↓&nbsp; Download Beat</a>{% endif %}</div>
+            <div class="bh-license-footer"><div class="bh-owned-text">✓ Licensed to your BeatHub account</div>{% if license.track_id %}<div style="display:flex;gap:9px;flex-wrap:wrap"><a href="/account/download/{{ license.track_id }}" class="bh-download">↓&nbsp; Download Beat</a><a href="/account/release-kit/{{ license.id }}" class="bh-download" style="background:transparent;color:var(--gold-light)">▣&nbsp; Download Release Kit</a></div>{% endif %}</div>
           </article>
         {% endfor %}
       </div>
