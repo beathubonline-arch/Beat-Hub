@@ -294,6 +294,8 @@ def _catalog_item(track: Track) -> dict:
         "title": title,
         "producer": _producer_name(track),
         "producer_store_url": _producer_store_url(track),
+        "session_url": (f"/sessions/producer/{track.creator_profile.slug}?from_track={track.slug}"
+                        if getattr(track, "creator_profile", None) and getattr(track.creator_profile, "slug", None) and getattr(track, "slug", None) else None),
         "price": _track_price(track),
         "currency": str(_model_value(track, "currency", default="KES") or "KES").upper(),
         "artwork_url": _track_artwork(track),
