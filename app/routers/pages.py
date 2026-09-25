@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import FileResponse, RedirectResponse
+from starlette.background import BackgroundTask
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.models.user import User, UserRole
 from app.models.profile import Profile
 from app.services.search import run_search
 from app.services.r2_download import r2_download_url
+from app.services.purchase_release_kit import ReleaseKitUnavailable, build_purchase_release_kit, remove_release_kit, safe_name
 from app.utils.deps import get_optional_user, require_user, get_role_name, require_creator
 from app.utils.text import unique_slug
 
@@ -239,6 +241,44 @@ def download_track(track_id: str, db: Session = Depends(get_db), current_user: U
     if not path:
         raise HTTPException(status_code=404, detail="The purchased audio file is currently unavailable.")
     return FileResponse(path=str(path), media_type=_media_content_type(path), filename=filename, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/account/release-kit/{license_id}")
+def download_release_kit(license_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_user)):
+    license_record = (
+        db.query(License)
+        .join(Order, License.order_id == Order.id)
+        .filter(
+            License.id == license_id,
+            License.buyer_id == current_user.id,
+            Order.buyer_id == current_user.id,
+            Order.status == OrderStatus.COMPLETED,
+        )
+        .first()
+    )
+    if license_record is None or license_record.order is None or license_record.track_id is None:
+        raise HTTPException(status_code=403, detail="This Release Kit is not available for your account.")
+    order = license_record.order
+    track = order.track
+    if track is None or order.track_id != license_record.track_id:
+        raise HTTPException(status_code=404, detail="The purchased track is unavailable.")
+    try:
+        archive_path = build_purchase_release_kit(
+            license_record=license_record,
+            order=order,
+            track=track,
+            buyer=current_user,
+        )
+    except ReleaseKitUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    filename = f"{safe_name(track.title)}_Release_Kit.zip"
+    return FileResponse(
+        path=str(archive_path),
+        media_type="application/zip",
+        filename=filename,
+        headers={"Cache-Control": "private, no-store"},
+        background=BackgroundTask(remove_release_kit, archive_path),
+    )
 
 
 @router.get("/account/orders")
