@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -74,3 +74,32 @@ class GrowthCampaignDay(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ContentExperimentVariant(Base):
+    """Creator-owned 3-hook × 2-visual short-form experiment variant."""
+    __tablename__ = "content_experiment_variants"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    experiment_group_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    creator_profile_id: Mapped[str] = mapped_column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    track_id: Mapped[str] = mapped_column(String(36), ForeignKey("tracks.id", ondelete="CASCADE"), nullable=False, index=True)
+    hook_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    hook_text: Mapped[str] = mapped_column(Text, nullable=False)
+    visual_treatment: Mapped[str] = mapped_column(String(80), nullable=False)
+    shot_direction: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[str] = mapped_column(String(30), nullable=False, default="all", server_default="all")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="planned", server_default="planned", index=True)
+    impressions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    avg_watch_time_seconds: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0, server_default="0")
+    saves: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    sends: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    profile_visits: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    registrations: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    purchases: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    track = relationship("Track", foreign_keys=[track_id])
+    __table_args__ = (
+        UniqueConstraint("experiment_group_id", "hook_number", "visual_treatment", name="uq_content_experiment_variant"),
+    )
