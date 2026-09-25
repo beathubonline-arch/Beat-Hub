@@ -1653,6 +1653,10 @@
 
               </div>
 
+              {% if item.session_url %}
+                <a class="view-button" style="margin-top:10px;background:transparent;color:var(--gold);border:1px solid var(--gold);" href="{{ item.session_url }}">Book a Session</a>
+              {% endif %}
+
             </div>
 
           </article>
