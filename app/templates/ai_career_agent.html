@@ -23,7 +23,7 @@
 </aside>
 <main class="card">
 {% if campaign %}
-<h2>{{ campaign.track.title }} — Release Kit</h2><p class="muted">{{ campaign.positioning }}</p>
+<h2>{{ campaign.track.title }} — Release Kit</h2>{% if campaign.track_intelligence %}<div class="item"><strong>Track Intelligence</strong><br>{{ campaign.track_intelligence.genre }}{% if campaign.track_intelligence.bpm %} · {{ campaign.track_intelligence.bpm }} BPM{% endif %}{% if campaign.track_intelligence.tempo != "unknown" %} · {{ campaign.track_intelligence.tempo }}{% endif %}{% if campaign.track_intelligence.energy != "unknown" %} · {{ campaign.track_intelligence.energy }} energy{% endif %}{% if campaign.track_intelligence.brightness %} · {{ campaign.track_intelligence.brightness }} tone{% endif %}</div>{% endif %}<p class="muted">{{ campaign.positioning }}</p>
 <div class="section"><h3>5 hooks</h3>{% for x in campaign.hooks %}<div class="item">{{ x }}</div>{% endfor %}</div>
 <div class="section"><h3>Reels / TikTok concepts</h3>{% for x in campaign.video_ideas %}<div class="item">{{ x }}</div>{% endfor %}</div>
 <div class="section"><h3>Captions</h3>{% for x in campaign.captions %}<div class="item">{{ x }}</div>{% endfor %}</div>
