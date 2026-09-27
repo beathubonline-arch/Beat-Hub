@@ -20,21 +20,24 @@ def age_days():
     return (date.today()-datetime.strptime(OBSERVED_ON,"%Y-%m-%d").date()).days
 
 def parse(text):
-    t=" ".join((text or "").lower().split()); out={}
-    # Common Kenyan conversational forms.
+    t=" ".join((text or "").lower().split())
+    out={}
     t=t.replace("gunias","gunia").replace("bags za","bags ")
     for loc in ["moiben","eldoret","kitale","turbo","kapsabet","bungoma","nakuru"]:
-        if loc in t: out["location"]=loc.title(); break
+        if loc in t:
+            out["location"]=loc.title()
+            break
     m=re.search(r"(\d+(?:\.\d+)?)\s*(?:bags?|gunia)",t) or re.search(r"(?:bags?|gunia)\s*(\d+(?:\.\d+)?)",t)
-    if m: out["bags"]=float(m.group(1))
+    if m:
+        out["bags"]=float(m.group(1))
     nums=[float(x.replace(",","")) for x in re.findall(r"\b([0-9][0-9,]{2,}(?:\.\d+)?)\b",t)]
     if nums:
         candidates=[n for n in nums if n>=100 and n!=out.get("bags")]
-        if candidates: out["offer"]=candidates[-1]
-    # Short follow-up answers such as "20" or "3400" are interpreted later
-    # from the one field still missing, rather than forcing the farmer to repeat context.
-    bare=re.fullmatch(r"(?:kes|ksh|sh)?\\s*([0-9][0-9,]*(?:\\.\\d+)?)",t)
-    if bare: out["_bare_number"]=float(bare.group(1).replace(",",""))
+        if candidates:
+            out["offer"]=candidates[-1]
+    bare=re.fullmatch(r"(?:kes|ksh|sh)?\s*([0-9][0-9,]*(?:\.\d+)?)",t)
+    if bare:
+        out["_bare_number"]=float(bare.group(1).replace(",",""))
     return out
 
 def reply_for(text, known=None):
@@ -42,28 +45,32 @@ def reply_for(text, known=None):
     incoming=parse(text)
     bare=incoming.pop("_bare_number",None)
     missing_before=[x for x in ("location","bags","offer") if x not in f]
-    if bare is not None and len(missing_before)==1:
-        incoming[missing_before[0]]=bare if missing_before[0]!="location" else incoming.get("location")
-    f.update({k:v for k,v in incoming.items() if v is not None})
+    if bare is not None and len(missing_before)==1 and missing_before[0]!="location":
+        incoming[missing_before[0]]=bare
+    f.update(incoming)
     missing=[x for x in ("location","bags","offer") if x not in f]
     if missing:
-        q={"location":"Uko eneo gani? Mfano Moiben, Eldoret au Kitale.",
-           "bags":"Una gunia ngapi za mahindi?",
-           "offer":"Buyer amekupea bei gani kwa gunia moja?"}
+        q={
+            "location":"Uko eneo gani? Mfano Moiben, Eldoret au Kitale.",
+            "bags":"Una gunia ngapi za mahindi?",
+            "offer":"Buyer amekupea bei gani kwa gunia moja?"
+        }
         return q[missing[0]]
     gross=f["bags"]*f["offer"]
     if age_days()>FRESH_DAYS:
-        return (f"🌽 Offer yako: KES {gross:,.0f} kwa {f['bags']:g} gunia.
-"
-                f"⚠️ Reference yangu iliyothibitishwa ni KES {PRICE_PER_90KG:,.0f}/90kg, tarehe {OBSERVED_ON}, kutoka {SOURCE}. "
-                "Bei hii ni ya zamani, kwa hivyo sitakushauri uuze kwa reference hiyo. Nahitaji bei ya sasa kuthibitishwa kwanza.")
+        return (
+            f"🌽 Offer yako: KES {gross:,.0f} kwa {f['bags']:g} gunia.\\n"
+            f"⚠️ Reference yangu iliyothibitishwa ni KES {PRICE_PER_90KG:,.0f}/90kg, tarehe {OBSERVED_ON}, kutoka {SOURCE}. "
+            "Bei hii ni ya zamani, kwa hivyo sitakushauri uuze kwa reference hiyo. Nahitaji bei ya sasa kuthibitishwa kwanza."
+        )
     ref=f["bags"]*PRICE_PER_90KG
     diff=ref-gross
-    return (f"🌽 Offer: KES {gross:,.0f}
-Reference: KES {ref:,.0f}
-Tofauti: KES {diff:+,.0f}
-"
-            f"Source: {SOURCE}, {OBSERVED_ON}. Hii si guaranteed buyer quote.")
+    return (
+        f"🌽 Offer: KES {gross:,.0f}\\n"
+        f"Reference: KES {ref:,.0f}\\n"
+        f"Tofauti: KES {diff:+,.0f}\\n"
+        f"Source: {SOURCE}, {OBSERVED_ON}. Hii si guaranteed buyer quote."
+    )
 
 
 LEGAL_STYLE = """<style>body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;line-height:1.6;color:#17351f}h1,h2{color:#176b35}small{color:#667}</style>"""
