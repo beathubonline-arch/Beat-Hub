@@ -20,20 +20,16 @@ def age_days():
     return (date.today()-datetime.strptime(OBSERVED_ON,"%Y-%m-%d").date()).days
 
 def parse(text):
-    t=" ".join((text or "").lower().split()); out={}
+    t=" ".join((text or "").lower().split()); out={}\n    # Common Kenyan conversational forms.\n    t=t.replace("gunias","gunia").replace("bags za","bags ")
     for loc in ["moiben","eldoret","kitale","turbo","kapsabet","bungoma","nakuru"]:
         if loc in t: out["location"]=loc.title(); break
     m=re.search(r"(\d+(?:\.\d+)?)\s*(?:bags?|gunia)",t) or re.search(r"(?:bags?|gunia)\s*(\d+(?:\.\d+)?)",t)
     if m: out["bags"]=float(m.group(1))
     nums=[float(x.replace(",","")) for x in re.findall(r"\b([0-9][0-9,]{2,}(?:\.\d+)?)\b",t)]
-    if nums:
-        candidates=[n for n in nums if n>=100 and n!=out.get("bags")]
-        if candidates: out["offer"]=candidates[-1]
+    if nums:\n        candidates=[n for n in nums if n>=100 and n!=out.get("bags")]\n        if candidates: out["offer"]=candidates[-1]\n    # Short follow-up answers such as "20" or "3400" are interpreted later\n    # from the one field still missing, rather than forcing the farmer to repeat context.\n    bare=re.fullmatch(r"(?:kes|ksh|sh)?\\s*([0-9][0-9,]*(?:\\.\\d+)?)",t)\n    if bare: out["_bare_number"]=float(bare.group(1).replace(",",""))
     return out
 
-def reply_for(text, known=None):
-    f=dict(known or {})
-    f.update(parse(text))
+def reply_for(text, known=None):\n    f=dict(known or {})\n    incoming=parse(text)\n    bare=incoming.pop("_bare_number",None)\n    missing_before=[x for x in ("location","bags","offer") if x not in f]\n    if bare is not None and len(missing_before)==1:\n        incoming[missing_before[0]]=bare if missing_before[0]!="location" else incoming.get("location")\n    f.update({k:v for k,v in incoming.items() if v is not None})
     missing=[x for x in ("location","bags","offer") if x not in f]
     if missing:
         q={"location":"Uko eneo gani? Mfano Moiben, Eldoret au Kitale.",
@@ -114,7 +110,7 @@ def webhook():
             state=json.loads(row[0]) if row else {}
         except (TypeError,ValueError,json.JSONDecodeError):
             state={}
-        state.update(parse(msg["text"]["body"]))
+        incoming=parse(msg["text"]["body"])\n        bare=incoming.pop("_bare_number",None)\n        missing_before=[x for x in ("location","bags","offer") if x not in state]\n        if bare is not None and len(missing_before)==1 and missing_before[0]!="location":\n            incoming[missing_before[0]]=bare\n        # Explicit new-sale/reset phrases prevent old deal details leaking into a new quote.\n        normalized=" ".join(msg["text"]["body"].lower().split())\n        if any(p in normalized for p in ("new sale","new deal","bei mpya","mauzo mapya","start over","anza upya")):\n            state={}\n            incoming=parse(msg["text"]["body"])\n            incoming.pop("_bare_number",None)\n        state.update(incoming)
         con.execute(
             "INSERT INTO conversations(phone,state) VALUES(?,?) "
             "ON CONFLICT(phone) DO UPDATE SET state=excluded.state",
