@@ -115,6 +115,17 @@ def build_purchase_release_kit(*, license_record, order, track, buyer) -> Path:
     completed_at = getattr(order, "completed_at", None) or getattr(license_record, "granted_at", None)
     completed_text = completed_at.isoformat() if completed_at else "Recorded by BeatHub"
     buyer_email = str(getattr(buyer, "email", "") or "")
+    rights = {
+        "commercial_use": bool(getattr(license_record, "commercial_use_allowed", True)),
+        "sampling": bool(getattr(license_record, "sampling_allowed", True)),
+        "remixing": bool(getattr(license_record, "remixing_allowed", True)),
+        "resale": bool(getattr(license_record, "resale_allowed", False)),
+        "ai_training": bool(getattr(license_record, "ai_training_allowed", False)),
+        "synthetic_voice_or_likeness": bool(getattr(license_record, "synthetic_likeness_allowed", False)),
+        "derivative_works": bool(getattr(license_record, "derivatives_allowed", True)),
+        "sublicensing": bool(getattr(license_record, "sublicensing_allowed", False)),
+    }
+    rights_text = "\n".join(f"- {name.replace('_', ' ').title()}: {'Allowed' if allowed else 'Not allowed'}" for name, allowed in rights.items())
 
     work_dir = Path(tempfile.mkdtemp(prefix="beathub-release-kit-"))
     archive_path = work_dir / f"{title}_Release_Kit.zip"
@@ -150,6 +161,9 @@ Order number: {order_number}
 Payment status: Completed
 Amount paid: {getattr(order, 'gross_amount', '')} {getattr(order, 'currency', 'KES')}
 Granted at: {completed_text}
+
+MACHINE-READABLE RIGHTS SNAPSHOT
+{rights_text}
 
 This certificate records the licence granted through the completed BeatHub order above.
 The rights, restrictions and permitted uses are governed by the licence shown at checkout and
@@ -192,6 +206,13 @@ before releasing the song. BeatHub does not submit this package to a distributor
                 "producer": producer,
                 "genre": getattr(track, "genre", "") or "",
                 "bpm": getattr(track, "bpm", None),
+                "mood": getattr(track, "mood", "") or "",
+                "energy": getattr(track, "energy", "") or "",
+                "instruments": getattr(track, "instruments", "") or "",
+                "vocal_type": getattr(track, "vocal_type", "") or "",
+                "intended_use": getattr(track, "intended_use", "") or "",
+                "similar_sound": getattr(track, "similar_sound", "") or "",
+                "region": getattr(track, "region", "") or "",
                 "beat_license": license_type,
                 "beathub_order_number": order_number,
                 "primary_artist": "",
@@ -201,10 +222,12 @@ before releasing the song. BeatHub does not submit this package to a distributor
                 "upc": "",
                 "explicit_content": "",
                 "copyright_holder": "",
+                "license_rights": rights,
             }
             archive.writestr("README.txt", readme)
             archive.writestr("02_Artwork/ARTWORK_GUIDE.txt", artwork)
             archive.writestr("03_Licence/BEATHUB_LICENCE_CERTIFICATE.txt", certificate)
+            archive.writestr("03_Licence/license_rights.json", json.dumps({"license_id": getattr(license_record, "id", ""), "order_number": order_number, "rights": rights}, indent=2))
             archive.writestr("04_Metadata/RELEASE_CREDITS.txt", credits)
             archive.writestr("04_Metadata/release_metadata.csv", _metadata_csv(track, producer))
             archive.writestr("04_Metadata/release_metadata.json", json.dumps(metadata_json, indent=2, ensure_ascii=False))

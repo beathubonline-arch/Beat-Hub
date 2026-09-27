@@ -39,12 +39,21 @@ def _ensure_fulfillment_and_ledger(db: Session, order: Order, track: Track | Non
     """
     existing_license = db.query(License).filter(License.order_id == order.id).first()
     if not existing_license:
+        rights = track if track is not None else None
         db.add(
             License(
                 order_id=order.id,
                 buyer_id=order.buyer_id,
                 track_id=order.track_id,
                 album_id=order.album_id,
+                commercial_use_allowed=getattr(rights, "commercial_use_allowed", True),
+                sampling_allowed=getattr(rights, "sampling_allowed", True),
+                remixing_allowed=getattr(rights, "remixing_allowed", True),
+                resale_allowed=getattr(rights, "resale_allowed", False),
+                ai_training_allowed=getattr(rights, "ai_training_allowed", False),
+                synthetic_likeness_allowed=getattr(rights, "synthetic_likeness_allowed", False),
+                derivatives_allowed=getattr(rights, "derivatives_allowed", True),
+                sublicensing_allowed=getattr(rights, "sublicensing_allowed", False),
             )
         )
 

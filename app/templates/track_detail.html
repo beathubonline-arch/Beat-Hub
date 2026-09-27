@@ -43,11 +43,14 @@
 
         <div class="track-meta">
           {% if track.bpm %}<span class="track-pill">{{ track.bpm }} BPM</span>{% endif %}
+          {% if track.mood %}<span class="track-pill">{{ track.mood }}</span>{% endif %}{% if track.energy %}<span class="track-pill">{{ track.energy|title }} energy</span>{% endif %}{% if track.region %}<span class="track-pill">{{ track.region }}</span>{% endif %}{% if track.vocal_type %}<span class="track-pill">{{ track.vocal_type }}</span>{% endif %}
           {% if track.sales_model %}<span class="track-pill">{{ track.sales_model.value|replace('_',' ')|title }}</span>{% endif %}
           {% if purchased %}<span class="track-pill">Purchased</span>{% endif %}
         </div>
 
         {% if track.description %}<p class="track-desc">{{ track.description }}</p>{% endif %}
+
+        <div style="margin:18px 0;padding:16px;border:1px solid rgba(212,175,55,.2);border-radius:12px;background:rgba(212,175,55,.04)"><strong style="color:#f0d878">Own it. License it. Track it.</strong><div class="track-meta" style="margin-top:10px">{% if track.commercial_use_allowed %}<span class="track-pill">Commercial use</span>{% endif %}{% if track.sampling_allowed %}<span class="track-pill">Sampling</span>{% endif %}{% if track.remixing_allowed %}<span class="track-pill">Remixing</span>{% endif %}{% if track.derivatives_allowed %}<span class="track-pill">Derivative works</span>{% endif %}{% if track.ai_training_allowed %}<span class="track-pill">AI training allowed</span>{% else %}<span class="track-pill">No AI training</span>{% endif %}{% if track.resale_allowed %}<span class="track-pill">Resale allowed</span>{% else %}<span class="track-pill">No resale</span>{% endif %}</div><div class="preview-label">Your completed purchase records these permissions in a permanent licence snapshot and Release Kit.</div></div>
 
         <div class="track-price">
           <div class="track-price-label">Price</div>
