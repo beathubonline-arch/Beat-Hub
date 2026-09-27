@@ -49,7 +49,39 @@ def reply_for(text):
     return (f"🌽 Offer: KES {gross:,.0f}\nReference: KES {ref:,.0f}\nTofauti: KES {diff:+,.0f}\n"
             f"Source: {SOURCE}, {OBSERVED_ON}. Hii si guaranteed buyer quote.")
 
-@app.get("/api/health")
+
+LEGAL_STYLE = """<style>body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;line-height:1.6;color:#17351f}h1,h2{color:#176b35}small{color:#667}</style>"""
+
+@app.get("/")
+def home():
+    return LEGAL_STYLE + """<h1>Mkulima AI</h1><p>Practical decision support for Kenyan farmers before they sell their harvest.</p><p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> · <a href="/data-deletion">Data Deletion</a></p>"""
+
+@app.get("/privacy")
+def privacy():
+    return LEGAL_STYLE + """<h1>Mkulima AI Privacy Policy</h1><small>Effective 27 September 2026</small>
+    <p>Mkulima AI processes information you send to the service, such as your WhatsApp phone number, message content, crop quantity, location information you choose to provide, and buyer offers, so it can respond to your request and operate the service.</p>
+    <h2>How we use information</h2><p>We use it to provide farmer decision support, maintain service reliability, prevent duplicate processing, and improve the service. We do not sell personal information.</p>
+    <h2>Service providers</h2><p>Messages may be processed through WhatsApp/Meta and infrastructure providers needed to deliver the service. Their own terms and privacy practices also apply.</p>
+    <h2>Market information</h2><p>Market references can become outdated and are shown with source/date context where available. They are decision-support information, not guaranteed buyer quotes.</p>
+    <h2>Retention and deletion</h2><p>We keep information only as reasonably necessary for the service, security, and legal obligations. You can request deletion using the instructions on our <a href="/data-deletion">Data Deletion page</a>.</p>
+    <h2>Contact</h2><p>Privacy questions: beathubonline@gmail.com</p>"""
+
+@app.get("/terms")
+def terms():
+    return LEGAL_STYLE + """<h1>Mkulima AI Terms of Service</h1><small>Effective 27 September 2026</small>
+    <p>By using Mkulima AI you agree to use the service lawfully and provide information you are entitled to share.</p>
+    <h2>Decision support</h2><p>Mkulima AI provides informational decision support for farmers. Market prices, comparisons and calculations are not guaranteed offers, financial advice, or promises that a buyer will transact at a stated price. Verify important information before making a sale.</p>
+    <h2>Availability</h2><p>The service may change, experience interruptions, or contain incomplete information. We aim to label stale reference data rather than present it as current.</p>
+    <h2>Acceptable use</h2><p>Do not misuse the service, interfere with its operation, impersonate others, or submit unlawful content.</p>
+    <h2>Contact</h2><p>Questions: beathubonline@gmail.com</p>"""
+
+@app.get("/data-deletion")
+def data_deletion():
+    return LEGAL_STYLE + """<h1>Mkulima AI — Data Deletion Instructions</h1>
+    <p>To request deletion of personal information associated with your use of Mkulima AI, email <strong>beathubonline@gmail.com</strong> with the subject <strong>Mkulima AI Data Deletion Request</strong>.</p>
+    <p>Include the WhatsApp phone number used with Mkulima AI so we can identify the relevant records. Do not send passwords, access tokens, PINs, or other secrets.</p>
+    <p>We will verify the request where necessary and delete or anonymize eligible records, subject to information we must retain for security, fraud prevention, or legal obligations.</p>"""
+\n@app.get("/api/health")
 def health():
     init_db()
     return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=OBSERVED_ON,reference_stale=age_days()>FRESH_DAYS)
