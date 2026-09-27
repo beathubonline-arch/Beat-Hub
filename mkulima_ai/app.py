@@ -193,7 +193,7 @@ def webhook():
         return jsonify(ok=True),200
     except Exception:
         app.logger.exception("webhook processing failed")
-        return jsonify(ok=False,error="processing_failed"),500def detect_language(text):
+        return jsonify(ok=False,error="processing_failed"),500\n\ndef detect_language(text):
     t=" "+(" ".join((text or "").lower().split()))+" "
     sw=[" niko "," nina "," gunia "," bei "," karibu "," nifanye "," aje "," eneo "," mahindi "," amekupea "," naweza "," nataka "]
     en=[" i "," have "," bags "," buyer "," price "," near "," what "," should "," sell "," maize "," offer "," from "]
