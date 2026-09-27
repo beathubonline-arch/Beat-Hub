@@ -1,4 +1,4 @@
-import os, re, sqlite3
+import os, re, sqlite3, json
 from datetime import date, datetime
 from flask import Flask, request, jsonify
 from integrations import send_whatsapp_text
@@ -31,8 +31,9 @@ def parse(text):
         if candidates: out["offer"]=candidates[-1]
     return out
 
-def reply_for(text):
-    f=parse(text)
+def reply_for(text, known=None):
+    f=dict(known or {})
+    f.update(parse(text))
     missing=[x for x in ("location","bags","offer") if x not in f]
     if missing:
         q={"location":"Uko eneo gani? Mfano Moiben, Eldoret au Kitale.",
@@ -104,7 +105,24 @@ def webhook():
         if msg.get("type")!="text":
             send_whatsapp_text(phone,"Kwa sasa tuma text kuhusu mahindi yako. Voice itaongezwa baada ya text test kupita.")
             return jsonify(ok=True),200
-        response=reply_for(msg["text"]["body"])
+
+        # Remember facts already supplied by this farmer so follow-up questions
+        # ask only for information we genuinely still need.
+        con=sqlite3.connect(DB)
+        row=con.execute("SELECT state FROM conversations WHERE phone=?",(phone,)).fetchone()
+        try:
+            state=json.loads(row[0]) if row else {}
+        except (TypeError,ValueError,json.JSONDecodeError):
+            state={}
+        state.update(parse(msg["text"]["body"]))
+        con.execute(
+            "INSERT INTO conversations(phone,state) VALUES(?,?) "
+            "ON CONFLICT(phone) DO UPDATE SET state=excluded.state",
+            (phone,json.dumps(state))
+        )
+        con.commit(); con.close()
+
+        response=reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
         return jsonify(ok=True),200
     except Exception:
