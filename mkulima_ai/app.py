@@ -19,56 +19,107 @@ def init_db():
 def age_days():
     return (date.today()-datetime.strptime(OBSERVED_ON,"%Y-%m-%d").date()).days
 
+def clean_location(text):
+    raw=" ".join((text or "").strip().split())
+    t=raw.lower()
+    # Strip common conversational prefixes while preserving precise place/landmark text.
+    prefixes=[
+        r"^(?:niko|nipo|iko|ni|location(?: yangu)? ni|eneo(?: langu)? ni|from|i am in|i'm in|near|karibu na|around)\s+",
+    ]
+    for p in prefixes:
+        raw=re.sub(p,"",raw,flags=re.I).strip(" ,.-")
+    if not raw or re.fullmatch(r"[0-9,. ]+",raw):
+        return None
+    # Avoid treating obvious sale sentences as locations.
+    if re.search(r"\b(?:gunia|bags?|buyer|broker|bei|offer|kes|ksh|per bag)\b",raw,re.I):
+        return None
+    return raw[:120].title()
+
 def parse(text):
     t=" ".join((text or "").lower().split())
     out={}
-    t=t.replace("gunias","gunia").replace("bags za","bags ")
-    for loc in ["moiben","eldoret","kitale","turbo","kapsabet","bungoma","nakuru"]:
-        if loc in t:
-            out["location"]=loc.title()
-            break
-    m=re.search(r"(\d+(?:\.\d+)?)\s*(?:bags?|gunia)",t) or re.search(r"(?:bags?|gunia)\s*(\d+(?:\.\d+)?)",t)
+    t=t.replace("gunias","gunia")
+    m=re.search(r"(\d+(?:\.\d+)?)\s*(?:bags?|gunia|sacks?)\b",t) or re.search(r"(?:bags?|gunia|sacks?)\s*(?:za\s*)?(\d+(?:\.\d+)?)",t)
     if m:
         out["bags"]=float(m.group(1))
-    nums=[float(x.replace(",","")) for x in re.findall(r"\b([0-9][0-9,]{2,}(?:\.\d+)?)\b",t)]
-    if nums:
-        candidates=[n for n in nums if n>=100 and n!=out.get("bags")]
-        if candidates:
-            out["offer"]=candidates[-1]
+    # Price phrases are stronger evidence than arbitrary large numbers.
+    price_patterns=[
+        r"(?:buyer|broker).{0,30}?(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)\s*(?:per|kwa)?\s*(?:bag|gunia)?",
+        r"(?:offer|bei|anapea|amepea|ameoffer|anataka kununua)\D{0,20}(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)",
+        r"(?:kes|ksh)\s*([0-9][0-9,]{2,}(?:\.\d+)?)\s*(?:per|kwa)\s*(?:bag|gunia)",
+        r"([0-9][0-9,]{2,}(?:\.\d+)?)\s*(?:per|kwa)\s*(?:bag|gunia)"
+    ]
+    for p in price_patterns:
+        pm=re.search(p,t)
+        if pm:
+            out["offer"]=float(pm.group(1).replace(",",""))
+            break
     bare=re.fullmatch(r"(?:kes|ksh|sh)?\s*([0-9][0-9,]*(?:\.\d+)?)",t)
     if bare:
         out["_bare_number"]=float(bare.group(1).replace(",",""))
     return out
 
-def reply_for(text, known=None):
-    f=dict(known or {})
+def apply_message(text,state):
+    state=dict(state or {})
+    normalized=" ".join((text or "").lower().split())
+    if any(p in normalized for p in ("new sale","new deal","bei mpya","mauzo mapya","start over","anza upya","reset")):
+        return {"stage":"location"}
+
     incoming=parse(text)
     bare=incoming.pop("_bare_number",None)
-    missing_before=[x for x in ("location","bags","offer") if x not in f]
-    if bare is not None and len(missing_before)==1 and missing_before[0]!="location":
-        incoming[missing_before[0]]=bare
-    f.update(incoming)
+    stage=state.get("stage")
+
+    # A requested field controls the meaning of a short reply.
+    if stage=="bags" and bare is not None:
+        incoming["bags"]=bare
+    elif stage=="offer" and bare is not None:
+        incoming["offer"]=bare
+    elif stage=="location":
+        loc=clean_location(text)
+        if loc:
+            incoming["location"]=loc
+
+    # Explicit location wording works at any point and preserves villages,
+    # estates, roads and landmarks instead of restricting farmers to a town list.
+    if re.match(r"^(?:niko|nipo|from|i am in|i'm in|near|karibu na|around|location|eneo)\b",normalized):
+        loc=clean_location(text)
+        if loc:
+            incoming["location"]=loc
+
+    state.update(incoming)
+    if "location" not in state:
+        state["stage"]="location"
+    elif "bags" not in state:
+        state["stage"]="bags"
+    elif "offer" not in state:
+        state["stage"]="offer"
+    else:
+        state["stage"]="complete"
+    return state
+
+def reply_for(text, known=None):
+    f=dict(known or {})
     missing=[x for x in ("location","bags","offer") if x not in f]
     if missing:
         q={
-            "location":"Uko eneo gani? Mfano Moiben, Eldoret au Kitale.",
+            "location":"Uko eneo gani? Unaweza kutaja village, estate, road au landmark iliyo karibu.",
             "bags":"Una gunia ngapi za mahindi?",
-            "offer":"Buyer amekupea bei gani kwa gunia moja?"
+            "offer":"Buyer/broker amekupea bei gani kwa gunia moja?"
         }
         return q[missing[0]]
     gross=f["bags"]*f["offer"]
     if age_days()>FRESH_DAYS:
         return (
-            f"🌽 Offer yako: KES {gross:,.0f} kwa {f['bags']:g} gunia.\\n"
+            f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} kwa {f['bags']:g} gunia.\n"
             f"⚠️ Reference yangu iliyothibitishwa ni KES {PRICE_PER_90KG:,.0f}/90kg, tarehe {OBSERVED_ON}, kutoka {SOURCE}. "
             "Bei hii ni ya zamani, kwa hivyo sitakushauri uuze kwa reference hiyo. Nahitaji bei ya sasa kuthibitishwa kwanza."
         )
     ref=f["bags"]*PRICE_PER_90KG
     diff=ref-gross
     return (
-        f"🌽 Offer: KES {gross:,.0f}\\n"
-        f"Reference: KES {ref:,.0f}\\n"
-        f"Tofauti: KES {diff:+,.0f}\\n"
+        f"🌽 {f['location']}: Offer KES {gross:,.0f}\n"
+        f"Reference KES {ref:,.0f}\n"
+        f"Tofauti KES {diff:+,.0f}\n"
         f"Source: {SOURCE}, {OBSERVED_ON}. Hii si guaranteed buyer quote."
     )
 
@@ -136,18 +187,7 @@ def webhook():
             state=json.loads(row[0]) if row else {}
         except (TypeError,ValueError,json.JSONDecodeError):
             state={}
-        incoming=parse(msg["text"]["body"])
-        bare=incoming.pop("_bare_number",None)
-        missing_before=[x for x in ("location","bags","offer") if x not in state]
-        if bare is not None and len(missing_before)==1 and missing_before[0]!="location":
-            incoming[missing_before[0]]=bare
-        # Explicit new-sale/reset phrases prevent old deal details leaking into a new quote.
-        normalized=" ".join(msg["text"]["body"].lower().split())
-        if any(p in normalized for p in ("new sale","new deal","bei mpya","mauzo mapya","start over","anza upya")):
-            state={}
-            incoming=parse(msg["text"]["body"])
-            incoming.pop("_bare_number",None)
-        state.update(incoming)
+        state=apply_message(msg["text"]["body"],state)
         con.execute(
             "INSERT INTO conversations(phone,state) VALUES(?,?) "
             "ON CONFLICT(phone) DO UPDATE SET state=excluded.state",
