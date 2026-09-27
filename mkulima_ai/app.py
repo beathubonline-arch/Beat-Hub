@@ -30,29 +30,29 @@ def detect_language(text):
 def extract_location(text):
     raw=" ".join((text or "").strip().split())
     # Capture location after natural location cues, stopping before quantity/offer details.
-    m=re.search(r"(?:^|\\b)(?:niko|nipo|from|i am in|i'm in|near|around|eneo(?: langu)? ni|location(?: yangu)? ni)\\s+(.+)",raw,re.I)
+    m=re.search(r"(?:^|\b)(?:niko|nipo|from|i am in|i'm in|near|around|eneo(?: langu)? ni|location(?: yangu)? ni)\s+(.+)",raw,re.I)
     if not m: return None
     loc=m.group(1)
-    loc=re.split(r"\\b(?:na\\s+)?\\d+(?:\\.\\d+)?\\s*(?:bags?|gunia|sacks?)\\b|\\b(?:buyer|broker|offer|bei)\\b",loc,1,flags=re.I)[0]
+    loc=re.split(r"\b(?:na\s+)?\d+(?:\.\d+)?\s*(?:bags?|gunia|sacks?)\b|\b(?:buyer|broker|offer|bei)\b",loc,1,flags=re.I)[0]
     loc=loc.strip(" ,.-")
     return loc[:160].title() if loc else None
 
 def parse(text):
     t=" ".join((text or "").lower().split())
     out={}
-    m=re.search(r"(\\d+(?:\\.\\d+)?)\\s*(?:bags?|gunia|sacks?)\\b",t) or re.search(r"(?:bags?|gunia|sacks?)\\s*(?:za\\s*)?(\\d+(?:\\.\\d+)?)",t)
+    m=re.search(r"(\d+(?:\.\d+)?)\s*(?:bags?|gunia|sacks?)\b",t) or re.search(r"(?:bags?|gunia|sacks?)\s*(?:za\s*)?(\d+(?:\.\d+)?)",t)
     if m: out["bags"]=float(m.group(1))
     for p in [
-        r"(?:buyer|broker).{0,40}?(?:kes|ksh)?\\s*([0-9][0-9,]{2,}(?:\\.\\d+)?)",
-        r"(?:offer|bei|anapea|amepea|ameoffer|anataka kununua)\\D{0,25}(?:kes|ksh)?\\s*([0-9][0-9,]{2,}(?:\\.\\d+)?)",
-        r"(?:kes|ksh)?\\s*([0-9][0-9,]{2,}(?:\\.\\d+)?)\\s*(?:per|kwa)\\s*(?:bag|gunia)"
+        r"(?:buyer|broker).{0,40}?(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)",
+        r"(?:offer|bei|anapea|amepea|ameoffer|anataka kununua)\D{0,25}(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)",
+        r"(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)\s*(?:per|kwa)\s*(?:bag|gunia)"
     ]:
         pm=re.search(p,t)
         if pm:
             out["offer"]=float(pm.group(1).replace(",","")); break
     loc=extract_location(text)
     if loc: out["location"]=loc
-    bare=re.fullmatch(r"(?:kes|ksh|sh)?\\s*([0-9][0-9,]*(?:\\.\\d+)?)",t)
+    bare=re.fullmatch(r"(?:kes|ksh|sh)?\s*([0-9][0-9,]*(?:\.\d+)?)",t)
     if bare: out["_bare_number"]=float(bare.group(1).replace(",",""))
     return out
 
@@ -68,7 +68,7 @@ def apply_message(text,state):
     elif stage=="offer" and bare is not None: incoming["offer"]=bare
     elif stage=="location" and "location" not in incoming:
         raw=" ".join((text or "").strip().split())
-        if raw and not re.search(r"\\b(?:bags?|gunia|buyer|broker|offer|bei)\\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
+        if raw and not re.search(r"\b(?:bags?|gunia|buyer|broker|offer|bei)\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
     state["language"]=detect_language(text) if text else state.get("language","sw")
@@ -82,7 +82,7 @@ def reply_for(text, known=None):
     f=dict(known or {})
     lang=detect_language(text)
     # Preserve established language on short numeric follow-ups.
-    if re.fullmatch(r"(?:kes|ksh|sh)?\\s*[0-9][0-9,.]*",(text or "").strip(),re.I):
+    if re.fullmatch(r"(?:kes|ksh|sh)?\s*[0-9][0-9,.]*",(text or "").strip(),re.I):
         lang=f.get("language",lang)
     missing=[x for x in ("location","bags","offer") if x not in f]
     questions={
@@ -96,21 +96,21 @@ def reply_for(text, known=None):
     wants_help=any(p in normalized for p in ("nifanye aje","nifanye nini","what should i do","what do i do","ushauri","advise","help me","solution"))
     if wants_help:
         if lang=="en":
-            return (f"You have {f['bags']:g} bags in {f['location']} at KES {f['offer']:,.0f}/bag = KES {gross:,.0f}.\\n\\n"
+            return (f"You have {f['bags']:g} bags in {f['location']} at KES {f['offer']:,.0f}/bag = KES {gross:,.0f}.\n\n"
                     "Next: don't rush the sale until we verify today's market. Get 2–3 buyer offers. Send me your transport cost and, if you can store, the storage cost and how long you can wait. I'll compare the options by the cash you actually keep.")
         if lang=="mixed":
-            return (f"Uko na {f['bags']:g} bags {f['location']}, offer ni KES {f['offer']:,.0f}/bag = KES {gross:,.0f}.\\n\\n"
+            return (f"Uko na {f['bags']:g} bags {f['location']}, offer ni KES {f['offer']:,.0f}/bag = KES {gross:,.0f}.\n\n"
                     "Next step: usiuze haraka before tuverify market ya leo. Pata offers 2–3, then nitumie transport cost. Kama unaweza store, niambie storage cost na how long unaweza wait. Nitacompare option yenye net cash nzuri.")
-        return (f"Una gunia {f['bags']:g} huko {f['location']}, offer ni KES {f['offer']:,.0f}/gunia = KES {gross:,.0f}.\\n\\n"
+        return (f"Una gunia {f['bags']:g} huko {f['location']}, offer ni KES {f['offer']:,.0f}/gunia = KES {gross:,.0f}.\n\n"
                 "Hatua inayofuata: usikimbilie kuuza kabla bei ya leo kuthibitishwa. Tafuta offers 2–3, kisha nitumie gharama ya transport. Kama unaweza kuhifadhi, niambie storage cost na muda unaoweza kusubiri. Nitakulinganishia pesa halisi utakayobaki nayo.")
     if age_days()>FRESH_DAYS:
         if lang=="en":
-            return (f"🌽 {f['location']}: your offer totals KES {gross:,.0f} for {f['bags']:g} bags.\\n"
+            return (f"🌽 {f['location']}: your offer totals KES {gross:,.0f} for {f['bags']:g} bags.\n"
                     f"⚠️ My verified reference is KES {PRICE_PER_90KG:,.0f}/90kg from {OBSERVED_ON} ({SOURCE}), but it is stale. I won't present it as today's price. Ask me 'what should I do?' for practical next steps.")
         if lang=="mixed":
-            return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} for {f['bags']:g} bags.\\n"
+            return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} for {f['bags']:g} bags.\n"
                     f"⚠️ Verified reference ni KES {PRICE_PER_90KG:,.0f}/90kg ya {OBSERVED_ON} ({SOURCE}), but ni old. Sitaiita bei ya leo. Niulize 'nifanye aje?' for next steps.")
-        return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} kwa gunia {f['bags']:g}.\\n"
+        return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} kwa gunia {f['bags']:g}.\n"
                 f"⚠️ Reference iliyothibitishwa ni KES {PRICE_PER_90KG:,.0f}/90kg ya {OBSERVED_ON} ({SOURCE}), lakini ni ya zamani. Sitaiita bei ya leo. Niulize 'nifanye aje?' nikupe hatua zinazofuata.")
     ref=f["bags"]*PRICE_PER_90KG
     diff=ref-gross
