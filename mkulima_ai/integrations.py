@@ -1,4 +1,5 @@
-import os,json,urllib.request
+import os,json,urllib.request,urllib.error
+
 def send_whatsapp_text(to,body):
     token=os.getenv("WHATSAPP_TOKEN"); phone_id=os.getenv("WHATSAPP_PHONE_NUMBER_ID")
     if not token or not phone_id:
@@ -8,5 +9,18 @@ def send_whatsapp_text(to,body):
     url=f"https://graph.facebook.com/v23.0/{phone_id}/messages"
     data=json.dumps({"messaging_product":"whatsapp","to":to,"type":"text","text":{"body":body}}).encode()
     req=urllib.request.Request(url,data=data,headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},method="POST")
-    with urllib.request.urlopen(req,timeout=30) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req,timeout=30) as r:
+            result=json.loads(r.read())
+            print("WHATSAPP_SEND_OK",json.dumps({"to":to,"message_id":(result.get("messages") or [{}])[0].get("id")}),flush=True)
+            return result
+    except urllib.error.HTTPError as exc:
+        raw=exc.read().decode("utf-8","replace")
+        try:
+            payload=json.loads(raw)
+            err=payload.get("error",{})
+            safe={"status":exc.code,"message":err.get("message"),"type":err.get("type"),"code":err.get("code"),"error_subcode":err.get("error_subcode"),"fbtrace_id":err.get("fbtrace_id")}
+        except Exception:
+            safe={"status":exc.code,"message":raw[:500]}
+        print("WHATSAPP_SEND_ERROR",json.dumps(safe,ensure_ascii=False),flush=True)
+        raise
