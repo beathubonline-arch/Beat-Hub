@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -53,6 +53,14 @@ class License(Base):
     buyer_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     track_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tracks.id"), nullable=True, index=True)
     album_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("albums.id"), nullable=True, index=True)
+    commercial_use_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    sampling_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    remixing_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    resale_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    ai_training_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    synthetic_likeness_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    derivatives_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    sublicensing_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     granted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     order = relationship("Order", back_populates="license")
 

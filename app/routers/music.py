@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.music import Track
 from app.services.storage import media_url, storage_exists
+from app.services.beat_finder import parse_brief, rank_tracks
 from app.utils.deps import get_optional_user
 
 logger = logging.getLogger("beathub.music")
@@ -238,6 +239,13 @@ def _query_catalog(
             "description",
             "tags",
             "slug",
+            "mood",
+            "energy",
+            "instruments",
+            "vocal_type",
+            "intended_use",
+            "similar_sound",
+            "region",
         ):
             field = getattr(Track, field_name, None)
             if field is not None:
@@ -345,6 +353,9 @@ def _catalog_item(track: Track) -> dict:
             )
             or ""
         ),
+        "energy": str(_model_value(track, "energy", default="") or ""),
+        "region": str(_model_value(track, "region", default="") or ""),
+        "vocal_type": str(_model_value(track, "vocal_type", default="") or ""),
     }
 
 
@@ -497,6 +508,31 @@ def beats_catalog(
             max_price=max_price,
         ),
     )
+
+
+@router.get("/find-my-beat", name="find_my_beat")
+def find_my_beat(
+    request: Request,
+    q: str = Query(default="", max_length=500),
+    current_user=Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    brief = parse_brief(q)
+    matches = []
+    if q.strip():
+        try:
+            candidates = db.query(Track).filter(Track.is_published.is_(True)).order_by(Track.created_at.desc()).limit(500).all()
+            candidates = [track for track in candidates if _track_is_public(track)]
+            matches = [
+                {**_catalog_item(track), "match_score": score, "match_reasons": reasons}
+                for track, score, reasons in rank_tracks(candidates, brief)
+            ]
+        except Exception:
+            logger.exception("Unable to run conversational beat search")
+    return templates.TemplateResponse(request, "find_my_beat.html", {
+        "request": request, "current_user": current_user, "user": current_user,
+        "current_year": 2026, "q": q.strip(), "brief": brief, "matches": matches,
+    })
 
 
 @router.get("/hot-picks")
@@ -908,4 +944,3 @@ def track_preview(
         request,
         fallback_media_type="audio/mpeg",
     )
-

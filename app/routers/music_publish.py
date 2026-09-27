@@ -49,6 +49,11 @@ def _direct_paths(form,name:str,preserve_empty:bool=False)->List[str]:
     if len(values)==1 and "\n" in values[0]: values=values[0].splitlines()
     return [v.strip() for v in values] if preserve_empty else [v.strip() for v in values if v.strip()]
 
+def _clean(item,name:str,limit:int)->str: return str(item.get(name) or "").strip()[:limit]
+def _allowed(item,name:str,default:bool)->bool:
+    value=item.get(name,default)
+    return value if isinstance(value,bool) else str(value).strip().lower() in {"1","true","yes","on"}
+
 def _publish_data(request,user,db,data):
     if not isinstance(data,dict): return _error(request,user,"Invalid upload data. Please refresh and try again.")
     items=data.get("items")
@@ -61,7 +66,9 @@ def _publish_data(request,user,db,data):
             if not isinstance(item,dict): raise UploadValidationError("Invalid upload item.")
             title=str(item.get("title") or "").strip()
             if not title: raise UploadValidationError("Every upload needs a title.")
-            description=str(item.get("description") or "").strip(); genre=str(item.get("genre") or "").strip(); tags=str(item.get("tags") or "").strip(); content_raw=str(item.get("content_type") or "").strip().lower()
+            description=_clean(item,"description",4000); genre=_clean(item,"genre",100); tags=_clean(item,"tags",1000); content_raw=str(item.get("content_type") or "").strip().lower()
+            mood=_clean(item,"mood",80); energy=_clean(item,"energy",30).lower(); instruments=_clean(item,"instruments",1000); vocal_type=_clean(item,"vocal_type",80); intended_use=_clean(item,"intended_use",1000); similar_sound=_clean(item,"similar_sound",1000); region=_clean(item,"region",100)
+            if energy and energy not in {"low","medium","high"}: raise UploadValidationError(f"Energy for '{title}' must be low, medium, or high.")
             if content_raw not in {TrackContentType.BEAT.value,TrackContentType.TRACK.value}: raise UploadValidationError(f"Choose Beat or Track for '{title}'.")
             try: currency=normalize_currency(str(item.get("currency") or ""))
             except ValueError as exc: raise UploadValidationError(f"Currency for '{title}' is invalid: {exc}") from exc
@@ -83,7 +90,7 @@ def _publish_data(request,user,db,data):
             if cover_path:
                 meta=r2_object_head(cover_path)
                 if int(meta.get("ContentLength") or 0)<=0: raise UploadValidationError("Cover art is empty.")
-            track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=description or None,genre=genre or None,bpm=bpm_value,tags=tags or None,audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=SalesModel.EXCLUSIVE if model_raw=="exclusive" else SalesModel.NON_EXCLUSIVE,content_type=content_raw,is_published=True)
+            track=Track(creator_profile_id=profile.id,title=title,slug=unique_slug(db,Track,title,"track"),description=description or None,genre=genre or None,bpm=bpm_value,tags=tags or None,mood=mood or None,energy=energy or None,instruments=instruments or None,vocal_type=vocal_type or None,intended_use=intended_use or None,similar_sound=similar_sound or None,region=region or None,commercial_use_allowed=_allowed(item,"commercial_use_allowed",True),sampling_allowed=_allowed(item,"sampling_allowed",True),remixing_allowed=_allowed(item,"remixing_allowed",True),resale_allowed=_allowed(item,"resale_allowed",False),ai_training_allowed=_allowed(item,"ai_training_allowed",False),synthetic_likeness_allowed=_allowed(item,"synthetic_likeness_allowed",False),derivatives_allowed=_allowed(item,"derivatives_allowed",True),sublicensing_allowed=_allowed(item,"sublicensing_allowed",False),audio_file_path=audio_path,cover_art_path=cover_path,price=price_value,currency=currency,sales_model=SalesModel.EXCLUSIVE if model_raw=="exclusive" else SalesModel.NON_EXCLUSIVE,content_type=content_raw,is_published=True)
             db.add(track); created.append(track)
         db.commit()
     except UploadValidationError as exc: db.rollback(); return _error(request,user,str(exc))
