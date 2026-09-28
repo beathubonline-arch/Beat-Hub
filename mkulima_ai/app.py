@@ -3,6 +3,7 @@ from datetime import date, datetime
 from flask import Flask, request, jsonify
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
+from planner import build_plan, safe_reasoning_reply
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -73,6 +74,7 @@ def apply_message(text,state):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
     state=enrich_context(text,state)
+    state["plan"]=build_plan(text,state)
     state["language"]=detect_language(text) if text else state.get("language","sw")
     # Only the specialist selling flow requires location/bags/offer. Other
     # farmer intents must not be forced through the maize-sale questionnaire.
@@ -91,6 +93,10 @@ def reply_for(text, known=None):
     # Preserve established language on short numeric follow-ups.
     if re.fullmatch(r"(?:kes|ksh|sh)?\s*[0-9][0-9,.]*",(text or "").strip(),re.I):
         lang=f.get("language",lang)
+    # Safety/urgency reasoning runs before normal intent replies.
+    reasoned=safe_reasoning_reply(text,f,lang)
+    if reasoned is not None:
+        return reasoned
     # Open-ended intents branch before the legacy maize-sale gate.
     broad=open_reply(text,f,lang)
     if broad is not None:
