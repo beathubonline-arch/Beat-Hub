@@ -437,10 +437,14 @@ def pricing():
     sig=request.args.get("sig","")
     bound=_valid_actor(actor,sig)
     hidden=(f'<input type="hidden" name="actor" value="{actor}"><input type="hidden" name="sig" value="{sig}">' if bound else "")
-    note="Your purchase will activate this WhatsApp account automatically." if bound else "Open this page from the upgrade link Mkulima sends you on WhatsApp so access can be activated automatically."
+    note="✓ Secure WhatsApp account detected. Your purchase will activate this account automatically." if bound else "To activate payment securely, return to your Mkulima WhatsApp chat and send: upgrade"
+    def buy(plan,label):
+        if not bound:
+            return '<div class="muted"><strong>Send “upgrade” in WhatsApp to get your secure payment link.</strong></div>'
+        return '<form method="post" action="/pay/start">'+hidden+'<input type="hidden" name="plan" value="'+plan+'"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">'+label+'</button></form>'
     return """<style>body{font-family:Arial,sans-serif;background:#f4f8f0;color:#17351f;margin:0}.w{max-width:820px;margin:auto;padding:40px 20px}h1{color:#176b35}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.c{background:white;border:1px solid #dbe8d7;border-radius:18px;padding:24px}.p{font-size:34px;font-weight:800}.b{background:#176b35;color:white;border:0;border-radius:12px;padding:13px 18px;font-weight:800;cursor:pointer;width:100%}input{width:100%;padding:12px;margin:10px 0;border:1px solid #bdcdbc;border-radius:10px;box-sizing:border-box}.muted{color:#617063}</style><div class="w"><h1>🌱 Mkulima AI Plans</h1><p>Keep practical farm help available when you need it. Free accounts get 5 useful questions each month.</p><p class="muted">"""+note+"""</p><div class="g">
-    <div class="c"><h2>Day Pass</h2><div class="p">KES 49</div><p>24 hours of unlimited Mkulima conversations for an urgent farm or selling decision.</p><form method="post" action="/pay/start">"""+hidden+"""<input type="hidden" name="plan" value="day_pass"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">Pay KES 49</button></form></div>
-    <div class="c"><h2>Mkulima Plus</h2><div class="p">KES 199</div><p>30 days of unlimited chat, saved conversation context and premium decision support as features roll out.</p><form method="post" action="/pay/start">"""+hidden+"""<input type="hidden" name="plan" value="plus_monthly"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">Pay KES 199</button></form></div>
+    <div class="c"><h2>Day Pass</h2><div class="p">KES 49</div><p>24 hours of unlimited Mkulima conversations for an urgent farm or selling decision.</p>"""+buy("day_pass","Pay KES 49")+"""</div>
+    <div class="c"><h2>Mkulima Plus</h2><div class="p">KES 199</div><p>30 days of unlimited chat, saved conversation context and premium decision support as features roll out.</p>"""+buy("plus_monthly","Pay KES 199")+"""</div>
     </div><p class="muted">Payments are verified server-side before access is activated.</p></div>"""
 
 @app.post("/pay/start")
@@ -502,7 +506,7 @@ def paystack_webhook():
 @app.get("/api/health")
 def health():
     init_db()
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=OBSERVED_ON,reference_stale=age_days()>FRESH_DAYS)
+    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=OBSERVED_ON,reference_stale=age_days()>FRESH_DAYS,payments={"configured":bool(_pay_secret()),"plans":{"day_pass_kes":49,"plus_30d_kes":199},"free_questions_per_month":5})
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
