@@ -2,6 +2,7 @@ import os, sys, unittest
 ROOT=os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0,os.path.join(ROOT,"mkulima_ai"))
 from intent_engine import detect_intents, enrich_context, open_reply
+from planner import build_plan, safe_reasoning_reply
 
 class FarmerIntentRegression(unittest.TestCase):
     def test_disease_not_forced_into_sale(self):
@@ -40,6 +41,23 @@ class FarmerIntentRegression(unittest.TestCase):
         s=enrich_context("Bro kuna kitu strange kwa shamba sijui hata nieleze aje",{})
         self.assertEqual(s["primary_intent"],"general")
         self.assertIn("outcome",open_reply("Bro kuna kitu strange kwa shamba sijui hata nieleze aje",s,"mixed"))
+
+    def test_weather_plan_requests_live_tool(self):
+        s=enrich_context("Mvua itanyesha kesho? Niko Kitale",{"location":"Kitale"})
+        p=build_plan("Mvua itanyesha kesho? Niko Kitale",s)
+        self.assertEqual(p["goal"],"plan_farm_action")
+        self.assertIn("live_weather",p["tools"])
+
+    def test_urgent_livestock_escalates(self):
+        s=enrich_context("Ngombe yangu can't breathe, ni urgent",{})
+        reply=safe_reasoning_reply("Ngombe yangu can't breathe, ni urgent",s,"mixed")
+        self.assertIn("veterinary",reply)
+
+    def test_sale_plan_requires_evidence(self):
+        s=enrich_context("Nataka kuuza mahindi",{})
+        p=build_plan("Nataka kuuza mahindi",s)
+        self.assertIn("live_market_prices",p["tools"])
+        self.assertIn("buyer_offer",p["missing_evidence"])
 
     def test_sale_remains_specialist(self):
         s=enrich_context("Nataka kuuza mahindi buyer amenipea offer",{})
