@@ -131,6 +131,18 @@ def feedback_rating(text):
     if t in {"still problem","still have problem","bado shida","bado iko","bado"}: return "still_problem"
     return None
 
+
+CONTINUE_PHRASES={"ok cont","cont","continue","do it","proceed","go ahead","yes","yeah","yep","sawa","endelea","fanya","fanya hivyo"}
+NO_OFFER_PHRASES={"no offer","none","sina offer","hakuna offer","no buyer","sina buyer","hakuna buyer"}
+
+def is_continue(text):
+    t=" ".join((text or "").strip().lower().split())
+    return t in CONTINUE_PHRASES
+
+def is_no_offer(text):
+    t=" ".join((text or "").strip().lower().split())
+    return t in NO_OFFER_PHRASES
+
 def enrich_case_evidence(text,state):
     """Extract lightweight evidence from natural follow-ups without pretending it is diagnosis."""
     state=dict(state or {})
@@ -185,6 +197,11 @@ def apply_message(text,state):
         if any(x in timing for x in ("today","leo","now","sasa","asap","haraka")): state["sale_timing"]="today"
         elif any(x in timing for x in ("few days","next days","this week","wiki","days")): state["sale_timing"]="few_days"
         elif any(x in timing for x in ("best price","check price","bei nzuri","bei bora","price first")): state["sale_timing"]="best_price"
+        if is_no_offer(text):
+            state["no_offer"]=True
+            state.pop("offer",None)
+        elif is_continue(text) and state.get("product") in NON_BAG_SALE_PRODUCTS and state.get("sale_timing"):
+            state["next_action"]="collect_offer"
     state=enrich_case_evidence(text,state)
     state=enrich_context(text,state)
     state["plan"]=build_plan(text,state)
@@ -195,6 +212,7 @@ def apply_message(text,state):
         if "location" not in state: state["stage"]="location"
         elif "quantity" not in state and "bags" not in state: state["stage"]="quantity" if state.get("product") in NON_BAG_SALE_PRODUCTS else "bags"
         elif state.get("product") in NON_BAG_SALE_PRODUCTS and "sale_timing" not in state: state["stage"]="sale_timing"
+        elif state.get("product") in NON_BAG_SALE_PRODUCTS and not state.get("no_offer") and "offer" not in state: state["stage"]="offer"
         elif state.get("quantity_unit")=="bags" and "offer" not in state: state["stage"]="offer"
         else: state["stage"]="complete"
     else:
@@ -239,13 +257,32 @@ def reply_for(text, known=None):
         if lang=="mixed":
             return f"Sawa 👍 Uko na {quantity:g} {unit} za {product} {f['location']}. Unataka kuuza leo, within the next few days, ama tucheck best price first?"
         return f"Sawa 👍 Una {quantity:g} {unit} za {product} huko {f['location']}. Unataka kuuza leo, ndani ya siku chache, au tuangalie bei bora kwanza?"
+    if product in NON_BAG_SALE_PRODUCTS and f.get("no_offer"):
+        if lang=="en":
+            return (f"Okay. You have {quantity:g} {unit} of {product} in {f['location']} and no buyer offer yet. "
+                    f"Buyer-ready listing: FOR SALE — {quantity:g} {unit} of {product}, location: {f['location']}. Seeking serious buyers and the best verified offer. "
+                    "My verified buyer directory and live market-price feed are not connected yet, so I won't invent buyers or today's price. Share this listing with buyers/co-ops you trust, then send me any offers you receive and I will compare the cash value for you.")
+        return (f"Sawa. Una {quantity:g} {unit} za {product} huko {f['location']} na bado huna offer. "
+                f"Buyer-ready listing: INAUZWA — {quantity:g} {unit} za {product}, eneo: {f['location']}. Tunatafuta serious buyers na best verified offer. "
+                "Buyer directory na live market-price feed bado hazijaunganishwa, kwa hivyo sitabuni buyer au bei ya leo. Share listing hii kwa buyers/co-ops unaowaamini, kisha nitumie offers upate comparison.")
+    if product in NON_BAG_SALE_PRODUCTS and "offer" not in f:
+        per=unit[:-1] if unit.endswith("s") else unit
+        if lang=="en":
+            return f"Good — let's move. Do you already have a buyer offer? Send the price in KES per {per} (for example, 450 per {per}). If you have no offer yet, reply 'no offer' and I'll prepare a buyer-ready listing from the details you've already given me."
+        if lang=="mixed":
+            return f"Sawa, tuendelee. Uko na buyer offer? Tuma price in KES per {per} (mfano 450 per {per}). Kama huna offer, reply 'no offer' nitengeneze buyer-ready listing na details ulizonipa."
+        return f"Sawa, tuendelee. Una buyer offer? Tuma bei ya KES kwa kila {per}. Kama huna offer, sema 'no offer' nitengeneze buyer-ready listing kwa details ulizonipa."
     if unit=="bags" and "offer" not in f:
         return {"sw":"Buyer/broker amekupea bei gani kwa gunia moja?","en":"What price per bag has the buyer or broker offered you?","mixed":"Buyer/broker amekuoffer how much per bag?"}[lang]
-    if product in NON_BAG_SALE_PRODUCTS:
-        timing=f.get("sale_timing","")
+    if product in NON_BAG_SALE_PRODUCTS and f.get("offer") is not None:
+        gross=quantity*f["offer"]
+        per=unit[:-1] if unit.endswith("s") else unit
         if lang=="en":
-            return f"Thanks — I have {quantity:g} {unit} of {product} in {f['location']} and your priority is {timing.replace('_',' ')}. Next I can help you compare buyer options and the price you should verify before accepting a deal."
-        return f"Asante — nimehifadhi {quantity:g} {unit} za {product} huko {f['location']}, priority ni {timing.replace('_',' ')}. Hatua inayofuata ni kulinganisha buyer options na bei kabla ukubali deal."
+            return (f"Offer captured: {quantity:g} {unit} of {product} in {f['location']} at KES {f['offer']:,.0f} per {per} = KES {gross:,.0f} gross. "
+                    "I don't have a verified live market-price feed yet, so I won't label this good or bad against today's market. Send another buyer offer and I'll compare totals, or send your transport cost so I can calculate what you actually keep.")
+        return (f"Offer nimehifadhi: {quantity:g} {unit} za {product} huko {f['location']} @ KES {f['offer']:,.0f} per {per} = KES {gross:,.0f} gross. "
+                "Sina verified live market-price feed bado, kwa hivyo sitaiita good/bad dhidi ya bei ya leo. Tuma offer nyingine nifananishie totals, ama transport cost nihesabu net cash.")
+
     gross=f["bags"]*f["offer"]
     normalized=" ".join((text or "").lower().split())
     wants_help=any(p in normalized for p in ("nifanye aje","nifanye nini","what should i do","what do i do","ushauri","advise","help me","solution"))
