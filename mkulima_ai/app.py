@@ -193,7 +193,7 @@ def apply_message(text,state):
     # farmer intents must not be forced through the maize-sale questionnaire.
     if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","quantity","offer")):
         if "location" not in state: state["stage"]="location"
-        elif "quantity" not in state and "bags" not in state: state["stage"]="quantity"
+        elif "quantity" not in state and "bags" not in state: state["stage"]="quantity" if state.get("product") in NON_BAG_SALE_PRODUCTS else "bags"
         elif state.get("product") in NON_BAG_SALE_PRODUCTS and "sale_timing" not in state: state["stage"]="sale_timing"
         elif state.get("quantity_unit")=="bags" and "offer" not in state: state["stage"]="offer"
         else: state["stage"]="complete"
