@@ -59,6 +59,24 @@ def parse(text):
     if bare: out["_bare_number"]=float(bare.group(1).replace(",",""))
     return out
 
+def enrich_case_evidence(text,state):
+    """Extract lightweight evidence from natural follow-ups without pretending it is diagnosis."""
+    state=dict(state or {})
+    raw=" ".join((text or "").strip().split())
+    t=raw.lower()
+    timing=re.search(r"\\b(?:for|since|imeanza|ilianza|zilianza|tangu)\\s+(\\d+)\\s*(day|days|siku|week|weeks|wiki)\\b",t)
+    if timing:
+        state["symptom_timing"]=timing.group(0)
+    affected=re.search(r"\\b(\\d+(?:\\.\\d+)?)\\s*(%|percent|percentage)\\b",t)
+    if affected:
+        state["affected_area"]=affected.group(0)
+    if state.get("has_image") and raw and len(raw)<=500:
+        notes=list(state.get("case_notes") or [])
+        if raw not in notes:
+            notes.append(raw)
+        state["case_notes"]=notes[-8:]
+    return state
+
 def apply_message(text,state):
     state=dict(state or {})
     normalized=" ".join((text or "").lower().split())
@@ -74,6 +92,7 @@ def apply_message(text,state):
         if raw and not re.search(r"\b(?:bags?|gunia|buyer|broker|offer|bei)\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
+    state=enrich_case_evidence(text,state)
     state=enrich_context(text,state)
     state["plan"]=build_plan(text,state)
     state["language"]=detect_language(text) if text else state.get("language","sw")
