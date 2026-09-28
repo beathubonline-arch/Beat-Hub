@@ -4,11 +4,12 @@ from datetime import date, datetime
 # Mkulima has a supported execution path, not merely because a useful website exists.
 TOOL_REGISTRY = {
     "live_weather": {
-        "status": "planned",
-        "provider": "Kenya Meteorological Department / KALRO KAOP",
-        "source_url": "https://meteo.go.ke/",
+        "status": "available",
+        "provider": "MET Norway Locationforecast 2.0",
+        "source_url": "https://api.met.no/weatherapi/locationforecast/2.0/",
         "live": True,
-        "reason": "Authoritative sources identified; supported API adapter not wired yet.",
+        "license": "CC BY 4.0",
+        "reason": "Live forecast adapter is wired; location is resolved from farmer-provided Kenyan place text.",
     },
     "live_market_prices": {
         "status": "planned",
