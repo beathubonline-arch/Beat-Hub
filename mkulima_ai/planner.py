@@ -10,7 +10,7 @@ GOALS={
  "harvest":"harvest_at_right_time","general":"understand_farmer_goal"
 }
 TOOLS={
- "crop_health":["trusted_agronomy_knowledge","farmer_symptoms","image_when_available"],
+ "crop_health":["trusted_agronomy_knowledge","farmer_symptoms","farm_vision"],
  "weather":["live_weather","location_context"],
  "livestock":["trusted_veterinary_knowledge","farmer_symptoms"],
  "profit":["farm_calculator"],
@@ -35,9 +35,10 @@ def build_plan(text,state):
       "crop":state.get("crop"),
       "location":state.get("location"),
       "urgency":"urgent" if urgent else "normal",
-      "tools":TOOLS.get(intent,TOOLS["general"]),
+      "tools":list(TOOLS.get(intent,TOOLS["general"])),
       "created_at":datetime.now(timezone.utc).isoformat()
     }
+    if state.get("has_image") and "farm_vision" not in plan["tools"]: plan["tools"].append("farm_vision")
     missing=[]
     if intent in ("weather","sell") and not state.get("location"): missing.append("location")
     if intent=="sell":
