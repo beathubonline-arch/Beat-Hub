@@ -1,0 +1,17 @@
+{
+  "name": "Mizizi Family Legacy",
+  "short_name": "Mizizi",
+  "description": "Your family. Your roots. Your story.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#28150d",
+  "theme_color": "#28150d",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
