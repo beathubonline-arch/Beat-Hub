@@ -151,6 +151,11 @@ if __name__=="__main__":
     unittest.main()
 
 
+class AppSmokeRegression(unittest.TestCase):
+    def test_app_module_imports_cleanly(self):
+        import py_compile
+        py_compile.compile(os.path.join(ROOT,"mkulima_ai","app.py"),doraise=True)
+
 class DurableStateRegression(unittest.TestCase):
     def test_actor_ref_is_pseudonymous(self):
         import state_store
