@@ -6,7 +6,7 @@ from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 from weather_live import live_weather, weather_reply
-from state_store import load_state, save_state, claim_message, record_interaction
+from state_store import load_state, save_state, claim_message, record_interaction, record_feedback
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -61,6 +61,23 @@ def parse(text):
     if bare: out["_bare_number"]=float(bare.group(1).replace(",",""))
     return out
 
+def capture_growth_signal(text,state):
+    """Remember privacy-safe first-touch/referral tags carried in a WhatsApp message."""
+    state=dict(state or {})
+    raw=" ".join((text or "").strip().split())
+    m=re.match(r"^(?:start|source|ref)\s*[:= -]?\s*([a-z0-9][a-z0-9_-]{1,63})$",raw,re.I)
+    if m and not state.get("acquisition_source"):
+        state["acquisition_source"]=m.group(1).lower()
+        state["acquired_at"]=datetime.utcnow().isoformat()+"Z"
+    return state
+
+def feedback_rating(text):
+    t=" ".join((text or "").strip().lower().split())
+    if t in {"helpful","helped","yes helpful","imesaidia","imenisaidia","sawa imesaidia"}: return "helpful"
+    if t in {"wrong","si sahihi","incorrect","hapana si sahihi"}: return "wrong"
+    if t in {"still problem","still have problem","bado shida","bado iko","bado"}: return "still_problem"
+    return None
+
 def enrich_case_evidence(text,state):
     """Extract lightweight evidence from natural follow-ups without pretending it is diagnosis."""
     state=dict(state or {})
@@ -80,7 +97,7 @@ def enrich_case_evidence(text,state):
     return state
 
 def apply_message(text,state):
-    state=dict(state or {})
+    state=capture_growth_signal(text,state)
     normalized=" ".join((text or "").lower().split())
     if any(p in normalized for p in ("new sale","new deal","bei mpya","mauzo mapya","start over","anza upya","reset")):
         state={}
@@ -297,7 +314,17 @@ def webhook():
         if msg.get("type")!="text":
             send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
             return jsonify(ok=True,unsupported_type=msg.get("type")),200
-        state=apply_message(msg["text"]["body"],state)
+        body=msg["text"]["body"]
+        rating=feedback_rating(body)
+        if rating and state.get("last_interaction_id"):
+            saved=record_feedback(mid,state.get("last_interaction_id"),rating)
+            if saved:
+                state["last_feedback"]=rating
+                save_state(phone,state)
+                ack={"helpful":"Thanks — that helps Mkulima learn what worked.","wrong":"Thanks. I have marked that answer for correction. Tell me what was wrong or what happened.","still_problem":"I understand. Tell me what is still happening and I will continue from this case."}[rating]
+                send_whatsapp_text(phone,ack)
+                return jsonify(ok=True,feedback=rating),200
+        state=apply_message(body,state)
         weather_result=None
         if state.get("primary_intent")=="weather" and state.get("location"):
             weather_result=live_weather(state.get("location"))
