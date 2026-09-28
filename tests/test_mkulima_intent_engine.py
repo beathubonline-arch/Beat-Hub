@@ -239,6 +239,33 @@ class LearningPersistenceRegression(unittest.TestCase):
         import state_store
         self.assertFalse(state_store.record_feedback("fb.1","interaction-1","maybe"))
 
+class RevenueInstrumentationRegression(unittest.TestCase):
+    def test_revenue_rejects_unverified_event_type(self):
+        import state_store
+        self.assertFalse(state_store.record_revenue_event("254700123456","estimated_revenue",500))
+
+    def test_revenue_payload_is_pseudonymous(self):
+        import state_store
+        old_url=os.environ.get("SUPABASE_URL"); old_key=os.environ.get("SUPABASE_SECRET_KEY")
+        old_salt=os.environ.get("MKULIMA_ACTOR_SALT"); original=state_store._api; seen={}
+        try:
+            os.environ["SUPABASE_URL"]="https://example.supabase.co"
+            os.environ["SUPABASE_SECRET_KEY"]="test-secret"
+            os.environ["MKULIMA_ACTOR_SALT"]="test-only-salt"
+            def fake_api(method,path,body=None,prefer=None):
+                seen.update(method=method,path=path,body=body,prefer=prefer)
+            state_store._api=fake_api
+            phone="254700123456"
+            self.assertTrue(state_store.record_revenue_event(phone,"payment_success",100,"fb_maize_01"))
+            self.assertNotIn(phone,json.dumps(seen))
+            self.assertEqual(seen["body"]["amount_kes"],100.0)
+            self.assertEqual(seen["body"]["source"],"fb_maize_01")
+        finally:
+            state_store._api=original
+            for key,old in (("SUPABASE_URL",old_url),("SUPABASE_SECRET_KEY",old_key),("MKULIMA_ACTOR_SALT",old_salt)):
+                if old is None: os.environ.pop(key,None)
+                else: os.environ[key]=old
+
 class DurableStateRegression(unittest.TestCase):
     def test_actor_ref_is_pseudonymous(self):
         import state_store
