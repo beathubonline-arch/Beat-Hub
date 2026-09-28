@@ -6,7 +6,7 @@ from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 from weather_live import live_weather, weather_reply
-from state_store import load_state, save_state, claim_message
+from state_store import load_state, save_state, claim_message, record_interaction
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -283,6 +283,11 @@ def webhook():
             save_state(phone,state)
             response=safe_vision_reply(vision,state.get("language","sw")) or image_context_reply(state,caption)
             send_whatsapp_text(phone,response)
+            interaction_id=record_interaction(mid,phone,caption or "[farm photo]",response,state)
+            if interaction_id:
+                state["last_interaction_id"]=interaction_id
+                state["last_interaction_message_id"]=mid
+                save_state(phone,state)
             return jsonify(ok=True,image_received=True,media_status=media.get("status"),vision_status=vision.get("status")),200
         if msg.get("type")!="text":
             send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
@@ -296,6 +301,11 @@ def webhook():
 
         response=weather_reply(weather_result,state.get("language","sw")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
+        interaction_id=record_interaction(mid,phone,msg["text"]["body"],response,state)
+        if interaction_id:
+            state["last_interaction_id"]=interaction_id
+            state["last_interaction_message_id"]=mid
+            save_state(phone,state)
         return jsonify(ok=True),200
     except Exception:
         app.logger.exception("webhook processing failed")
