@@ -390,74 +390,125 @@ def service_worker():
 
 @app.get("/")
 def home():
-    return HOME_STYLE + """<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Built for Kenyan farmers</span></nav>
+    src=re.sub(r"[^a-z0-9_-]","",(request.args.get("src","direct") or "direct").lower())[:32] or "direct"
+    return HOME_STYLE + """<style>
+.funnel{background:#fff;border:1px solid rgba(255,255,255,.26);border-radius:24px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.18)}
+.funnel h3{margin:0 0 6px;color:#17351f;font-size:23px}.funnel p{margin:0 0 15px;color:#617063;font-size:14px}
+.field{margin:11px 0}.field label{display:block;color:#31523a;font-weight:800;font-size:13px;margin-bottom:6px}
+.field select,.field input{width:100%;border:1px solid #cbd9cb;border-radius:12px;padding:13px 12px;font:inherit;background:#fff;color:#17351f}
+.wa{width:100%;border:0;background:#25D366;color:#073b1c;padding:15px 16px;border-radius:13px;font-weight:900;font-size:16px;cursor:pointer;margin-top:8px}
+.trust{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;color:#daf0df;font-size:13px}.trust span{display:inline-flex;align-items:center;gap:5px}
+.quick{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}.quick button{border:1px solid #cbd9cb;background:#f7faf6;color:#245335;border-radius:999px;padding:9px 11px;font-weight:700;cursor:pointer}
+.install-lite{margin-top:10px;background:transparent;border:1px solid #c9d9ca;color:#31523a;padding:10px 12px;border-radius:11px;font-weight:800;cursor:pointer;width:100%}
+@media(max-width:800px){.hero{padding-top:34px}.funnel{padding:18px}.actions{gap:8px}.lead{font-size:18px}}
+</style>
+<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Built for Kenyan farmers</span></nav>
 <section class="hero"><div class="wrap grid"><div>
 <span class="eyebrow">🇰🇪 Practical AI for agriculture</span>
-<h1>Better decisions before you sell your harvest.</h1>
-<p class="lead">Mkulima AI helps Kenyan farmers understand offers, compare options and decide their next step using the information they already have — in language that feels natural.</p>
-<div class="actions"><button class="btn primary" id="installApp" type="button" style="border:0;cursor:pointer">⬇ Install Mkulima App</button><a class="btn secondary" href="#how">See how it works</a><a class="btn secondary" href="#support">What Mkulima helps with</a></div><p id="installHelp" style="margin:12px 0 0;color:#d9f0df;font-size:13px">Install once, then open Mkulima directly from your home screen.</p>
-</div><div class="phone">
-<div class="phonehead"><div class="avatar">🌽</div><div><strong>Mkulima AI</strong><div class="online">● Farmer decision support</div></div></div>
-<div class="bubble farmer">Niko Eldoret, nina gunia 25 za mahindi. Buyer amenipea KES 3,200 kwa gunia. Nifanye aje?</div>
-<div class="bubble ai"><span class="tick">Mkulima AI</span><br>You have 25 bags at KES 3,200/bag = <strong>KES 80,000</strong>.<br><br>Usiuze haraka before tuverify market ya leo. Pata offers 2–3, then nitumie transport cost. Nitacompare option yenye net cash nzuri.</div>
+<h1>Ask before you sell, spray, plant or panic.</h1>
+<p class="lead">Tell Mkulima what is happening on your farm. We move the conversation straight to WhatsApp, where you can type naturally, mix English and Kiswahili, or send a farm photo.</p>
+<div class="trust"><span>✓ 5 free questions/month</span><span>✓ Works in WhatsApp</span><span>✓ No new account to learn</span></div>
+</div>
+<div class="funnel">
+<h3>Start with Mkulima on WhatsApp</h3>
+<p>Choose what you need help with. We prepare the first message for you.</p>
+<form action="/go/whatsapp" method="get" id="waStart">
+<input type="hidden" name="src" value=""""+src+"""">
+<div class="field"><label>What do you need help with?</label>
+<select name="intent" id="intent">
+<option value="sell">💰 I want to sell produce / compare an offer</option>
+<option value="crop">🌿 My crop looks sick / I need crop advice</option>
+<option value="weather">🌦 I need weather or timing advice</option>
+<option value="buyer">🤝 I need help finding or dealing with a buyer</option>
+<option value="other">💬 Something else</option>
+</select></div>
+<div class="quick"><button type="button" data-intent="sell">Selling</button><button type="button" data-intent="crop">Sick crop</button><button type="button" data-intent="weather">Weather</button></div>
+<div class="field"><label>Crop or product <span style="font-weight:400">(optional)</span></label><input name="crop" maxlength="60" placeholder="e.g. maize, tomatoes, milk"></div>
+<div class="field"><label>Your area <span style="font-weight:400">(optional)</span></label><input name="location" maxlength="100" placeholder="e.g. Eldoret, Burnt Forest, near Turbo market"></div>
+<button class="wa" type="submit">💬 Continue on WhatsApp</button>
+</form>
+<button class="install-lite" id="installApp" type="button">⬇ Install Mkulima App</button>
+<p id="installHelp" style="margin:9px 0 0;color:#66756b;font-size:12px">You can also install Mkulima on your phone for quick access.</p>
 </div></div></section>
-<section class="section" id="support"><div class="wrap"><div class="center"><h2>From a farmer's question to a practical next step</h2><p>Designed around the decisions that matter when produce is ready and money is on the line.</p></div>
-<div class="cards"><div class="card"><div class="icon">💰</div><h3>Understand the offer</h3><p>Turn buyer or broker offers into clear totals and comparisons before making a sale.</p></div>
-<div class="card"><div class="icon">📍</div><h3>Use local context</h3><p>Farmers can share their village, estate, road or nearby landmark so advice starts with where they actually are.</p></div>
-<div class="card"><div class="icon">🤝</div><h3>Choose the next move</h3><p>Compare buyer offers, transport and storage considerations to focus on the cash the farmer actually keeps.</p></div></div></div></section>
-<section class="section how" id="how"><div class="wrap"><div class="center"><h2>Simple enough to use from the farm</h2><p>No complicated dashboard required. The conversation gathers only the information needed to help.</p></div>
-<div class="steps"><div class="step"><div class="num">1</div><h3>Tell Mkulima what you have</h3><p>Share crop quantity, location and the offer you've received.</p></div>
-<div class="step"><div class="num">2</div><h3>Mkulima evaluates the situation</h3><p>The system structures the details, checks what is known and avoids presenting stale reference data as today's price.</p></div>
-<div class="step"><div class="num">3</div><h3>Get a practical next step</h3><p>Receive a clear response in English, Kiswahili or a natural mix, with the next information or action that matters.</p></div></div>
-<div class="promise"><div><h2>Built to become more useful over time.</h2><p>Our direction is outcome-driven: farmer question → recommendation → farmer feedback → validated knowledge → better future decision support.</p></div><span class="pill">🌱 Learning with farmers</span></div></div></section>
-<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer><script>
+<section class="section" id="support"><div class="wrap"><div class="center"><h2>One conversation. Practical next steps.</h2><p>Built around problems farmers already ask on WhatsApp.</p></div>
+<div class="cards"><div class="card"><div class="icon">💰</div><h3>Check a buyer offer</h3><p>Share quantity, price and transport cost. Mkulima helps you compare what you actually keep.</p></div>
+<div class="card"><div class="icon">📷</div><h3>Send a farm photo</h3><p>Send a crop or farm photo with a short description so Mkulima can help structure what to check next.</p></div>
+<div class="card"><div class="icon">📍</div><h3>Use your real location</h3><p>Village, estate, road or landmark can be included when local context matters.</p></div></div>
+<div class="promise"><div><h2>Try it free. Pay only when you need more.</h2><p>Every farmer gets 5 useful questions per month. When you need more, Mkulima can send a secure Paystack upgrade link inside your WhatsApp conversation.</p></div><span class="pill">Day Pass KES 49 · Plus KES 199</span></div>
+</div></section>
+<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/pricing">Plans</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer>
+<script>
+document.querySelectorAll("[data-intent]").forEach(function(b){b.addEventListener("click",function(){document.getElementById("intent").value=b.dataset.intent;});});
 let mkulimaInstallPrompt=null;
-const installBtn=document.getElementById("installApp");
-const installHelp=document.getElementById("installHelp");
-window.addEventListener("beforeinstallprompt",function(e){
-  e.preventDefault();
-  mkulimaInstallPrompt=e;
-  if(installBtn){installBtn.textContent="⬇ Install Mkulima App";installBtn.disabled=false;}
-  if(installHelp){installHelp.textContent="Ready to install on this phone.";}
-});
-if(installBtn){
-  installBtn.addEventListener("click",async function(){
-    if(window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone){
-      installHelp.textContent="Mkulima AI is already installed on this phone.";
-      return;
-    }
-    if(mkulimaInstallPrompt){
-      mkulimaInstallPrompt.prompt();
-      const choice=await mkulimaInstallPrompt.userChoice;
-      if(choice.outcome==="accepted"){
-        installHelp.textContent="Installing Mkulima AI…";
-      }else{
-        installHelp.textContent="Install cancelled. Tap the button whenever you're ready.";
-      }
-      mkulimaInstallPrompt=null;
-      return;
-    }
-    const ua=navigator.userAgent||"";
-    const isAndroid=/Android/i.test(ua);
-    const isChrome=/Chrome/i.test(ua) && !/wv|FBAN|FBAV|Instagram/i.test(ua);
-    if(isAndroid && !isChrome){
-      installHelp.textContent="Opening Mkulima in Chrome so it can be installed…";
-      window.location.href="intent://mkulima-ai-whatsapp.onrender.com/#Intent;scheme=https;package=com.android.chrome;end";
-      return;
-    }
-    installHelp.textContent="Chrome is preparing the install. If the prompt does not appear, tap ⋮ then Install app.";
-  });
-}
-window.addEventListener("appinstalled",function(){
-  if(installBtn){installBtn.textContent="✓ Mkulima Installed";installBtn.disabled=true;}
-  if(installHelp){installHelp.textContent="Installed successfully. Open Mkulima from your home screen.";}
-});
-if("serviceWorker" in navigator){
-  window.addEventListener("load",function(){
-    navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(function(){});
-  });
-}
+const installBtn=document.getElementById("installApp"),installHelp=document.getElementById("installHelp");
+window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();mkulimaInstallPrompt=e;if(installHelp)installHelp.textContent="Ready to install on this phone.";});
+if(installBtn){installBtn.addEventListener("click",async function(){
+ if(window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone){installHelp.textContent="Mkulima AI is already installed.";return;}
+ if(mkulimaInstallPrompt){mkulimaInstallPrompt.prompt();const x=await mkulimaInstallPrompt.userChoice;installHelp.textContent=x.outcome==="accepted"?"Installing Mkulima AI…":"Install cancelled.";mkulimaInstallPrompt=null;return;}
+ const ua=navigator.userAgent||"",android=/Android/i.test(ua),chrome=/Chrome/i.test(ua)&&!/wv|FBAN|FBAV|Instagram/i.test(ua);
+ if(android&&!chrome){window.location.href="intent://mkulima-ai-whatsapp.onrender.com/#Intent;scheme=https;package=com.android.chrome;end";return;}
+ installHelp.textContent="Tap Chrome ⋮ then Install app if the install prompt does not appear.";
+});}
+window.addEventListener("appinstalled",function(){if(installBtn){installBtn.textContent="✓ Mkulima Installed";installBtn.disabled=true;}if(installHelp)installHelp.textContent="Installed successfully.";});
+if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(function(){});});}
 </script>"""
+
+def _whatsapp_display_number():
+    token=os.getenv("WHATSAPP_TOKEN","").strip()
+    phone_id=os.getenv("WHATSAPP_PHONE_NUMBER_ID","").strip()
+    if not (token and phone_id): return None
+    req=urlrequest.Request(
+        "https://graph.facebook.com/v23.0/"+urlparse.quote(phone_id)+"?fields=display_phone_number",
+        headers={"Authorization":"Bearer "+token}
+    )
+    try:
+        with urlrequest.urlopen(req,timeout=12) as res:
+            data=json.loads(res.read().decode())
+            return re.sub(r"\\D","",str(data.get("display_phone_number") or "")) or None
+    except Exception:
+        app.logger.exception("could not resolve WhatsApp display number")
+        return None
+
+@app.get("/go/whatsapp")
+def go_whatsapp():
+    intent=(request.args.get("intent","other") or "other").strip().lower()
+    crop=" ".join((request.args.get("crop","") or "").split())[:60]
+    location=" ".join((request.args.get("location","") or "").split())[:100]
+    src=re.sub(r"[^a-z0-9_-]","",(request.args.get("src","direct") or "direct").lower())[:32] or "direct"
+    prompts={
+        "sell":"I want help selling my produce or comparing a buyer offer.",
+        "crop":"I need help with a crop or farm problem.",
+        "weather":"I need weather or timing advice for my farm.",
+        "buyer":"I need help dealing with or finding a buyer.",
+        "other":"I need help with my farm."
+    }
+    parts=["Hi Mkulima 🌱",prompts.get(intent,prompts["other"])]
+    if crop: parts.append("Crop/product: "+crop+".")
+    if location: parts.append("Area: "+location+".")
+    parts.append("Please guide me on the next step.")
+    number=_whatsapp_display_number()
+    app.logger.info("MKULIMA_ACQUISITION source=%s intent=%s",src,intent)
+    if not number:
+        return """<h2>Mkulima WhatsApp is temporarily unavailable</h2><p>Please return in a moment. No payment has been taken.</p>""",503
+    return redirect("https://wa.me/"+number+"?"+urlparse.urlencode({"text":" ".join(parts)}),302)
+
+def _paystack_connection_ok():
+    if not _pay_secret(): return False
+    try:
+        data=_paystack_json("GET","/balance")
+        return bool(data and data.get("status"))
+    except Exception:
+        return False
+
+@app.get("/api/readiness")
+def readiness():
+    number=_whatsapp_display_number()
+    return jsonify(
+        ok=bool(number and _paystack_connection_ok() and _checkout_signing_secret()),
+        whatsapp={"configured":bool(number)},
+        payments={"configured":bool(_pay_secret()),"api_ok":_paystack_connection_ok(),"signed_checkout":bool(_checkout_signing_secret())},
+        pwa={"manifest":True,"service_worker":True,"install_button":True}
+    )
 
 @app.get("/privacy")
 def privacy():
