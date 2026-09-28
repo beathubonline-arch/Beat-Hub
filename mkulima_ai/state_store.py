@@ -254,10 +254,14 @@ def mark_payment_paid(reference, provider_payload=None):
 
 def create_payment_for_actor(actor, reference, plan, amount_kes, email):
     if not (supabase_enabled() and actor):
+        print("MKULIMA_PAYMENT_STORE_NOT_READY supabase_url=%s supabase_secret=%s actor=%s" % (
+            bool(_url()), bool(_secret()), bool(actor)
+        ), flush=True)
         return False
     payload={"actor_ref":actor,"reference":reference,"plan":plan,"amount_kes":int(amount_kes),"email":email,"status":"initialized","provider":"paystack"}
     try:
         _api("POST","mkulima_payments",payload,"return=minimal")
         return True
-    except Exception:
+    except Exception as exc:
+        print("MKULIMA_PAYMENT_STORE_ERROR type=%s message=%s" % (type(exc).__name__, str(exc)[:300]), flush=True)
         return False
