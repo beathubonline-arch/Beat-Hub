@@ -366,7 +366,7 @@ LEGAL_STYLE = """<style>
 h1,h2{color:var(--green)}a{color:var(--green)}small{color:#667}
 </style>"""
 
-HOME_STYLE = """<style>
+HOME_STYLE = """<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#176b35"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Mkulima AI"><link rel="manifest" href="/static/manifest.webmanifest"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><style>
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,Arial,sans-serif;color:#15351f;background:#fbfcf7;line-height:1.55}
 a{text-decoration:none}.wrap{width:min(1120px,calc(100% - 36px));margin:auto}
 nav{height:76px;display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:800;color:#103e24}.mark{width:38px;height:38px;border-radius:12px;background:#176b35;display:grid;place-items:center;color:#fff;font-size:21px}.navtag{font-size:13px;color:#52695a}
@@ -403,7 +403,7 @@ def home():
 <div class="step"><div class="num">2</div><h3>Mkulima evaluates the situation</h3><p>The system structures the details, checks what is known and avoids presenting stale reference data as today's price.</p></div>
 <div class="step"><div class="num">3</div><h3>Get a practical next step</h3><p>Receive a clear response in English, Kiswahili or a natural mix, with the next information or action that matters.</p></div></div>
 <div class="promise"><div><h2>Built to become more useful over time.</h2><p>Our direction is outcome-driven: farmer question → recommendation → farmer feedback → validated knowledge → better future decision support.</p></div><span class="pill">🌱 Learning with farmers</span></div></div></section>
-<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer>"""
+<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer><script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/static/sw.js").catch(function(){});});}</script>"""
 
 @app.get("/privacy")
 def privacy():
