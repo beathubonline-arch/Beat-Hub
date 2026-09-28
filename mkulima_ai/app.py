@@ -23,7 +23,7 @@ MZ_PLANS={
 MKULIMA_BASE_URL=os.getenv("MKULIMA_BASE_URL","https://mkulima-ai-whatsapp.onrender.com").rstrip("/")
 
 def _pay_secret():
-    return os.getenv("PAYSTACK_SECRET_KEY","").strip()
+    return (os.getenv("MKULIMA_PAYSTACK_SECRET_KEY") or os.getenv("PAYSTACK_SECRET_KEY") or "").strip()
 
 def _checkout_signing_secret():
     return (os.getenv("MKULIMA_CHECKOUT_SECRET") or os.getenv("MKULIMA_ACTOR_SALT") or os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").encode()
