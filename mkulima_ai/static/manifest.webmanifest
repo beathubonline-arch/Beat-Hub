@@ -1,0 +1,19 @@
+{
+  "name": "Mkulima AI",
+  "short_name": "Mkulima AI",
+  "description": "Practical decision support for Kenyan farmers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfcf7",
+  "theme_color": "#176b35",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
