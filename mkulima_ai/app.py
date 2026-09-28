@@ -42,11 +42,63 @@ def extract_location(text):
     loc=loc.strip(" ,.-")
     return loc[:160].title() if loc else None
 
+NUMBER_WORDS={
+    "one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,
+    "eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,"nineteen":19,
+    "twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60,"seventy":70,"eighty":80,"ninety":90,
+    "moja":1,"mbili":2,"tatu":3,"nne":4,"tano":5,"sita":6,"saba":7,"nane":8,"tisa":9,"kumi":10
+}
+PRODUCT_ALIASES={
+    "eggs":"eggs","egg":"eggs","mayai":"eggs",
+    "milk":"milk","maziwa":"milk",
+    "maize":"maize","mahindi":"maize",
+    "tomato":"tomatoes","tomatoes":"tomatoes","nyanya":"tomatoes",
+    "potato":"potatoes","potatoes":"potatoes","viazi":"potatoes",
+    "beans":"beans","maharagwe":"beans",
+    "banana":"bananas","bananas":"bananas","ndizi":"bananas",
+    "cabbage":"cabbages","cabbages":"cabbages","kabichi":"cabbages"
+}
+UNIT_ALIASES={
+    "tray":"trays","trays":"trays","trei":"trays",
+    "litre":"litres","litres":"litres","liter":"litres","liters":"litres","lita":"litres",
+    "crate":"crates","crates":"crates","kreti":"crates",
+    "bag":"bags","bags":"bags","gunia":"bags","sack":"bags","sacks":"bags",
+    "kg":"kg","kgs":"kg","kilo":"kg","kilos":"kg",
+    "bunch":"bunches","bunches":"bunches",
+    "head":"heads","heads":"heads","pieces":"pieces","piece":"pieces"
+}
+DEFAULT_UNITS={"eggs":"trays","milk":"litres","tomatoes":"crates","maize":"bags","beans":"bags","potatoes":"bags","bananas":"bunches","cabbages":"heads"}
+
+def _word_number(raw):
+    parts=re.findall(r"[a-z]+",raw.lower())
+    total=0; seen=False
+    for p in parts:
+        if p in NUMBER_WORDS:
+            total+=NUMBER_WORDS[p]; seen=True
+        elif p in {"and","na"}:
+            continue
+        else:
+            return None
+    return float(total) if seen and total>0 else None
+
 def parse(text):
     t=" ".join((text or "").lower().split())
     out={}
-    m=re.search(r"(\d+(?:\.\d+)?)\s*(?:bags?|gunia|sacks?)\b",t) or re.search(r"(?:bags?|gunia|sacks?)\s*(?:za\s*)?(\d+(?:\.\d+)?)",t)
-    if m: out["bags"]=float(m.group(1))
+    for token,product in PRODUCT_ALIASES.items():
+        if re.search(r"\b"+re.escape(token)+r"\b",t):
+            out["product"]=product
+            break
+    unit_group="|".join(sorted((re.escape(k) for k in UNIT_ALIASES),key=len,reverse=True))
+    qm=re.search(r"(\d+(?:\.\d+)?)\s*("+unit_group+r")\b",t)
+    if not qm:
+        qm=re.search(r"\b([a-z]+(?:\s+[a-z]+){0,2})\s+("+unit_group+r")\b",t)
+    if qm:
+        q=float(qm.group(1)) if re.fullmatch(r"\d+(?:\.\d+)?",qm.group(1)) else _word_number(qm.group(1))
+        if q is not None:
+            unit=UNIT_ALIASES[qm.group(2)]
+            out["quantity"]=q
+            out["quantity_unit"]=unit
+            if unit=="bags": out["bags"]=q
     for p in [
         r"(?:buyer|broker).{0,40}?(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)",
         r"(?:offer|bei|anapea|amepea|ameoffer|anataka kununua)\D{0,25}(?:kes|ksh)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)",
@@ -104,10 +156,18 @@ def apply_message(text,state):
     incoming=parse(text)
     bare=incoming.pop("_bare_number",None)
     stage=state.get("stage")
+    # A newly named product starts a fresh selling case instead of inheriting
+    # quantity/offer details from a previous crop or livestock sale.
+    if incoming.get("product") and state.get("primary_intent")=="sell" and state.get("product") and incoming["product"]!=state.get("product"):
+        for k in ("bags","quantity","quantity_unit","offer","sale_timing"):
+            state.pop(k,None)
     # Interpret a bare number from the facts still missing in the active sale,
     # not from a stale prompt/stage. Known facts always win.
     if bare is not None and state.get("primary_intent")=="sell":
-        if "bags" not in state: incoming["bags"]=bare
+        if "quantity" not in state and "bags" not in state:
+            incoming["quantity"]=bare
+            incoming["quantity_unit"]=DEFAULT_UNITS.get(incoming.get("product") or state.get("product"),"units")
+            if incoming["quantity_unit"]=="bags": incoming["bags"]=bare
         elif "offer" not in state: incoming["offer"]=bare
     elif stage=="bags" and bare is not None: incoming["bags"]=bare
     elif stage=="offer" and bare is not None: incoming["offer"]=bare
@@ -116,16 +176,25 @@ def apply_message(text,state):
         if raw and not re.search(r"\b(?:bags?|gunia|buyer|broker|offer|bei)\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
+    # Normalize legacy bag state into the generic quantity model.
+    if state.get("bags") is not None and state.get("quantity") is None:
+        state["quantity"]=state["bags"]; state["quantity_unit"]="bags"
+    if state.get("primary_intent")=="sell":
+        timing=" ".join((text or "").lower().split())
+        if any(x in timing for x in ("today","leo","now","sasa","asap","haraka")): state["sale_timing"]="today"
+        elif any(x in timing for x in ("few days","next days","this week","wiki","days")): state["sale_timing"]="few_days"
+        elif any(x in timing for x in ("best price","check price","bei nzuri","bei bora","price first")): state["sale_timing"]="best_price"
     state=enrich_case_evidence(text,state)
     state=enrich_context(text,state)
     state["plan"]=build_plan(text,state)
     state["language"]=detect_language(text) if text else state.get("language","en")
     # Only the specialist selling flow requires location/bags/offer. Other
     # farmer intents must not be forced through the maize-sale questionnaire.
-    if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","offer")):
+    if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","quantity","offer")):
         if "location" not in state: state["stage"]="location"
-        elif "bags" not in state: state["stage"]="bags"
-        elif "offer" not in state: state["stage"]="offer"
+        elif "quantity" not in state and "bags" not in state: state["stage"]="quantity"
+        elif state.get("product") and state.get("product")!="maize" and "sale_timing" not in state: state["stage"]="sale_timing"
+        elif state.get("quantity_unit")=="bags" and "offer" not in state: state["stage"]="offer"
         else: state["stage"]="complete"
     else:
         state["stage"]="open"
@@ -153,13 +222,29 @@ def reply_for(text, known=None):
     broad=open_reply(text,f,lang)
     if broad is not None:
         return broad
-    missing=[x for x in ("location","bags","offer") if x not in f]
-    questions={
-      "sw":{"location":"Uko eneo gani? Unaweza kutaja village, estate, road au landmark iliyo karibu.","bags":"Una gunia ngapi za mazao?","offer":"Buyer/broker amekupea bei gani kwa gunia moja?"},
-      "en":{"location":"Where exactly are you? You can give your village, estate, road or a nearby landmark.","bags":"How many bags of produce do you have?","offer":"What price per bag has the buyer or broker offered you?"},
-      "mixed":{"location":"Uko wapi exactly? Taja village, estate, road or nearby landmark.","bags":"Una bags/gunia ngapi za mazao?","offer":"Buyer/broker amekuoffer how much per bag?"}
-    }
-    if missing: return questions[lang][missing[0]]
+    product=f.get("product")
+    quantity=f.get("quantity",f.get("bags"))
+    unit=f.get("quantity_unit") or ("bags" if f.get("bags") is not None else DEFAULT_UNITS.get(product,"units"))
+    if "location" not in f:
+        return {"sw":"Uko eneo gani? Unaweza kutaja village, estate, road au landmark iliyo karibu.","en":"Where exactly are you? You can give your village, estate, road or a nearby landmark.","mixed":"Uko wapi exactly? Taja village, estate, road or nearby landmark."}[lang]
+    if quantity is None:
+        label=unit or "units"
+        if lang=="en": return f"How many {label} of {product or 'produce'} do you have?"
+        if lang=="mixed": return f"Uko na {label} ngapi za {product or 'produce'}?"
+        return f"Una {label} ngapi za {product or 'mazao'}?"
+    if product and product!="maize" and not f.get("sale_timing"):
+        if lang=="en":
+            return f"Got it 👍 You have {quantity:g} {unit} of {product} in {f['location']}. Are you looking to sell them today, within the next few days, or are you checking the best price first?"
+        if lang=="mixed":
+            return f"Sawa 👍 Uko na {quantity:g} {unit} za {product} {f['location']}. Unataka kuuza leo, within the next few days, ama tucheck best price first?"
+        return f"Sawa 👍 Una {quantity:g} {unit} za {product} huko {f['location']}. Unataka kuuza leo, ndani ya siku chache, au tuangalie bei bora kwanza?"
+    if unit=="bags" and "offer" not in f:
+        return {"sw":"Buyer/broker amekupea bei gani kwa gunia moja?","en":"What price per bag has the buyer or broker offered you?","mixed":"Buyer/broker amekuoffer how much per bag?"}[lang]
+    if product and product!="maize":
+        timing=f.get("sale_timing","")
+        if lang=="en":
+            return f"Thanks — I have {quantity:g} {unit} of {product} in {f['location']} and your priority is {timing.replace('_',' ')}. Next I can help you compare buyer options and the price you should verify before accepting a deal."
+        return f"Asante — nimehifadhi {quantity:g} {unit} za {product} huko {f['location']}, priority ni {timing.replace('_',' ')}. Hatua inayofuata ni kulinganisha buyer options na bei kabla ukubali deal."
     gross=f["bags"]*f["offer"]
     normalized=" ".join((text or "").lower().split())
     wants_help=any(p in normalized for p in ("nifanye aje","nifanye nini","what should i do","what do i do","ushauri","advise","help me","solution"))
