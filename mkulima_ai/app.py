@@ -510,7 +510,7 @@ def _log_startup_readiness_once():
     wa_ok=bool(_whatsapp_display_number())
     pay_ok=_paystack_connection_ok()
     signing_ok=bool(_checkout_signing_secret())
-    app.logger.info("MKULIMA_LIVE_READINESS whatsapp=%s paystack=%s signed_checkout=%s",wa_ok,pay_ok,signing_ok)
+    print("MKULIMA_LIVE_READINESS whatsapp=%s paystack=%s signed_checkout=%s" % (wa_ok,pay_ok,signing_ok), flush=True)
     return None
 
 @app.get("/api/readiness")
