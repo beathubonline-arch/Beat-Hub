@@ -5,7 +5,7 @@ from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
-from weather_live import live_weather, weather_reply
+from weather_live import live_weather, weather_reply\nfrom state_store import load_state, save_state, claim_message
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -249,18 +249,11 @@ def webhook():
         value=payload["entry"][0]["changes"][0]["value"]
         if "messages" not in value: return jsonify(ok=True),200
         msg=value["messages"][0]; mid=msg["id"]; phone=msg["from"]
-        init_db(); con=sqlite3.connect(DB)
-        try: con.execute("INSERT INTO processed_messages(message_id) VALUES(?)",(mid,)); con.commit()
-        except sqlite3.IntegrityError: con.close(); return jsonify(ok=True,deduplicated=True),200
-        con.close()
-        # Remember facts already supplied by this farmer so follow-up questions
-        # ask only for information we genuinely still need.
-        con=sqlite3.connect(DB)
-        row=con.execute("SELECT state FROM conversations WHERE phone=?",(phone,)).fetchone()
-        try:
-            state=json.loads(row[0]) if row else {}
-        except (TypeError,ValueError,json.JSONDecodeError):
-            state={}
+        if not claim_message(mid):
+            return jsonify(ok=True,deduplicated=True),200
+        # Supabase is preferred when securely configured; SQLite remains a rollout fallback.
+        # The durable store uses a pseudonymous actor_ref rather than the raw WhatsApp number.
+        state=load_state(phone)
         if msg.get("type")=="image":
             image=msg.get("image") or {}
             caption=(image.get("caption") or "").strip()
@@ -272,8 +265,7 @@ def webhook():
                 state["plan"]=build_plan("",state)
                 state["language"]=state.get("language","sw")
                 state["stage"]="open"
-            con.execute("INSERT INTO conversations(phone,state) VALUES(?,?) ON CONFLICT(phone) DO UPDATE SET state=excluded.state",(phone,json.dumps(state)))
-            con.commit(); con.close()
+            save_state(phone,state)
             media=download_whatsapp_media(image.get("id"))
             vision={"ok":False,"status":"media_unavailable"}
             if media.get("ok"):
@@ -287,14 +279,11 @@ def webhook():
             if vision.get("ok"):
                 state["last_image"]["vision_provider"]=vision.get("provider")
                 state["last_image"]["observations"]=vision.get("observations")
-            con=sqlite3.connect(DB)
-            con.execute("INSERT INTO conversations(phone,state) VALUES(?,?) ON CONFLICT(phone) DO UPDATE SET state=excluded.state",(phone,json.dumps(state)))
-            con.commit(); con.close()
+            save_state(phone,state)
             response=safe_vision_reply(vision,state.get("language","sw")) or image_context_reply(state,caption)
             send_whatsapp_text(phone,response)
             return jsonify(ok=True,image_received=True,media_status=media.get("status"),vision_status=vision.get("status")),200
         if msg.get("type")!="text":
-            con.close()
             send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
             return jsonify(ok=True,unsupported_type=msg.get("type")),200
         state=apply_message(msg["text"]["body"],state)
@@ -302,12 +291,7 @@ def webhook():
         if state.get("primary_intent")=="weather" and state.get("location"):
             weather_result=live_weather(state.get("location"))
             state["last_weather"]={k:v for k,v in weather_result.items() if k not in ("raw",)}
-        con.execute(
-            "INSERT INTO conversations(phone,state) VALUES(?,?) "
-            "ON CONFLICT(phone) DO UPDATE SET state=excluded.state",
-            (phone,json.dumps(state))
-        )
-        con.commit(); con.close()
+        save_state(phone,state)
 
         response=weather_reply(weather_result,state.get("language","sw")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
