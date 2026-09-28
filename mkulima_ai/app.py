@@ -87,6 +87,14 @@ def apply_message(text,state):
         state["stage"]="open"
     return state
 
+def image_context_reply(state, caption=""):
+    lang=state.get("language","sw")
+    crop=state.get("crop")
+    known=(f" I can see from our chat that the crop is {crop}." if crop and lang=="en" else (f" Kwa context yetu zao ni {crop}." if crop else ""))
+    if lang=="en":
+        return ("📷 I received the farm photo."+known+" I can use photos as evidence, but the visual-diagnosis engine is not connected yet, so I won't invent what the image shows. Tell me what you want checked (disease, pest, nutrient problem, product/label, crop quality, animal, soil or whole field), when the problem started, and your location. If possible send one close photo and one wider photo.")
+    return ("📷 Nimepokea picha ya shamba."+known+" Naweza kuitumia kama evidence, lakini visual-diagnosis engine bado haijaunganishwa, kwa hivyo sitabuni diagnosis. Niambie unataka nichunguze nini—ugonjwa, pest, nutrient, product/label, quality ya mazao, mnyama, soil ama field yote—ilianza lini na uko eneo gani. Ukiweza tuma close photo moja na wide photo moja.")
+
 def reply_for(text, known=None):
     f=dict(known or {})
     lang=detect_language(text)
@@ -224,10 +232,6 @@ def webhook():
         try: con.execute("INSERT INTO processed_messages(message_id) VALUES(?)",(mid,)); con.commit()
         except sqlite3.IntegrityError: con.close(); return jsonify(ok=True,deduplicated=True),200
         con.close()
-        if msg.get("type")!="text":
-            send_whatsapp_text(phone,"Kwa sasa tuma text kuhusu mahindi yako. Voice itaongezwa baada ya text test kupita.")
-            return jsonify(ok=True),200
-
         # Remember facts already supplied by this farmer so follow-up questions
         # ask only for information we genuinely still need.
         con=sqlite3.connect(DB)
@@ -236,6 +240,25 @@ def webhook():
             state=json.loads(row[0]) if row else {}
         except (TypeError,ValueError,json.JSONDecodeError):
             state={}
+        if msg.get("type")=="image":
+            image=msg.get("image") or {}
+            caption=(image.get("caption") or "").strip()
+            state["has_image"]=True
+            state["last_image"]={"media_id":image.get("id"),"mime_type":image.get("mime_type"),"sha256":image.get("sha256"),"caption":caption}
+            if caption:
+                state=apply_message(caption,state)
+            else:
+                state["plan"]=build_plan("",state)
+                state["language"]=state.get("language","sw")
+                state["stage"]="open"
+            con.execute("INSERT INTO conversations(phone,state) VALUES(?,?) ON CONFLICT(phone) DO UPDATE SET state=excluded.state",(phone,json.dumps(state)))
+            con.commit(); con.close()
+            send_whatsapp_text(phone,image_context_reply(state,caption))
+            return jsonify(ok=True,image_received=True,vision_status="input_available"),200
+        if msg.get("type")!="text":
+            con.close()
+            send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
+            return jsonify(ok=True,unsupported_type=msg.get("type")),200
         state=apply_message(msg["text"]["body"],state)
         con.execute(
             "INSERT INTO conversations(phone,state) VALUES(?,?) "
