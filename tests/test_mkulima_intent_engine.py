@@ -192,6 +192,35 @@ class ConversationLoopRegression(unittest.TestCase):
         state=app_module.apply_message("50",state)
         self.assertEqual(state.get("stage"),"offer")
 
+    def test_egg_sale_keeps_product_location_and_trays(self):
+        state={}
+        state=app_module.apply_message("I need to sell eggs",state)
+        self.assertEqual(state.get("product"),"eggs")
+        self.assertEqual(state.get("stage"),"location")
+        state=app_module.apply_message("Ngara Estate",state)
+        self.assertEqual(state.get("location"),"Ngara Estate")
+        self.assertEqual(state.get("stage"),"quantity")
+        state=app_module.apply_message("thirty trays",state)
+        self.assertEqual(state.get("quantity"),30)
+        self.assertEqual(state.get("quantity_unit"),"trays")
+        self.assertEqual(state.get("stage"),"sale_timing")
+        reply=app_module.reply_for("thirty trays",state)
+        self.assertIn("30 trays of eggs",reply.lower())
+        self.assertNotIn("bags of produce",reply.lower())
+        self.assertIn("today",reply.lower())
+
+    def test_egg_sale_flow_is_repeatable(self):
+        for _ in range(2):
+            state={}
+            for message in ("I need to sell eggs","Ngara Estate","thirty trays"):
+                state=app_module.apply_message(message,state)
+            reply=app_module.reply_for("thirty trays",state)
+            self.assertEqual(state.get("product"),"eggs")
+            self.assertEqual(state.get("location"),"Ngara Estate")
+            self.assertEqual(state.get("quantity"),30)
+            self.assertEqual(state.get("quantity_unit"),"trays")
+            self.assertNotIn("how many bags",reply.lower())
+
 
 class GrowthRevenueRegression(unittest.TestCase):
     def test_first_touch_source_is_remembered_and_not_overwritten(self):
