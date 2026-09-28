@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timezone
+from tool_registry import describe_tools, evidence_summary
 
 URGENT=("dying","dead","can't breathe","cannot breathe","poison","bleeding","severe","emergency","haraka sana","inakufa","amekufa","haipumui","sumu","damu nyingi")
 GOALS={
@@ -47,7 +48,10 @@ def build_plan(text,state):
     if intent=="inputs": missing.extend(["plot_size","growth_stage","problem_to_solve"])
     if intent=="profit": missing.extend(["selling_price","known_costs"])
     plan["missing_evidence"]=missing
+    plan["tool_status"]=describe_tools(plan["tools"])
+    plan["evidence"]=evidence_summary(plan)
     plan["can_answer_from_memory"]=not missing
+    plan["can_execute_all_tools"]=all(x.get("status")=="available" for x in plan["tool_status"])
     return plan
 
 def safe_reasoning_reply(text,state,lang):
