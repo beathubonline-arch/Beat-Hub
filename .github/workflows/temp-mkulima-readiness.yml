@@ -1,6 +1,7 @@
 name: Temporary Mkulima Readiness Check
 on:
-  workflow_dispatch:
+  push:
+    branches: [mkulima-ai-deploy]
 jobs:
   verify:
     runs-on: ubuntu-latest
