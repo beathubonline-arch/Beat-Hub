@@ -381,6 +381,13 @@ footer{border-top:1px solid #e1e8e0;padding:28px 0 36px;color:#66756b;font-size:
 @media(max-width:800px){.grid{grid-template-columns:1fr;gap:42px}.hero{padding:55px 0}.cards,.steps{grid-template-columns:1fr}.promise{flex-direction:column;align-items:flex-start}h1{letter-spacing:-1.5px}.navtag{display:none}.phone{max-width:100%}}
 </style>"""
 
+@app.get("/sw.js")
+def service_worker():
+    response=app.send_static_file("sw.js")
+    response.headers["Service-Worker-Allowed"]="/"
+    response.headers["Cache-Control"]="no-cache"
+    return response
+
 @app.get("/")
 def home():
     return HOME_STYLE + """<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Built for Kenyan farmers</span></nav>
@@ -403,7 +410,7 @@ def home():
 <div class="step"><div class="num">2</div><h3>Mkulima evaluates the situation</h3><p>The system structures the details, checks what is known and avoids presenting stale reference data as today's price.</p></div>
 <div class="step"><div class="num">3</div><h3>Get a practical next step</h3><p>Receive a clear response in English, Kiswahili or a natural mix, with the next information or action that matters.</p></div></div>
 <div class="promise"><div><h2>Built to become more useful over time.</h2><p>Our direction is outcome-driven: farmer question → recommendation → farmer feedback → validated knowledge → better future decision support.</p></div><span class="pill">🌱 Learning with farmers</span></div></div></section>
-<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer><script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/static/sw.js").catch(function(){});});}</script>"""
+<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer><script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js", {scope:"/"}).catch(function(){});});}</script>"""
 
 @app.get("/privacy")
 def privacy():
