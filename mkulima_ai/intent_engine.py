@@ -36,9 +36,10 @@ def detect_crop(text,previous=None):
 def enrich_context(text,state):
     state=dict(state or {})
     intents=detect_intents(text)
-    # Short follow-ups after a farm photo often contain no intent keywords.
-    # Keep the active case intent instead of resetting to a generic flow.
-    if intents==["general"] and state.get("has_image") and state.get("primary_intent") not in (None,"general"):
+    # Generic/short follow-ups belong to the active conversation unless the
+    # farmer explicitly introduces a different intent. This prevents location,
+    # quantity, price, yes/no and landmark answers from resetting the flow.
+    if intents==["general"] and state.get("primary_intent") not in (None,"general"):
         intents=state.get("intents") or [state["primary_intent"]]
     state["intents"]=intents
     state["primary_intent"]=intents[0]
