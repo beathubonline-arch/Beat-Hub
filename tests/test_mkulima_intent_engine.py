@@ -156,6 +156,33 @@ class AppSmokeRegression(unittest.TestCase):
         import py_compile
         py_compile.compile(os.path.join(ROOT,"mkulima_ai","app.py"),doraise=True)
 
+class LearningPersistenceRegression(unittest.TestCase):
+    def test_interaction_record_is_deidentified(self):
+        import state_store
+        old_url=os.environ.get("SUPABASE_URL"); old_key=os.environ.get("SUPABASE_SECRET_KEY")
+        original=state_store._api; seen={}
+        try:
+            os.environ["SUPABASE_URL"]="https://example.supabase.co"
+            os.environ["SUPABASE_SECRET_KEY"]="test-secret"
+            def fake_api(method,path,body=None,prefer=None):
+                seen.update(method=method,path=path,body=body,prefer=prefer)
+                return [{"id":"interaction-1"}]
+            state_store._api=fake_api
+            iid=state_store.record_interaction("wamid.1","254700123456","maize leaves yellow","check timing",{"crop":"maize","location":"Turbo","language":"en","primary_intent":"crop_health"})
+            self.assertEqual(iid,"interaction-1")
+            self.assertNotIn("254700123456",json.dumps(seen))
+            self.assertEqual(seen["body"]["crop"],"maize")
+        finally:
+            state_store._api=original
+            if old_url is None: os.environ.pop("SUPABASE_URL",None)
+            else: os.environ["SUPABASE_URL"]=old_url
+            if old_key is None: os.environ.pop("SUPABASE_SECRET_KEY",None)
+            else: os.environ["SUPABASE_SECRET_KEY"]=old_key
+
+    def test_feedback_rejects_unknown_rating(self):
+        import state_store
+        self.assertFalse(state_store.record_feedback("fb.1","interaction-1","maybe"))
+
 class DurableStateRegression(unittest.TestCase):
     def test_actor_ref_is_pseudonymous(self):
         import state_store
