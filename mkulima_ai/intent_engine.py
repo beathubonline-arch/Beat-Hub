@@ -36,8 +36,7 @@ def detect_crop(text,previous=None):
 def enrich_context(text,state):
     state=dict(state or {})
     intents=detect_intents(text)
-    state["intents"]=intents
-    state["primary_intent"]=intents[0]
+    # Short follow-ups after a farm photo often contain no intent keywords. Keep\n    # the active case intent instead of resetting the farmer to a generic flow.\n    if intents==["general"] and state.get("has_image") and state.get("primary_intent") not in (None,"general"):\n        intents=state.get("intents") or [state["primary_intent"]]\n    state["intents"]=intents\n    state["primary_intent"]=intents[0]
     crop=detect_crop(text,state.get("crop"))
     if crop: state["crop"]=crop
     return state
