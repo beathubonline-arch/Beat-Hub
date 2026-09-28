@@ -149,3 +149,88 @@ def record_revenue_event(phone, event_type, amount_kes=None, source=None, metada
         return True
     except Exception:
         return False
+
+
+def get_access(phone):
+    """Return current paid/free access without exposing the raw phone."""
+    ref=actor_ref(phone)
+    if not (supabase_enabled() and ref):
+        return {"plan":"free","active":False,"free_used":0,"free_limit":5}
+    month=__import__("datetime").datetime.utcnow().strftime("%Y-%m")
+    try:
+        rows=_api("GET","mkulima_access?actor_ref=eq."+urlparse.quote(ref)+"&select=plan,access_until,free_month,free_used&limit=1") or []
+        if not rows:
+            _api("POST","mkulima_access",{"actor_ref":ref,"plan":"free","free_month":month,"free_used":0},"return=minimal")
+            return {"plan":"free","active":False,"free_used":0,"free_limit":5}
+        row=rows[0]
+        if row.get("free_month")!=month:
+            _api("PATCH","mkulima_access?actor_ref=eq."+urlparse.quote(ref),{"free_month":month,"free_used":0,"updated_at":__import__("datetime").datetime.utcnow().isoformat()+"Z"},"return=minimal")
+            row["free_month"]=month; row["free_used"]=0
+        active=False
+        until=row.get("access_until")
+        if until:
+            try:
+                active=__import__("datetime").datetime.fromisoformat(until.replace("Z","+00:00")) > __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+            except Exception:
+                active=False
+        return {"plan":row.get("plan") or "free","active":active,"access_until":until,"free_used":int(row.get("free_used") or 0),"free_limit":5}
+    except Exception:
+        return {"plan":"free","active":False,"free_used":0,"free_limit":5}
+
+def consume_free_question(phone):
+    """Atomically-ish increment free usage after a useful answer is sent."""
+    ref=actor_ref(phone)
+    if not (supabase_enabled() and ref):
+        return False
+    access=get_access(phone)
+    if access.get("active"):
+        return True
+    if access.get("free_used",0) >= access.get("free_limit",5):
+        return False
+    try:
+        new_used=access.get("free_used",0)+1
+        _api("PATCH","mkulima_access?actor_ref=eq."+urlparse.quote(ref),
+             {"free_used":new_used,"updated_at":__import__("datetime").datetime.utcnow().isoformat()+"Z"},
+             "return=minimal")
+        return True
+    except Exception:
+        return False
+
+def create_payment(phone, reference, plan, amount_kes, email):
+    ref=actor_ref(phone)
+    if not (supabase_enabled() and ref):
+        return False
+    payload={"actor_ref":ref,"reference":reference,"plan":plan,"amount_kes":int(amount_kes),"email":email,"status":"initialized","provider":"paystack"}
+    try:
+        _api("POST","mkulima_payments",payload,"return=minimal")
+        return True
+    except Exception:
+        return False
+
+def get_payment(reference):
+    if not (supabase_enabled() and reference):
+        return None
+    try:
+        rows=_api("GET","mkulima_payments?reference=eq."+urlparse.quote(reference)+"&select=*&limit=1") or []
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+def mark_payment_paid(reference, provider_payload=None):
+    p=get_payment(reference)
+    if not p:
+        return False
+    plan=p.get("plan")
+    seconds=86400 if plan=="day_pass" else 30*86400
+    now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    until=now+__import__("datetime").timedelta(seconds=seconds)
+    try:
+        _api("PATCH","mkulima_payments?reference=eq."+urlparse.quote(reference),
+             {"status":"paid","paid_at":now.isoformat(),"provider_payload":provider_payload or {}},
+             "return=minimal")
+        _api("POST","mkulima_access?on_conflict=actor_ref",
+             {"actor_ref":p["actor_ref"],"plan":plan,"access_until":until.isoformat(),"updated_at":now.isoformat()},
+             "resolution=merge-duplicates,return=minimal")
+        return True
+    except Exception:
+        return False
