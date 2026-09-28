@@ -29,8 +29,8 @@ def detect_language(text):
     sw=sum(1 for w in [" niko "," gunia "," bei "," karibu "," nifanye "," aje "," eneo "," mahindi "," amekupea "," nataka "] if w in t)
     en=sum(1 for w in [" i "," have "," bags "," buyer "," price "," near "," what "," should "," sell "," broker "," offer "] if w in t)
     if sw and en: return "mixed"
-    if en>sw: return "en"
-    return "sw"
+    if sw>en: return "sw"
+    return "en"
 
 def extract_location(text):
     raw=" ".join((text or "").strip().split())
@@ -97,7 +97,7 @@ def apply_message(text,state):
     state=enrich_case_evidence(text,state)
     state=enrich_context(text,state)
     state["plan"]=build_plan(text,state)
-    state["language"]=detect_language(text) if text else state.get("language","sw")
+    state["language"]=detect_language(text) if text else state.get("language","en")
     # Only the specialist selling flow requires location/bags/offer. Other
     # farmer intents must not be forced through the maize-sale questionnaire.
     if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","offer")):
@@ -110,7 +110,7 @@ def apply_message(text,state):
     return state
 
 def image_context_reply(state, caption=""):
-    lang=state.get("language","sw")
+    lang=state.get("language","en")
     crop=state.get("crop")
     known=(f" I can see from our chat that the crop is {crop}." if crop and lang=="en" else (f" Kwa context yetu zao ni {crop}." if crop else ""))
     if lang=="en":
@@ -264,7 +264,7 @@ def webhook():
                 state=apply_message(caption,state)
             else:
                 state["plan"]=build_plan("",state)
-                state["language"]=state.get("language","sw")
+                state["language"]=state.get("language","en")
                 state["stage"]="open"
             save_state(phone,state)
             media=download_whatsapp_media(image.get("id"))
@@ -281,7 +281,7 @@ def webhook():
                 state["last_image"]["vision_provider"]=vision.get("provider")
                 state["last_image"]["observations"]=vision.get("observations")
             save_state(phone,state)
-            response=safe_vision_reply(vision,state.get("language","sw")) or image_context_reply(state,caption)
+            response=safe_vision_reply(vision,state.get("language","en")) or image_context_reply(state,caption)
             send_whatsapp_text(phone,response)
             interaction_id=record_interaction(mid,phone,caption or "[farm photo]",response,state)
             if interaction_id:
@@ -299,7 +299,7 @@ def webhook():
             state["last_weather"]={k:v for k,v in weather_result.items() if k not in ("raw",)}
         save_state(phone,state)
 
-        response=weather_reply(weather_result,state.get("language","sw")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
+        response=weather_reply(weather_result,state.get("language","en")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
         interaction_id=record_interaction(mid,phone,msg["text"]["body"],response,state)
         if interaction_id:
