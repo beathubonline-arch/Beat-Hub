@@ -48,7 +48,10 @@ def _paystack_json(method,path,payload=None):
     if not secret: raise RuntimeError("paystack_not_configured")
     data=None if payload is None else json.dumps(payload).encode()
     req=urlrequest.Request("https://api.paystack.co"+path,data=data,method=method,headers={
-        "Authorization":"Bearer "+secret,"Content-Type":"application/json"
+        "Authorization":"Bearer "+secret,
+        "Content-Type":"application/json",
+        "Accept":"application/json",
+        "User-Agent":"MkulimaAI/1.0 (+https://mkulima-ai-whatsapp.onrender.com)"
     })
     with urlrequest.urlopen(req,timeout=15) as res:
         return json.loads(res.read().decode())
