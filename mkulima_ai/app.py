@@ -2,6 +2,7 @@ import os, re, sqlite3, json
 from datetime import date, datetime
 from flask import Flask, request, jsonify
 from integrations import send_whatsapp_text
+from intent_engine import enrich_context, open_reply
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -71,11 +72,17 @@ def apply_message(text,state):
         if raw and not re.search(r"\b(?:bags?|gunia|buyer|broker|offer|bei)\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
+    state=enrich_context(text,state)
     state["language"]=detect_language(text) if text else state.get("language","sw")
-    if "location" not in state: state["stage"]="location"
-    elif "bags" not in state: state["stage"]="bags"
-    elif "offer" not in state: state["stage"]="offer"
-    else: state["stage"]="complete"
+    # Only the specialist selling flow requires location/bags/offer. Other
+    # farmer intents must not be forced through the maize-sale questionnaire.
+    if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","offer")):
+        if "location" not in state: state["stage"]="location"
+        elif "bags" not in state: state["stage"]="bags"
+        elif "offer" not in state: state["stage"]="offer"
+        else: state["stage"]="complete"
+    else:
+        state["stage"]="open"
     return state
 
 def reply_for(text, known=None):
@@ -84,6 +91,10 @@ def reply_for(text, known=None):
     # Preserve established language on short numeric follow-ups.
     if re.fullmatch(r"(?:kes|ksh|sh)?\s*[0-9][0-9,.]*",(text or "").strip(),re.I):
         lang=f.get("language",lang)
+    # Open-ended intents branch before the legacy maize-sale gate.
+    broad=open_reply(text,f,lang)
+    if broad is not None:
+        return broad
     missing=[x for x in ("location","bags","offer") if x not in f]
     questions={
       "sw":{"location":"Uko eneo gani? Unaweza kutaja village, estate, road au landmark iliyo karibu.","bags":"Una gunia ngapi za mahindi?","offer":"Buyer/broker amekupea bei gani kwa gunia moja?"},
