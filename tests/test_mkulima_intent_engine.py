@@ -81,6 +81,21 @@ class FarmerIntentRegression(unittest.TestCase):
         self.assertEqual(x["status"],"unavailable")
         self.assertFalse(tool_is_executable("magic_price_oracle"))
 
+    def test_image_context_adds_farm_vision(self):
+        s=enrich_context("My tomato is sick",{})
+        s["has_image"]=True
+        p=build_plan("My tomato is sick",s)
+        self.assertIn("farm_vision",p["tools"])
+        vision=[x for x in p["tool_status"] if x["name"]=="farm_vision"][0]
+        self.assertEqual(vision["status"],"input_available")
+        self.assertFalse(tool_is_executable("farm_vision"))
+
+    def test_photo_does_not_fake_visual_execution(self):
+        p=build_plan("",{"primary_intent":"general","has_image":True})
+        vision=[x for x in p["tool_status"] if x["name"]=="farm_vision"][0]
+        self.assertNotEqual(vision["status"],"available")
+        self.assertFalse(p["can_execute_all_tools"])
+
     def test_sale_remains_specialist(self):
         s=enrich_context("Nataka kuuza mahindi buyer amenipea offer",{})
         self.assertEqual(s["primary_intent"],"sell")
