@@ -5,7 +5,8 @@ from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
-from weather_live import live_weather, weather_reply\nfrom state_store import load_state, save_state, claim_message
+from weather_live import live_weather, weather_reply
+from state_store import load_state, save_state, claim_message
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
