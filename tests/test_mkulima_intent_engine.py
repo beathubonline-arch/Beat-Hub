@@ -221,6 +221,33 @@ class ConversationLoopRegression(unittest.TestCase):
             self.assertEqual(state.get("quantity_unit"),"trays")
             self.assertNotIn("how many bags",reply.lower())
 
+    def test_continue_advances_nonbag_sale_instead_of_repeating(self):
+        state={}
+        for message in ("I'm selling eggs","Kisumu Ndogo Eld","300","checking best price","ok cont"):
+            state=app_module.apply_message(message,state)
+        reply=app_module.reply_for("ok cont",state)
+        self.assertEqual(state.get("stage"),"offer")
+        self.assertIn("buyer offer",reply.lower())
+        self.assertNotIn("next i can help you compare buyer options",reply.lower())
+
+    def test_do_it_advances_same_case_twice(self):
+        for phrase in ("do it","proceed"):
+            state={}
+            for message in ("I'm selling eggs","Kisumu Ndogo Eld","300","checking best price",phrase):
+                state=app_module.apply_message(message,state)
+            reply=app_module.reply_for(phrase,state)
+            self.assertIn("price in kes per tray",reply.lower())
+            self.assertNotIn("next i can help",reply.lower())
+
+    def test_no_offer_generates_truthful_buyer_ready_listing(self):
+        state={}
+        for message in ("I'm selling eggs","Kisumu Ndogo Eld","300","checking best price","no offer"):
+            state=app_module.apply_message(message,state)
+        reply=app_module.reply_for("no offer",state)
+        self.assertIn("buyer-ready listing",reply.lower())
+        self.assertIn("300 trays of eggs",reply.lower())
+        self.assertIn("not connected yet",reply.lower())
+
 
 class GrowthRevenueRegression(unittest.TestCase):
     def test_first_touch_source_is_remembered_and_not_overwritten(self):
