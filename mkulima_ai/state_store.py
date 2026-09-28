@@ -1,5 +1,5 @@
 import os, json, sqlite3, hashlib, hmac
-from urllib import request as urlrequest, parse as urlparse
+from urllib import request as urlrequest, parse as urlparse, error as urlerror
 
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
 
@@ -31,12 +31,26 @@ def _api(method,path,body=None,prefer=None):
     if not (_url() and key):
         raise RuntimeError("supabase_not_configured")
     data=None if body is None else json.dumps(body).encode()
-    headers={"apikey":key,"Authorization":"Bearer "+key,"Content-Type":"application/json"}
+    headers={
+        "apikey":key,
+        "Authorization":"Bearer "+key,
+        "Content-Type":"application/json",
+        "Accept":"application/json",
+        "User-Agent":"MkulimaAI/1.0 (+https://mkulima-ai-whatsapp.onrender.com)"
+    }
     if prefer: headers["Prefer"]=prefer
     req=urlrequest.Request(_url()+"/rest/v1/"+path,data=data,headers=headers,method=method)
-    with urlrequest.urlopen(req,timeout=8) as res:
-        raw=res.read()
-        return json.loads(raw.decode()) if raw else None
+    try:
+        with urlrequest.urlopen(req,timeout=8) as res:
+            raw=res.read()
+            return json.loads(raw.decode()) if raw else None
+    except urlerror.HTTPError as exc:
+        try:
+            body=exc.read().decode("utf-8","replace")[:500]
+        except Exception:
+            body=""
+        print("SUPABASE_REST_ERROR method=%s path=%s status=%s body=%s" % (method,path.split("?")[0],getattr(exc,"code","?"),body), flush=True)
+        raise
 
 def load_state(phone):
     ref=actor_ref(phone)
