@@ -28,7 +28,9 @@ def parse_feedback(text):
     label, _, outcome = text.strip().partition(':')
     rating = {
         '👍': 'helpful', 'helpful': 'helpful', 'imesaidia': 'helpful',
+        '👍 helpful': 'helpful', '👍 imesaidia': 'helpful',
         '👎': 'wrong', 'wrong': 'wrong', 'si sahihi': 'wrong',
+        '👎 wrong': 'wrong', '👎 si sahihi': 'wrong',
         'still problem': 'still_problem', 'still a problem': 'still_problem',
         'bado tatizo': 'still_problem',
     }.get(label.strip().lower())

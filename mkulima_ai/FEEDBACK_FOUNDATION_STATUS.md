@@ -20,7 +20,7 @@ Retrieval returns only validated, current entries matching crop, region, languag
 
 ## Not yet connected
 
-This branch does not modify `app.py` or send WhatsApp messages. Farmer feedback is not yet being collected by the live app. Render's configuration page requested sign-in, so existing secret presence could not be verified. Never request secret values in chat or copy them into a commit/log.
+The first commit left `app.py` unchanged. The follow-on commit now adds an opt-in signed webhook path; it is disabled unless `MKULIMA_FEEDBACK_ENABLED=1`. No real WhatsApp messages have been sent during these tests. Farmer feedback is not yet being collected by the live app. Render's configuration page requested sign-in, so existing secret presence could not be verified. Never request secret values in chat or copy them into a commit/log.
 
 Next bounded milestone:
 
@@ -33,3 +33,15 @@ Next bounded milestone:
 ## Video worker
 
 Kaggle notebook version 10 contains the model-and-worker restart cell. Live output confirmed `MKULIMA_MODEL_READY`, `BEATHUB_PREFLIGHT_PASS: pipeline, decoder, database`, and `BEATHUB_KAGGLE_WORKER_READY`. Existing two generated MP4s remain in QC; this does not claim publishable visual quality. Kaggle sessions remain temporary and subject to free GPU availability/quota.
+
+## Signed webhook milestone — 28 September, 05:52 EAT
+
+Implemented in this PR, not deployed: raw-body Meta HMAC verification, batch message iteration, durable per-farmer state, stored replies before sending, delivery leases, retry after failed sends, duplicate exclusion and feedback linked to original outbound reply with actor ownership. English and Swahili feedback prompts are included. Existing behavior remains selected while the feature flag is unset. Logs no longer print recipient numbers, message content or arbitrary upstream error bodies.
+
+Applied follow-on Supabase migration `mkulima_durable_webhook_state`; exact DDL in `webhook_state.sql`. Eight local tests passed, including two independent signed Flask conversations with mocked storage/delivery (English with numeric follow-ups and duplicate feedback; Swahili with failed delivery/retry and negative feedback). Another live Supabase transaction test passed for leases, durable state, staged-answer reuse, reply ownership and linked feedback, then rolled back. These are separate component/contract checks, not proof of live Render-to-Meta integration.
+
+Known delivery limitation: if Meta accepts a send but the process dies before the database marks it sent, retry may send a duplicate reply. There is no claim of exactly-once external delivery. An unfinished message blocks later messages from that actor until retried successfully; operational recovery/retention is still needed for permanently undeliverable messages.
+
+Live activation is blocked on verifying existing Render configuration: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WHATSAPP_APP_SECRET, WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_VERIFY_TOKEN. These are names only; do not paste values in chat. The Meta app secret also produces stable HMAC actor IDs; rotating it requires an identity migration. Enable the feature flag only after signed live integration validation. Reviewed knowledge retrieval is available in the backend but is not yet injected into farmer answers.
+
+Kaggle's fresh restart was verified at this milestone: Qwen 179.56s, DiT 68.75s, VAE 7.12s, followed by model-ready, preflight-pass and worker-ready output with the execution still running.

@@ -2,6 +2,8 @@ import os, re, sqlite3, json
 from datetime import date, datetime
 from flask import Flask, request, jsonify
 from integrations import send_whatsapp_text
+from feedback import FeedbackStore
+from feedback_webhook import valid_signature, process_payload
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -156,9 +158,25 @@ def health():
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
     if request.method=="GET":
-        if request.args.get("hub.verify_token")==os.getenv("WHATSAPP_VERIFY_TOKEN"):
+        if os.getenv("WHATSAPP_VERIFY_TOKEN") and request.args.get("hub.verify_token")==os.getenv("WHATSAPP_VERIFY_TOKEN"):
             return request.args.get("hub.challenge",""),200
         return "verification failed",403
+    if os.getenv('MKULIMA_FEEDBACK_ENABLED') == '1':
+        secret = os.getenv('WHATSAPP_APP_SECRET', '')
+        if len(secret) < 32:
+            return jsonify(ok=False,error='feedback_not_configured'),503
+        if not valid_signature(request.get_data(), request.headers.get('X-Hub-Signature-256'), secret):
+            return jsonify(ok=False,error='invalid_signature'),401
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(ok=False,error='invalid_payload'),400
+        try:
+            store = app.config.get('FEEDBACK_STORE') or FeedbackStore()
+            process_payload(payload, store, secret, apply_message, reply_for, send_whatsapp_text)
+            return jsonify(ok=True),200
+        except Exception:
+            app.logger.error('feedback_webhook_failed')
+            return jsonify(ok=False,error='processing_failed'),503
     payload=request.get_json(silent=True) or {}
     try:
         value=payload["entry"][0]["changes"][0]["value"]
