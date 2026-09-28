@@ -125,3 +125,27 @@ def record_feedback(message_id, interaction_id, rating, outcome=None):
         return True
     except Exception:
         return False
+
+
+def record_revenue_event(phone, event_type, amount_kes=None, source=None, metadata=None):
+    """Record a real business event only when Supabase is securely configured."""
+    allowed={"lead_generated","buyer_match","premium_started","payment_success","cooperative_account"}
+    event_type=str(event_type or "").strip().lower()
+    ref=actor_ref(phone)
+    if event_type not in allowed or not (supabase_enabled() and ref):
+        return False
+    payload={"actor_ref":ref,"event_type":event_type}
+    if amount_kes is not None:
+        try:
+            amount=float(amount_kes)
+            if amount < 0: return False
+            payload["amount_kes"]=amount
+        except (TypeError,ValueError):
+            return False
+    if source: payload["source"]=str(source)[:100]
+    if metadata and isinstance(metadata,dict): payload["metadata"]=metadata
+    try:
+        _api("POST","mkulima_revenue_events",payload,"return=minimal")
+        return True
+    except Exception:
+        return False
