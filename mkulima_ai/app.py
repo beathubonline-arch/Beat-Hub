@@ -68,6 +68,7 @@ UNIT_ALIASES={
     "head":"heads","heads":"heads","pieces":"pieces","piece":"pieces"
 }
 DEFAULT_UNITS={"eggs":"trays","milk":"litres","tomatoes":"crates","maize":"bags","beans":"bags","potatoes":"bags","bananas":"bunches","cabbages":"heads"}
+NON_BAG_SALE_PRODUCTS={"eggs","milk","tomatoes","bananas","cabbages"}
 
 def _word_number(raw):
     parts=re.findall(r"[a-z]+",raw.lower())
@@ -193,7 +194,7 @@ def apply_message(text,state):
     if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","quantity","offer")):
         if "location" not in state: state["stage"]="location"
         elif "quantity" not in state and "bags" not in state: state["stage"]="quantity"
-        elif state.get("product") and state.get("product")!="maize" and "sale_timing" not in state: state["stage"]="sale_timing"
+        elif state.get("product") in NON_BAG_SALE_PRODUCTS and "sale_timing" not in state: state["stage"]="sale_timing"
         elif state.get("quantity_unit")=="bags" and "offer" not in state: state["stage"]="offer"
         else: state["stage"]="complete"
     else:
@@ -232,7 +233,7 @@ def reply_for(text, known=None):
         if lang=="en": return f"How many {label} of {product or 'produce'} do you have?"
         if lang=="mixed": return f"Uko na {label} ngapi za {product or 'produce'}?"
         return f"Una {label} ngapi za {product or 'mazao'}?"
-    if product and product!="maize" and not f.get("sale_timing"):
+    if product in NON_BAG_SALE_PRODUCTS and not f.get("sale_timing"):
         if lang=="en":
             return f"Got it 👍 You have {quantity:g} {unit} of {product} in {f['location']}. Are you looking to sell them today, within the next few days, or are you checking the best price first?"
         if lang=="mixed":
@@ -240,7 +241,7 @@ def reply_for(text, known=None):
         return f"Sawa 👍 Una {quantity:g} {unit} za {product} huko {f['location']}. Unataka kuuza leo, ndani ya siku chache, au tuangalie bei bora kwanza?"
     if unit=="bags" and "offer" not in f:
         return {"sw":"Buyer/broker amekupea bei gani kwa gunia moja?","en":"What price per bag has the buyer or broker offered you?","mixed":"Buyer/broker amekuoffer how much per bag?"}[lang]
-    if product and product!="maize":
+    if product in NON_BAG_SALE_PRODUCTS:
         timing=f.get("sale_timing","")
         if lang=="en":
             return f"Thanks — I have {quantity:g} {unit} of {product} in {f['location']} and your priority is {timing.replace('_',' ')}. Next I can help you compare buyer options and the price you should verify before accepting a deal."
