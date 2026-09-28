@@ -151,6 +151,25 @@ if __name__=="__main__":
     unittest.main()
 
 
+class ConversationLoopRegression(unittest.TestCase):
+    def test_sale_followups_do_not_reset_to_general(self):
+        state={}
+        for message in ("beans","kuuza beans","narok town","kuuza mahindi na maharagwe","50"):
+            state=app_module.apply_message(message,state)
+        self.assertEqual(state.get("primary_intent"),"sell")
+        self.assertEqual(state.get("bags"),50)
+        self.assertEqual(state.get("stage"),"offer")
+        reply=app_module.reply_for("50",state)
+        self.assertNotIn("outcome unayotaka",reply.lower())
+        self.assertIn("bei",reply.lower())
+
+    def test_location_followup_keeps_sell_intent(self):
+        state=app_module.apply_message("nataka kuuza beans",{})
+        state=app_module.apply_message("Narok Town",state)
+        self.assertEqual(state.get("primary_intent"),"sell")
+        self.assertEqual(state.get("location"),"Narok Town")
+        self.assertEqual(state.get("stage"),"bags")
+
 class AppSmokeRegression(unittest.TestCase):
     def test_app_module_imports_cleanly(self):
         import py_compile
