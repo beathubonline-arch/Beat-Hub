@@ -5,6 +5,7 @@ from intent_engine import detect_intents, enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from tool_registry import describe_tools, tool_is_executable, stale_reference_tool
 from farm_vision import analyze_farm_image, safe_vision_reply
+from weather_live import weather_reply
 
 class FarmerIntentRegression(unittest.TestCase):
     def test_disease_not_forced_into_sale(self):
@@ -127,6 +128,19 @@ class FarmerIntentRegression(unittest.TestCase):
         self.assertNotIn("timing",p["missing_evidence"])
         self.assertNotIn("location",p["missing_evidence"])
         self.assertIn("farm_vision",p["tools"])
+
+    def test_live_weather_registry_is_now_executable(self):
+        self.assertTrue(tool_is_executable("live_weather"))
+        meta=[x for x in describe_tools(["live_weather"]) if x["name"]=="live_weather"][0]
+        self.assertEqual(meta["provider"],"MET Norway Locationforecast 2.0")
+
+    def test_weather_reply_carries_provenance(self):
+        r={"ok":True,"hours":24,"retrieved_at":"2026-09-28T14:00:00+00:00",
+           "location":{"query":"Kitale"},"forecast":{"precipitation_mm":4.2,"temp_min_c":12,"temp_max_c":23,"wind_max_m_s":5}}
+        reply=weather_reply(r,"en")
+        self.assertIn("MET Norway",reply)
+        self.assertIn("retrieved",reply)
+        self.assertIn("4.2 mm",reply)
 
     def test_sale_remains_specialist(self):
         s=enrich_context("Nataka kuuza mahindi buyer amenipea offer",{})
