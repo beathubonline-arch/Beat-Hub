@@ -44,7 +44,7 @@ def build_plan(text,state):
     if intent=="sell":
         if state.get("bags") is None: missing.append("quantity")
         if state.get("offer") is None: missing.append("buyer_offer")
-    if intent=="crop_health": missing.extend(["symptoms","timing"])
+    if intent=="crop_health":\n        if not state.get("case_notes"): missing.append("symptoms")\n        if not state.get("symptom_timing"): missing.append("timing")\n        if not state.get("location"): missing.append("location")
     if intent=="livestock": missing.extend(["animal","symptoms"])
     if intent=="inputs": missing.extend(["plot_size","growth_stage","problem_to_solve"])
     if intent=="profit": missing.extend(["selling_price","known_costs"])
