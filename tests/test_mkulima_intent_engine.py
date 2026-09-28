@@ -4,6 +4,7 @@ sys.path.insert(0,os.path.join(ROOT,"mkulima_ai"))
 from intent_engine import detect_intents, enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from tool_registry import describe_tools, tool_is_executable, stale_reference_tool
+from farm_vision import analyze_farm_image, safe_vision_reply
 
 class FarmerIntentRegression(unittest.TestCase):
     def test_disease_not_forced_into_sale(self):
@@ -95,6 +96,22 @@ class FarmerIntentRegression(unittest.TestCase):
         vision=[x for x in p["tool_status"] if x["name"]=="farm_vision"][0]
         self.assertNotEqual(vision["status"],"available")
         self.assertFalse(p["can_execute_all_tools"])
+
+    def test_vision_without_provider_fails_closed(self):
+        old=os.environ.pop("GEMINI_API_KEY",None)
+        try:
+            r=analyze_farm_image(b"fake","image/jpeg",{"crop":"maize"})
+            self.assertFalse(r["ok"])
+            self.assertEqual(r["status"],"provider_unavailable")
+            self.assertEqual(r["observations"],[])
+        finally:
+            if old is not None: os.environ["GEMINI_API_KEY"]=old
+
+    def test_safe_vision_reply_labels_hypotheses(self):
+        r={"ok":True,"observations":{"visible_observations":["brown spots on leaves"],"possible_explanations":["leaf disease","physical damage"],"confidence":"low","questions_needed":["When did it start?"],"urgent_visual_flags":[]}}
+        reply=safe_vision_reply(r,"en")
+        self.assertIn("not confirmed diagnoses",reply)
+        self.assertIn("low",reply)
 
     def test_sale_remains_specialist(self):
         s=enrich_context("Nataka kuuza mahindi buyer amenipea offer",{})
