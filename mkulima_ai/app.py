@@ -1,12 +1,13 @@
-import os, re, sqlite3, json
+import os, re, sqlite3, json, hashlib, hmac, secrets
 from datetime import date, datetime
-from flask import Flask, request, jsonify
+from urllib import request as urlrequest, parse as urlparse
+from flask import Flask, request, jsonify, redirect
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 from weather_live import live_weather, weather_reply
-from state_store import load_state, save_state, claim_message, record_interaction, record_feedback
+from state_store import load_state, save_state, claim_message, record_interaction, record_feedback, actor_ref, get_access, consume_free_question, create_payment_for_actor, get_payment, mark_payment_paid
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -14,6 +15,56 @@ FRESH_DAYS=14
 SOURCE="Warehouse Receipt System Council"
 OBSERVED_ON="2026-08-10"
 PRICE_PER_90KG=3730.50
+
+MZ_PLANS={
+    "day_pass":{"name":"Mkulima Day Pass","amount_kes":49,"days":1},
+    "plus_monthly":{"name":"Mkulima Plus","amount_kes":199,"days":30},
+}
+MKULIMA_BASE_URL=os.getenv("MKULIMA_BASE_URL","https://mkulima-ai-whatsapp.onrender.com").rstrip("/")
+
+def _pay_secret():
+    return os.getenv("PAYSTACK_SECRET_KEY","").strip()
+
+def _checkout_signing_secret():
+    return (os.getenv("MKULIMA_CHECKOUT_SECRET") or os.getenv("MKULIMA_ACTOR_SALT") or os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").encode()
+
+def _sign_actor(ref):
+    key=_checkout_signing_secret()
+    if not key or not ref: return None
+    return hmac.new(key,ref.encode(),hashlib.sha256).hexdigest()
+
+def _valid_actor(ref,sig):
+    expected=_sign_actor(ref)
+    return bool(expected and sig and hmac.compare_digest(expected,sig))
+
+def upgrade_url(phone):
+    ref=actor_ref(phone)
+    sig=_sign_actor(ref) if ref else None
+    if not (ref and sig): return MKULIMA_BASE_URL+"/pricing"
+    return MKULIMA_BASE_URL+"/pricing?actor="+urlparse.quote(ref)+"&sig="+urlparse.quote(sig)
+
+def _paystack_json(method,path,payload=None):
+    secret=_pay_secret()
+    if not secret: raise RuntimeError("paystack_not_configured")
+    data=None if payload is None else json.dumps(payload).encode()
+    req=urlrequest.Request("https://api.paystack.co"+path,data=data,method=method,headers={
+        "Authorization":"Bearer "+secret,"Content-Type":"application/json"
+    })
+    with urlrequest.urlopen(req,timeout=15) as res:
+        return json.loads(res.read().decode())
+
+def _verify_paystack_reference(reference):
+    p=get_payment(reference)
+    if not p: return False,None
+    try:
+        v=_paystack_json("GET","/transaction/verify/"+urlparse.quote(reference))
+    except Exception:
+        return False,None
+    d=(v or {}).get("data") or {}
+    valid=bool(v.get("status") and d.get("status")=="success" and int(d.get("amount") or 0)==int(p.get("amount_kes") or 0)*100 and d.get("currency")=="KES")
+    if valid: mark_payment_paid(reference,d)
+    return valid,d
+
 
 def init_db():
     con=sqlite3.connect(DB)
@@ -379,6 +430,75 @@ def data_deletion():
     <p>To request deletion of personal information associated with your use of Mkulima AI, email <strong>beathubonline@gmail.com</strong> with the subject <strong>Mkulima AI Data Deletion Request</strong>.</p>
     <p>Include the WhatsApp phone number used with Mkulima AI so we can identify the relevant records. Do not send passwords, access tokens, PINs, or other secrets.</p>
     <p>We will verify the request where necessary and delete or anonymize eligible records, subject to information we must retain for security, fraud prevention, or legal obligations.</p>"""
+
+@app.get("/pricing")
+def pricing():
+    actor=request.args.get("actor","")
+    sig=request.args.get("sig","")
+    bound=_valid_actor(actor,sig)
+    hidden=(f'<input type="hidden" name="actor" value="{actor}"><input type="hidden" name="sig" value="{sig}">' if bound else "")
+    note="Your purchase will activate this WhatsApp account automatically." if bound else "Open this page from the upgrade link Mkulima sends you on WhatsApp so access can be activated automatically."
+    return """<style>body{font-family:Arial,sans-serif;background:#f4f8f0;color:#17351f;margin:0}.w{max-width:820px;margin:auto;padding:40px 20px}h1{color:#176b35}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.c{background:white;border:1px solid #dbe8d7;border-radius:18px;padding:24px}.p{font-size:34px;font-weight:800}.b{background:#176b35;color:white;border:0;border-radius:12px;padding:13px 18px;font-weight:800;cursor:pointer;width:100%}input{width:100%;padding:12px;margin:10px 0;border:1px solid #bdcdbc;border-radius:10px;box-sizing:border-box}.muted{color:#617063}</style><div class="w"><h1>🌱 Mkulima AI Plans</h1><p>Keep practical farm help available when you need it. Free accounts get 5 useful questions each month.</p><p class="muted">"""+note+"""</p><div class="g">
+    <div class="c"><h2>Day Pass</h2><div class="p">KES 49</div><p>24 hours of unlimited Mkulima conversations for an urgent farm or selling decision.</p><form method="post" action="/pay/start">"""+hidden+"""<input type="hidden" name="plan" value="day_pass"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">Pay KES 49</button></form></div>
+    <div class="c"><h2>Mkulima Plus</h2><div class="p">KES 199</div><p>30 days of unlimited chat, saved conversation context and premium decision support as features roll out.</p><form method="post" action="/pay/start">"""+hidden+"""<input type="hidden" name="plan" value="plus_monthly"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">Pay KES 199</button></form></div>
+    </div><p class="muted">Payments are verified server-side before access is activated.</p></div>"""
+
+@app.post("/pay/start")
+def pay_start():
+    plan=request.form.get("plan","")
+    actor=request.form.get("actor","")
+    sig=request.form.get("sig","")
+    email=request.form.get("email","").strip()
+    if plan not in MZ_PLANS: return "Invalid plan",400
+    if not _valid_actor(actor,sig): return "Open the payment link from your Mkulima WhatsApp conversation.",400
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email): return "Enter a valid email.",400
+    if not _pay_secret(): return "Mkulima Paystack is awaiting its live server key. No charge was made.",503
+    reference="mk_"+secrets.token_hex(12)
+    cfg=MZ_PLANS[plan]
+    if not create_payment_for_actor(actor,reference,plan,cfg["amount_kes"],email): return "Could not create payment record.",500
+    try:
+        data=_paystack_json("POST","/transaction/initialize",{
+            "email":email,
+            "amount":str(cfg["amount_kes"]*100),
+            "currency":"KES",
+            "reference":reference,
+            "callback_url":MKULIMA_BASE_URL+"/pay/callback",
+            "metadata":{"app":"mkulima_ai","plan":plan}
+        })
+        url=((data or {}).get("data") or {}).get("authorization_url")
+        if not (data.get("status") and url): return "Paystack checkout could not start.",502
+        return redirect(url,302)
+    except Exception:
+        app.logger.exception("paystack initialize failed")
+        return "Paystack checkout could not start.",502
+
+@app.get("/pay/callback")
+def pay_callback():
+    reference=request.args.get("reference","")
+    valid,_=_verify_paystack_reference(reference)
+    if not valid: return "<h2>Payment not verified</h2><p>No premium access was activated. Return to WhatsApp and try again.</p>",400
+    p=get_payment(reference) or {}
+    name=MZ_PLANS.get(p.get("plan"),{}).get("name","Mkulima premium")
+    return f"<h2>✅ Payment verified</h2><p>{name} is active. Return to WhatsApp and continue chatting with Mkulima AI.</p>"
+
+@app.post("/webhook/paystack")
+def paystack_webhook():
+    secret=_pay_secret()
+    if not secret: return "not configured",503
+    raw=request.get_data()
+    expected=hmac.new(secret.encode(),raw,hashlib.sha512).hexdigest()
+    supplied=request.headers.get("x-paystack-signature","")
+    if not hmac.compare_digest(expected,supplied): return "invalid signature",401
+    payload=request.get_json(silent=True) or {}
+    if payload.get("event")=="charge.success":
+        data=payload.get("data") or {}
+        reference=str(data.get("reference") or "")
+        if reference.startswith("mk_"):
+            p=get_payment(reference)
+            valid=bool(p and data.get("status")=="success" and int(data.get("amount") or 0)==int(p.get("amount_kes") or 0)*100 and data.get("currency")=="KES")
+            if valid: mark_payment_paid(reference,data)
+    return "ok",200
+
 @app.get("/api/health")
 def health():
     init_db()
@@ -438,6 +558,14 @@ def webhook():
             send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
             return jsonify(ok=True,unsupported_type=msg.get("type")),200
         body=msg["text"]["body"]
+        normalized_body=" ".join(body.strip().lower().split())
+        if normalized_body in {"upgrade","premium","plus","subscribe","pay","pricing","plans"}:
+            send_whatsapp_text(phone,"🌱 Mkulima plans:\n• Free — 5 useful questions/month\n• Day Pass — KES 49 / 24 hours\n• Mkulima Plus — KES 199 / 30 days\n\nActivate securely here: "+upgrade_url(phone))
+            return jsonify(ok=True,pricing=True),200
+        access=get_access(phone)
+        if not access.get("active") and access.get("free_used",0)>=access.get("free_limit",5):
+            send_whatsapp_text(phone,"Umetumia free questions 5 za mwezi huu. 🌱 Continue with Mkulima for KES 49/24h or KES 199/30 days: "+upgrade_url(phone))
+            return jsonify(ok=True,upgrade_required=True),200
         rating=feedback_rating(body)
         if rating and state.get("last_interaction_id"):
             saved=record_feedback(mid,state.get("last_interaction_id"),rating)
@@ -456,6 +584,7 @@ def webhook():
 
         response=weather_reply(weather_result,state.get("language","en")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
+        consume_free_question(phone)
         interaction_id=record_interaction(mid,phone,msg["text"]["body"],response,state)
         if interaction_id:
             state["last_interaction_id"]=interaction_id
