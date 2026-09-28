@@ -170,6 +170,27 @@ class ConversationLoopRegression(unittest.TestCase):
         self.assertEqual(state.get("location"),"Narok Town")
         self.assertEqual(state.get("stage"),"bags")
 
+    def test_known_location_is_not_asked_twice_and_numbers_advance(self):
+        state={}
+        for message in ("I want to sell beans","Narok Town","50","593","sell the bags"):
+            state=app_module.apply_message(message,state)
+        self.assertEqual(state.get("crop"),"beans")
+        self.assertEqual(state.get("location"),"Narok Town")
+        self.assertEqual(state.get("bags"),50)
+        self.assertEqual(state.get("offer"),593)
+        self.assertEqual(state.get("stage"),"complete")
+        reply=app_module.reply_for("sell the bags",state)
+        self.assertNotIn("where exactly",reply.lower())
+        self.assertNotIn("outcome",reply.lower())
+
+    def test_simple_farmer_gets_only_next_missing_fact(self):
+        state=app_module.apply_message("sell beans",{})
+        self.assertEqual(state.get("stage"),"location")
+        state=app_module.apply_message("Narok Town",state)
+        self.assertEqual(state.get("stage"),"bags")
+        state=app_module.apply_message("50",state)
+        self.assertEqual(state.get("stage"),"offer")
+
 class AppSmokeRegression(unittest.TestCase):
     def test_app_module_imports_cleanly(self):
         import py_compile
