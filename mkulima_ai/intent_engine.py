@@ -21,7 +21,8 @@ def detect_intents(text):
     for intent,words in INTENT_RULES.items():
         score=sum(1 for w in words if (" "+w+" ") in t or (len(w)>5 and w in t))
         if score: scores[intent]=score
-    ordered=sorted(scores,key=lambda k:(-scores[k],k))
+    priority={"crop_health":0,"weather":1,"livestock":2,"sell":3,"storage":4,"transport":5,"inputs":6,"finance":7,"profit":8,"harvest":9}
+    ordered=sorted(scores,key=lambda k:(-scores[k],priority.get(k,99)))
     return ordered[:3] or ["general"]
 
 def detect_crop(text,previous=None):
