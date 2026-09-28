@@ -45,7 +45,7 @@ TOOL_REGISTRY = {
     "buyer_or_market_destination": {"status": "planned", "provider": None, "live": True, "reason": "Destination lookup not connected."},
     "registered_input_reference": {"status": "planned", "provider": None, "live": False, "reason": "Registered-input reference adapter not connected."},
     "verified_finance_options": {"status": "planned", "provider": None, "live": True, "reason": "Verified finance source not connected."},
-    "image_when_available": {"status": "planned", "provider": "WhatsApp media", "live": True, "reason": "Image analysis is not enabled in the current text webhook."},
+    "farm_vision": {"status": "input_available", "provider": "WhatsApp image input", "live": True, "reason": "Image messages are accepted and contextualized; visual inference adapter is not connected yet."},
     "conversation_reasoner": {"status": "available", "provider": "Mkulima AI planner", "live": False},
 }
 
