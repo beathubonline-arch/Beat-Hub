@@ -24,7 +24,7 @@
 <div class="card"><h3>📖 Heritage Book</h3><div class="price">Request quote</div><p>Turn the verified archive into a physical family book for gifting and inheritance.</p><button class="secondary" onclick="selectOffer('Printed Heritage Book','Quote')">Join book list</button></div>
 <div class="card"><h3>🕯 Mizizi Memorial</h3><div class="price">Subscription / one-time plan</div><p>Create, edit and publish a beautiful eulogy with a permanent family share link.</p><button class="secondary" onclick="go('memorial')">Create eulogy</button></div>
 <div class="card"><h3>🌍 Diaspora Legacy</h3><div class="price">USD quote</div><p>For families abroad preserving a connection between children, elders and home.</p><button class="secondary" onclick="selectOffer('Diaspora Family Legacy','USD quote')">Request diaspora package</button></div></div>
-<h2 style="margin-top:28px">Order / enquiry</h2><div class="card order"><div class="form"><input id="offer" readonly placeholder="Select an offer above"><input id="offerPrice" readonly placeholder="Price"><input id="customer" placeholder="Your name"><input id="contact" placeholder="Phone / WhatsApp / email"><select id="country"><option>Kenya</option><option>Uganda</option><option>Tanzania</option><option>United Kingdom</option><option>United States</option><option>Canada</option><option>Other</option></select><textarea id="details" placeholder="Tell us about the family, number of photos, event or what you want preserved."></textarea></div><button class="primary" onclick="saveOrder()">Continue order</button><div id="checkout" class="qa">Select a package. Real payment is intentionally not claimed until a payment provider/backend is connected.</div></div>
+<h2 style="margin-top:28px">Order / enquiry</h2><div class="card order"><div class="form"><input id="offer" readonly placeholder="Select an offer above"><input id="offerPrice" readonly placeholder="Price"><input id="customer" placeholder="Your name"><input id="contact" placeholder="Phone / WhatsApp / email"><select id="country"><option>Kenya</option><option>Uganda</option><option>Tanzania</option><option>United Kingdom</option><option>United States</option><option>Canada</option><option>Other</option></select><textarea id="details" placeholder="Tell us about the family, number of photos, event or what you want preserved."></textarea></div><button id="orderSubmit" class="primary" onclick="saveOrder()">Continue order</button><div id="checkout" class="qa">Select a package. Real payment is intentionally not claimed until a payment provider/backend is connected.</div></div>
 <h3>Your saved enquiries</h3><div id="orders" class="grid"></div></section></div><nav class="mobilebar"><button onclick="go('home')"><b>⌂</b>Home</button><button onclick="go('family')"><b>🌳</b>Family</button><button onclick="go('memories')"><b>＋</b>Memory</button><button onclick="go('invite')"><b>↗</b>Invite</button><button onclick="go('heritage')"><b>◉</b>Heritage</button></nav>
 <script>
 document.querySelectorAll('[id]').forEach(el=>{if(!(el.id in window))window[el.id]=el});
@@ -82,14 +82,39 @@ function createFamily(){let n=familyName.value.trim();if(!n)return alert('Name y
 function parseNatural(){let t=naturalFamily.value.trim();if(!t)return;let hits=[];[['mother','Parent'],['father','Parent'],['parent','Parent'],['grandmother','Grandparent'],['grandfather','Grandparent'],['sister','Sibling'],['brother','Sibling'],['daughter','Child'],['son','Child'],['wife','Spouse'],['husband','Spouse']].forEach(([k,v])=>{if(t.toLowerCase().includes(k))hits.push(v)});naturalResult.textContent=hits.length?'Detected possible relationship types: '+[...new Set(hits)].join(', ')+'. Confirm the people and connections below before adding them.':'I can save this statement for review, but there is not enough structured information to create a safe connection yet.'}function calculateRelationship(){let a=verified[+relA.value],b=verified[+relB.value];if(!a||!b||a===b){relAnswer.textContent='Choose two different family members.';return}let d=levelOf(b)-levelOf(a),direct=b.anchorId===a.id?a.name+' is recorded as the reference connection for '+b.name:a.anchorId===b.id?b.name+' is recorded as the reference connection for '+a.name:'';let txt=direct||('They are '+Math.abs(d)+' generation'+(Math.abs(d)===1?'':'s')+' apart in the verified tree.');relAnswer.textContent=txt+' Mizizi will only name a precise kinship when the stored connections prove it.'}function levelOf(x){return Number.isFinite(+x.level)?+x.level:0}function relationLabel(r,l){if(r==='self')return 'Self';if(r==='spouse')return 'Spouse';if(r==='sibling')return 'Sibling';if(r==='parent')return 'Parent';if(r==='child')return 'Child';if(r==='grandparent')return 'Grandparent';if(r==='grandchild')return 'Grandchild';return l<0?'Ancestor':l>0?'Descendant':'Relative'}function calcLevel(r,a){let base=a?levelOf(a):0;return r==='parent'?base-1:r==='grandparent'?base-2:r==='child'?base+1:r==='grandchild'?base+2:base}function updatePlacement(){let a=verified[+anchor.value],r=rel.value;if(r!=='self'&&!a){placementHint.textContent='Choose an existing family member so Mizizi knows where to connect this person.';return}let l=calcLevel(r,a);placementHint.textContent=r==='self'?'This person becomes the reference point for the family tree.':'Mizizi will connect '+(nm.value.trim()||'this person')+' as '+relationLabel(r,l).toLowerCase()+' of '+a.name+' and place them in generation '+(l===0?'0 (reference)':l)+'.'}function propose(){let name=nm.value.trim(),r=rel.value,a=verified[+anchor.value];if(!name)return alert('Add a name.');if(r!=='self'&&!a)return alert('Choose who this person is related to.');let level=calcLevel(r,a),item={name,relation:relationLabel(r,level),relationType:r,anchorName:a?a.name:'',anchorId:a?a.id:'',level,home:homep.value.trim(),branch:branch.value.trim()||(a&&a.branch)||'',note:note.value.trim(),id:'m'+Date.now()};pending.push(item);persist()}function approve(i){verified.push(pending.splice(i,1)[0]);persist()}function rejectP(i){pending.splice(i,1);persist()}function editMember(i){let x=verified[i],n=prompt('Full name',x.name);if(n===null)return;n=n.trim();if(!n)return alert('Name cannot be empty.');let r=prompt('Relationship',x.relation);if(r===null)return;let h=prompt('Ancestral home / place',x.home||'');if(h===null)return;let b=prompt('Family branch / clan',x.branch||'');if(b===null)return;verified[i]={...x,name:n,relation:r.trim()||x.relation,home:h.trim(),branch:b.trim()};persist()}function removeMember(i){if(confirm('Remove '+verified[i].name+' from this family tree?')){verified.splice(i,1);persist()}}
 if(typeof rel!=='undefined'){rel.addEventListener('change',updatePlacement);anchor.addEventListener('change',updatePlacement);nm.addEventListener('input',updatePlacement)}
 function invite(){if(!iname.value.trim())return alert('Add a relative.');invs.unshift({name:iname.value.trim(),role:irole.value,rel:irel.value.trim(),exp:iexp.value||'Not set',status:'Pending'});persist();iname.value='';irel.value='';if(typeof invites!=='undefined')invites.insertAdjacentHTML('afterbegin','<div class="qa">✓ Invitation saved privately. You can revoke it anytime.</div>')}function revoke(i){invs[i].status='Revoked';persist()}
-function selectOffer(a,p){offer.value=a;offerPrice.value=p;checkout.textContent='Selected: '+a+' · '+p+'. Add your contact details to continue.';document.getElementById('customer').focus()}
+function selectOffer(a,p){offer.value=a;offerPrice.value=p;const fixed=['Eulogy Basic','Family Memorial','Legacy Memorial'];const needsPayment=fixed.includes(a);checkout.textContent='Selected: '+a+' · '+p+'. '+(needsPayment?'Add your contact details to continue to secure payment.':'Add your contact details and send the request — no payment is required now.');if(typeof orderSubmit!=='undefined')orderSubmit.textContent=needsPayment?'Continue to secure payment':'Send request — no payment';document.getElementById('customer').focus()}
 async function saveOrder(){
  if(!offer.value)return alert('Choose a package first.');
  if(!customer.value.trim()||!contact.value.trim())return alert('Add your name and contact so the enquiry can be followed up.');
  const fixed=['Eulogy Basic','Family Memorial','Legacy Memorial'];
  if(!fixed.includes(offer.value)){
-   orderList.unshift({offer:offer.value,price:offerPrice.value,name:customer.value.trim(),contact:contact.value.trim(),country:country.value,details:details.value.trim(),status:'Enquiry saved — quote/follow-up required'});
-   persist();checkout.textContent='✓ Enquiry saved. This package needs a quote or assisted follow-up before payment.';return;
+   if(!mzBackendReady(checkout))return;
+   let session=null;
+   try{({data:{session}}=await mzsb.auth.getSession())}catch(err){checkout.textContent='Could not reach secure enquiry services. Check your connection and try again.';return}
+   if(!session){checkout.textContent='🔒 Sign in first so Mizizi can save your request securely. No payment is required.';go('start');return;}
+   checkout.textContent='Sending your request…';
+   let data,error;
+   try{
+     ({data,error}=await mzsb.functions.invoke('mizizi-api',{body:{
+       action:'create_enquiry',
+       offer:offer.value,
+       price_label:offerPrice.value,
+       customer_name:customer.value.trim(),
+       contact:contact.value.trim(),
+       country:country.value,
+       details:details.value.trim()
+     }}));
+   }catch(err){
+     checkout.textContent='Could not send the request. Check your connection and try again.';return;
+   }
+   if(error||!data?.enquiry){
+     checkout.textContent='Could not save the request securely. Please try again.';return;
+   }
+   orderList.unshift({offer:offer.value,price:offerPrice.value,name:customer.value.trim(),contact:contact.value.trim(),country:country.value,details:details.value.trim(),status:'Request sent — no payment required',enquiry_id:data.enquiry.id});
+   persist();
+   checkout.textContent='✓ Request sent successfully. No payment was taken. Mizizi can follow up with a quote or next steps.';
+   if(typeof orderSubmit!=='undefined')orderSubmit.textContent='Request sent';
+   return;
  }
  if(!mzBackendReady(checkout))return;
  let session=null;
