@@ -192,6 +192,21 @@ class ConversationLoopRegression(unittest.TestCase):
         state=app_module.apply_message("50",state)
         self.assertEqual(state.get("stage"),"offer")
 
+
+class GrowthRevenueRegression(unittest.TestCase):
+    def test_first_touch_source_is_remembered_and_not_overwritten(self):
+        state=app_module.apply_message("source fb_maize_01",{})
+        self.assertEqual(state.get("acquisition_source"),"fb_maize_01")
+        state=app_module.apply_message("source wa_narok_01",state)
+        self.assertEqual(state.get("acquisition_source"),"fb_maize_01")
+
+    def test_feedback_language_maps_to_safe_ratings(self):
+        self.assertEqual(app_module.feedback_rating("helpful"),"helpful")
+        self.assertEqual(app_module.feedback_rating("imenisaidia"),"helpful")
+        self.assertEqual(app_module.feedback_rating("si sahihi"),"wrong")
+        self.assertEqual(app_module.feedback_rating("bado shida"),"still_problem")
+        self.assertIsNone(app_module.feedback_rating("sell beans"))
+
 class AppSmokeRegression(unittest.TestCase):
     def test_app_module_imports_cleanly(self):
         import py_compile
