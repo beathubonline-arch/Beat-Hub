@@ -87,7 +87,12 @@ def apply_message(text,state):
     incoming=parse(text)
     bare=incoming.pop("_bare_number",None)
     stage=state.get("stage")
-    if stage=="bags" and bare is not None: incoming["bags"]=bare
+    # Interpret a bare number from the facts still missing in the active sale,
+    # not from a stale prompt/stage. Known facts always win.
+    if bare is not None and state.get("primary_intent")=="sell":
+        if "bags" not in state: incoming["bags"]=bare
+        elif "offer" not in state: incoming["offer"]=bare
+    elif stage=="bags" and bare is not None: incoming["bags"]=bare
     elif stage=="offer" and bare is not None: incoming["offer"]=bare
     elif stage=="location" and "location" not in incoming:
         raw=" ".join((text or "").strip().split())
