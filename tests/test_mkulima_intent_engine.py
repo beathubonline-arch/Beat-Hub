@@ -113,6 +113,21 @@ class FarmerIntentRegression(unittest.TestCase):
         self.assertIn("not confirmed diagnoses",reply)
         self.assertIn("low",reply)
 
+    def test_photo_followup_keeps_crop_health_intent(self):
+        s={"has_image":True,"primary_intent":"crop_health","intents":["crop_health"],"crop":"tomato"}
+        s=enrich_context("3 days",s)
+        self.assertEqual(s["primary_intent"],"crop_health")
+        self.assertEqual(s["crop"],"tomato")
+
+    def test_accumulated_case_evidence_reduces_missing_fields(self):
+        s={"has_image":True,"primary_intent":"crop_health","intents":["crop_health"],"crop":"tomato",
+           "case_notes":["brown spots on lower leaves"],"symptom_timing":"for 3 days","location":"Turbo"}
+        p=build_plan("for 3 days",s)
+        self.assertNotIn("symptoms",p["missing_evidence"])
+        self.assertNotIn("timing",p["missing_evidence"])
+        self.assertNotIn("location",p["missing_evidence"])
+        self.assertIn("farm_vision",p["tools"])
+
     def test_sale_remains_specialist(self):
         s=enrich_context("Nataka kuuza mahindi buyer amenipea offer",{})
         self.assertEqual(s["primary_intent"],"sell")
