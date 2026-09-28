@@ -5,6 +5,7 @@ from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
+from weather_live import live_weather, weather_reply
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -297,6 +298,10 @@ def webhook():
             send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
             return jsonify(ok=True,unsupported_type=msg.get("type")),200
         state=apply_message(msg["text"]["body"],state)
+        weather_result=None
+        if state.get("primary_intent")=="weather" and state.get("location"):
+            weather_result=live_weather(state.get("location"))
+            state["last_weather"]={k:v for k,v in weather_result.items() if k not in ("raw",)}
         con.execute(
             "INSERT INTO conversations(phone,state) VALUES(?,?) "
             "ON CONFLICT(phone) DO UPDATE SET state=excluded.state",
@@ -304,7 +309,7 @@ def webhook():
         )
         con.commit(); con.close()
 
-        response=reply_for(msg["text"]["body"],state)
+        response=weather_reply(weather_result,state.get("language","sw")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
         return jsonify(ok=True),200
     except Exception:
