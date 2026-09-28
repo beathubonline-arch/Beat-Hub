@@ -133,9 +133,9 @@ def reply_for(text, known=None):
         return broad
     missing=[x for x in ("location","bags","offer") if x not in f]
     questions={
-      "sw":{"location":"Uko eneo gani? Unaweza kutaja village, estate, road au landmark iliyo karibu.","bags":"Una gunia ngapi za mahindi?","offer":"Buyer/broker amekupea bei gani kwa gunia moja?"},
-      "en":{"location":"Where exactly are you? You can give your village, estate, road or a nearby landmark.","bags":"How many bags of maize do you have?","offer":"What price per bag has the buyer or broker offered you?"},
-      "mixed":{"location":"Uko wapi exactly? Taja village, estate, road or nearby landmark.","bags":"Una bags/gunia ngapi za mahindi?","offer":"Buyer/broker amekuoffer how much per bag?"}
+      "sw":{"location":"Uko eneo gani? Unaweza kutaja village, estate, road au landmark iliyo karibu.","bags":"Una gunia ngapi za mazao?","offer":"Buyer/broker amekupea bei gani kwa gunia moja?"},
+      "en":{"location":"Where exactly are you? You can give your village, estate, road or a nearby landmark.","bags":"How many bags of produce do you have?","offer":"What price per bag has the buyer or broker offered you?"},
+      "mixed":{"location":"Uko wapi exactly? Taja village, estate, road or nearby landmark.","bags":"Una bags/gunia ngapi za mazao?","offer":"Buyer/broker amekuoffer how much per bag?"}
     }
     if missing: return questions[lang][missing[0]]
     gross=f["bags"]*f["offer"]
