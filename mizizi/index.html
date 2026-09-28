@@ -26,8 +26,43 @@
 <div class="card"><h3>🌍 Diaspora Legacy</h3><div class="price">USD quote</div><p>For families abroad preserving a connection between children, elders and home.</p><button class="secondary" onclick="selectOffer('Diaspora Family Legacy','USD quote')">Request diaspora package</button></div></div>
 <h2 style="margin-top:28px">Order / enquiry</h2><div class="card order"><div class="form"><input id="offer" readonly placeholder="Select an offer above"><input id="offerPrice" readonly placeholder="Price"><input id="customer" placeholder="Your name"><input id="contact" placeholder="Phone / WhatsApp / email"><select id="country"><option>Kenya</option><option>Uganda</option><option>Tanzania</option><option>United Kingdom</option><option>United States</option><option>Canada</option><option>Other</option></select><textarea id="details" placeholder="Tell us about the family, number of photos, event or what you want preserved."></textarea></div><button class="primary" onclick="saveOrder()">Continue order</button><div id="checkout" class="qa">Select a package. Real payment is intentionally not claimed until a payment provider/backend is connected.</div></div>
 <h3>Your saved enquiries</h3><div id="orders" class="grid"></div></section></div><nav class="mobilebar"><button onclick="go('home')"><b>⌂</b>Home</button><button onclick="go('family')"><b>🌳</b>Family</button><button onclick="go('memories')"><b>＋</b>Memory</button><button onclick="go('invite')"><b>↗</b>Invite</button><button onclick="go('heritage')"><b>◉</b>Heritage</button></nav>
-<script>const MZ_SUPABASE_URL='https://beixlzqbuascruzhcety.supabase.co',MZ_SUPABASE_KEY='sb_publishable_plIANQ52kvCUjclk5cESjA_66uKkbKi';const mzsb=window.supabase.createClient(MZ_SUPABASE_URL,MZ_SUPABASE_KEY);async function mzSignUp(){let {data,error}=await mzsb.auth.signUp({email:authEmail.value.trim(),password:authPassword.value});authStatus.textContent=error?error.message:(data.session?'✓ Account created and signed in.':'✓ Account created. Check your email if confirmation is required.')}async function mzSignIn(){let {error}=await mzsb.auth.signInWithPassword({email:authEmail.value.trim(),password:authPassword.value});authStatus.textContent=error?error.message:'✓ Signed in securely.'}async function mzSignOut(){await mzsb.auth.signOut();authStatus.textContent='Signed out.'}mzsb.auth.onAuthStateChange((_e,s)=>{if(s?.user)authStatus.textContent='✓ Signed in as '+s.user.email});
-let deferredInstall=null;window.addEventListener('beforeinstallprompt',ev=>{ev.preventDefault();deferredInstall=ev;document.getElementById('installBtn').classList.add('show')});async function installApp(){if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;document.getElementById('installBtn').classList.remove('show')}if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));const ids=['home','start','family','memories','invite','ask','shop','heritage','memorial'];function go(x){ids.forEach(i=>document.getElementById(i).classList.toggle('active',i===x));scrollTo(0,0)}function focusPerson(id){let x=verified.find(v=>v.id===id);if(!x)return;profileCard.style.display='block';profileCard.innerHTML='<div class="ey">Person profile</div><h2>'+e(x.name)+'</h2><p><b>'+e(x.relation)+'</b>'+(x.anchorName?' of '+e(x.anchorName):'')+'</p><div class="tree-summary">'+(x.home?'<span class="badge">📍 '+e(x.home)+'</span>':'')+(x.branch?'<span class="badge">🌿 '+e(x.branch)+'</span>':'')+'<span class="badge ok">✓ Family verified</span></div>'+(x.note?'<p>'+e(x.note)+'</p>':'')+'<div class="actions"><button class="secondary" onclick="profileCard.style.display=\'none\'">Close</button><button class="primary" onclick="treeSearch.value=\''+e(x.name).replace(/'/g,"&#39;")+'\';renderTree()">Focus branch</button></div>';profileCard.scrollIntoView({behavior:'smooth',block:'start'})}function e(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+<script>
+document.querySelectorAll('[id]').forEach(el=>{if(!(el.id in window))window[el.id]=el});
+const MZ_SUPABASE_URL='https://beixlzqbuascruzhcety.supabase.co',MZ_SUPABASE_KEY='sb_publishable_plIANQ52kvCUjclk5cESjA_66uKkbKi';
+const mzsb=(window.supabase&&window.supabase.createClient)?window.supabase.createClient(MZ_SUPABASE_URL,MZ_SUPABASE_KEY):null;
+function mzBackendReady(messageTarget){
+ if(mzsb)return true;
+ const msg='Secure account services did not load. Your local family tools still work. Refresh once you have internet access.';
+ if(messageTarget)messageTarget.textContent=msg;
+ return false;
+}
+async function mzSignUp(){
+ if(!mzBackendReady(authStatus))return;
+ const email=authEmail.value.trim(),password=authPassword.value;
+ if(!email||password.length<6){authStatus.textContent='Enter a valid email and a password with at least 6 characters.';return;}
+ authStatus.textContent='Creating account…';
+ try{
+   let {data,error}=await mzsb.auth.signUp({email,password});
+   authStatus.textContent=error?error.message:(data.session?'✓ Account created and signed in.':'✓ Account created. Check your email if confirmation is required.');
+ }catch(err){authStatus.textContent='Could not reach secure account services. Check your connection and try again.'}
+}
+async function mzSignIn(){
+ if(!mzBackendReady(authStatus))return;
+ const email=authEmail.value.trim(),password=authPassword.value;
+ if(!email||!password){authStatus.textContent='Enter your email and password first.';return;}
+ authStatus.textContent='Signing in…';
+ try{
+   let {error}=await mzsb.auth.signInWithPassword({email,password});
+   authStatus.textContent=error?error.message:'✓ Signed in securely.';
+ }catch(err){authStatus.textContent='Could not reach secure account services. Check your connection and try again.'}
+}
+async function mzSignOut(){
+ if(!mzBackendReady(authStatus))return;
+ try{await mzsb.auth.signOut();authStatus.textContent='Signed out.'}
+ catch(err){authStatus.textContent='Could not sign out cleanly. Refresh and try again.'}
+}
+if(mzsb)mzsb.auth.onAuthStateChange((_e,s)=>{if(s?.user)authStatus.textContent='✓ Signed in as '+s.user.email});
+let deferredInstall=null;window.addEventListener('beforeinstallprompt',ev=>{ev.preventDefault();deferredInstall=ev;document.getElementById('installBtn').classList.add('show')});async function installApp(){if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;document.getElementById('installBtn').classList.remove('show')}if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));const ids=['home','start','family','memories','invite','ask','shop','heritage','memorial'];function go(x){const target=document.getElementById(x);if(!target)return;ids.forEach(i=>{const p=document.getElementById(i);if(p)p.classList.toggle('active',i===x)});window.scrollTo({top:0,left:0,behavior:'instant'})}function focusPerson(id){let x=verified.find(v=>v.id===id);if(!x)return;profileCard.style.display='block';profileCard.innerHTML='<div class="ey">Person profile</div><h2>'+e(x.name)+'</h2><p><b>'+e(x.relation)+'</b>'+(x.anchorName?' of '+e(x.anchorName):'')+'</p><div class="tree-summary">'+(x.home?'<span class="badge">📍 '+e(x.home)+'</span>':'')+(x.branch?'<span class="badge">🌿 '+e(x.branch)+'</span>':'')+'<span class="badge ok">✓ Family verified</span></div>'+(x.note?'<p>'+e(x.note)+'</p>':'')+'<div class="actions"><button class="secondary" onclick="profileCard.style.display=\'none\'">Close</button><button class="primary" onclick="treeSearch.value=\''+e(x.name).replace(/'/g,"&#39;")+'\';renderTree()">Focus branch</button></div>';profileCard.scrollIntoView({behavior:'smooth',block:'start'})}function e(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 let verified=JSON.parse(localStorage.getItem('mzv')||'[]'),pending=JSON.parse(localStorage.getItem('mzp')||'[]'),invs=JSON.parse(localStorage.getItem('mzi')||'[]'),orderList=JSON.parse(localStorage.getItem('mzo')||'[]'),fname=localStorage.getItem('mz_family')||'Our Family';
 // One-time cleanup for browsers that used the original prototype seed. Only remove the exact untouched demo trio.
 if(!localStorage.getItem('mz_seed_cleanup_v2')){const demo=[['Gogo','Grandparent','Kapseret','Family elder'],['Kogo','Grandparent','Kapseret','Family elder'],['Anthony','Child','Kenya','Bii Family']];const isDemo=x=>demo.some(d=>x&&x.name===d[0]&&x.relation===d[1]&&x.home===d[2]&&x.branch===d[3]);verified=verified.filter(x=>!isDemo(x));localStorage.setItem('mzv',JSON.stringify(verified));localStorage.setItem('mz_seed_cleanup_v2','1');}
@@ -45,20 +80,28 @@ async function saveOrder(){
    orderList.unshift({offer:offer.value,price:offerPrice.value,name:customer.value.trim(),contact:contact.value.trim(),country:country.value,details:details.value.trim(),status:'Enquiry saved — quote/follow-up required'});
    persist();checkout.textContent='✓ Enquiry saved. This package needs a quote or assisted follow-up before payment.';return;
  }
- const {data:{session}}=await mzsb.auth.getSession();
+ if(!mzBackendReady(checkout))return;
+ let session=null;
+ try{({data:{session}}=await mzsb.auth.getSession())}catch(err){checkout.textContent='Could not reach secure payment services. Check your connection and try again.';return}
  if(!session){checkout.textContent='🔒 Sign in first so Mizizi can attach the payment securely to your account.';go('start');return;}
  checkout.textContent='Opening secure Paystack checkout…';
- const {data,error}=await mzsb.functions.invoke('mizizi-paystack',{body:{action:'initialize',plan:offer.value}});
- if(error||!data?.authorization_url){checkout.textContent='Payment setup is not active yet. The live Paystack key still needs to be added securely to the backend.';return;}
+ let data,error;
+ try{({data,error}=await mzsb.functions.invoke('mizizi-paystack',{body:{action:'initialize',plan:offer.value}}))}
+ catch(err){checkout.textContent='Could not open secure checkout. Check your connection and try again.';return}
+ if(error||!data?.authorization_url){checkout.textContent='Secure checkout could not start. Please try again in a moment.';return;}
  orderList.unshift({offer:offer.value,price:offerPrice.value,name:customer.value.trim(),contact:contact.value.trim(),country:country.value,details:details.value.trim(),status:'Paystack checkout opened',reference:data.reference});persist();
  location.href=data.authorization_url;
 }
 async function mzVerifyReturnedPayment(){
  const p=new URLSearchParams(location.search),reference=p.get('reference')||p.get('trxref');
  if(!reference||!reference.startsWith('mz_'))return;
- const {data:{session}}=await mzsb.auth.getSession();
+ if(!mzsb){localStorage.setItem('mz_pending_payment_ref',reference);return;}
+ let session=null;
+ try{({data:{session}}=await mzsb.auth.getSession())}catch(err){localStorage.setItem('mz_pending_payment_ref',reference);return}
  if(!session){localStorage.setItem('mz_pending_payment_ref',reference);return;}
- const {data,error}=await mzsb.functions.invoke('mizizi-paystack',{body:{action:'verify',reference}});
+ let data,error;
+ try{({data,error}=await mzsb.functions.invoke('mizizi-paystack',{body:{action:'verify',reference}}))}
+ catch(err){if(typeof checkout!=='undefined')checkout.textContent='Payment returned, but verification is temporarily unavailable. Your reference is saved safely.';localStorage.setItem('mz_pending_payment_ref',reference);return}
  if(!error&&data?.paid){
    localStorage.setItem('mz_paid_plan',data.plan||'');
    localStorage.setItem('mz_paid_ref',reference);
