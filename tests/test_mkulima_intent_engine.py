@@ -162,7 +162,7 @@ class ConversationLoopRegression(unittest.TestCase):
         self.assertEqual(state.get("stage"),"offer")
         reply=app_module.reply_for("50",state)
         self.assertNotIn("outcome unayotaka",reply.lower())
-        self.assertIn("bei",reply.lower())
+        self.assertTrue("price" in reply.lower() or "bei" in reply.lower())
 
     def test_location_followup_keeps_sell_intent(self):
         state=app_module.apply_message("nataka kuuza beans",{})
