@@ -524,6 +524,7 @@ def _log_startup_readiness_once():
     pay_ok=_paystack_connection_ok()
     signing_ok=bool(_checkout_signing_secret())
     print("MKULIMA_LIVE_READINESS whatsapp=%s paystack=%s signed_checkout=%s" % (wa_ok,pay_ok,signing_ok), flush=True)
+    print("MKULIMA_SUPABASE_ENV_KEYS", sorted([k for k in os.environ.keys() if "SUPABASE" in k.upper()]), flush=True)
     return None
 
 @app.get("/api/readiness")
