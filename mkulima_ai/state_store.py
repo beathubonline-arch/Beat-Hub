@@ -87,3 +87,41 @@ def claim_message(message_id):
         return False
     finally:
         con.close()
+
+
+def record_interaction(message_id, phone, question, recommendation, state, answer_version="mkulima-v1"):
+    ref=actor_ref(phone)
+    if not (supabase_enabled() and ref and message_id):
+        return None
+    payload={
+        "message_id":message_id,
+        "actor_ref":ref,
+        "question":str(question or "")[:8000],
+        "recommendation":str(recommendation or "")[:8000],
+        "crop":state.get("crop"),
+        "location_context":state.get("location"),
+        "language":state.get("language") or "unknown",
+        "problem":state.get("primary_intent") or state.get("problem"),
+        "confidence":state.get("confidence"),
+        "answer_version":answer_version,
+    }
+    try:
+        rows=_api("POST","mkulima_interactions",payload,"return=representation") or []
+        return rows[0].get("id") if rows else None
+    except Exception:
+        return None
+
+def record_feedback(message_id, interaction_id, rating, outcome=None):
+    rating=str(rating or "").strip().lower()
+    if rating not in {"helpful","wrong","still_problem"}:
+        return False
+    if not (supabase_enabled() and interaction_id and message_id):
+        return False
+    payload={"message_id":message_id,"interaction_id":interaction_id,"rating":rating}
+    if outcome:
+        payload["outcome"]=str(outcome)[:8000]
+    try:
+        _api("POST","mkulima_feedback",payload,"return=minimal")
+        return True
+    except Exception:
+        return False
