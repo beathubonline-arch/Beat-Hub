@@ -500,6 +500,19 @@ def _paystack_connection_ok():
     except Exception:
         return False
 
+_startup_readiness_logged=False
+
+@app.before_request
+def _log_startup_readiness_once():
+    global _startup_readiness_logged
+    if _startup_readiness_logged: return None
+    _startup_readiness_logged=True
+    wa_ok=bool(_whatsapp_display_number())
+    pay_ok=_paystack_connection_ok()
+    signing_ok=bool(_checkout_signing_secret())
+    app.logger.info("MKULIMA_LIVE_READINESS whatsapp=%s paystack=%s signed_checkout=%s",wa_ok,pay_ok,signing_ok)
+    return None
+
 @app.get("/api/readiness")
 def readiness():
     number=_whatsapp_display_number()
