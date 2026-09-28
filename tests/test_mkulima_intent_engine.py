@@ -6,6 +6,7 @@ from planner import build_plan, safe_reasoning_reply
 from tool_registry import describe_tools, tool_is_executable, stale_reference_tool
 from farm_vision import analyze_farm_image, safe_vision_reply
 from weather_live import weather_reply
+import app as app_module
 
 class FarmerIntentRegression(unittest.TestCase):
     def test_disease_not_forced_into_sale(self):
