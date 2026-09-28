@@ -395,7 +395,7 @@ def home():
 <span class="eyebrow">🇰🇪 Practical AI for agriculture</span>
 <h1>Better decisions before you sell your harvest.</h1>
 <p class="lead">Mkulima AI helps Kenyan farmers understand offers, compare options and decide their next step using the information they already have — in language that feels natural.</p>
-<div class="actions"><a class="btn primary" href="#how">See how it works</a><a class="btn secondary" href="#support">What Mkulima helps with</a></div>
+<div class="actions"><button class="btn primary" id="installApp" type="button" style="border:0;cursor:pointer">⬇ Install Mkulima App</button><a class="btn secondary" href="#how">See how it works</a><a class="btn secondary" href="#support">What Mkulima helps with</a></div><p id="installHelp" style="margin:12px 0 0;color:#d9f0df;font-size:13px">Install once, then open Mkulima directly from your home screen.</p>
 </div><div class="phone">
 <div class="phonehead"><div class="avatar">🌽</div><div><strong>Mkulima AI</strong><div class="online">● Farmer decision support</div></div></div>
 <div class="bubble farmer">Niko Eldoret, nina gunia 25 za mahindi. Buyer amenipea KES 3,200 kwa gunia. Nifanye aje?</div>
@@ -410,7 +410,54 @@ def home():
 <div class="step"><div class="num">2</div><h3>Mkulima evaluates the situation</h3><p>The system structures the details, checks what is known and avoids presenting stale reference data as today's price.</p></div>
 <div class="step"><div class="num">3</div><h3>Get a practical next step</h3><p>Receive a clear response in English, Kiswahili or a natural mix, with the next information or action that matters.</p></div></div>
 <div class="promise"><div><h2>Built to become more useful over time.</h2><p>Our direction is outcome-driven: farmer question → recommendation → farmer feedback → validated knowledge → better future decision support.</p></div><span class="pill">🌱 Learning with farmers</span></div></div></section>
-<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer><script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js", {scope:"/"}).catch(function(){});});}</script>"""
+<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer><script>
+let mkulimaInstallPrompt=null;
+const installBtn=document.getElementById("installApp");
+const installHelp=document.getElementById("installHelp");
+window.addEventListener("beforeinstallprompt",function(e){
+  e.preventDefault();
+  mkulimaInstallPrompt=e;
+  if(installBtn){installBtn.textContent="⬇ Install Mkulima App";installBtn.disabled=false;}
+  if(installHelp){installHelp.textContent="Ready to install on this phone.";}
+});
+if(installBtn){
+  installBtn.addEventListener("click",async function(){
+    if(window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone){
+      installHelp.textContent="Mkulima AI is already installed on this phone.";
+      return;
+    }
+    if(mkulimaInstallPrompt){
+      mkulimaInstallPrompt.prompt();
+      const choice=await mkulimaInstallPrompt.userChoice;
+      if(choice.outcome==="accepted"){
+        installHelp.textContent="Installing Mkulima AI…";
+      }else{
+        installHelp.textContent="Install cancelled. Tap the button whenever you're ready.";
+      }
+      mkulimaInstallPrompt=null;
+      return;
+    }
+    const ua=navigator.userAgent||"";
+    const isAndroid=/Android/i.test(ua);
+    const isChrome=/Chrome/i.test(ua) && !/wv|FBAN|FBAV|Instagram/i.test(ua);
+    if(isAndroid && !isChrome){
+      installHelp.textContent="Opening Mkulima in Chrome so it can be installed…";
+      window.location.href="intent://mkulima-ai-whatsapp.onrender.com/#Intent;scheme=https;package=com.android.chrome;end";
+      return;
+    }
+    installHelp.textContent="Chrome is preparing the install. If the prompt does not appear, tap ⋮ then Install app.";
+  });
+}
+window.addEventListener("appinstalled",function(){
+  if(installBtn){installBtn.textContent="✓ Mkulima Installed";installBtn.disabled=true;}
+  if(installHelp){installHelp.textContent="Installed successfully. Open Mkulima from your home screen.";}
+});
+if("serviceWorker" in navigator){
+  window.addEventListener("load",function(){
+    navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(function(){});
+  });
+}
+</script>"""
 
 @app.get("/privacy")
 def privacy():
