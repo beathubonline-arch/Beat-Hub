@@ -1,6 +1,6 @@
 import os, re, sqlite3, json, hashlib, hmac, secrets
 from datetime import date, datetime
-from urllib import request as urlrequest, parse as urlparse
+from urllib import request as urlrequest, error as urlerror, parse as urlparse
 from flask import Flask, request, jsonify, redirect
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
@@ -493,11 +493,21 @@ def go_whatsapp():
     return redirect("https://wa.me/"+number+"?"+urlparse.urlencode({"text":" ".join(parts)}),302)
 
 def _paystack_connection_ok():
-    if not _pay_secret(): return False
+    if not _pay_secret():
+        print("PAYSTACK_READINESS_ERROR missing_secret", flush=True)
+        return False
     try:
         data=_paystack_json("GET","/balance")
         return bool(data and data.get("status"))
-    except Exception:
+    except urlerror.HTTPError as exc:
+        try:
+            body=exc.read().decode("utf-8","replace")[:500]
+        except Exception:
+            body=""
+        print("PAYSTACK_READINESS_ERROR http_status=%s body=%s" % (getattr(exc,"code","?"), body), flush=True)
+        return False
+    except Exception as exc:
+        print("PAYSTACK_READINESS_ERROR type=%s message=%s" % (type(exc).__name__, str(exc)[:300]), flush=True)
         return False
 
 _startup_readiness_logged=False
