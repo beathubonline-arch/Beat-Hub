@@ -152,6 +152,30 @@ if __name__=="__main__":
     unittest.main()
 
 
+class MkulimaPaymentsRegression(unittest.TestCase):
+    def test_pricing_page_has_launch_prices(self):
+        client=app_module.app.test_client()
+        r=client.get("/pricing")
+        self.assertEqual(r.status_code,200)
+        body=r.get_data(as_text=True)
+        self.assertIn("KES 49",body)
+        self.assertIn("KES 199",body)
+        self.assertIn("5 useful questions",body)
+
+    def test_unsigned_checkout_is_rejected_before_paystack(self):
+        client=app_module.app.test_client()
+        r=client.post("/pay/start",data={"plan":"day_pass","email":"farmer@example.com"})
+        self.assertEqual(r.status_code,400)
+        self.assertIn("WhatsApp",r.get_data(as_text=True))
+
+    def test_plan_prices_are_server_controlled(self):
+        self.assertEqual(app_module.MZ_PLANS["day_pass"]["amount_kes"],49)
+        self.assertEqual(app_module.MZ_PLANS["plus_monthly"]["amount_kes"],199)
+        self.assertEqual(app_module.MZ_PLANS["day_pass"]["days"],1)
+        self.assertEqual(app_module.MZ_PLANS["plus_monthly"]["days"],30)
+
+
+
 class ConversationLoopRegression(unittest.TestCase):
     def test_sale_followups_do_not_reset_to_general(self):
         state={}
