@@ -1,0 +1,14 @@
+name: Temporary Mkulima Readiness Check
+on:
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check readiness twice
+        run: |
+          set -euo pipefail
+          for n in 1 2; do
+            body="$(curl -fsS https://mkulima-ai-whatsapp.onrender.com/api/readiness)"
+            echo "RUN_$n=$body"
+          done
