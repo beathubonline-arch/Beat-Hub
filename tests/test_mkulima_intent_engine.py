@@ -62,13 +62,13 @@ class FarmerIntentRegression(unittest.TestCase):
         self.assertIn("live_market_prices",p["tools"])
         self.assertIn("buyer_offer",p["missing_evidence"])
 
-    def test_planned_live_weather_is_not_claimed_executed(self):
+    def test_live_weather_is_executable_after_adapter_wiring(self):
         s=enrich_context("Mvua itanyesha kesho? Niko Kitale",{"location":"Kitale"})
         p=build_plan("Mvua itanyesha kesho? Niko Kitale",s)
         weather=[x for x in p["tool_status"] if x["name"]=="live_weather"][0]
-        self.assertEqual(weather["status"],"planned")
-        self.assertFalse(p["can_execute_all_tools"])
-        self.assertIn("live_weather",p["evidence"]["not_executed"])
+        self.assertEqual(weather["status"],"available")
+        self.assertTrue(tool_is_executable("live_weather"))
+        self.assertNotIn("live_weather",p["evidence"]["not_executed"])
 
     def test_local_calculator_is_executable(self):
         self.assertTrue(tool_is_executable("farm_calculator"))
