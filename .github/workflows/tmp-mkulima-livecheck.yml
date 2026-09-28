@@ -1,0 +1,23 @@
+name: Temp Mkulima livecheck
+on:
+  push:
+    branches: [tmp-mkulima-livecheck]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live readiness twice
+        run: |
+          set -euo pipefail
+          for n in 1 2; do
+            body="$(curl -fsS https://mkulima-ai-whatsapp.onrender.com/api/readiness)"
+            echo "RUN_$n=$body"
+            python - "$body" <<'PY'
+          import json,sys
+          d=json.loads(sys.argv[1])
+          assert d["payments"]["configured"] is True, d
+          assert d["payments"]["api_ok"] is True, d
+          assert d["payments"]["signed_checkout"] is True, d
+          assert d["whatsapp"]["configured"] is True, d
+          PY
+          done
