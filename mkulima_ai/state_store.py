@@ -13,7 +13,9 @@ def supabase_enabled():
     return bool(_url() and _secret())
 
 def actor_ref(phone):
-    salt=os.getenv("MKULIMA_ACTOR_SALT") or _secret()
+    salt=(os.getenv("MKULIMA_ACTOR_SALT")
+          or os.getenv("MKULIMA_CHECKOUT_SECRET")
+          or _secret())
     if not salt:
         return None
     return hmac.new(salt.encode(), str(phone).encode(), hashlib.sha256).hexdigest()
