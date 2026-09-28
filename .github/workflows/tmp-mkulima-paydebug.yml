@@ -1,0 +1,22 @@
+name: Temp Mkulima paydebug
+on:
+  push:
+    branches: [tmp-mkulima-paydebug]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit checkout start twice
+        run: |
+          set -euo pipefail
+          for n in 1 2; do
+            echo "RUN_$n"
+            curl -sS -o /tmp/body -w "STATUS=%{http_code}\n" \
+              -X POST https://mkulima-ai-whatsapp.onrender.com/pay/start \
+              --data-urlencode "plan=day_pass" \
+              --data-urlencode "actor=f76eb6e991011a73e894d3137d39183d22d2861c3dc11a64890a0b19c8673afc" \
+              --data-urlencode "sig=ada26cf3c5c42018a64245f122dbb2edad60fa2a610f37088002e19858d203aa" \
+              --data-urlencode "email=diagnostic+mkulima@example.com"
+            cat /tmp/body
+            echo
+          done
