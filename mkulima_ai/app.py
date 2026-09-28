@@ -117,11 +117,50 @@ def reply_for(text, known=None):
     return f"🌽 Offer KES {gross:,.0f} | Reference KES {ref:,.0f} | Difference KES {diff:+,.0f} | {SOURCE}, {OBSERVED_ON}."
 
 
-LEGAL_STYLE = """<style>body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;line-height:1.6;color:#17351f}h1,h2{color:#176b35}small{color:#667}</style>"""
+LEGAL_STYLE = """<style>
+:root{--green:#176b35;--deep:#0b3d22;--leaf:#2f8f4e;--cream:#f7f4e8;--ink:#17351f;--muted:#66756b}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;line-height:1.6;color:var(--ink);background:#fff}
+h1,h2{color:var(--green)}a{color:var(--green)}small{color:#667}
+</style>"""
+
+HOME_STYLE = """<style>
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,Arial,sans-serif;color:#15351f;background:#fbfcf7;line-height:1.55}
+a{text-decoration:none}.wrap{width:min(1120px,calc(100% - 36px));margin:auto}
+nav{height:76px;display:flex;align-items:center;justify-content:space-between}.brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:800;color:#103e24}.mark{width:38px;height:38px;border-radius:12px;background:#176b35;display:grid;place-items:center;color:#fff;font-size:21px}.navtag{font-size:13px;color:#52695a}
+.hero{position:relative;overflow:hidden;background:linear-gradient(135deg,#0d4827 0%,#176b35 55%,#2d8b4a 100%);color:white;padding:76px 0 70px}.hero:after{content:"";position:absolute;width:520px;height:520px;border-radius:50%;background:rgba(255,255,255,.06);right:-160px;top:-190px}
+.grid{display:grid;grid-template-columns:1.12fr .88fr;gap:58px;align-items:center;position:relative;z-index:1}.eyebrow{display:inline-flex;padding:8px 12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);border-radius:999px;font-size:13px;font-weight:700;margin-bottom:20px}
+h1{font-size:clamp(42px,6vw,68px);line-height:1.02;letter-spacing:-2.5px;margin:0 0 22px}.lead{font-size:20px;color:#e6f3e9;max-width:650px;margin:0 0 30px}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{display:inline-block;padding:14px 20px;border-radius:12px;font-weight:800}.primary{background:#fff;color:#145d31}.secondary{border:1px solid rgba(255,255,255,.4);color:#fff}
+.phone{background:#fff;color:#17351f;border-radius:28px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.22);max-width:380px;margin:auto}.phonehead{display:flex;gap:11px;align-items:center;padding-bottom:14px;border-bottom:1px solid #e9eee9}.avatar{width:42px;height:42px;border-radius:50%;background:#e5f4e9;display:grid;place-items:center;font-size:23px}.online{font-size:12px;color:#4d755a}.bubble{padding:12px 14px;border-radius:14px;margin-top:14px;font-size:14px}.farmer{background:#e7f6e9;margin-left:40px}.ai{background:#f1f3ef;margin-right:24px}.tick{color:#278647;font-weight:700}
+.section{padding:72px 0}.center{text-align:center;max-width:700px;margin:0 auto 42px}.center h2{font-size:36px;letter-spacing:-1px;margin:0 0 12px;color:#123d24}.center p{color:#607064;margin:0}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{background:#fff;border:1px solid #e5ebe4;border-radius:18px;padding:25px;box-shadow:0 8px 24px rgba(18,61,36,.05)}.icon{font-size:27px}.card h3{margin:12px 0 7px;color:#173e26}.card p{margin:0;color:#647168;font-size:15px}
+.how{background:#f0f5eb}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:25px}.num{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#176b35;color:white;font-weight:800}.step h3{margin:12px 0 5px}.step p{color:#657269;margin:0}
+.promise{margin:70px auto;background:#123e24;color:white;border-radius:24px;padding:42px;display:flex;justify-content:space-between;gap:28px;align-items:center}.promise h2{margin:0 0 8px;font-size:30px}.promise p{margin:0;color:#d9eadf;max-width:650px}.pill{white-space:nowrap;background:#e7f5e8;color:#145c31;padding:11px 15px;border-radius:999px;font-weight:800}
+footer{border-top:1px solid #e1e8e0;padding:28px 0 36px;color:#66756b;font-size:13px}.foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}.links a{color:#456451;margin-left:16px}
+@media(max-width:800px){.grid{grid-template-columns:1fr;gap:42px}.hero{padding:55px 0}.cards,.steps{grid-template-columns:1fr}.promise{flex-direction:column;align-items:flex-start}h1{letter-spacing:-1.5px}.navtag{display:none}.phone{max-width:100%}}
+</style>"""
 
 @app.get("/")
 def home():
-    return LEGAL_STYLE + """<h1>Mkulima AI</h1><p>Practical decision support for Kenyan farmers before they sell their harvest.</p><p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> · <a href="/data-deletion">Data Deletion</a></p>"""
+    return HOME_STYLE + """<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Built for Kenyan farmers</span></nav>
+<section class="hero"><div class="wrap grid"><div>
+<span class="eyebrow">🇰🇪 Practical AI for agriculture</span>
+<h1>Better decisions before you sell your harvest.</h1>
+<p class="lead">Mkulima AI helps Kenyan farmers understand offers, compare options and decide their next step using the information they already have — in language that feels natural.</p>
+<div class="actions"><a class="btn primary" href="#how">See how it works</a><a class="btn secondary" href="#support">What Mkulima helps with</a></div>
+</div><div class="phone">
+<div class="phonehead"><div class="avatar">🌽</div><div><strong>Mkulima AI</strong><div class="online">● Farmer decision support</div></div></div>
+<div class="bubble farmer">Niko Eldoret, nina gunia 25 za mahindi. Buyer amenipea KES 3,200 kwa gunia. Nifanye aje?</div>
+<div class="bubble ai"><span class="tick">Mkulima AI</span><br>You have 25 bags at KES 3,200/bag = <strong>KES 80,000</strong>.<br><br>Usiuze haraka before tuverify market ya leo. Pata offers 2–3, then nitumie transport cost. Nitacompare option yenye net cash nzuri.</div>
+</div></div></section>
+<section class="section" id="support"><div class="wrap"><div class="center"><h2>From a farmer's question to a practical next step</h2><p>Designed around the decisions that matter when produce is ready and money is on the line.</p></div>
+<div class="cards"><div class="card"><div class="icon">💰</div><h3>Understand the offer</h3><p>Turn buyer or broker offers into clear totals and comparisons before making a sale.</p></div>
+<div class="card"><div class="icon">📍</div><h3>Use local context</h3><p>Farmers can share their village, estate, road or nearby landmark so advice starts with where they actually are.</p></div>
+<div class="card"><div class="icon">🤝</div><h3>Choose the next move</h3><p>Compare buyer offers, transport and storage considerations to focus on the cash the farmer actually keeps.</p></div></div></div></section>
+<section class="section how" id="how"><div class="wrap"><div class="center"><h2>Simple enough to use from the farm</h2><p>No complicated dashboard required. The conversation gathers only the information needed to help.</p></div>
+<div class="steps"><div class="step"><div class="num">1</div><h3>Tell Mkulima what you have</h3><p>Share crop quantity, location and the offer you've received.</p></div>
+<div class="step"><div class="num">2</div><h3>Mkulima evaluates the situation</h3><p>The system structures the details, checks what is known and avoids presenting stale reference data as today's price.</p></div>
+<div class="step"><div class="num">3</div><h3>Get a practical next step</h3><p>Receive a clear response in English, Kiswahili or a natural mix, with the next information or action that matters.</p></div></div>
+<div class="promise"><div><h2>Built to become more useful over time.</h2><p>Our direction is outcome-driven: farmer question → recommendation → farmer feedback → validated knowledge → better future decision support.</p></div><span class="pill">🌱 Learning with farmers</span></div></div></section>
+<footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer>"""
 
 @app.get("/privacy")
 def privacy():
