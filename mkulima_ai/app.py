@@ -37,11 +37,21 @@ def _valid_actor(ref,sig):
     expected=_sign_actor(ref)
     return bool(expected and sig and hmac.compare_digest(expected,sig))
 
+def _short_checkout_url(actor,sig):
+    init_db()
+    code=secrets.token_urlsafe(6)
+    expires_at=int(__import__("time").time())+1800
+    con=sqlite3.connect(DB)
+    con.execute("DELETE FROM checkout_links WHERE expires_at < ?",(int(__import__("time").time()),))
+    con.execute("INSERT OR REPLACE INTO checkout_links(code,actor,sig,expires_at) VALUES(?,?,?,?)",(code,actor,sig,expires_at))
+    con.commit(); con.close()
+    return MKULIMA_BASE_URL+"/u/"+code
+
 def upgrade_url(phone):
     ref=actor_ref(phone)
     sig=_sign_actor(ref) if ref else None
     if not (ref and sig): return MKULIMA_BASE_URL+"/pricing"
-    return MKULIMA_BASE_URL+"/pricing?actor="+urlparse.quote(ref)+"&sig="+urlparse.quote(sig)
+    return _short_checkout_url(ref,sig)
 
 def _paystack_json(method,path,payload=None):
     secret=_pay_secret()
@@ -73,6 +83,7 @@ def init_db():
     con=sqlite3.connect(DB)
     con.execute("""CREATE TABLE IF NOT EXISTS conversations(phone TEXT PRIMARY KEY,state TEXT NOT NULL DEFAULT '{}')""")
     con.execute("""CREATE TABLE IF NOT EXISTS processed_messages(message_id TEXT PRIMARY KEY,created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    con.execute("""CREATE TABLE IF NOT EXISTS checkout_links(code TEXT PRIMARY KEY,actor TEXT NOT NULL,sig TEXT NOT NULL,expires_at INTEGER NOT NULL)""")
     con.commit(); con.close()
 
 def age_days():
@@ -563,10 +574,7 @@ def data_deletion():
     <p>Include the WhatsApp phone number used with Mkulima AI so we can identify the relevant records. Do not send passwords, access tokens, PINs, or other secrets.</p>
     <p>We will verify the request where necessary and delete or anonymize eligible records, subject to information we must retain for security, fraud prevention, or legal obligations.</p>"""
 
-@app.get("/pricing")
-def pricing():
-    actor=request.args.get("actor","")
-    sig=request.args.get("sig","")
+def _pricing_response(actor="",sig=""):
     bound=_valid_actor(actor,sig)
     hidden=(f'<input type="hidden" name="actor" value="{actor}"><input type="hidden" name="sig" value="{sig}">' if bound else "")
     note="✓ Secure WhatsApp account detected. Your purchase will activate this account automatically." if bound else "To activate payment securely, return to your Mkulima WhatsApp chat and send: upgrade"
@@ -578,6 +586,22 @@ def pricing():
     <div class="c"><h2>Day Pass</h2><div class="p">KES 49</div><p>24 hours of unlimited Mkulima conversations for an urgent farm or selling decision.</p>"""+buy("day_pass","Pay KES 49")+"""</div>
     <div class="c"><h2>Mkulima Plus</h2><div class="p">KES 199</div><p>30 days of unlimited chat, saved conversation context and premium decision support as features roll out.</p>"""+buy("plus_monthly","Pay KES 199")+"""</div>
     </div><p class="muted">Payments are verified server-side before access is activated.</p></div>"""
+
+
+
+@app.get("/pricing")
+def pricing():
+    return _pricing_response(request.args.get("actor",""),request.args.get("sig",""))
+
+@app.get("/u/<code>")
+def short_checkout(code):
+    init_db()
+    con=sqlite3.connect(DB)
+    row=con.execute("SELECT actor,sig,expires_at FROM checkout_links WHERE code=?",(code,)).fetchone()
+    con.close()
+    if not row or int(row[2]) < int(__import__("time").time()):
+        return "<h2>Payment link expired</h2><p>Return to WhatsApp and send <strong>upgrade</strong> for a fresh link.</p>",410
+    return _pricing_response(row[0],row[1])
 
 @app.post("/pay/start")
 def pay_start():
