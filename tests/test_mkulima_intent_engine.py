@@ -1,4 +1,4 @@
-import os, sys, unittest
+import os, sys, unittest, json
 ROOT=os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0,os.path.join(ROOT,"mkulima_ai"))
 from intent_engine import detect_intents, enrich_context, open_reply
@@ -149,3 +149,39 @@ class FarmerIntentRegression(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+class DurableStateRegression(unittest.TestCase):
+    def test_actor_ref_is_pseudonymous(self):
+        import state_store
+        old=os.environ.get("MKULIMA_ACTOR_SALT")
+        try:
+            os.environ["MKULIMA_ACTOR_SALT"]="test-only-salt"
+            phone="254700123456"
+            ref=state_store.actor_ref(phone)
+            self.assertEqual(ref,state_store.actor_ref(phone))
+            self.assertNotIn(phone,ref)
+            self.assertEqual(len(ref),64)
+        finally:
+            if old is None: os.environ.pop("MKULIMA_ACTOR_SALT",None)
+            else: os.environ["MKULIMA_ACTOR_SALT"]=old
+
+    def test_supabase_state_payload_excludes_raw_phone(self):
+        import state_store
+        old_url=os.environ.get("SUPABASE_URL"); old_key=os.environ.get("SUPABASE_SECRET_KEY")
+        original=state_store._api
+        seen={}
+        try:
+            os.environ["SUPABASE_URL"]="https://example.supabase.co"
+            os.environ["SUPABASE_SECRET_KEY"]="test-secret"
+            def fake_api(method,path,body=None,prefer=None):
+                seen.update(method=method,path=path,body=body,prefer=prefer)
+            state_store._api=fake_api
+            self.assertEqual(state_store.save_state("254700123456",{"crop":"maize"}),"supabase")
+            self.assertNotIn("254700123456",json.dumps(seen))
+        finally:
+            state_store._api=original
+            if old_url is None: os.environ.pop("SUPABASE_URL",None)
+            else: os.environ["SUPABASE_URL"]=old_url
+            if old_key is None: os.environ.pop("SUPABASE_SECRET_KEY",None)
+            else: os.environ["SUPABASE_SECRET_KEY"]=old_key
