@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
+from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -253,8 +254,25 @@ def webhook():
                 state["stage"]="open"
             con.execute("INSERT INTO conversations(phone,state) VALUES(?,?) ON CONFLICT(phone) DO UPDATE SET state=excluded.state",(phone,json.dumps(state)))
             con.commit(); con.close()
-            send_whatsapp_text(phone,image_context_reply(state,caption))
-            return jsonify(ok=True,image_received=True,vision_status="input_available"),200
+            media=download_whatsapp_media(image.get("id"))
+            vision={"ok":False,"status":"media_unavailable"}
+            if media.get("ok"):
+                vision=analyze_farm_image(media["bytes"],media["mime_type"],{
+                    "caption":caption,"crop":state.get("crop"),"location":state.get("location"),
+                    "primary_intent":state.get("primary_intent")
+                })
+            # Persist only structured observations/status, never raw image bytes.
+            state["last_image"]["download_status"]=media.get("status")
+            state["last_image"]["vision_status"]=vision.get("status")
+            if vision.get("ok"):
+                state["last_image"]["vision_provider"]=vision.get("provider")
+                state["last_image"]["observations"]=vision.get("observations")
+            con=sqlite3.connect(DB)
+            con.execute("INSERT INTO conversations(phone,state) VALUES(?,?) ON CONFLICT(phone) DO UPDATE SET state=excluded.state",(phone,json.dumps(state)))
+            con.commit(); con.close()
+            response=safe_vision_reply(vision,state.get("language","sw")) or image_context_reply(state,caption)
+            send_whatsapp_text(phone,response)
+            return jsonify(ok=True,image_received=True,media_status=media.get("status"),vision_status=vision.get("status")),200
         if msg.get("type")!="text":
             con.close()
             send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
