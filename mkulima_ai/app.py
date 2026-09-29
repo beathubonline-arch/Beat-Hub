@@ -407,14 +407,23 @@ def reply_for(text, known=None):
     normalized=" ".join((text or "").lower().split())
     wants_help=any(p in normalized for p in ("nifanye aje","nifanye nini","what should i do","what do i do","ushauri","advise","help me","solution"))
     if wants_help:
+        # Advice must follow evidence, not a hard-coded "wait" or "sell" stance.
+        # Until current local market evidence is verified, remain decision-neutral
+        # and collect the facts needed to calculate the farmer's best net outcome.
         if lang=="en":
-            return (f"You have {f['bags']:g} bags in {f['location']} at KES {f['offer']:,.0f}/bag = KES {gross:,.0f}.\n\n"
-                    "Next: don't rush the sale until we verify today's market. Get 2–3 buyer offers. Send me your transport cost and, if you can store, the storage cost and how long you can wait. I'll compare the options by the cash you actually keep.")
+            return (f"You have {f['bags']:g} bags in {f['location']} at KES {f['offer']:,.0f}/bag = KES {gross:,.0f} gross.\n\n"
+                    "I can't responsibly tell you to sell or wait until I have a verified current local benchmark for this exact product/grade and bag weight. "
+                    "Send the bag weight/grade and your transport cost. If you have another current buyer offer, send it too. "
+                    "Once verified market evidence is available, I can recommend SELL NOW when your net offer is materially better, NEGOTIATE when it is close, or WAIT/SEEK BUYERS when it is materially worse.")
         if lang=="mixed":
-            return (f"Uko na {f['bags']:g} bags {f['location']}, offer ni KES {f['offer']:,.0f}/bag = KES {gross:,.0f}.\n\n"
-                    "Next step: usiuze haraka before tuverify market ya leo. Pata offers 2–3, then nitumie transport cost. Kama unaweza store, niambie storage cost na how long unaweza wait. Nitacompare option yenye net cash nzuri.")
-        return (f"Una gunia {f['bags']:g} huko {f['location']}, offer ni KES {f['offer']:,.0f}/gunia = KES {gross:,.0f}.\n\n"
-                "Hatua inayofuata: usikimbilie kuuza kabla bei ya leo kuthibitishwa. Tafuta offers 2–3, kisha nitumie gharama ya transport. Kama unaweza kuhifadhi, niambie storage cost na muda unaoweza kusubiri. Nitakulinganishia pesa halisi utakayobaki nayo.")
+            return (f"Uko na {f['bags']:g} bags {f['location']}, offer ni KES {f['offer']:,.0f}/bag = KES {gross:,.0f} gross.\n\n"
+                    "Siwezi kukuambia sell or wait bila verified current local benchmark ya exact product/grade na bag weight. "
+                    "Nitumie bag weight/grade na transport cost; ukiwa na another current buyer offer nitumie pia. "
+                    "Evidence ikiverify, advice inaweza kuwa SELL NOW ikiwa net offer iko materially above market, NEGOTIATE ikiwa iko close, ama WAIT/SEEK BUYERS ikiwa iko materially below.")
+        return (f"Una gunia {f['bags']:g} huko {f['location']}, offer ni KES {f['offer']:,.0f}/gunia = KES {gross:,.0f} gross.\n\n"
+                "Siwezi kusema uuze au usubiri bila bei ya sasa ya eneo lako iliyothibitishwa kwa product/grade na uzito huo wa gunia. "
+                "Nitumie uzito/grade ya gunia na transport cost; ukiwa na offer nyingine ya sasa nitumie pia. "
+                "Evidence ikithibitishwa, ushauri unaweza kuwa UZA SASA ikiwa net offer ni bora zaidi, NEGOTIATE ikiwa iko karibu na market, au TAFUTA BUYERS/WAI ikiwa iko chini.")
     # Never benchmark a farmer's offer against an old/global hard-coded price.
     # Current market intelligence must be product-specific, dated, sourced and
     # location-aware. Until that pipeline has a verified observation, fail closed.
