@@ -75,13 +75,25 @@ def _morning_brief(phone):
         f=weather.get("forecast") or {}
         weather_text=f"{f.get('temp_min_c')}–{f.get('temp_max_c')}°C · rain ~{f.get('precipitation_mm')} mm · wind max {f.get('wind_max_m_s')} m/s"
     listings=list_marketplace_listings(product if product!="your farm" else None,location if location!="your county" else None,5)
-    return state,location,product,weather,weather_text,listings
+    market=official_market_price(product)
+    return state,location,product,weather,weather_text,listings,market
 
 OFFICIAL_FEEDS=[
     {"name":"Kenya Meteorological Department","url":"https://meteo.go.ke/our-products/county-forecasts/","kind":"weather"},
     {"name":"Ministry of Agriculture and Livestock Development","url":"https://kilimo.go.ke/","kind":"programme"},
     {"name":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","kind":"market"},
 ]
+def official_market_price(product):
+    """Fetch KAMIS page availability and expose provenance without inventing a price."""
+    if not product or product=="your farm": return {"ok":False,"reason":"add_crop"}
+    try:
+        req=urlrequest.Request("https://kamis.kilimo.go.ke/site/market",headers={"User-Agent":"MkulimaAI/1.0"})
+        with urlrequest.urlopen(req,timeout=8) as res:
+            ok=200 <= getattr(res,"status",200) < 400
+        return {"ok":ok,"source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","product":product}
+    except Exception:
+        return {"ok":False,"reason":"source_unavailable","source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market"}
+
 def official_updates(location,product):
     """Return trusted source links only; never synthesize a government offer."""
     county=urlparse.quote(str(location or "").split(",")[0].strip())
@@ -642,7 +654,7 @@ def morning_dashboard(code):
     con.close()
     if not row or int(row[1]) < int(__import__("time").time()):
         return "<h2>Morning link expired</h2><p>Send <strong>morning</strong> to Mkulima on WhatsApp for a fresh private link.</p>",410
-    state,location,product,weather,weather_text,listings=_morning_brief(row[0])
+    state,location,product,weather,weather_text,listings,market=_morning_brief(row[0])
     updates=official_updates(location,product)
     safe_location=escape(location); safe_product=escape(product); safe_weather=escape(weather_text)
     market_items="".join("<li><strong>"+str(escape(str(x.get("quantity") or "")+" "+str(x.get("unit") or "")+" "+str(x.get("product") or "")))+"</strong> · "+str(escape(str(x.get("location_text") or x.get("county") or "")))+"</li>" for x in listings) or "<li>No matching Mkulima Market listings yet.</li>"
@@ -652,7 +664,7 @@ def morning_dashboard(code):
 <section class="hero" style="padding:44px 0"><div class="wrap"><span class="eyebrow">☀️ Mkulima Morning</span><h1 style="font-size:46px">Your farm today</h1><p class="lead">📍 {safe_location} · 🌱 {safe_product}</p></div></section>
 <section class="section"><div class="wrap"><div class="cards">
 <div class="card"><div class="icon">🌦️</div><h3>Local weather</h3><p>{safe_weather}</p><small>{weather_source}</small></div>
-<div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>Live Mkulima Market matches for your product/location.</p><ul>{market_items}</ul><a href="/marketplace">Open market →</a></div>
+<div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>Live Mkulima Market matches for your product/location.</p><ul>{market_items}</ul><p><strong>Official price source:</strong> {'KAMIS reachable' if market.get('ok') else 'KAMIS temporarily unavailable — no price guessed'}.</p><a href="https://kamis.kilimo.go.ke/site/market" rel="noopener noreferrer">Check official prices →</a> · <a href="/marketplace">Open Mkulima Market →</a></div>
 <div class="card"><div class="icon">🏛️</div><h3>Verified official updates</h3><p>Trusted national and county-relevant information. Mkulima links to the authority rather than inventing offers.</p><ul>{update_items}</ul></div>
 </div>
 <div class="promise"><div><h2>Your farm memory</h2><p>Mkulima uses the crop, location and decisions you have shared to keep advice relevant over time. Multi-year guidance will be scenario planning, not guaranteed predictions.</p></div><span class="pill">Updated for {safe_location}</span></div>
@@ -869,7 +881,7 @@ def webhook():
         if normalized_body in {"morning","brief","morning brief","today","dashboard","my farm"}:
             state=apply_message(body,state)
             save_state(phone,state)
-            _,location,product,weather,weather_text,listings=_morning_brief(phone)
+            _,location,product,weather,weather_text,listings,market=_morning_brief(phone)
             summary="☀️ *Mkulima Morning*\n📍 "+str(location)+" · 🌱 "+str(product)+"\n🌦 "+weather_text+"\n💰 "+str(len(listings))+" relevant Mkulima Market listing(s) found.\n🏛 Government/county circulars will only be shown from verified official sources.\n\nYour private farm dashboard: "+morning_url(phone)
             send_whatsapp_text(phone,summary)
             return jsonify(ok=True,morning=True),200
