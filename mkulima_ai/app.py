@@ -169,15 +169,62 @@ NUMBER_WORDS={
     "moja":1,"mbili":2,"tatu":3,"nne":4,"tano":5,"sita":6,"saba":7,"nane":8,"tisa":9,"kumi":10
 }
 PRODUCT_ALIASES={
-    "eggs":"eggs","egg":"eggs","mayai":"eggs",
-    "milk":"milk","maziwa":"milk",
-    "maize":"maize","mahindi":"maize",
-    "tomato":"tomatoes","tomatoes":"tomatoes","nyanya":"tomatoes",
-    "potato":"potatoes","potatoes":"potatoes","viazi":"potatoes",
+    # Cereals
+    "maize":"maize","mahindi":"maize","corn":"maize",
+    "wheat":"wheat","ngano":"wheat","rice":"rice","mchele":"rice","paddy":"rice",
+    "sorghum":"sorghum","mtama":"sorghum","millet":"millet","finger millet":"finger millet","wimbi":"finger millet",
+    "barley":"barley","shairi":"barley","oats":"oats","teff":"teff",
+    # Pulses / legumes
     "green grams":"green grams","green gram":"green grams","mung beans":"green grams","mung bean":"green grams","ndengu":"green grams",
-    "beans":"beans","maharagwe":"beans",
+    "beans":"beans","bean":"beans","dry beans":"beans","maharagwe":"beans",
+    "cowpeas":"cowpeas","cowpea":"cowpeas","kunde":"cowpeas",
+    "pigeon peas":"pigeon peas","pigeon pea":"pigeon peas","mbaazi":"pigeon peas",
+    "chickpeas":"chickpeas","chickpea":"chickpeas","dengu":"chickpeas",
+    "soybeans":"soybeans","soybean":"soybeans","soya beans":"soybeans","soya":"soybeans",
+    "lentils":"lentils","lentil":"lentils","kamande":"lentils",
+    "dolichos":"dolichos","lablab":"dolichos","njahi":"dolichos","black beans":"dolichos",
+    "garden peas":"garden peas","garden pea":"garden peas","peas":"garden peas","pea":"garden peas","minji":"garden peas",
+    "groundnuts":"groundnuts","groundnut":"groundnuts","peanuts":"groundnuts","peanut":"groundnuts","njugu":"groundnuts",
+    # Roots / tubers
+    "potatoes":"potatoes","potato":"potatoes","irish potatoes":"potatoes","irish potato":"potatoes","viazi":"potatoes",
+    "sweet potatoes":"sweet potatoes","sweet potato":"sweet potatoes","viazi vitamu":"sweet potatoes",
+    "cassava":"cassava","muhogo":"cassava","yam":"yams","yams":"yams","arrowroot":"arrowroots","arrowroots":"arrowroots","nduma":"arrowroots",
+    # Vegetables
+    "tomatoes":"tomatoes","tomato":"tomatoes","nyanya":"tomatoes",
+    "onions":"onions","onion":"onions","vitunguu":"onions",
+    "cabbages":"cabbages","cabbage":"cabbages","kabichi":"cabbages",
+    "kales":"kales","kale":"kales","sukuma wiki":"kales","sukuma":"kales",
+    "spinach":"spinach","capsicum":"capsicum","bell pepper":"capsicum","pilipili hoho":"capsicum",
+    "chilli":"chillies","chillies":"chillies","chili":"chillies","pepper":"chillies",
+    "carrots":"carrots","carrot":"carrots","beetroot":"beetroot","okra":"okra",
+    "amaranth":"amaranth","terere":"amaranth","managu":"african nightshade","african nightshade":"african nightshade",
+    "sagaa":"spider plant","spider plant":"spider plant","mrenda":"jute mallow","jute mallow":"jute mallow",
+    "pumpkin":"pumpkins","pumpkins":"pumpkins","butternut":"butternut","cucumber":"cucumber","courgette":"courgette","zucchini":"courgette",
+    # Fruits
     "banana":"bananas","bananas":"bananas","ndizi":"bananas",
-    "cabbage":"cabbages","cabbages":"cabbages","kabichi":"cabbages"
+    "mango":"mangoes","mangoes":"mangoes","embe":"mangoes",
+    "avocado":"avocados","avocados":"avocados","parachichi":"avocados",
+    "watermelon":"watermelon","water melon":"watermelon","tikiti maji":"watermelon",
+    "pineapple":"pineapples","pineapples":"pineapples","nanasi":"pineapples",
+    "passion fruit":"passion fruit","passion fruits":"passion fruit",
+    "orange":"oranges","oranges":"oranges","machungwa":"oranges",
+    "lemon":"lemons","lemons":"lemons","lime":"limes","limes":"limes",
+    "papaya":"papaya","pawpaw":"papaya","pawpaws":"papaya","mapapai":"papaya",
+    "guava":"guavas","guavas":"guavas","strawberry":"strawberries","strawberries":"strawberries",
+    "grapes":"grapes","grape":"grapes","apples":"apples","apple":"apples",
+    # Cash / industrial / beverage / oil / fibre crops
+    "coffee":"coffee","kahawa":"coffee","tea":"tea","chai":"tea",
+    "sugarcane":"sugarcane","sugar cane":"sugarcane","miwa":"sugarcane",
+    "cotton":"cotton","pamba":"cotton","tobacco":"tobacco","pyrethrum":"pyrethrum",
+    "macadamia":"macadamia","macadamia nuts":"macadamia","cashew":"cashew nuts","cashew nuts":"cashew nuts","korosho":"cashew nuts",
+    "coconut":"coconuts","coconuts":"coconuts","nazi":"coconuts",
+    "sunflower":"sunflower","alizeti":"sunflower","sesame":"sesame","simsim":"sesame","canola":"canola",
+    # Herbs / spices / fodder
+    "ginger":"ginger","tangawizi":"ginger","garlic":"garlic","kitunguu saumu":"garlic",
+    "turmeric":"turmeric","coriander":"coriander","dhania":"coriander","basil":"basil","mint":"mint",
+    "napier":"napier grass","napier grass":"napier grass","brachiaria":"brachiaria","lucerne":"lucerne","alfalfa":"lucerne",
+    # Common farm produce handled by the same sales parser
+    "eggs":"eggs","egg":"eggs","mayai":"eggs","milk":"milk","maziwa":"milk"
 }
 UNIT_ALIASES={
     "tray":"trays","trays":"trays","trei":"trays",
@@ -188,7 +235,7 @@ UNIT_ALIASES={
     "bunch":"bunches","bunches":"bunches",
     "head":"heads","heads":"heads","pieces":"pieces","piece":"pieces"
 }
-DEFAULT_UNITS={"eggs":"trays","milk":"litres","tomatoes":"crates","maize":"bags","green grams":"bags","beans":"bags","potatoes":"bags","bananas":"bunches","cabbages":"heads"}
+DEFAULT_UNITS={"eggs":"trays","milk":"litres","tomatoes":"crates","maize":"bags","wheat":"bags","rice":"bags","sorghum":"bags","millet":"bags","finger millet":"bags","barley":"bags","green grams":"bags","beans":"bags","cowpeas":"bags","pigeon peas":"bags","chickpeas":"bags","soybeans":"bags","lentils":"bags","dolichos":"bags","garden peas":"bags","groundnuts":"bags","potatoes":"bags","sweet potatoes":"bags","cassava":"bags","onions":"bags","bananas":"bunches","cabbages":"heads"}
 NON_BAG_SALE_PRODUCTS={"eggs","milk","tomatoes","bananas","cabbages"}
 
 def _word_number(raw):
