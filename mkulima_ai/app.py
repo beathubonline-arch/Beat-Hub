@@ -416,8 +416,10 @@ def apply_message(text,state):
         elif "offer" not in state: incoming["offer"]=bare
     elif stage=="bags" and bare is not None: incoming["bags"]=bare
     elif stage=="offer" and bare is not None: incoming["offer"]=bare
-    elif stage=="location" and "location" not in incoming:
+    elif stage=="location":
         raw=" ".join((text or "").strip().split())
+        # During an explicit location prompt, preserve the farmer's full locality
+        # including a leading town plus landmark (e.g. "Ainabkoi near chiefs camp").
         if raw and not re.search(r"\b(?:bags?|gunia|buyer|broker|offer|bei)\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
