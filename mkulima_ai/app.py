@@ -487,7 +487,7 @@ def home():
 <span class="eyebrow">🇰🇪 Practical AI for agriculture</span>
 <h1>Ask before you sell, spray, plant or panic.</h1>
 <p class="lead">Tell Mkulima what is happening on your farm. We move the conversation straight to WhatsApp, where you can type naturally, mix English and Kiswahili, or send a farm photo.</p>
-<div class="trust"><span>✓ 5 free questions/month</span><span>✓ Works in WhatsApp</span><span>✓ No new account to learn</span></div>
+<div class="trust"><span>✓ 100 free questions/month</span><span>✓ Works in WhatsApp</span><span>✓ No new account to learn</span></div>
 </div>
 <div class="funnel">
 <h3>Start with Mkulima on WhatsApp</h3>
@@ -514,7 +514,7 @@ def home():
 <div class="cards"><div class="card"><div class="icon">💰</div><h3>Check a buyer offer</h3><p>Share quantity, price and transport cost. Mkulima helps you compare what you actually keep.</p></div>
 <div class="card"><div class="icon">📷</div><h3>Send a farm photo</h3><p>Send a crop or farm photo with a short description so Mkulima can help structure what to check next.</p></div>
 <div class="card"><div class="icon">📍</div><h3>Use your real location</h3><p>Village, estate, road or landmark can be included when local context matters.</p></div></div>
-<div class="promise"><div><h2>Try it free. Pay only when you need more.</h2><p>Every farmer gets 5 useful questions per month. When you need more, Mkulima can send a secure Paystack upgrade link inside your WhatsApp conversation.</p></div><span class="pill">Day Pass KES 49 · Plus KES 199</span></div>
+<div class="promise"><div><h2>Try it free. Pay only when you need more.</h2><p>Every farmer gets 100 useful questions per month. When you need more, Mkulima can send a secure Paystack upgrade link inside your WhatsApp conversation.</p></div><span class="pill">Day Pass KES 49 · Plus KES 199</span></div>
 </div></section>
 <footer><div class="wrap foot"><span>© 2026 Mkulima AI · Practical decision support for Kenyan farmers.</span><span class="links"><a href="/pricing">Plans</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a></span></div></footer>
 <script>
@@ -648,7 +648,7 @@ def _pricing_response(actor="",sig=""):
         if not bound:
             return '<div class="muted"><strong>Send “upgrade” in WhatsApp to get your secure payment link.</strong></div>'
         return '<form method="post" action="/pay/start">'+hidden+'<input type="hidden" name="plan" value="'+plan+'"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">'+label+'</button></form>'
-    return """<style>body{font-family:Arial,sans-serif;background:#f4f8f0;color:#17351f;margin:0}.w{max-width:820px;margin:auto;padding:40px 20px}h1{color:#176b35}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.c{background:white;border:1px solid #dbe8d7;border-radius:18px;padding:24px}.p{font-size:34px;font-weight:800}.b{background:#176b35;color:white;border:0;border-radius:12px;padding:13px 18px;font-weight:800;cursor:pointer;width:100%}input{width:100%;padding:12px;margin:10px 0;border:1px solid #bdcdbc;border-radius:10px;box-sizing:border-box}.muted{color:#617063}</style><div class="w"><h1>🌱 Mkulima AI Plans</h1><p>Keep practical farm help available when you need it. Free accounts get 5 useful questions each month.</p><p class="muted">"""+note+"""</p><div class="g">
+    return """<style>body{font-family:Arial,sans-serif;background:#f4f8f0;color:#17351f;margin:0}.w{max-width:820px;margin:auto;padding:40px 20px}h1{color:#176b35}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.c{background:white;border:1px solid #dbe8d7;border-radius:18px;padding:24px}.p{font-size:34px;font-weight:800}.b{background:#176b35;color:white;border:0;border-radius:12px;padding:13px 18px;font-weight:800;cursor:pointer;width:100%}input{width:100%;padding:12px;margin:10px 0;border:1px solid #bdcdbc;border-radius:10px;box-sizing:border-box}.muted{color:#617063}</style><div class="w"><h1>🌱 Mkulima AI Plans</h1><p>Keep practical farm help available when you need it. Free accounts get 100 useful questions each month.</p><p class="muted">"""+note+"""</p><div class="g">
     <div class="c"><h2>Monthly</h2><div class="p">KES 399</div><p>30 days of personalized farm intelligence, saved context and premium decision support.</p>"""+buy("monthly","Pay KES 399")+"""</div>
     <div class="c" style="border:2px solid #176b35"><h2>🌾 Season Pass</h2><div class="p">KES 999</div><p><strong>Most practical:</strong> 90 days covering a farming season, with morning intelligence, farm memory and priority decision support.</p>"""+buy("season_pass","Get Season Pass — KES 999")+"""</div>
     <div class="c"><h2>Yearly</h2><div class="p">KES 2,999</div><p>365 days plus long-term farm planning. Multi-year views are planning scenarios, not guaranteed forecasts.</p>"""+buy("yearly","Pay KES 2,999")+"""</div>
@@ -835,7 +835,7 @@ def marketplace_matches(listing_id):
 @app.get("/api/health")
 def health():
     init_db()
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":5},morning_dashboard=True)
+    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True)
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
@@ -945,8 +945,8 @@ def webhook():
             send_whatsapp_text(phone,"✅ Offer accepted for contact. Buyer: "+str(b.get("business_name") or b.get("contact_name") or "Buyer")+"\nContact: "+(" / ".join(contact_bits) if contact_bits else "contact unavailable")+"\nOffer: KES "+str(o.get("price_per_unit"))+" per unit.\n\nPlease independently confirm quality, quantity, pickup, payment timing and final price before handing over produce.")
             return jsonify(ok=True,offer_accept=True),200
         access=get_access(phone)
-        if not access.get("active") and access.get("free_used",0)>=access.get("free_limit",5):
-            send_whatsapp_text(phone,"Umetumia free questions 5 za mwezi huu. 🌱 Continue with Mkulima: KES 399/month, Season Pass KES 999/90 days, or KES 2,999/year: "+upgrade_url(phone))
+        if not access.get("active") and access.get("free_used",0)>=access.get("free_limit",100):
+            send_whatsapp_text(phone,"Umetumia free questions 100 za mwezi huu. 🌱 Continue with Mkulima: KES 399/month, Season Pass KES 999/90 days, or KES 2,999/year: "+upgrade_url(phone))
             return jsonify(ok=True,upgrade_required=True),200
         rating=feedback_rating(body)
         if rating and state.get("last_interaction_id"):
