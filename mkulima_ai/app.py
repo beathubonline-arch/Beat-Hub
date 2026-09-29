@@ -1096,7 +1096,22 @@ def webhook():
                 ack={"helpful":"Thanks — that helps Mkulima learn what worked.","wrong":"Thanks. I have marked that answer for correction. Tell me what was wrong or what happened.","still_problem":"I understand. Tell me what is still happening and I will continue from this case."}[rating]
                 send_whatsapp_text(phone,ack)
                 return jsonify(ok=True,feedback=rating),200
+        previous_state=dict(state or {})
         state=apply_message(body,state)
+        # Durable Farm Memory: persist only meaningful changes, keyed by a
+        # pseudonymous actor reference in state_store (never raw phone in the table).
+        crop=state.get("product") or state.get("crop")
+        location=state.get("location")
+        if crop and crop != (previous_state.get("product") or previous_state.get("crop")):
+            record_farm_event(phone,"crop_set",crop=crop,location_context=location)
+        if location and location != previous_state.get("location"):
+            record_farm_event(phone,"location_set",crop=crop,location_context=location)
+        if state.get("offer") is not None and state.get("offer") != previous_state.get("offer"):
+            record_farm_event(phone,"sale_offer",crop=crop,location_context=location,details={
+                "price_per_unit":state.get("offer"),
+                "quantity":state.get("quantity",state.get("bags")),
+                "unit":state.get("quantity_unit") or ("bags" if state.get("bags") is not None else None)
+            })
         weather_result=None
         if state.get("primary_intent")=="weather" and state.get("location"):
             weather_result=live_weather(state.get("location"))
