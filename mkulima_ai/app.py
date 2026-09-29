@@ -987,8 +987,9 @@ def _critical_path_self_test():
 @app.get("/api/health")
 def health():
     init_db()
-    regression=_critical_path_self_test()
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True,critical_path_regression=regression)
+    regression_1=_critical_path_self_test()
+    regression_2=_critical_path_self_test()
+    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True,critical_path_regression={"ok":bool(regression_1.get("ok") and regression_2.get("ok")),"pass_1":regression_1,"pass_2":regression_2})
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
