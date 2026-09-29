@@ -174,6 +174,7 @@ PRODUCT_ALIASES={
     "maize":"maize","mahindi":"maize",
     "tomato":"tomatoes","tomatoes":"tomatoes","nyanya":"tomatoes",
     "potato":"potatoes","potatoes":"potatoes","viazi":"potatoes",
+    "green grams":"green grams","green gram":"green grams","mung beans":"green grams","mung bean":"green grams","ndengu":"green grams",
     "beans":"beans","maharagwe":"beans",
     "banana":"bananas","bananas":"bananas","ndizi":"bananas",
     "cabbage":"cabbages","cabbages":"cabbages","kabichi":"cabbages"
@@ -187,7 +188,7 @@ UNIT_ALIASES={
     "bunch":"bunches","bunches":"bunches",
     "head":"heads","heads":"heads","pieces":"pieces","piece":"pieces"
 }
-DEFAULT_UNITS={"eggs":"trays","milk":"litres","tomatoes":"crates","maize":"bags","beans":"bags","potatoes":"bags","bananas":"bunches","cabbages":"heads"}
+DEFAULT_UNITS={"eggs":"trays","milk":"litres","tomatoes":"crates","maize":"bags","green grams":"bags","beans":"bags","potatoes":"bags","bananas":"bunches","cabbages":"heads"}
 NON_BAG_SALE_PRODUCTS={"eggs","milk","tomatoes","bananas","cabbages"}
 
 def _word_number(raw):
