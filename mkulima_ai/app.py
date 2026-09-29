@@ -963,10 +963,32 @@ def marketplace_offer():
 def marketplace_matches(listing_id):
     return jsonify(ok=True,matches=matching_buyers_for_listing(listing_id,10))
 
+def _critical_path_self_test():
+    """Pure regression check: no WhatsApp sends, payments, writes or external calls."""
+    state={}
+    state=apply_message("Find a buyer",state)
+    state=apply_message("Ainabkoi near chiefs camp",state)
+    state=apply_message("70 bags of green grams and the broker is offering 7000 per bag",state)
+    reply=reply_for("70 bags of green grams and the broker is offering 7000 per bag",state)
+    checks={
+        "sell_intent":state.get("primary_intent")=="sell",
+        "product":state.get("product")=="green grams",
+        "location":state.get("location")=="Ainabkoi Near Chiefs Camp",
+        "quantity":state.get("bags")==70 or state.get("quantity")==70,
+        "offer":state.get("offer")==7000,
+        "complete":state.get("stage")=="complete",
+        "gross_490000":"490,000" in reply,
+        "no_stale_3730":"3,730" not in reply,
+        "no_90kg_assumption":"90kg" not in reply.lower() and "90 kg" not in reply.lower(),
+        "no_hardcoded_sell":"sell now" not in reply.lower() and "uza sasa" not in reply.lower()
+    }
+    return {"ok":all(checks.values()),"checks":checks}
+
 @app.get("/api/health")
 def health():
     init_db()
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True)
+    regression=_critical_path_self_test()
+    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True,critical_path_regression=regression)
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
