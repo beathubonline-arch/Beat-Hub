@@ -406,6 +406,10 @@ def apply_message(text,state):
     if incoming.get("product") and state.get("primary_intent")=="sell" and state.get("product") and incoming["product"]!=state.get("product"):
         for k in ("bags","quantity","quantity_unit","offer","sale_timing"):
             state.pop(k,None)
+    # A product named while a seller intake is already active is still part of
+    # that sale, even when the follow-up itself contains no sell/buyer keyword.
+    if incoming.get("product") and state.get("primary_intent")=="sell":
+        incoming["primary_intent"]="sell"
     # Interpret a bare number from the facts still missing in the active sale,
     # not from a stale prompt/stage. Known facts always win.
     if bare is not None and state.get("primary_intent")=="sell":
