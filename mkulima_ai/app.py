@@ -17,8 +17,9 @@ OBSERVED_ON="2026-08-10"
 PRICE_PER_90KG=3730.50
 
 MZ_PLANS={
-    "day_pass":{"name":"Mkulima Day Pass","amount_kes":49,"days":1},
-    "plus_monthly":{"name":"Mkulima Plus","amount_kes":199,"days":30},
+    "monthly":{"name":"Mkulima Monthly","amount_kes":399,"days":30},
+    "season_pass":{"name":"Mkulima Season Pass","amount_kes":999,"days":90},
+    "yearly":{"name":"Mkulima Yearly","amount_kes":2999,"days":365},
 }
 MKULIMA_BASE_URL=os.getenv("MKULIMA_BASE_URL","https://mkulima-ai-whatsapp.onrender.com").rstrip("/")
 
@@ -53,6 +54,28 @@ def upgrade_url(phone):
     if not (ref and sig): return MKULIMA_BASE_URL+"/pricing"
     return _short_checkout_url(ref,sig)
 
+def morning_url(phone):
+    init_db()
+    code=secrets.token_urlsafe(7)
+    expires_at=int(__import__("time").time())+7*86400
+    con=sqlite3.connect(DB)
+    con.execute("DELETE FROM morning_links WHERE expires_at < ?",(int(__import__("time").time()),))
+    con.execute("INSERT OR REPLACE INTO morning_links(code,phone,expires_at) VALUES(?,?,?)",(code,phone,expires_at))
+    con.commit(); con.close()
+    return MKULIMA_BASE_URL+"/morning/"+code
+
+def _morning_brief(phone):
+    state=load_state(phone) or {}
+    location=state.get("location") or "your county"
+    product=state.get("product") or state.get("crop") or "your farm"
+    weather=live_weather(location) if location!="your county" else {"ok":False}
+    weather_text="Add your county or nearest town in WhatsApp to unlock local weather."
+    if weather.get("ok"):
+        f=weather.get("forecast") or {}
+        weather_text=f"{f.get('temp_min_c')}–{f.get('temp_max_c')}°C · rain ~{f.get('precipitation_mm')} mm · wind max {f.get('wind_max_m_s')} m/s"
+    listings=list_marketplace_listings(product if product!="your farm" else None,location if location!="your county" else None,5)
+    return state,location,product,weather,weather_text,listings
+
 def _paystack_json(method,path,payload=None):
     secret=_pay_secret()
     if not secret: raise RuntimeError("paystack_not_configured")
@@ -84,6 +107,7 @@ def init_db():
     con.execute("""CREATE TABLE IF NOT EXISTS conversations(phone TEXT PRIMARY KEY,state TEXT NOT NULL DEFAULT '{}')""")
     con.execute("""CREATE TABLE IF NOT EXISTS processed_messages(message_id TEXT PRIMARY KEY,created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
     con.execute("""CREATE TABLE IF NOT EXISTS checkout_links(code TEXT PRIMARY KEY,actor TEXT NOT NULL,sig TEXT NOT NULL,expires_at INTEGER NOT NULL)""")
+    con.execute("""CREATE TABLE IF NOT EXISTS morning_links(code TEXT PRIMARY KEY,phone TEXT NOT NULL,expires_at INTEGER NOT NULL)""")
     con.commit(); con.close()
 
 def age_days():
@@ -583,8 +607,9 @@ def _pricing_response(actor="",sig=""):
             return '<div class="muted"><strong>Send “upgrade” in WhatsApp to get your secure payment link.</strong></div>'
         return '<form method="post" action="/pay/start">'+hidden+'<input type="hidden" name="plan" value="'+plan+'"><input type="email" name="email" placeholder="Email for payment receipt" required><button class="b">'+label+'</button></form>'
     return """<style>body{font-family:Arial,sans-serif;background:#f4f8f0;color:#17351f;margin:0}.w{max-width:820px;margin:auto;padding:40px 20px}h1{color:#176b35}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.c{background:white;border:1px solid #dbe8d7;border-radius:18px;padding:24px}.p{font-size:34px;font-weight:800}.b{background:#176b35;color:white;border:0;border-radius:12px;padding:13px 18px;font-weight:800;cursor:pointer;width:100%}input{width:100%;padding:12px;margin:10px 0;border:1px solid #bdcdbc;border-radius:10px;box-sizing:border-box}.muted{color:#617063}</style><div class="w"><h1>🌱 Mkulima AI Plans</h1><p>Keep practical farm help available when you need it. Free accounts get 5 useful questions each month.</p><p class="muted">"""+note+"""</p><div class="g">
-    <div class="c"><h2>Day Pass</h2><div class="p">KES 49</div><p>24 hours of unlimited Mkulima conversations for an urgent farm or selling decision.</p>"""+buy("day_pass","Pay KES 49")+"""</div>
-    <div class="c"><h2>Mkulima Plus</h2><div class="p">KES 199</div><p>30 days of unlimited chat, saved conversation context and premium decision support as features roll out.</p>"""+buy("plus_monthly","Pay KES 199")+"""</div>
+    <div class="c"><h2>Monthly</h2><div class="p">KES 399</div><p>30 days of personalized farm intelligence, saved context and premium decision support.</p>"""+buy("monthly","Pay KES 399")+"""</div>
+    <div class="c" style="border:2px solid #176b35"><h2>🌾 Season Pass</h2><div class="p">KES 999</div><p><strong>Most practical:</strong> 90 days covering a farming season, with morning intelligence, farm memory and priority decision support.</p>"""+buy("season_pass","Get Season Pass — KES 999")+"""</div>
+    <div class="c"><h2>Yearly</h2><div class="p">KES 2,999</div><p>365 days plus long-term farm planning. Multi-year views are planning scenarios, not guaranteed forecasts.</p>"""+buy("yearly","Pay KES 2,999")+"""</div>
     </div><p class="muted">Payments are verified server-side before access is activated.</p></div>"""
 
 
@@ -592,6 +617,28 @@ def _pricing_response(actor="",sig=""):
 @app.get("/pricing")
 def pricing():
     return _pricing_response(request.args.get("actor",""),request.args.get("sig",""))
+
+@app.get("/morning/<code>")
+def morning_dashboard(code):
+    init_db()
+    con=sqlite3.connect(DB)
+    row=con.execute("SELECT phone,expires_at FROM morning_links WHERE code=?",(code,)).fetchone()
+    con.close()
+    if not row or int(row[1]) < int(__import__("time").time()):
+        return "<h2>Morning link expired</h2><p>Send <strong>morning</strong> to Mkulima on WhatsApp for a fresh private link.</p>",410
+    state,location,product,weather,weather_text,listings=_morning_brief(row[0])
+    market_items="".join("<li><strong>"+str(x.get("quantity") or "")+" "+str(x.get("unit") or "")+" "+str(x.get("product") or "")+"</strong> · "+str(x.get("location_text") or x.get("county") or "")+"</li>" for x in listings) or "<li>No matching Mkulima Market listings yet.</li>"
+    weather_source=("MET Norway live forecast · "+str(weather.get("retrieved_at") or "")) if weather.get("ok") else "Add location to enable live forecast"
+    return HOME_STYLE+f"""<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Private morning brief</span></nav>
+<section class="hero" style="padding:44px 0"><div class="wrap"><span class="eyebrow">☀️ Mkulima Morning</span><h1 style="font-size:46px">Your farm today</h1><p class="lead">📍 {location} · 🌱 {product}</p></div></section>
+<section class="section"><div class="wrap"><div class="cards">
+<div class="card"><div class="icon">🌦️</div><h3>Local weather</h3><p>{weather_text}</p><small>{weather_source}</small></div>
+<div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>Live Mkulima Market matches for your product/location.</p><ul>{market_items}</ul><a href="/marketplace">Open market →</a></div>
+<div class="card"><div class="icon">🏛️</div><h3>Government & county updates</h3><p>Verified regional programme/circular ingestion is being activated. Official-source links will appear here; Mkulima will not invent offers.</p></div>
+</div>
+<div class="promise"><div><h2>Your farm memory</h2><p>Mkulima uses the crop, location and decisions you have shared to keep advice relevant over time. Multi-year guidance will be scenario planning, not guaranteed predictions.</p></div><span class="pill">Updated for {location}</span></div>
+</div></section>"""
+
 
 @app.get("/u/<code>")
 def short_checkout(code):
@@ -743,7 +790,7 @@ def marketplace_matches(listing_id):
 @app.get("/api/health")
 def health():
     init_db()
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=OBSERVED_ON,reference_stale=age_days()>FRESH_DAYS,payments={"configured":bool(_pay_secret()),"plans":{"day_pass_kes":49,"plus_30d_kes":199},"free_questions_per_month":5})
+    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=OBSERVED_ON,reference_stale=age_days()>FRESH_DAYS,payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":5},morning_dashboard=True)
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
@@ -800,8 +847,15 @@ def webhook():
             return jsonify(ok=True,unsupported_type=msg.get("type")),200
         body=msg["text"]["body"]
         normalized_body=" ".join(body.strip().lower().split())
+        if normalized_body in {"morning","brief","morning brief","today","dashboard","my farm"}:
+            state=apply_message(body,state)
+            save_state(phone,state)
+            _,location,product,weather,weather_text,listings=_morning_brief(phone)
+            summary="☀️ *Mkulima Morning*\n📍 "+str(location)+" · 🌱 "+str(product)+"\n🌦 "+weather_text+"\n💰 "+str(len(listings))+" relevant Mkulima Market listing(s) found.\n🏛 Government/county circulars will only be shown from verified official sources.\n\nYour private farm dashboard: "+morning_url(phone)
+            send_whatsapp_text(phone,summary)
+            return jsonify(ok=True,morning=True),200
         if normalized_body in {"upgrade","premium","plus","subscribe","pay","pricing","plans"}:
-            send_whatsapp_text(phone,"🌱 Mkulima plans:\n• Free — 5 useful questions/month\n• Day Pass — KES 49 / 24 hours\n• Mkulima Plus — KES 199 / 30 days\n\nActivate securely here: "+upgrade_url(phone))
+            send_whatsapp_text(phone,"🌱 Mkulima plans:\n• Monthly — KES 399 / 30 days\n• 🌾 Season Pass — KES 999 / 90 days (recommended)\n• Yearly — KES 2,999 / 365 days\n\nActivate securely here: "+upgrade_url(phone))
             return jsonify(ok=True,pricing=True),200
         if normalized_body in {"marketplace","market","find buyer","find buyers","buyers","buyer"}:
             listing_id=state.get("market_listing_id")
@@ -847,7 +901,7 @@ def webhook():
             return jsonify(ok=True,offer_accept=True),200
         access=get_access(phone)
         if not access.get("active") and access.get("free_used",0)>=access.get("free_limit",5):
-            send_whatsapp_text(phone,"Umetumia free questions 5 za mwezi huu. 🌱 Continue with Mkulima for KES 49/24h or KES 199/30 days: "+upgrade_url(phone))
+            send_whatsapp_text(phone,"Umetumia free questions 5 za mwezi huu. 🌱 Continue with Mkulima: KES 399/month, Season Pass KES 999/90 days, or KES 2,999/year: "+upgrade_url(phone))
             return jsonify(ok=True,upgrade_required=True),200
         rating=feedback_rating(body)
         if rating and state.get("last_interaction_id"):
