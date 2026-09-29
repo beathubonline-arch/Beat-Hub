@@ -78,7 +78,7 @@ def _morning_brief(phone):
         f=weather.get("forecast") or {}
         weather_text=f"{f.get('temp_min_c')}–{f.get('temp_max_c')}°C · rain ~{f.get('precipitation_mm')} mm · wind max {f.get('wind_max_m_s')} m/s"
     listings=list_marketplace_listings(product if product!="your farm" else None,location if location!="your county" else None,5)
-    market=official_market_price(product)
+    market=official_market_price(product,location)
     return state,location,product,weather,weather_text,listings,market
 
 OFFICIAL_FEEDS=[
@@ -86,26 +86,57 @@ OFFICIAL_FEEDS=[
     {"name":"Ministry of Agriculture and Livestock Development","url":"https://kilimo.go.ke/","kind":"programme"},
     {"name":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","kind":"market"},
 ]
-def official_market_price(product):
-    """Fetch KAMIS page availability and expose provenance without inventing a price."""
-    if not product or product=="your farm": return {"ok":False,"reason":"add_crop"}
+def _source_probe(url, timeout=8):
+    """Reachability check with retrieval timestamp; never turns availability into a factual claim."""
     try:
-        req=urlrequest.Request("https://kamis.kilimo.go.ke/site/market",headers={"User-Agent":"MkulimaAI/1.0"})
-        with urlrequest.urlopen(req,timeout=8) as res:
+        req=urlrequest.Request(url,headers={"User-Agent":"MkulimaAI/1.0 (+https://mkulima-ai-whatsapp.onrender.com)"})
+        with urlrequest.urlopen(req,timeout=timeout) as res:
             ok=200 <= getattr(res,"status",200) < 400
-        return {"ok":ok,"source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","product":product}
+        return {"ok":ok,"retrieved_at":datetime.utcnow().isoformat()+"Z"}
     except Exception:
-        return {"ok":False,"reason":"source_unavailable","source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market"}
+        return {"ok":False,"retrieved_at":datetime.utcnow().isoformat()+"Z"}
+
+def official_market_price(product, location=None):
+    """Verified-market gateway. A source being reachable is NOT treated as a price observation."""
+    if not product or product=="your farm":
+        return {"ok":False,"verified":False,"reason":"add_crop"}
+    url="https://kamis.kilimo.go.ke/site/market"
+    probe=_source_probe(url)
+    # KAMIS currently needs a structured observation adapter before we can safely
+    # compare a farmer offer. Fail closed rather than scraping an ambiguous number.
+    return {
+        "ok":probe["ok"],"verified":False,
+        "reason":"no_verified_observation" if probe["ok"] else "source_unavailable",
+        "source":"KAMIS","url":url,"product":product,"location":location,
+        "retrieved_at":probe["retrieved_at"],
+        "required_fields":["commodity","market","county","price_type","unit","observed_date","source_url"]
+    }
 
 def official_updates(location,product):
-    """Return trusted source links only; never synthesize a government offer."""
-    county=urlparse.quote(str(location or "").split(",")[0].strip())
-    crop=urlparse.quote(str(product or "").strip())
-    return [
-      {"title":"County forecasts & agro-advisories","source":"Kenya Meteorological Department","url":"https://meteo.go.ke/our-products/county-forecasts/","why":("Localized weather and agro-advisories for "+str(location)) if location!="your county" else "Localized county weather and agro-advisories"},
-      {"title":"Agriculture programmes & official news","source":"Ministry of Agriculture and Livestock Development","url":"https://kilimo.go.ke/","why":"National agriculture programmes, subsidy and sector announcements"},
-      {"title":"Commodity market information","source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","why":("Official market information relevant to "+str(product)) if product!="your farm" else "Official commodity market information"},
-    ]
+    """Current, dated official intelligence plus source provenance; no invented eligibility."""
+    today=date.today()
+    updates=[]
+    # Current national programme confirmed by MoALD on 8 Sep 2026.
+    fertiliser_end=date(2026,9,30)
+    if today <= fertiliser_end:
+        updates.append({
+          "title":"Subsidised fertiliser distribution",
+          "source":"Ministry of Agriculture and Livestock Development",
+          "published":"2026-09-08","valid_through":"2026-09-30",
+          "url":"https://kilimo.go.ke/ps-ronoh-flags-off-99000-metric-tonnes-of-subsidised-fertiliser-at-the-port-of-mombasa/",
+          "scope":"Kenya","verified":True,
+          "summary":"MoALD announced 99,000 metric tonnes for distribution to small-scale farmers at KES 2,000 per 50 kg bag.",
+          "eligibility":"Confirm local availability and farmer eligibility with the official distribution channel before travelling or paying."
+        })
+    # Long-running programmes are surfaced as programme intelligence, not as an
+    # assertion that the individual farmer is currently eligible/open for intake.
+    updates.extend([
+      {"title":"National Agricultural Value Chain Development Project (NAVCDP)","source":"MoALD NASIP 2026–2030","published":"2026-05-18","programme_period":"2022–2027","url":"https://kilimo.go.ke/wp-content/uploads/2026/05/The-NASIP-May-18th-Version.pdf","scope":"Selected project areas/value chains","verified":True,"summary":"Programme focused on market participation and value addition for targeted farmers.","eligibility":"Check current county/value-chain intake with the implementing authority."},
+      {"title":"Kenya Agricultural Insurance Program (KAIP)","source":"MoALD NASIP 2026–2030","published":"2026-05-18","programme_period":"2017–2030","url":"https://kilimo.go.ke/wp-content/uploads/2026/05/The-NASIP-May-18th-Version.pdf","scope":"Kenya","verified":True,"summary":"Programme intended to cushion farmers against natural disasters.","eligibility":"Confirm current products, counties and enrollment conditions with the implementing authority."},
+      {"title":"County forecasts & agro-advisories","source":"Kenya Meteorological Department","url":"https://meteo.go.ke/our-products/county-forecasts/","scope":str(location or "Kenya"),"verified":True,"summary":"KMD publishes county seasonal, weekly and monthly forecasts and agro-advisories."},
+      {"title":"Commodity market information","source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","scope":str(product or "farm commodities"),"verified":True,"summary":"Official market-information source; Mkulima only uses a price after commodity, market, unit and observation date are verified."}
+    ])
+    return updates
 
 def _paystack_json(method,path,payload=None):
     secret=_pay_secret()
