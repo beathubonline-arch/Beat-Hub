@@ -478,7 +478,7 @@ def _whatsapp_display_number():
     try:
         with urlrequest.urlopen(req,timeout=12) as res:
             data=json.loads(res.read().decode())
-            return re.sub(r"\\D","",str(data.get("display_phone_number") or "")) or None
+            return re.sub(r"\D","",str(data.get("display_phone_number") or "")) or None
     except Exception:
         app.logger.exception("could not resolve WhatsApp display number")
         return None
