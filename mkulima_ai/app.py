@@ -77,6 +77,21 @@ def _morning_brief(phone):
     listings=list_marketplace_listings(product if product!="your farm" else None,location if location!="your county" else None,5)
     return state,location,product,weather,weather_text,listings
 
+OFFICIAL_FEEDS=[
+    {"name":"Kenya Meteorological Department","url":"https://meteo.go.ke/our-products/county-forecasts/","kind":"weather"},
+    {"name":"Ministry of Agriculture and Livestock Development","url":"https://kilimo.go.ke/","kind":"programme"},
+    {"name":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","kind":"market"},
+]
+def official_updates(location,product):
+    """Return trusted source links only; never synthesize a government offer."""
+    county=urlparse.quote(str(location or "").split(",")[0].strip())
+    crop=urlparse.quote(str(product or "").strip())
+    return [
+      {"title":"County forecasts & agro-advisories","source":"Kenya Meteorological Department","url":"https://meteo.go.ke/our-products/county-forecasts/","why":("Localized weather and agro-advisories for "+str(location)) if location!="your county" else "Localized county weather and agro-advisories"},
+      {"title":"Agriculture programmes & official news","source":"Ministry of Agriculture and Livestock Development","url":"https://kilimo.go.ke/","why":"National agriculture programmes, subsidy and sector announcements"},
+      {"title":"Commodity market information","source":"KAMIS","url":"https://kamis.kilimo.go.ke/site/market","why":("Official market information relevant to "+str(product)) if product!="your farm" else "Official commodity market information"},
+    ]
+
 def _paystack_json(method,path,payload=None):
     secret=_pay_secret()
     if not secret: raise RuntimeError("paystack_not_configured")
@@ -628,15 +643,17 @@ def morning_dashboard(code):
     if not row or int(row[1]) < int(__import__("time").time()):
         return "<h2>Morning link expired</h2><p>Send <strong>morning</strong> to Mkulima on WhatsApp for a fresh private link.</p>",410
     state,location,product,weather,weather_text,listings=_morning_brief(row[0])
+    updates=official_updates(location,product)
     safe_location=escape(location); safe_product=escape(product); safe_weather=escape(weather_text)
     market_items="".join("<li><strong>"+str(escape(str(x.get("quantity") or "")+" "+str(x.get("unit") or "")+" "+str(x.get("product") or "")))+"</strong> · "+str(escape(str(x.get("location_text") or x.get("county") or "")))+"</li>" for x in listings) or "<li>No matching Mkulima Market listings yet.</li>"
     weather_source=escape(("MET Norway live forecast · "+str(weather.get("retrieved_at") or "")) if weather.get("ok") else "Add location to enable live forecast")
+    update_items="".join('<li><strong>'+str(escape(x["title"]))+'</strong><br>'+str(escape(x["why"]))+' · <a href="'+str(escape(x["url"]))+'" rel="noopener noreferrer">Official source →</a></li>' for x in updates)
     return HOME_STYLE+f"""<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Private morning brief</span></nav>
 <section class="hero" style="padding:44px 0"><div class="wrap"><span class="eyebrow">☀️ Mkulima Morning</span><h1 style="font-size:46px">Your farm today</h1><p class="lead">📍 {safe_location} · 🌱 {safe_product}</p></div></section>
 <section class="section"><div class="wrap"><div class="cards">
 <div class="card"><div class="icon">🌦️</div><h3>Local weather</h3><p>{safe_weather}</p><small>{weather_source}</small></div>
 <div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>Live Mkulima Market matches for your product/location.</p><ul>{market_items}</ul><a href="/marketplace">Open market →</a></div>
-<div class="card"><div class="icon">🏛️</div><h3>Government & county updates</h3><p>Verified regional programme/circular ingestion is being activated. Official-source links will appear here; Mkulima will not invent offers.</p></div>
+<div class="card"><div class="icon">🏛️</div><h3>Verified official updates</h3><p>Trusted national and county-relevant information. Mkulima links to the authority rather than inventing offers.</p><ul>{update_items}</ul></div>
 </div>
 <div class="promise"><div><h2>Your farm memory</h2><p>Mkulima uses the crop, location and decisions you have shared to keep advice relevant over time. Multi-year guidance will be scenario planning, not guaranteed predictions.</p></div><span class="pill">Updated for {safe_location}</span></div>
 </div></section>"""
