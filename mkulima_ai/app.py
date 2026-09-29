@@ -1030,6 +1030,14 @@ def webhook():
             send_whatsapp_text(phone,"🌱 Mkulima plans:\n• Monthly — KES 399 / 30 days\n• 🌾 Season Pass — KES 999 / 90 days (recommended)\n• Yearly — KES 2,999 / 365 days\n\nActivate securely here: "+upgrade_url(phone))
             return jsonify(ok=True,pricing=True),200
         if normalized_body in {"marketplace","market","find buyer","find buyers","buyers","buyer"}:
+            # "Find a buyer" is also the natural entry point to the seller journey.
+            # If sale facts are incomplete, capture the intent and ask for the
+            # missing facts instead of trying to create an empty listing.
+            if normalized_body in {"find buyer","find buyers"} and not (state.get("product") and state.get("location") and (state.get("quantity") is not None or state.get("bags") is not None)):
+                state=apply_message(body,state)
+                save_state(phone,state)
+                send_whatsapp_text(phone,reply_for(body,state))
+                return jsonify(ok=True,marketplace_needs_details=True),200
             listing_id=state.get("market_listing_id")
             if not listing_id:
                 listing_id=create_seller_listing(phone,state)
