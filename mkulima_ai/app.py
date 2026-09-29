@@ -13,9 +13,12 @@ from state_store import load_state, save_state, claim_message, record_interactio
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
 FRESH_DAYS=14
-SOURCE="Warehouse Receipt System Council"
-OBSERVED_ON="2026-08-10"
-PRICE_PER_90KG=3730.50
+# Market-price safety: never use a hard-coded commodity price as a sale benchmark.
+# A price may only be presented when a current, product-specific, dated source has
+# been verified. Otherwise Mkulima explicitly says the current price is unverified.
+SOURCE=None
+OBSERVED_ON=None
+PRICE_PER_90KG=None
 
 MZ_PLANS={
     "monthly":{"name":"Mkulima Monthly","amount_kes":399,"days":30},
@@ -412,18 +415,20 @@ def reply_for(text, known=None):
                     "Next step: usiuze haraka before tuverify market ya leo. Pata offers 2–3, then nitumie transport cost. Kama unaweza store, niambie storage cost na how long unaweza wait. Nitacompare option yenye net cash nzuri.")
         return (f"Una gunia {f['bags']:g} huko {f['location']}, offer ni KES {f['offer']:,.0f}/gunia = KES {gross:,.0f}.\n\n"
                 "Hatua inayofuata: usikimbilie kuuza kabla bei ya leo kuthibitishwa. Tafuta offers 2–3, kisha nitumie gharama ya transport. Kama unaweza kuhifadhi, niambie storage cost na muda unaoweza kusubiri. Nitakulinganishia pesa halisi utakayobaki nayo.")
-    if age_days()>FRESH_DAYS:
-        if lang=="en":
-            return (f"🌽 {f['location']}: your offer totals KES {gross:,.0f} for {f['bags']:g} bags.\n"
-                    f"⚠️ My verified reference is KES {PRICE_PER_90KG:,.0f}/90kg from {OBSERVED_ON} ({SOURCE}), but it is stale. I won't present it as today's price. Ask me 'what should I do?' for practical next steps.")
-        if lang=="mixed":
-            return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} for {f['bags']:g} bags.\n"
-                    f"⚠️ Verified reference ni KES {PRICE_PER_90KG:,.0f}/90kg ya {OBSERVED_ON} ({SOURCE}), but ni old. Sitaiita bei ya leo. Niulize 'nifanye aje?' for next steps.")
-        return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} kwa gunia {f['bags']:g}.\n"
-                f"⚠️ Reference iliyothibitishwa ni KES {PRICE_PER_90KG:,.0f}/90kg ya {OBSERVED_ON} ({SOURCE}), lakini ni ya zamani. Sitaiita bei ya leo. Niulize 'nifanye aje?' nikupe hatua zinazofuata.")
-    ref=f["bags"]*PRICE_PER_90KG
-    diff=ref-gross
-    return f"🌽 Offer KES {gross:,.0f} | Reference KES {ref:,.0f} | Difference KES {diff:+,.0f} | {SOURCE}, {OBSERVED_ON}."
+    # Never benchmark a farmer's offer against an old/global hard-coded price.
+    # Current market intelligence must be product-specific, dated, sourced and
+    # location-aware. Until that pipeline has a verified observation, fail closed.
+    if lang=="en":
+        return (f"🌽 {f['location']}: your offer totals KES {gross:,.0f} for {f['bags']:g} bags.\n"
+                "⚠️ I do not have a verified current local market price for this product, so I won't call the offer high, low or fair. "
+                "Before you sell, compare 2–3 current buyer offers and confirm the bag weight/grade, transport and payment terms.")
+    if lang=="mixed":
+        return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} for {f['bags']:g} bags.\n"
+                "⚠️ Sina verified current local market price ya product hii, so sitasema offer ni high, low or fair. "
+                "Before uuze, compare current offers 2–3 na confirm bag weight/grade, transport na payment terms.")
+    return (f"🌽 {f['location']}: offer yako ni KES {gross:,.0f} kwa gunia {f['bags']:g}.\n"
+            "⚠️ Sina bei ya sasa ya eneo lako iliyothibitishwa kwa zao hili, kwa hivyo sitasema offer ni juu, chini au sawa. "
+            "Kabla ya kuuza, linganisha offers 2–3 za sasa na uthibitishe uzito/grade ya gunia, transport na masharti ya malipo.")
 
 
 LEGAL_STYLE = """<style>
@@ -821,7 +826,7 @@ def marketplace_matches(listing_id):
 @app.get("/api/health")
 def health():
     init_db()
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=OBSERVED_ON,reference_stale=age_days()>FRESH_DAYS,payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":5},morning_dashboard=True)
+    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":5},morning_dashboard=True)
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
