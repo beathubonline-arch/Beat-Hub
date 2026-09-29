@@ -7,7 +7,7 @@ from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 from weather_live import live_weather, weather_reply
-from state_store import load_state, save_state, claim_message, record_interaction, record_feedback, actor_ref, get_access, consume_free_question, create_payment_for_actor, get_payment, mark_payment_paid
+from state_store import load_state, save_state, claim_message, record_interaction, record_feedback, actor_ref, get_access, consume_free_question, create_payment_for_actor, get_payment, mark_payment_paid, register_buyer, get_buyer_by_token, list_marketplace_listings, create_seller_listing, matching_buyers_for_listing, submit_buyer_offer, seller_offers, accept_seller_offer
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -659,6 +659,87 @@ def paystack_webhook():
             if valid: mark_payment_paid(reference,data)
     return "ok",200
 
+
+def _marketplace_html():
+    return """<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mkulima Market</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f7f2;color:#18351f;margin:0}.wrap{max-width:980px;margin:auto;padding:24px}
+.hero{background:#143d24;color:white;padding:28px;border-radius:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:18px}
+.card{background:white;border-radius:14px;padding:18px;box-shadow:0 3px 14px #0001}.muted{color:#667466}.pill{display:inline-block;background:#e8f3ea;padding:5px 9px;border-radius:99px;font-size:12px}
+input{width:100%;box-sizing:border-box;padding:11px;margin:6px 0;border:1px solid #ccd8ce;border-radius:9px}button{background:#1f6d3a;color:white;border:0;border-radius:9px;padding:11px 14px;font-weight:700;cursor:pointer}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ok{background:#e8f5ea;padding:12px;border-radius:9px}.err{background:#fdeaea;padding:12px;border-radius:9px;color:#8b1d1d}
+@media(max-width:640px){.row{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+<div class="hero"><h1>🌱 Mkulima Market</h1><p>Buy produce directly from Kenyan farmers. Register as a buyer, browse live listings and make offers. Farmer phone numbers stay private until the farmer chooses to proceed.</p></div>
+<div class="grid">
+<div class="card"><h2>Buyer registration</h2>
+<input id="business" placeholder="Business / buyer name"><input id="contact" placeholder="Contact person"><input id="phone" placeholder="Phone / WhatsApp">
+<input id="email" placeholder="Email (optional)"><div class="row"><input id="county" placeholder="County"><input id="locality" placeholder="Town / locality"></div>
+<input id="products" placeholder="Products e.g. maize, eggs, milk"><div class="row"><input id="minq" type="number" placeholder="Min quantity"><input id="maxq" type="number" placeholder="Max quantity"></div>
+<input id="unit" placeholder="Preferred unit e.g. bags, trays"><label><input id="pickup" type="checkbox" style="width:auto"> I can pick up from farmer</label>
+<input id="terms" placeholder="Payment terms e.g. cash on pickup">
+<button onclick="registerBuyer()">Register buyer</button><div id="regMsg"></div></div>
+<div class="card"><h2>Find produce</h2><div class="row"><input id="filterProduct" placeholder="Product"><input id="filterLocation" placeholder="Location"></div><button onclick="loadListings()">Search listings</button>
+<p class="muted">Your buyer access is saved only on this browser after registration.</p></div></div>
+<h2>Live seller listings</h2><div id="listings" class="grid"></div>
+</div>
+<script>
+const tokenKey='mkulima_buyer_token';
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+async function registerBuyer(){
+ const products=document.getElementById('products').value.split(',').map(x=>x.trim()).filter(Boolean);
+ const body={business_name:business.value.trim(),contact_name:contact.value.trim(),phone:phone.value.trim(),email:email.value.trim(),county:county.value.trim(),locality:locality.value.trim(),products,min_quantity:minq.value?Number(minq.value):null,max_quantity:maxq.value?Number(maxq.value):null,preferred_unit:unit.value.trim(),pickup:pickup.checked,payment_terms:terms.value.trim()};
+ const r=await fetch('/api/marketplace/buyers/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const d=await r.json();
+ if(!r.ok){regMsg.innerHTML='<p class="err">'+esc(d.error||'Registration failed')+'</p>';return}
+ localStorage.setItem(tokenKey,d.token);regMsg.innerHTML='<p class="ok">✓ Buyer registered. This browser can now submit offers.</p>';loadListings();
+}
+async function loadListings(){
+ const q=new URLSearchParams();if(filterProduct.value.trim())q.set('product',filterProduct.value.trim().toLowerCase());if(filterLocation.value.trim())q.set('location',filterLocation.value.trim());
+ const r=await fetch('/api/marketplace/listings?'+q);const d=await r.json();const root=document.getElementById('listings');root.innerHTML='';
+ (d.listings||[]).forEach(x=>{const div=document.createElement('div');div.className='card';div.innerHTML='<span class="pill">'+esc(x.status)+'</span><h3>'+esc(x.quantity)+' '+esc(x.unit)+' '+esc(x.product)+'</h3><p>📍 '+esc(x.location_text)+'</p><p>Urgency: '+esc(x.urgency)+'</p>'+(x.target_price?'<p>Target: KES '+esc(x.target_price)+' / '+esc(x.unit)+'</p>':'')+'<button onclick="offer(\\''+x.id+'\\')">Make offer</button>';root.appendChild(div)});
+ if(!(d.listings||[]).length)root.innerHTML='<div class="card">No matching live listings yet.</div>';
+}
+async function offer(id){
+ const token=localStorage.getItem(tokenKey);if(!token){alert('Register as a buyer first.');return}
+ const price=prompt('Your price per unit (KES)');if(!price)return;
+ const payment=prompt('Payment terms e.g. cash on pickup')||'';const pickup=confirm('Can you pick up from the farmer?');
+ const r=await fetch('/api/marketplace/offers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({buyer_token:token,listing_id:id,price_per_unit:Number(price),payment_terms:payment,pickup})});const d=await r.json();
+ alert(r.ok?'Offer sent. The farmer can review it in Mkulima WhatsApp.':'Could not send offer: '+(d.error||'error'));
+}
+loadListings();
+</script></body></html>"""
+
+@app.get("/marketplace")
+def marketplace_page():
+    return _marketplace_html()
+
+@app.post("/api/marketplace/buyers/register")
+def marketplace_register_buyer():
+    body=request.get_json(silent=True) or {}
+    result=register_buyer(body)
+    if not result:
+        return jsonify(ok=False,error="Add business name, contact name, phone and at least one product."),400
+    return jsonify(ok=True,**result),201
+
+@app.get("/api/marketplace/listings")
+def marketplace_listings():
+    product=(request.args.get("product") or "").strip().lower() or None
+    location=(request.args.get("location") or "").strip() or None
+    rows=list_marketplace_listings(product,location,50)
+    return jsonify(ok=True,listings=rows,count=len(rows))
+
+@app.post("/api/marketplace/offers")
+def marketplace_offer():
+    body=request.get_json(silent=True) or {}
+    result=submit_buyer_offer(body.get("buyer_token"),body.get("listing_id"),body.get("price_per_unit"),bool(body.get("pickup")),body.get("payment_terms"),body.get("note"))
+    return (jsonify(result),201) if result.get("ok") else (jsonify(result),400)
+
+@app.get("/api/marketplace/matches/<listing_id>")
+def marketplace_matches(listing_id):
+    return jsonify(ok=True,matches=matching_buyers_for_listing(listing_id,10))
+
 @app.get("/api/health")
 def health():
     init_db()
@@ -722,6 +803,48 @@ def webhook():
         if normalized_body in {"upgrade","premium","plus","subscribe","pay","pricing","plans"}:
             send_whatsapp_text(phone,"🌱 Mkulima plans:\n• Free — 5 useful questions/month\n• Day Pass — KES 49 / 24 hours\n• Mkulima Plus — KES 199 / 30 days\n\nActivate securely here: "+upgrade_url(phone))
             return jsonify(ok=True,pricing=True),200
+        if normalized_body in {"marketplace","market","find buyer","find buyers","buyers","buyer"}:
+            listing_id=state.get("market_listing_id")
+            if not listing_id:
+                listing_id=create_seller_listing(phone,state)
+                if listing_id:
+                    state["market_listing_id"]=listing_id
+                    save_state(phone,state)
+            if listing_id:
+                matches=matching_buyers_for_listing(listing_id,5)
+                msg_text="🌱 Your produce is now listed on Mkulima Market. Buyers can browse and submit offers at "+MKULIMA_BASE_URL+"/marketplace"
+                if matches:
+                    msg_text+="\n\nI already found "+str(len(matches))+" potential buyer matches based on product, quantity and location. Send *offers* anytime to check buyer offers."
+                else:
+                    msg_text+="\n\nNo registered buyer match yet. I will keep the listing available for incoming offers. Send *offers* anytime to check."
+                send_whatsapp_text(phone,msg_text)
+                return jsonify(ok=True,marketplace=True,listing_id=listing_id),200
+            send_whatsapp_text(phone,"I can list your produce on Mkulima Market. Tell me the product, your exact location and quantity first. Example: I have 80 bags of maize in Turbo and I need a buyer.")
+            return jsonify(ok=True,marketplace_needs_details=True),200
+        if normalized_body in {"offers","my offers","buyer offers","check offers"}:
+            offers=seller_offers(phone,10)
+            if not offers:
+                send_whatsapp_text(phone,"No buyer offers yet. Your listing can stay live on Mkulima Market. I will compare offers once buyers submit them.")
+                return jsonify(ok=True,offers=0),200
+            lines=["📩 Buyer offers:"]
+            for o in offers[:5]:
+                b=o.get("buyer") or {}; l=o.get("listing") or {}
+                verified=" ✅ verified" if b.get("verified") else ""
+                lines.append("• "+o.get("offer_code","")+" — "+str(b.get("business_name") or "Buyer")+verified+": KES "+str(o.get("price_per_unit"))+"/"+str(l.get("unit") or "unit")+"; total approx KES "+str(o.get("total_amount") or "")+"; pickup "+("yes" if o.get("pickup") else "no"))
+            lines.append("\nTo proceed, reply: accept OFFER_CODE (example: accept ABC12345). I will reveal that buyer's contact to you.")
+            send_whatsapp_text(phone,"\n".join(lines))
+            return jsonify(ok=True,offers=len(offers)),200
+        accept_match=re.fullmatch(r"accept\s+([a-f0-9-]{6,36})",normalized_body,re.I)
+        if accept_match:
+            result=accept_seller_offer(phone,accept_match.group(1))
+            if not result.get("ok"):
+                send_whatsapp_text(phone,"I could not find that active offer. Send *offers* to see the current offer codes.")
+                return jsonify(ok=True,offer_accept=False),200
+            b=result.get("buyer") or {}; o=result.get("offer") or {}
+            contact_bits=[str(b.get("phone") or "").strip(),str(b.get("email") or "").strip()]
+            contact_bits=[x for x in contact_bits if x]
+            send_whatsapp_text(phone,"✅ Offer accepted for contact. Buyer: "+str(b.get("business_name") or b.get("contact_name") or "Buyer")+"\nContact: "+(" / ".join(contact_bits) if contact_bits else "contact unavailable")+"\nOffer: KES "+str(o.get("price_per_unit"))+" per unit.\n\nPlease independently confirm quality, quantity, pickup, payment timing and final price before handing over produce.")
+            return jsonify(ok=True,offer_accept=True),200
         access=get_access(phone)
         if not access.get("active") and access.get("free_used",0)>=access.get("free_limit",5):
             send_whatsapp_text(phone,"Umetumia free questions 5 za mwezi huu. 🌱 Continue with Mkulima for KES 49/24h or KES 199/30 days: "+upgrade_url(phone))
@@ -742,6 +865,11 @@ def webhook():
             state["last_weather"]={k:v for k,v in weather_result.items() if k not in ("raw",)}
         save_state(phone,state)
 
+        if state.get("primary_intent")=="sell" and state.get("no_offer") and state.get("stage")=="complete" and not state.get("market_listing_id"):
+            listing_id=create_seller_listing(phone,state)
+            if listing_id:
+                state["market_listing_id"]=listing_id
+                save_state(phone,state)
         response=weather_reply(weather_result,state.get("language","en")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
         send_whatsapp_text(phone,response)
         consume_free_question(phone)
