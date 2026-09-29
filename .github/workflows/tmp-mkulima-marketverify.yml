@@ -1,0 +1,31 @@
+name: Temp Mkulima market verify
+on:
+  push:
+    branches: [tmp-mkulima-marketverify]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify marketplace twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://mkulima-ai-whatsapp.onrender.com"
+          LISTING="4915fed2-8d0a-4564-b993-b1f613fb0853"
+          curl -fsS "$BASE/marketplace" | grep -q "Mkulima Market"
+          curl -fsS "$BASE/api/marketplace/listings?product=maize&location=Turbo" | grep -q "$LISTING"
+          for N in 1 2; do
+            REG="$(curl -fsS -X POST "$BASE/api/marketplace/buyers/register" \
+              -H 'Content-Type: application/json' \
+              -d "{\"business_name\":\"Verify Buyer $N\",\"contact_name\":\"Test Buyer $N\",\"phone\":\"+25470000000$N\",\"email\":\"verify$N@example.com\",\"county\":\"Uasin Gishu\",\"locality\":\"Turbo\",\"products\":[\"maize\"],\"min_quantity\":1,\"max_quantity\":100,\"preferred_unit\":\"bags\",\"pickup\":true,\"payment_terms\":\"cash on pickup\"}")"
+            TOKEN="$(python -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REG")"
+            test -n "$TOKEN"
+            CODE="$(curl -sS -o "/tmp/offer$N.json" -w "%{http_code}" -X POST "$BASE/api/marketplace/offers" \
+              -H 'Content-Type: application/json' \
+              -d "{\"buyer_token\":\"$TOKEN\",\"listing_id\":\"$LISTING\",\"price_per_unit\":380$N,\"pickup\":true,\"payment_terms\":\"cash on pickup\"}")"
+            echo "RUN_$N STATUS=$CODE"
+            cat "/tmp/offer$N.json"
+            echo
+            test "$CODE" = "201"
+            grep -q '"ok":true' "/tmp/offer$N.json"
+          done
