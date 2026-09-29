@@ -8,7 +8,7 @@ from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 from weather_live import live_weather, weather_reply
-from state_store import load_state, save_state, claim_message, record_interaction, record_feedback, actor_ref, get_access, consume_free_question, create_payment_for_actor, get_payment, mark_payment_paid, register_buyer, get_buyer_by_token, list_marketplace_listings, create_seller_listing, matching_buyers_for_listing, submit_buyer_offer, seller_offers, accept_seller_offer
+from state_store import load_state, save_state, claim_message, record_interaction, record_feedback, actor_ref, record_farm_event, list_farm_events, get_access, consume_free_question, create_payment_for_actor, get_payment, mark_payment_paid, register_buyer, get_buyer_by_token, list_marketplace_listings, create_seller_listing, matching_buyers_for_listing, submit_buyer_offer, seller_offers, accept_seller_offer
 
 app=Flask(__name__)
 DB=os.getenv("DB_PATH","/tmp/mkulima.db")
@@ -58,15 +58,48 @@ def upgrade_url(phone):
     if not (ref and sig): return MKULIMA_BASE_URL+"/pricing"
     return _short_checkout_url(ref,sig)
 
+def _morning_token(ref, expires_at):
+    key=_checkout_signing_secret()
+    if not (key and ref): return None
+    payload=ref+"."+str(int(expires_at))
+    sig=hmac.new(key,payload.encode(),hashlib.sha256).hexdigest()
+    return urlparse.quote(ref+"."+str(int(expires_at))+"."+sig)
+
+def _verify_morning_token(token):
+    try:
+        raw=urlparse.unquote(str(token or ""))
+        ref,exp,sig=raw.rsplit(".",2)
+        if int(exp) < int(__import__("time").time()): return None
+        key=_checkout_signing_secret()
+        expected=hmac.new(key,(ref+"."+exp).encode(),hashlib.sha256).hexdigest()
+        return ref if key and hmac.compare_digest(expected,sig) else None
+    except Exception:
+        return None
+
 def morning_url(phone):
-    init_db()
-    code=secrets.token_urlsafe(7)
-    expires_at=int(__import__("time").time())+7*86400
-    con=sqlite3.connect(DB)
-    con.execute("DELETE FROM morning_links WHERE expires_at < ?",(int(__import__("time").time()),))
-    con.execute("INSERT OR REPLACE INTO morning_links(code,phone,expires_at) VALUES(?,?,?)",(code,phone,expires_at))
-    con.commit(); con.close()
-    return MKULIMA_BASE_URL+"/morning/"+code
+    ref=actor_ref(phone)
+    if not ref: return MKULIMA_BASE_URL+"/"
+    exp=int(__import__("time").time())+7*86400
+    token=_morning_token(ref,exp)
+    return MKULIMA_BASE_URL+"/morning/"+token if token else MKULIMA_BASE_URL+"/"
+
+def _load_state_by_actor_ref(ref):
+    # Durable Supabase lookup; never exposes or stores the raw phone in a dashboard URL.
+    try:
+        from state_store import _api, supabase_enabled
+        if not (supabase_enabled() and ref): return {}
+        rows=_api("GET","mkulima_conversations?actor_ref=eq."+urlparse.quote(ref)+"&select=state&limit=1") or []
+        return (rows[0].get("state") or {}) if rows else {}
+    except Exception:
+        return {}
+
+def _farm_events_by_actor_ref(ref, limit=8):
+    try:
+        from state_store import _api, supabase_enabled
+        if not (supabase_enabled() and ref): return []
+        return _api("GET","mkulima_farm_events?actor_ref=eq."+urlparse.quote(ref)+"&select=event_type,crop,event_date,location_context,details,source&order=event_date.desc&limit="+str(max(1,min(int(limit),20)))) or []
+    except Exception:
+        return []
 
 def _morning_brief(phone):
     state=load_state(phone) or {}
@@ -739,30 +772,38 @@ def _pricing_response(actor="",sig=""):
 def pricing():
     return _pricing_response(request.args.get("actor",""),request.args.get("sig",""))
 
-@app.get("/morning/<code>")
-def morning_dashboard(code):
-    init_db()
-    con=sqlite3.connect(DB)
-    row=con.execute("SELECT phone,expires_at FROM morning_links WHERE code=?",(code,)).fetchone()
-    con.close()
-    if not row or int(row[1]) < int(__import__("time").time()):
+@app.get("/morning/<token>")
+def morning_dashboard(token):
+    ref=_verify_morning_token(token)
+    if not ref:
         return "<h2>Morning link expired</h2><p>Send <strong>morning</strong> to Mkulima on WhatsApp for a fresh private link.</p>",410
-    state,location,product,weather,weather_text,listings,market=_morning_brief(row[0])
+    state=_load_state_by_actor_ref(ref)
+    location=str(state.get("location") or "your county")[:160]
+    product=str(state.get("product") or state.get("crop") or "your farm")[:80]
+    weather=live_weather(location) if location!="your county" else {"ok":False}
+    weather_text="Add your county or nearest town in WhatsApp to unlock local weather."
+    if weather.get("ok"):
+        fc=weather.get("forecast") or {}
+        weather_text=f"{fc.get('temp_min_c')}–{fc.get('temp_max_c')}°C · rain ~{fc.get('precipitation_mm')} mm · wind max {fc.get('wind_max_m_s')} m/s"
+    listings=list_marketplace_listings(product if product!="your farm" else None,location if location!="your county" else None,5)
+    market=official_market_price(product,location)
     updates=official_updates(location,product)
+    events=_farm_events_by_actor_ref(ref,8)
     safe_location=escape(location); safe_product=escape(product); safe_weather=escape(weather_text)
     market_items="".join("<li><strong>"+str(escape(str(x.get("quantity") or "")+" "+str(x.get("unit") or "")+" "+str(x.get("product") or "")))+"</strong> · "+str(escape(str(x.get("location_text") or x.get("county") or "")))+"</li>" for x in listings) or "<li>No matching Mkulima Market listings yet.</li>"
     weather_source=escape(("MET Norway live forecast · "+str(weather.get("retrieved_at") or "")) if weather.get("ok") else "Add location to enable live forecast")
-    update_items="".join('<li><strong>'+str(escape(x["title"]))+'</strong><br>'+str(escape(x["why"]))+' · <a href="'+str(escape(x["url"]))+'" rel="noopener noreferrer">Official source →</a></li>' for x in updates)
+    update_items="".join('<li><strong>'+str(escape(str(x.get("title") or "")))+'</strong><br>'+str(escape(str(x.get("summary") or x.get("eligibility") or "")))+' · <a href="'+str(escape(str(x.get("url") or "")))+'" rel="noopener noreferrer">Official source →</a></li>' for x in updates)
+    memory_items="".join("<li><strong>"+str(escape(str(e.get("event_type") or "").replace("_"," ").title()))+"</strong> · "+str(escape(str(e.get("crop") or "")))+" · "+str(escape(str(e.get("event_date") or "")[:10]))+"</li>" for e in events) or "<li>Your farm timeline will grow as you share planting, crop issues, harvests and sales.</li>"
+    market_status="Verified current observation available" if market.get("verified") else "No verified current local observation — Mkulima will not guess a price"
     return HOME_STYLE+f"""<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Private morning brief</span></nav>
 <section class="hero" style="padding:44px 0"><div class="wrap"><span class="eyebrow">☀️ Mkulima Morning</span><h1 style="font-size:46px">Your farm today</h1><p class="lead">📍 {safe_location} · 🌱 {safe_product}</p></div></section>
 <section class="section"><div class="wrap"><div class="cards">
 <div class="card"><div class="icon">🌦️</div><h3>Local weather</h3><p>{safe_weather}</p><small>{weather_source}</small></div>
-<div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>Live Mkulima Market matches for your product/location.</p><ul>{market_items}</ul><p><strong>Official price source:</strong> {'KAMIS reachable' if market.get('ok') else 'KAMIS temporarily unavailable — no price guessed'}.</p><a href="https://kamis.kilimo.go.ke/site/market" rel="noopener noreferrer">Check official prices →</a> · <a href="/marketplace">Open Mkulima Market →</a></div>
-<div class="card"><div class="icon">🏛️</div><h3>Verified official updates</h3><p>Trusted national and county-relevant information. Mkulima links to the authority rather than inventing offers.</p><ul>{update_items}</ul></div>
+<div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>{escape(market_status)}</p><ul>{market_items}</ul><a href="https://kamis.kilimo.go.ke/site/market" rel="noopener noreferrer">KAMIS official source →</a> · <a href="/marketplace">Open Mkulima Market →</a></div>
+<div class="card"><div class="icon">🏛️</div><h3>Verified official updates</h3><ul>{update_items}</ul></div>
 </div>
-<div class="promise"><div><h2>Your farm memory</h2><p>Mkulima uses the crop, location and decisions you have shared to keep advice relevant over time. Multi-year guidance will be scenario planning, not guaranteed predictions.</p></div><span class="pill">Updated for {safe_location}</span></div>
+<div class="promise"><div><h2>Your farm memory</h2><ul>{memory_items}</ul><p>Mkulima uses your durable farm timeline for increasingly relevant advice. Long-term guidance remains scenario planning, not a guaranteed forecast.</p></div><span class="pill">Updated for {safe_location}</span></div>
 </div></section>"""
-
 
 @app.get("/u/<code>")
 def short_checkout(code):
