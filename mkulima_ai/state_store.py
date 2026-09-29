@@ -167,6 +167,32 @@ def record_revenue_event(phone, event_type, amount_kes=None, source=None, metada
         return False
 
 
+def record_farm_event(phone, event_type, crop=None, location_context=None, details=None, source="farmer"):
+    """Persist a privacy-preserving farm timeline event for future personalized advice."""
+    ref=actor_ref(phone)
+    allowed={"crop_set","location_set","planting","rain","fertilizer","pest","disease","treatment","harvest","sale_offer","sale","buyer_match","outcome","photo_issue"}
+    event_type=str(event_type or "").strip().lower()
+    if event_type not in allowed or not (supabase_enabled() and ref):
+        return False
+    payload={"actor_ref":ref,"event_type":event_type,"source":str(source or "farmer")[:80]}
+    if crop: payload["crop"]=str(crop)[:120]
+    if location_context: payload["location_context"]=str(location_context)[:200]
+    if isinstance(details,dict): payload["details"]=details
+    try:
+        _api("POST","mkulima_farm_events",payload,"return=minimal")
+        return True
+    except Exception:
+        return False
+
+def list_farm_events(phone, limit=20):
+    ref=actor_ref(phone)
+    if not (supabase_enabled() and ref): return []
+    try:
+        n=max(1,min(int(limit),100))
+        return _api("GET","mkulima_farm_events?actor_ref=eq."+urlparse.quote(ref)+"&select=event_type,crop,event_date,location_context,details,source&order=event_date.desc&limit="+str(n)) or []
+    except Exception:
+        return []
+
 def get_access(phone):
     """Return current paid/free access without exposing the raw phone."""
     ref=actor_ref(phone)
