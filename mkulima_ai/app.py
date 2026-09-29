@@ -1,7 +1,7 @@
 import os, re, sqlite3, json, hashlib, hmac, secrets
 from datetime import date, datetime
 from urllib import request as urlrequest, error as urlerror, parse as urlparse
-from flask import Flask, request, jsonify, redirect
+from flask import Flask, request, jsonify, redirect, escape
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
@@ -66,8 +66,8 @@ def morning_url(phone):
 
 def _morning_brief(phone):
     state=load_state(phone) or {}
-    location=state.get("location") or "your county"
-    product=state.get("product") or state.get("crop") or "your farm"
+    location=str(state.get("location") or "your county")[:160]
+    product=str(state.get("product") or state.get("crop") or "your farm")[:80]
     weather=live_weather(location) if location!="your county" else {"ok":False}
     weather_text="Add your county or nearest town in WhatsApp to unlock local weather."
     if weather.get("ok"):
@@ -627,16 +627,17 @@ def morning_dashboard(code):
     if not row or int(row[1]) < int(__import__("time").time()):
         return "<h2>Morning link expired</h2><p>Send <strong>morning</strong> to Mkulima on WhatsApp for a fresh private link.</p>",410
     state,location,product,weather,weather_text,listings=_morning_brief(row[0])
-    market_items="".join("<li><strong>"+str(x.get("quantity") or "")+" "+str(x.get("unit") or "")+" "+str(x.get("product") or "")+"</strong> · "+str(x.get("location_text") or x.get("county") or "")+"</li>" for x in listings) or "<li>No matching Mkulima Market listings yet.</li>"
-    weather_source=("MET Norway live forecast · "+str(weather.get("retrieved_at") or "")) if weather.get("ok") else "Add location to enable live forecast"
+    safe_location=escape(location); safe_product=escape(product); safe_weather=escape(weather_text)
+    market_items="".join("<li><strong>"+str(escape(str(x.get("quantity") or "")+" "+str(x.get("unit") or "")+" "+str(x.get("product") or "")))+"</strong> · "+str(escape(str(x.get("location_text") or x.get("county") or "")))+"</li>" for x in listings) or "<li>No matching Mkulima Market listings yet.</li>"
+    weather_source=escape(("MET Norway live forecast · "+str(weather.get("retrieved_at") or "")) if weather.get("ok") else "Add location to enable live forecast")
     return HOME_STYLE+f"""<nav class="wrap"><a class="brand" href="/"><span class="mark">🌱</span>Mkulima AI</a><span class="navtag">Private morning brief</span></nav>
-<section class="hero" style="padding:44px 0"><div class="wrap"><span class="eyebrow">☀️ Mkulima Morning</span><h1 style="font-size:46px">Your farm today</h1><p class="lead">📍 {location} · 🌱 {product}</p></div></section>
+<section class="hero" style="padding:44px 0"><div class="wrap"><span class="eyebrow">☀️ Mkulima Morning</span><h1 style="font-size:46px">Your farm today</h1><p class="lead">📍 {safe_location} · 🌱 {safe_product}</p></div></section>
 <section class="section"><div class="wrap"><div class="cards">
-<div class="card"><div class="icon">🌦️</div><h3>Local weather</h3><p>{weather_text}</p><small>{weather_source}</small></div>
+<div class="card"><div class="icon">🌦️</div><h3>Local weather</h3><p>{safe_weather}</p><small>{weather_source}</small></div>
 <div class="card"><div class="icon">💰</div><h3>Market & buyers</h3><p>Live Mkulima Market matches for your product/location.</p><ul>{market_items}</ul><a href="/marketplace">Open market →</a></div>
 <div class="card"><div class="icon">🏛️</div><h3>Government & county updates</h3><p>Verified regional programme/circular ingestion is being activated. Official-source links will appear here; Mkulima will not invent offers.</p></div>
 </div>
-<div class="promise"><div><h2>Your farm memory</h2><p>Mkulima uses the crop, location and decisions you have shared to keep advice relevant over time. Multi-year guidance will be scenario planning, not guaranteed predictions.</p></div><span class="pill">Updated for {location}</span></div>
+<div class="promise"><div><h2>Your farm memory</h2><p>Mkulima uses the crop, location and decisions you have shared to keep advice relevant over time. Multi-year guidance will be scenario planning, not guaranteed predictions.</p></div><span class="pill">Updated for {safe_location}</span></div>
 </div></section>"""
 
 
