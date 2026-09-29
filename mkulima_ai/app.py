@@ -326,10 +326,10 @@ def reply_for(text, known=None):
         if lang=="en":
             return (f"Okay. You have {quantity:g} {unit} of {product} in {f['location']} and no buyer offer yet. "
                     f"Buyer-ready listing: FOR SALE — {quantity:g} {unit} of {product}, location: {f['location']}. Seeking serious buyers and the best verified offer. "
-                    "My verified buyer directory and live market-price feed are not connected yet, so I won't invent buyers or today's price. Share this listing with buyers/co-ops you trust, then send me any offers you receive and I will compare the cash value for you.")
+                    "I can put this produce on Mkulima Market now so registered buyers can submit offers without exposing your phone publicly. Send 'marketplace' to confirm the listing, or 'offers' anytime to check responses. I will help you compare the cash value before you decide.")
         return (f"Sawa. Una {quantity:g} {unit} za {product} huko {f['location']} na bado huna offer. "
                 f"Buyer-ready listing: INAUZWA — {quantity:g} {unit} za {product}, eneo: {f['location']}. Tunatafuta serious buyers na best verified offer. "
-                "Buyer directory na live market-price feed bado hazijaunganishwa, kwa hivyo sitabuni buyer au bei ya leo. Share listing hii kwa buyers/co-ops unaowaamini, kisha nitumie offers upate comparison.")
+                "Naweza kuweka mazao haya kwa Mkulima Market sasa ili registered buyers watume offers bila kuweka namba yako public. Tuma 'marketplace' kuthibitisha listing, au 'offers' kuangalia responses. Nitakusaidia kulinganisha cash value kabla uamue.")
     if product in NON_BAG_SALE_PRODUCTS and "offer" not in f:
         per=unit[:-1] if unit.endswith("s") else unit
         if lang=="en":
