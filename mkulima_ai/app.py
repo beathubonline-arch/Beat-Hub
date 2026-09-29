@@ -438,6 +438,11 @@ def apply_message(text,state):
             state["next_action"]="collect_offer"
     state=enrich_case_evidence(text,state)
     state=enrich_context(text,state)
+    # Natural buyer-search phrases start the selling workflow even before a crop
+    # is known; keep the next questions focused on completing that sale case.
+    if normalized in {"find a buyer","find buyer","find buyers","need a buyer","i need a buyer","natafuta buyer","natafuta mnunuzi"}:
+        state["primary_intent"]="sell"
+        state["intents"]=["sell"]
     state["plan"]=build_plan(text,state)
     state["language"]=detect_language(text) if text else state.get("language","en")
     # Only the specialist selling flow requires location/bags/offer. Other
