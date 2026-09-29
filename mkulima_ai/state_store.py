@@ -171,13 +171,13 @@ def get_access(phone):
     """Return current paid/free access without exposing the raw phone."""
     ref=actor_ref(phone)
     if not (supabase_enabled() and ref):
-        return {"plan":"free","active":False,"free_used":0,"free_limit":5}
+        return {"plan":"free","active":False,"free_used":0,"free_limit":100}
     month=__import__("datetime").datetime.utcnow().strftime("%Y-%m")
     try:
         rows=_api("GET","mkulima_access?actor_ref=eq."+urlparse.quote(ref)+"&select=plan,access_until,free_month,free_used&limit=1") or []
         if not rows:
             _api("POST","mkulima_access",{"actor_ref":ref,"plan":"free","free_month":month,"free_used":0},"return=minimal")
-            return {"plan":"free","active":False,"free_used":0,"free_limit":5}
+            return {"plan":"free","active":False,"free_used":0,"free_limit":100}
         row=rows[0]
         if row.get("free_month")!=month:
             _api("PATCH","mkulima_access?actor_ref=eq."+urlparse.quote(ref),{"free_month":month,"free_used":0,"updated_at":__import__("datetime").datetime.utcnow().isoformat()+"Z"},"return=minimal")
@@ -189,9 +189,9 @@ def get_access(phone):
                 active=__import__("datetime").datetime.fromisoformat(until.replace("Z","+00:00")) > __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
             except Exception:
                 active=False
-        return {"plan":row.get("plan") or "free","active":active,"access_until":until,"free_used":int(row.get("free_used") or 0),"free_limit":5}
+        return {"plan":row.get("plan") or "free","active":active,"access_until":until,"free_used":int(row.get("free_used") or 0),"free_limit":100}
     except Exception:
-        return {"plan":"free","active":False,"free_used":0,"free_limit":5}
+        return {"plan":"free","active":False,"free_used":0,"free_limit":100}
 
 def consume_free_question(phone):
     """Atomically-ish increment free usage after a useful answer is sent."""
@@ -201,7 +201,7 @@ def consume_free_question(phone):
     access=get_access(phone)
     if access.get("active"):
         return True
-    if access.get("free_used",0) >= access.get("free_limit",5):
+    if access.get("free_used",0) >= access.get("free_limit",100):
         return False
     try:
         new_used=access.get("free_used",0)+1
