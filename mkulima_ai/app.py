@@ -1,7 +1,8 @@
 import os, re, sqlite3, json, hashlib, hmac, secrets
 from datetime import date, datetime
 from urllib import request as urlrequest, error as urlerror, parse as urlparse
-from flask import Flask, request, jsonify, redirect, escape
+from flask import Flask, request, jsonify, redirect
+from markupsafe import escape
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
