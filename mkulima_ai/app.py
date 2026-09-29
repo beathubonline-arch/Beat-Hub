@@ -725,6 +725,12 @@ def _log_startup_readiness_once():
     signing_ok=bool(_checkout_signing_secret())
     print("MKULIMA_LIVE_READINESS whatsapp=%s paystack=%s signed_checkout=%s" % (wa_ok,pay_ok,signing_ok), flush=True)
     print("MKULIMA_SUPABASE_ENV_KEYS", sorted([k for k in os.environ.keys() if "SUPABASE" in k.upper()]), flush=True)
+    try:
+        p1=_critical_path_self_test()
+        p2=_critical_path_self_test()
+        print("MKULIMA_PHASE5_REGRESSION pass1=%s pass2=%s checks1=%s checks2=%s" % (p1.get("ok"),p2.get("ok"),p1.get("checks"),p2.get("checks")), flush=True)
+    except Exception as exc:
+        print("MKULIMA_PHASE5_REGRESSION_ERROR type=%s message=%s" % (type(exc).__name__,str(exc)[:300]), flush=True)
     return None
 
 @app.get("/api/readiness")
