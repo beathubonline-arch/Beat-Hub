@@ -237,7 +237,8 @@ def mark_payment_paid(reference, provider_payload=None):
     if not p:
         return False
     plan=p.get("plan")
-    seconds=86400 if plan=="day_pass" else 30*86400
+    plan_days={"monthly":30,"season_pass":90,"yearly":365,"day_pass":1,"plus_monthly":30}
+    seconds=plan_days.get(plan,30)*86400
     now=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
     until=now+__import__("datetime").timedelta(seconds=seconds)
     try:
