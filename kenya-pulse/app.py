@@ -91,6 +91,7 @@ def terms():
  ("Contact","Questions about these terms can be sent to kenyapulse2026@gmail.com.")
  ])
 
+@app.get("/data-deletion-instructions")
 @app.get("/data-deletion")
 def data_deletion():
  return legal_page("Data Deletion","Request removal of information associated with your Kenya Pulse use",[
