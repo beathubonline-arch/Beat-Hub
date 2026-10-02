@@ -1,10 +1,10 @@
-import os, hashlib, re
+import os, hashlib, re, sqlite3
 from flask import Flask, request, jsonify, render_template_string
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 app=Flask(__name__)
-DB=os.environ.get("DATABASE_URL","")
+DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
 COUNTIES=["Mombasa","Kwale","Kilifi","Tana River","Lamu","Taita-Taveta","Garissa","Wajir","Mandera","Marsabit","Isiolo","Meru","Tharaka-Nithi","Embu","Kitui","Machakos","Makueni","Nyandarua","Nyeri","Kirinyaga","Murang'a","Kiambu","Turkana","West Pokot","Samburu","Trans Nzoia","Uasin Gishu","Elgeyo-Marakwet","Nandi","Baringo","Laikipia","Nakuru","Narok","Kajiado","Kericho","Bomet","Kakamega","Vihiga","Bungoma","Busia","Siaya","Kisumu","Homa Bay","Migori","Kisii","Nyamira","Nairobi City"]
 RACES=["President","Governor","Senator","Woman Representative","Member of Parliament","MCA"]
