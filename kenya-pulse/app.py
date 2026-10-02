@@ -1,4 +1,4 @@
-import os, hashlib, re, sqlite3
+import os, hashlib, re, sqlite3, base64, json, hmac
 from flask import Flask, request, jsonify, render_template_string
 app=Flask(__name__)
 DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
@@ -103,6 +103,38 @@ def data_deletion():
 def legal_page(title,kicker,sections):
  cards="".join(f"<section><h2>{h}</h2><p>{p}</p></section>" for h,p in sections)
  return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{title} — Kenya Pulse</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#06140e;color:#f5fff8;font-family:Inter,system-ui,sans-serif;line-height:1.65}}header{{border-bottom:1px solid #21432f;background:#081a12}}nav,main,footer{{max-width:920px;margin:auto;padding:20px}}nav{{display:flex;align-items:center;justify-content:space-between}}.brand{{font-weight:950;font-size:22px;letter-spacing:-.5px}}.brand b,.eyebrow,a{{color:#ffd447}}nav a{{text-decoration:none;color:#d7eadf}}main{{padding-top:64px;padding-bottom:70px}}.eyebrow{{font-weight:850;text-transform:uppercase;letter-spacing:1.5px;font-size:12px}}h1{{font-size:clamp(42px,7vw,70px);line-height:1;margin:10px 0 16px;letter-spacing:-2px}}.lead{{font-size:18px;color:#abc8b5;max-width:680px;margin-bottom:38px}}section{{background:linear-gradient(145deg,#0d2318,#0a1b13);border:1px solid #21432f;border-radius:20px;padding:24px;margin:14px 0}}h2{{font-size:19px;margin:0 0 8px}}p{{margin:0;color:#c8ddd0}}.links{{display:flex;gap:16px;flex-wrap:wrap;margin-top:30px}}footer{{border-top:1px solid #21432f;color:#87a493;font-size:13px;padding-top:28px;padding-bottom:40px}}@media(max-width:600px){{main{{padding-top:38px}}nav{{padding:16px 20px}}}}</style></head><body><header><nav><div class='brand'>KENYA <b>PULSE</b></div><a href='/'>← Back to Pulse</a></nav></header><main><div class='eyebrow'>Transparent participation</div><h1>{title}</h1><p class='lead'>{kicker}. Clear rules, privacy-minded participation and transparent public information.</p>{cards}<div class='links'><a href='/privacy'>Privacy Policy</a><a href='/terms'>Terms of Service</a><a href='/data-deletion'>Data Deletion</a><a href='/methodology'>Methodology</a></div></main><footer>KENYA PULSE · Your county. Your voice. · Open voluntary participation, not an election forecast.</footer></body></html>"""
+
+@app.post("/meta/data-deletion")
+def meta_data_deletion():
+ signed=request.form.get("signed_request","")
+ secret=os.environ.get("META_APP_SECRET","")
+ if not signed or not secret:
+  return jsonify(error="Missing signed request or server configuration."),400
+ try:
+  encoded_sig,payload=signed.split(".",1)
+  def b64decode(v):
+   return base64.urlsafe_b64decode(v+"="*((4-len(v)%4)%4))
+  supplied=b64decode(encoded_sig)
+  expected=hmac.new(secret.encode(),payload.encode(),hashlib.sha256).digest()
+  if not hmac.compare_digest(supplied,expected):
+   return jsonify(error="Invalid signed request."),403
+  data=json.loads(b64decode(payload))
+  user_id=str(data.get("user_id",""))
+  code=hashlib.sha256((user_id+SALT).encode()).hexdigest()[:24]
+  return jsonify(url=request.url_root.rstrip("/")+"/data-deletion-status?code="+code,confirmation_code=code)
+ except Exception:
+  return jsonify(error="Invalid signed request."),400
+
+@app.get("/data-deletion-status")
+def data_deletion_status():
+ code=request.args.get("code","")
+ if not re.fullmatch(r"[a-f0-9]{24}",code):
+  return "Invalid deletion confirmation code.",400
+ return legal_page("Deletion Request Status","Your request has been received",[
+  ("Confirmation code",code),
+  ("Status","The request has been recorded for review. Kenya Pulse does not publicly display individual participant submissions or technical fingerprints."),
+  ("Need help?","Email kenyapulse2026@gmail.com and include your confirmation code. Never send passwords or access tokens.")
+ ])
 
 @app.get("/methodology")
 def methodology():
