@@ -27,7 +27,7 @@ class DBConn:
   self.pg=bool(DATABASE_URL)
   if self.pg:
    self.c=psycopg2.connect(DATABASE_URL,sslmode="require")
-   self.cur=self.c.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+   self.cur=self.c.cursor(cursor_factory=psycopg2.extras.DictCursor)
   else:
    self.c=sqlite3.connect(DB);self.c.row_factory=sqlite3.Row;self.cur=None
  def execute(self,sql,args=()):
