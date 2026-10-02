@@ -73,15 +73,35 @@ def growth():
 def health(): return {"ok":True,"counties":47}
 @app.get("/privacy")
 def privacy():
- return """<body><h1>Kenya Pulse Privacy Policy</h1><p>Effective 2 October 2026.</p><p>Kenya Pulse is an independent voluntary public-participation dashboard. We process information participants choose to submit, including county, selected race, candidate preference and an optional issue, plus limited technical information needed to operate and protect the service.</p><p>A one-way technical fingerprint is used to restrict duplicate submissions. Aggregate results may be displayed publicly; individual submissions and technical fingerprints are not displayed publicly.</p><p>Information authorized through a Meta connection is used only to provide requested Kenya Pulse features. Following or sharing the Kenya Pulse Facebook Page is optional and is not required for a response to be counted.</p><p>Results reflect voluntary participants and are not representative of all Kenyan voters or an election forecast. We use information to operate, secure, measure and improve the service and do not sell individual voting preferences.</p><p>Privacy or deletion requests: kenyapulse2026@gmail.com. See /data-deletion and /terms.</p></body>"""
+ return legal_page("Privacy Policy","Effective 2 October 2026",[
+ ("What Kenya Pulse collects","Information you choose to submit, including county, selected race, candidate preference and an optional issue, plus limited technical information needed to operate and protect the service."),
+ ("How we protect participation","A one-way technical fingerprint is used to restrict duplicate submissions. Aggregate participant results may be displayed publicly; individual submissions and technical fingerprints are not displayed publicly."),
+ ("Meta / Facebook connections","Information authorized through a Meta connection is used only to provide requested Kenya Pulse features. Following or sharing the Kenya Pulse Facebook Page is optional and is never required for a response to be counted."),
+ ("How information is used","We use information to operate, secure, measure and improve Kenya Pulse. We do not sell individual voting preferences. Voluntary participant results are not representative of all Kenyan voters and are not an election forecast."),
+ ("Your choices","For privacy questions or deletion requests, email kenyapulse2026@gmail.com. You can also use our Data Deletion instructions.")
+ ])
 
 @app.get("/terms")
 def terms():
- return """<body><h1>Kenya Pulse Terms of Service</h1><p>Effective 2 October 2026.</p><p>Kenya Pulse is an open voluntary public-participation service. Users must not manipulate results, submit automated or fraudulent responses, disrupt the service or impersonate others.</p><p>Displayed results reflect voluntary website participants. They are not representative of all Kenyan voters and are not predictions of election outcomes. Candidate names may be participant-entered and their appearance is not an endorsement.</p><p>Third-party services, including Meta/Facebook, are governed by their own terms. Following or sharing the Kenya Pulse Facebook Page is optional and is not a condition for participation.</p><p>Questions: kenyapulse2026@gmail.com. See /privacy.</p></body>"""
+ return legal_page("Terms of Service","Effective 2 October 2026",[
+ ("Using Kenya Pulse","Kenya Pulse is an open, voluntary public-participation service. Use it lawfully and do not manipulate results, submit automated or fraudulent responses, disrupt the service or impersonate others."),
+ ("Understanding the results","Displayed results reflect voluntary website participants. They are not representative of all Kenyan voters and are not predictions of election outcomes. Candidate names may be participant-entered and their appearance is not an endorsement."),
+ ("Service operation","Features may change or be suspended when necessary for security, reliability, legal compliance or product development. Abusive or automated activity may be restricted."),
+ ("Third-party services","Meta, Facebook and other third-party services are governed by their own terms and policies. Following or sharing Kenya Pulse is optional and is not a condition for participation."),
+ ("Contact","Questions about these terms can be sent to kenyapulse2026@gmail.com.")
+ ])
 
 @app.get("/data-deletion")
 def data_deletion():
- return """<body><h1>Kenya Pulse Data Deletion Instructions</h1><p>To request deletion of personal information associated with Kenya Pulse or a Meta/Facebook connection, email kenyapulse2026@gmail.com with the subject Kenya Pulse Data Deletion Request.</p><p>Provide enough information to identify the relevant account or connection. Do not send passwords, access tokens or other secrets. Valid requests will be processed subject to applicable legal and security requirements.</p></body>"""
+ return legal_page("Data Deletion","Request removal of information associated with your Kenya Pulse use",[
+ ("1. Send your request","Email kenyapulse2026@gmail.com with the subject: Kenya Pulse Data Deletion Request."),
+ ("2. Identify the connection","Provide enough information for us to identify the relevant account or connection. Never send passwords, access tokens or other secrets."),
+ ("3. Processing","Valid requests will be reviewed and processed subject to applicable legal, security and record-retention requirements.")
+ ])
+
+def legal_page(title,kicker,sections):
+ cards="".join(f"<section><h2>{h}</h2><p>{p}</p></section>" for h,p in sections)
+ return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{title} — Kenya Pulse</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#06140e;color:#f5fff8;font-family:Inter,system-ui,sans-serif;line-height:1.65}}header{{border-bottom:1px solid #21432f;background:#081a12}}nav,main,footer{{max-width:920px;margin:auto;padding:20px}}nav{{display:flex;align-items:center;justify-content:space-between}}.brand{{font-weight:950;font-size:22px;letter-spacing:-.5px}}.brand b,.eyebrow,a{{color:#ffd447}}nav a{{text-decoration:none;color:#d7eadf}}main{{padding-top:64px;padding-bottom:70px}}.eyebrow{{font-weight:850;text-transform:uppercase;letter-spacing:1.5px;font-size:12px}}h1{{font-size:clamp(42px,7vw,70px);line-height:1;margin:10px 0 16px;letter-spacing:-2px}}.lead{{font-size:18px;color:#abc8b5;max-width:680px;margin-bottom:38px}}section{{background:linear-gradient(145deg,#0d2318,#0a1b13);border:1px solid #21432f;border-radius:20px;padding:24px;margin:14px 0}}h2{{font-size:19px;margin:0 0 8px}}p{{margin:0;color:#c8ddd0}}.links{{display:flex;gap:16px;flex-wrap:wrap;margin-top:30px}}footer{{border-top:1px solid #21432f;color:#87a493;font-size:13px;padding-top:28px;padding-bottom:40px}}@media(max-width:600px){{main{{padding-top:38px}}nav{{padding:16px 20px}}}}</style></head><body><header><nav><div class='brand'>KENYA <b>PULSE</b></div><a href='/'>← Back to Pulse</a></nav></header><main><div class='eyebrow'>Transparent participation</div><h1>{title}</h1><p class='lead'>{kicker}. Clear rules, privacy-minded participation and transparent public information.</p>{cards}<div class='links'><a href='/privacy'>Privacy Policy</a><a href='/terms'>Terms of Service</a><a href='/data-deletion'>Data Deletion</a><a href='/methodology'>Methodology</a></div></main><footer>KENYA PULSE · Your county. Your voice. · Open voluntary participation, not an election forecast.</footer></body></html>"""
 
 @app.get("/methodology")
 def methodology():
