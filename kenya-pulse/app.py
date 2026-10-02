@@ -1,21 +1,17 @@
 import os, hashlib, re, sqlite3
 from flask import Flask, request, jsonify, render_template_string
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
 app=Flask(__name__)
 DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
 COUNTIES=["Mombasa","Kwale","Kilifi","Tana River","Lamu","Taita-Taveta","Garissa","Wajir","Mandera","Marsabit","Isiolo","Meru","Tharaka-Nithi","Embu","Kitui","Machakos","Makueni","Nyandarua","Nyeri","Kirinyaga","Murang'a","Kiambu","Turkana","West Pokot","Samburu","Trans Nzoia","Uasin Gishu","Elgeyo-Marakwet","Nandi","Baringo","Laikipia","Nakuru","Narok","Kajiado","Kericho","Bomet","Kakamega","Vihiga","Bungoma","Busia","Siaya","Kisumu","Homa Bay","Migori","Kisii","Nyamira","Nairobi City"]
 RACES=["President","Governor","Senator","Woman Representative","Member of Parliament","MCA"]
 
-def conn(): return psycopg2.connect(DB, sslmode="require" if "render.com" in DB else "prefer")
+def conn():
+    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 def init():
-    if not DB:return
     with conn() as c:
-      with c.cursor() as q:
-       q.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id BIGSERIAL PRIMARY KEY,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(county,race,fp));""")
-       q.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race);")
+       c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(county,race,fp));""")
+       c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race);")
 try:init()
 except Exception as e: print("db init",e)
 
@@ -47,15 +43,14 @@ def vote():
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
  try:
   with conn() as c:
-   with c.cursor() as q:q.execute("INSERT INTO pulse_votes(county,race,candidate,issue,fp) VALUES(%s,%s,%s,%s,%s)",(county,race,candidate,issue,fp))
+   c.execute("INSERT INTO pulse_votes(county,race,candidate,issue,fp) VALUES(?,?,?,?,?)",(county,race,candidate,issue,fp))
   return jsonify(message="Preference counted. Live results updated.")
- except psycopg2.errors.UniqueViolation:return jsonify(error="A response from this device/network is already recorded for this county and race."),409
+ except sqlite3.IntegrityError:return jsonify(error="A response from this device/network is already recorded for this county and race."),409
 @app.get("/api/results")
 def results():
  county=request.args.get("county","");race=request.args.get("race","President")
  if county not in COUNTIES or race not in RACES:return jsonify(error="Invalid selection"),400
  with conn() as c:
-  with c.cursor(cursor_factory=RealDictCursor) as q:
-   q.execute("SELECT candidate,count(*)::int votes FROM pulse_votes WHERE county=%s AND race=%s GROUP BY candidate ORDER BY votes DESC,candidate",(county,race)); rows=q.fetchall()
+  rows=c.execute("SELECT candidate,count(*) votes FROM pulse_votes WHERE county=? AND race=? GROUP BY candidate ORDER BY votes DESC,candidate",(county,race)).fetchall()
  total=sum(x["votes"] for x in rows)
  return jsonify(total=total,results=[{"candidate":x["candidate"],"votes":x["votes"],"pct":round(x["votes"]*100/total,1) if total else 0} for x in rows])
