@@ -59,6 +59,9 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id BIGSERIAL PRIMARY KEY,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',starts_at TIMESTAMPTZ,ends_at TIMESTAMPTZ,impressions INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("""CREATE TABLE IF NOT EXISTS candidates(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,race TEXT NOT NULL,county TEXT,constituency TEXT,ward TEXT,party TEXT,status TEXT NOT NULL DEFAULT 'PROSPECTIVE',source_url TEXT,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_scope_unique ON candidates(name,race,COALESCE(county,''),COALESCE(constituency,''),COALESCE(ward,''));")
+   c.execute("""CREATE TABLE IF NOT EXISTS candidate_aliases(id BIGSERIAL PRIMARY KEY,candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,alias TEXT NOT NULL,verified BOOLEAN DEFAULT FALSE,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
+   c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS candidate_id BIGINT REFERENCES candidates(id);")
   else:
    old_exists=c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
    if not old_exists:
