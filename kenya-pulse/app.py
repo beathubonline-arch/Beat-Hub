@@ -89,7 +89,18 @@ HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" 
 <section class="glass notice"><b>Transparency:</b> Results show voluntary Kenya Pulse participants and are not representative of all registered voters. They should not be interpreted as an election forecast. Individual choices are not publicly displayed. Candidate names are participant-entered and their appearance is not an endorsement. <a href="/methodology" style="color:#ffd54a">Read methodology →</a></section>
 <footer class=footer><span>© Kenya Pulse · Open participation dashboard</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/methodology">Methodology</a></span></footer></main>
 <script>
-const C=document.getElementById('county'),R=document.getElementById('race');function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=()=>{syncUrl();clearAreas();load()};R.onchange=areaMode;const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';load()}
+const C=document.getElementById('county'),R=document.getElementById('race');async function populateConstituencies(){
+ const county=document.getElementById('county').value,sel=document.getElementById('constituency'),ward=document.getElementById('ward');
+ sel.innerHTML='<option value="">Choose constituency</option>';ward.innerHTML='<option value="">Choose ward</option>';
+ if(!county)return;
+ try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)),j=await r.json();(j.constituencies||[]).forEach(x=>sel.add(new Option(x,x)));}catch(e){}
+}
+async function populateWards(){
+ const county=document.getElementById('county').value,con=document.getElementById('constituency').value,sel=document.getElementById('ward');
+ sel.innerHTML='<option value="">Choose ward</option>';if(!county||!con)return;
+ try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)+'&constituency='+encodeURIComponent(con)),j=await r.json();(j.wards||[]).forEach(x=>sel.add(new Option(x,x)));}catch(e){}
+}
+function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=()=>{syncUrl();clearAreas();load()};R.onchange=areaMode;const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';load()}
 function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}document.getElementById('constituency').addEventListener('change',load);document.getElementById('ward').addEventListener('change',load);
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
