@@ -55,10 +55,19 @@ def county_page(slug):
 @app.get("/growth")
 def growth():
  with conn() as c:
-  rows=c.execute("""SELECT COALESCE(county,'Homepage') county,source,count(*) visits FROM pulse_visits GROUP BY county,source ORDER BY visits DESC LIMIT 100""").fetchall()
+  rows=c.execute("""SELECT COALESCE(county,'Homepage') county,source,count(*) visits FROM pulse_visits GROUP BY county,source ORDER BY visits DESC LIMIT 150""").fetchall()
   votes=c.execute("SELECT county,count(*) n FROM pulse_votes GROUP BY county ORDER BY n DESC").fetchall()
- data={"traffic":[dict(x) for x in rows],"responses":[dict(x) for x in votes]}
- return jsonify(data)
+ vote_map={x["county"]:x["n"] for x in votes}
+ traffic=[dict(x) for x in rows]
+ cards=[]
+ for county in COUNTIES:
+  v=sum(x["visits"] for x in traffic if x["county"]==county)
+  n=vote_map.get(county,0)
+  cards.append({"county":county,"visits":v,"responses":n,"conversion":round(n*100/v,1) if v else 0})
+ cards.sort(key=lambda x:(-x["responses"],-x["visits"],x["county"]))
+ html="""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Kenya Pulse Growth</title><style>*{box-sizing:border-box}body{margin:0;background:#07150f;color:#f4fff8;font-family:system-ui}.w{max-width:1100px;margin:auto;padding:30px 18px}h1{font-size:42px}.muted{color:#9db9a7}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.c{background:#0d2117;border:1px solid #21432f;border-radius:18px;padding:18px}.n{font-size:28px;font-weight:900;color:#ffd447}.tag{font-size:12px;border:1px solid #315942;border-radius:20px;padding:5px 8px}table{width:100%;border-collapse:collapse;margin-top:24px;background:#0d2117;border-radius:16px;overflow:hidden}th,td{text-align:left;padding:12px;border-bottom:1px solid #21432f}a{color:#ffd447}@media(max-width:600px){h1{font-size:34px}table{font-size:12px}}</style></head><body><main class=w><span class=tag>INTERNAL DISTRIBUTION VIEW</span><h1>47-County Growth Dashboard</h1><p class=muted>Track visits and completed responses by county. Source tags identify distribution channels; they never change how a response is counted.</p><div class=grid>{% for x in cards %}<div class=c><b>{{x.county}}</b><div class=n>{{x.responses}}</div><div class=muted>responses • {{x.visits}} visits • {{x.conversion}}% visit/response ratio</div><p><a href="/county/{{slug(x.county)}}?src=facebook_{{slug(x.county)}}">Open tracked county link →</a></p></div>{% endfor %}</div><h2>Traffic sources</h2><table><tr><th>County</th><th>Source tag</th><th>Visits</th></tr>{% for x in traffic %}<tr><td>{{x.county}}</td><td>{{x.source}}</td><td>{{x.visits}}</td></tr>{% endfor %}</table></main></body></html>"""
+ return render_template_string(html,cards=cards,traffic=traffic,slug=lambda s:re.sub(r"[^a-z0-9]+","-",s.lower()).strip("-"))
+
 @app.get("/health")
 def health(): return {"ok":True,"counties":47}
 @app.get("/methodology")
