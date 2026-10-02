@@ -242,6 +242,20 @@ body:before{background:radial-gradient(circle at 78% 13%,rgba(255,225,139,.95) 0
 .go{color:#edfff4;text-shadow:0 2px 12px #123}
 .scan{display:none}
 @media(max-width:720px){.hero{min-height:260px;padding:26px;border-radius:30px}.glass{backdrop-filter:blur(20px) saturate(135%);-webkit-backdrop-filter:blur(20px) saturate(135%)}.landscape:before{height:52%}.county{min-height:180px}}
+/* Eye-comfort refinement: retain physical glass, reduce visual competition */
+body:before{background:radial-gradient(circle at 80% 12%,rgba(255,225,155,.58) 0 1.6%,rgba(255,220,150,.10) 2% 7%,transparent 15%),linear-gradient(180deg,#789d9a 0%,#8fa99a 44%,#526c59 73%,#24392f 100%)}
+.landscape{opacity:.72}.landscape:before{opacity:.68;filter:blur(3px)}.landscape:after{opacity:.76;filter:blur(4px)}.gridfx{opacity:.055}
+.glass{background:linear-gradient(135deg,rgba(17,43,32,.64),rgba(20,49,37,.48));border-color:rgba(255,255,255,.24);box-shadow:inset 0 1px rgba(255,255,255,.30),0 18px 45px rgba(8,25,18,.22);backdrop-filter:blur(18px) saturate(118%);-webkit-backdrop-filter:blur(18px) saturate(118%)}
+.glass:before{opacity:.32}
+.hero{min-height:280px;background:linear-gradient(120deg,rgba(19,50,37,.66),rgba(24,55,42,.43));box-shadow:inset 0 1px rgba(255,255,255,.34),0 24px 58px rgba(9,31,21,.24)}
+.hero:after{color:#ffffff08}.hero h1{text-shadow:0 3px 18px rgba(4,22,14,.24)}
+.muted{color:#c3d5ca;text-shadow:none}.ey{color:#dff8e8;text-shadow:none}
+.stat,.county,.searchdock,.ads{background:linear-gradient(135deg,rgba(17,45,33,.62),rgba(22,52,39,.45))}
+.county{box-shadow:inset 0 1px rgba(255,255,255,.26),0 15px 36px rgba(8,28,19,.18)}
+.county:hover{transform:translateY(-3px);background:linear-gradient(135deg,rgba(24,58,43,.72),rgba(28,62,47,.52));border-color:rgba(255,255,255,.38);box-shadow:inset 0 1px rgba(255,255,255,.32),0 20px 48px rgba(8,28,19,.23)}
+.ico{font-size:42px;filter:none}.n{background:linear-gradient(90deg,#fff,#f4edbd);-webkit-background-clip:text}
+.go{color:#c9f4d9;text-shadow:none}.chip{background:rgba(7,30,20,.32);color:#dcebe2}
+.searchicon{color:#bcebd0;text-shadow:none}.searchbtn{box-shadow:none}.searchbtn:hover{box-shadow:0 8px 24px rgba(10,35,23,.18)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body><div class=landscape aria-hidden=true></div><div class=gridfx></div><div class=scan></div><main class=w><section class="glass hero"><div class=ey><span class=live></span> NATIONAL PARTICIPATION SIGNAL • LIVE</div><h1>KENYA<br>PULSE</h1><p class=muted>A cinematic view of voluntary participation across Kenya's 47 counties. This is an open online pulse, not a scientific election forecast.</p></section><section class=stats><div class="glass stat"><small class=muted>VISITS</small><div class=n>{{totalv}}</div></div><div class="glass stat"><small class=muted>RESPONSES</small><div class=n>{{totalr}}</div></div><div class="glass stat"><small class=muted>RESPONSE RATIO</small><div class=n>{{rate}}%</div></div><div class="glass stat"><small class=muted>COUNTIES</small><div class=n>47</div></div></section><section class="glass ads"><div class=adbox><div class=ey>SPONSORED • ADVERTISEMENT</div><h2>Put your brand here</h2><p class=muted>Reach Kenya Pulse visitors nationally or by county. Commercial advertising stays separate from participation and results.</p><p><a class=go style="position:static;font-weight:900" href="/advertise">ADVERTISE ON KENYA PULSE ↗</a></p></div></section><div class=section><h2>County Universe</h2><span class=chip>47 LIVE NODES</span></div>
 <div class="glass searchdock"><span class=searchicon>⌕</span><input id=countySearch list=countiesList autocomplete=off placeholder="Type a county — Kericho, Nairobi, Kisumu…" oninput="filterCounties(this.value)"><datalist id=countiesList>{% for x in cards %}<option value="{{x.county}}">{% endfor %}</datalist><button class=searchbtn onclick="openCounty()">SEARCH COUNTY ↗</button><span id=found class=chip>47 FOUND</span></div>
