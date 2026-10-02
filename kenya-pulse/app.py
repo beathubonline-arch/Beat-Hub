@@ -1,8 +1,13 @@
 import os, hashlib, re, sqlite3, base64, json, hmac
-try:\n import psycopg2\n import psycopg2.extras\nexcept ImportError:\n psycopg2=None
+try:
+ import psycopg2
+ import psycopg2.extras
+except ImportError:
+ psycopg2=None
 from flask import Flask, request, jsonify, render_template_string, abort, redirect
 app=Flask(__name__)
-DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")\nDATABASE_URL=os.environ.get("DATABASE_URL","")
+DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
+DATABASE_URL=os.environ.get("DATABASE_URL","")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
 ADMIN_KEY=os.environ.get("PULSE_ADMIN_KEY","")
 COUNTIES=["Mombasa","Kwale","Kilifi","Tana River","Lamu","Taita-Taveta","Garissa","Wajir","Mandera","Marsabit","Isiolo","Meru","Tharaka-Nithi","Embu","Kitui","Machakos","Makueni","Nyandarua","Nyeri","Kirinyaga","Murang'a","Kiambu","Turkana","West Pokot","Samburu","Trans Nzoia","Uasin Gishu","Elgeyo-Marakwet","Nandi","Baringo","Laikipia","Nakuru","Narok","Kajiado","Kericho","Bomet","Kakamega","Vihiga","Bungoma","Busia","Siaya","Kisumu","Homa Bay","Migori","Kisii","Nyamira","Nairobi City"]
