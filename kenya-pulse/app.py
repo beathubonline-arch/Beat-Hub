@@ -369,13 +369,22 @@ def candidate_resolve():
 
 @app.post("/api/vote")
 def vote():
- d=request.get_json(silent=True) or {}; county=d.get("county","").strip(); race=d.get("race","").strip(); constituency=d.get("constituency","").strip()[:80]; ward=d.get("ward","").strip()[:80]; candidate=re.sub(r"\s+"," ",d.get("candidate","").strip())[:80]; issue=d.get("issue","").strip()[:120]
+ d=request.get_json(silent=True) or {}; county=d.get("county","").strip(); race=d.get("race","").strip(); constituency=d.get("constituency","").strip()[:80]; ward=d.get("ward","").strip()[:80]; candidate=re.sub(r"\s+"," ",d.get("candidate","").strip())[:80]; candidate_id=d.get("candidate_id"); issue=d.get("issue","").strip()[:120]
  if county not in COUNTIES or race not in RACES or len(candidate)<2:return jsonify(error="Invalid county, race or candidate."),400
  if race in {"Member of Parliament","MCA"} and len(constituency)<2:return jsonify(error="Choose/enter the constituency for this race."),400
  if race=="MCA" and len(ward)<2:return jsonify(error="Choose/enter the ward for the MCA race."),400
  if race in {"Member of Parliament","MCA"} and not geography_ok(county,constituency,ward if race=="MCA" else ""):return jsonify(error="Invalid constituency or ward for the selected county."),400
  if race not in {"Member of Parliament","MCA"}: constituency=""; ward=""
  if race=="Member of Parliament": ward=""
+ if not candidate_id:return jsonify(error="Please choose and confirm a listed person before submitting."),400
+ with conn() as c:
+  scope_sql="SELECT id,name FROM candidates WHERE id=? AND active=1 AND race=?";scope_args=[candidate_id,race]
+  if race!="President":scope_sql+=" AND county=?";scope_args.append(county)
+  if race in {"Member of Parliament","MCA"}:scope_sql+=" AND constituency=?";scope_args.append(constituency)
+  if race=="MCA":scope_sql+=" AND ward=?";scope_args.append(ward)
+  canonical=c.execute(scope_sql,scope_args).fetchone()
+ if not canonical:return jsonify(error="That person is not verified for the selected seat and area."),400
+ candidate=canonical["name"]
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
  # Neutral integrity control: cap rapid submissions from the same technical fingerprint.
  with conn() as c:
@@ -385,7 +394,7 @@ def vote():
   if n>=8:return jsonify(error="Too many submissions in a short period. Please try again later."),429
  try:
   with conn() as c:
-   c.execute("INSERT INTO pulse_votes(county,race,candidate,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?)",(county,race,candidate,issue,fp,constituency or None,ward or None))
+   c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,issue,fp,constituency or None,ward or None))
   return jsonify(message="Preference counted. Live results updated.")
  except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this device/network is already recorded for this area and race."),409
 @app.get("/api/results")
