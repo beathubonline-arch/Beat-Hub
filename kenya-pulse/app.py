@@ -1,5 +1,5 @@
 import os, hashlib, re, sqlite3, base64, json, hmac
-from flask import Flask, request, jsonify, render_template_string, abort
+from flask import Flask, request, jsonify, render_template_string, abort, redirect
 app=Flask(__name__)
 DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
@@ -16,6 +16,9 @@ def init():
        c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
        c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
        c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id INTEGER PRIMARY KEY AUTOINCREMENT,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+       for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0")]:
+        try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
+        except sqlite3.OperationalError:pass
 try:init()
 except Exception as e: print("db init",e)
 
@@ -27,7 +30,7 @@ HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" 
 <section class=layout><div class="glass card"><div class=cardHead><div><h2>Join the pulse</h2><span class=muted>Choose your county and race</span></div><span class=pill>Private choice</span></div><div class=formgrid><select id=county><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race>{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><input id=candidate maxlength=80 placeholder="Preferred candidate name" style="margin-top:10px"><input id=issue maxlength=120 placeholder="Optional: issue influencing your choice" style="margin-top:10px"><button onclick=vote() style="margin-top:10px">Submit preference →</button><div id=msg class=muted style="margin-top:10px;font-size:13px"></div></div>
 <div class="glass card"><div class=cardHead><div><h2 id=rt>Live participant results</h2><span class=muted>Voluntary website responses</span></div><span class=pill>Live</span></div><div id=results><p class=muted>Select a county to explore aggregate participant results.</p></div></div></section>
 <section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
-<section class="glass adwrap"><div class=adlabel>Advertisement</div><div class=ad><div><b>Premium advertising space</b><small>Sponsored content will appear here, clearly separated from participation controls and results.</small></div></div></section>
+<section class="glass adwrap"><div class=adlabel>Advertisement</div><div class=ad id=liveAd><div><b>Premium advertising space</b><small>Sponsored content will appear here, clearly separated from participation controls and results.</small></div></div></section>
 <section class="glass notice"><b>Transparency:</b> Results show voluntary Kenya Pulse participants and are not representative of all registered voters. They should not be interpreted as an election forecast. Individual choices are not publicly displayed. Candidate names are participant-entered and their appearance is not an endorsement. <a href="/methodology" style="color:#ffd54a">Read methodology →</a></section>
 <footer class=footer><span>© Kenya Pulse · Open participation dashboard</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/methodology">Methodology</a></span></footer></main>
 <script>
@@ -35,7 +38,8 @@ const C=document.getElementById('county'),R=document.getElementById('race');C.on
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
 async function vote(){let candidate=document.getElementById('candidate').value.trim(),issue=document.getElementById('issue').value.trim(),msg=document.getElementById('msg');if(!C.value||candidate.length<2){msg.textContent='Choose a county and enter a candidate name.';return}let x=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate,issue})});let j=await x.json();msg.textContent=j.message||j.error;if(x.ok){document.getElementById('candidate').value='';load()}}
-async function load(){if(!C.value)return;let x=await fetch('/api/results?county='+encodeURIComponent(C.value)+'&race='+encodeURIComponent(R.value)),j=await x.json();document.getElementById('metricTotal').textContent=j.total;document.getElementById('rt').textContent=C.value+' · '+R.value;let h='';for(let a of j.results){h+='<div class=row><b>'+esc(a.candidate)+'</b><span style="float:right">'+a.votes+' · '+a.pct+'%</span><div class=bar><div class=fill style="width:'+a.pct+'%"></div></div></div>'}document.getElementById('results').innerHTML=h||'<p class=muted>No responses yet for this county and race.</p>'}function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+async function loadAd(){let x=await fetch('/api/ad?county='+encodeURIComponent(C.value||'')),j=await x.json();if(j.ad){let a=j.ad,box=document.getElementById('liveAd');box.innerHTML='<div><b>'+esc(a.headline||a.business)+'</b><small>Sponsored by '+esc(a.business)+'</small>'+(a.url?'<div style="margin-top:10px"><a href="'+a.click_url+'" rel="sponsored noopener" style="color:#ffd54a">Visit advertiser →</a></div>':'')+'</div>'}}loadAd();
+async function load(){if(!C.value)return;loadAd();let x=await fetch('/api/results?county='+encodeURIComponent(C.value)+'&race='+encodeURIComponent(R.value)),j=await x.json();document.getElementById('metricTotal').textContent=j.total;document.getElementById('rt').textContent=C.value+' · '+R.value;let h='';for(let a of j.results){h+='<div class=row><b>'+esc(a.candidate)+'</b><span style="float:right">'+a.votes+' · '+a.pct+'%</span><div class=bar><div class=fill style="width:'+a.pct+'%"></div></div></div>'}document.getElementById('results').innerHTML=h||'<p class=muted>No responses yet for this county and race.</p>'}function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 </script></body></html>'''
 
 @app.get("/")
@@ -68,6 +72,45 @@ def advertise():
   else: notice="Campaign could not be submitted. Check the fields and commercial-ad policy; destination links must start with http:// or https://."
  html="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Advertise • Kenya Pulse</title><style>*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 10%,#00ff8840,transparent 28%),radial-gradient(circle at 90% 10%,#ffd90030,transparent 25%),#020806;color:white;font-family:Inter,system-ui}.w{max-width:1000px;margin:auto;padding:35px 18px}.glass{background:linear-gradient(135deg,#ffffff18,#ffffff06);border:1px solid #ffffff30;box-shadow:inset 0 1px #ffffff45,0 30px 90px #0008;backdrop-filter:blur(35px) saturate(170%);border-radius:30px}.hero,.form{padding:28px;margin-bottom:16px}h1{font-size:clamp(42px,7vw,70px);margin:8px 0}.muted{color:#a9beb1}.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.p{padding:20px}.price{font-size:32px;font-weight:900;color:#ffe064}input,select,button{width:100%;padding:15px;margin:6px 0;border-radius:15px;border:1px solid #ffffff25;background:#ffffff0b;color:white;font:inherit}option{color:#111}button{background:linear-gradient(135deg,#78ffb3,#e3ff72);color:#04120a;font-weight:900;cursor:pointer}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.notice{padding:14px;border:1px solid #8affb855;border-radius:14px;background:#48ff9a10}.tag{font:700 11px monospace;letter-spacing:.15em;color:#7dffb7}@media(max-width:700px){.plans,.grid{grid-template-columns:1fr}}</style></head><body><main class=w><section class="glass hero"><div class=tag>KENYA PULSE • ADVERTISER STUDIO</div><h1>Put your brand<br>inside the pulse.</h1><p class=muted>Choose a national or county placement. Advertising is clearly labelled and kept separate from participation choices and results.</p></section><section class=plans><div class="glass p"><b>COUNTY STARTER</b><div class=price>KSh 5K</div><span class=muted>County placement</span></div><div class="glass p"><b>COUNTY PRO</b><div class=price>KSh 15K</div><span class=muted>Premium county placement</span></div><div class="glass p"><b>NATIONAL</b><div class=price>KSh 50K</div><span class=muted>Across the network</span></div></section><form class="glass form" method=post><h2>Launch a campaign</h2>{% if notice %}<p class=notice>{{notice}}</p>{% endif %}<div class=grid><input name=business required placeholder="Business / brand"><input type=email name=email required placeholder="Business email"><input name=phone placeholder="Phone number"><input name=headline placeholder="Ad headline"></div><div class=grid><select name=scope id=scope onchange="county.disabled=this.value==='National'"><option>County</option><option>National</option></select><select name=county id=county>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><select name=package><option>County Starter</option><option>County Pro</option><option>National</option></select><input name=url placeholder="Business website / campaign link (optional)"><button>SUBMIT CAMPAIGN FOR REVIEW →</button><p class=muted>No payment is collected at this stage. Approved campaigns can be connected to M-Pesa once merchant payment credentials are configured.</p></form></main></body></html>"""
  return render_template_string(html,counties=COUNTIES,notice=notice)
+
+@app.get("/api/ad")
+def serve_ad():
+ county=request.args.get("county","")
+ with conn() as db:
+  row=db.execute("""SELECT id,business,headline,url,scope,county FROM ad_orders
+   WHERE status='ACTIVE' AND (starts_at IS NULL OR datetime(starts_at)<=datetime('now'))
+   AND (ends_at IS NULL OR datetime(ends_at)>=datetime('now'))
+   AND (scope='National' OR county=?)
+   ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1""",(county,)).fetchone()
+  if not row:return jsonify(ad=None)
+  db.execute("UPDATE ad_orders SET impressions=COALESCE(impressions,0)+1 WHERE id=?",(row["id"],))
+  ad=dict(row); ad["click_url"]="/api/ad-click/"+str(row["id"])
+  return jsonify(ad=ad)
+
+@app.get("/api/ad-click/<int:ad_id>")
+def ad_click(ad_id):
+ with conn() as db:
+  row=db.execute("SELECT url FROM ad_orders WHERE id=? AND status='ACTIVE'",(ad_id,)).fetchone()
+  if not row or not row["url"]:return redirect("/")
+  db.execute("UPDATE ad_orders SET clicks=COALESCE(clicks,0)+1 WHERE id=?",(ad_id,))
+  return redirect(row["url"],code=302)
+
+@app.get("/admin/ad-metrics")
+def ad_metrics():
+ if not ADMIN_KEY or not hmac.compare_digest(request.args.get("key",""),ADMIN_KEY): abort(404)
+ with conn() as db:
+  rows=[dict(x) for x in db.execute("""SELECT id,business,scope,county,package,budget,status,impressions,clicks,
+   CASE WHEN COALESCE(impressions,0)>0 THEN ROUND(COALESCE(clicks,0)*100.0/impressions,2) ELSE 0 END ctr
+   FROM ad_orders ORDER BY id DESC LIMIT 100""").fetchall()]
+ return jsonify(campaigns=rows)
+
+@app.post("/admin/ads/<int:ad_id>/status")
+def ad_status(ad_id):
+ if not ADMIN_KEY or not hmac.compare_digest(request.args.get("key",""),ADMIN_KEY): abort(404)
+ status=(request.get_json(silent=True) or {}).get("status","")
+ if status not in {"PENDING_REVIEW","ACTIVE","PAUSED","ENDED"}:return jsonify(error="Invalid status"),400
+ with conn() as db:db.execute("UPDATE ad_orders SET status=? WHERE id=?",(status,ad_id))
+ return jsonify(ok=True,status=status)
 
 @app.get("/admin/ads")
 def admin_ads():
