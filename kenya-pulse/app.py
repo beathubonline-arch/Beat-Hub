@@ -59,16 +59,21 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS candidates(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,race TEXT NOT NULL,county TEXT,constituency TEXT,ward TEXT,party TEXT,status TEXT NOT NULL DEFAULT 'PROSPECTIVE',source_url TEXT,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_scope_unique ON candidates(name,race,COALESCE(county,''),COALESCE(constituency,''),COALESCE(ward,''));")
   else:
-   c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes_v2(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
    old_exists=c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
-   if old_exists:
+   if not old_exists:
+    c.execute("""CREATE TABLE pulse_votes(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   else:
     cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
-    con_expr="constituency" if "constituency" in cols else "NULL"
-    ward_expr="ward" if "ward" in cols else "NULL"
-    c.execute(f"""INSERT OR IGNORE INTO pulse_votes_v2(id,county,race,candidate,issue,fp,constituency,ward,created_at)
-                  SELECT id,county,race,candidate,issue,fp,{con_expr},{ward_expr},created_at FROM pulse_votes""")
-    c.execute("DROP TABLE pulse_votes")
-   c.execute("ALTER TABLE pulse_votes_v2 RENAME TO pulse_votes")
+    for col in ("constituency","ward"):
+     if col not in cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN "+col+" TEXT")
+   # Remove only the legacy table-level uniqueness rule if present; never rebuild healthy tables on startup.
+   legacy_sql=c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
+   legacy_sql=(legacy_sql[0] or "") if legacy_sql else ""
+   if "UNIQUE(county,race,fp)" in legacy_sql.replace(" ",""):
+    c.execute("""CREATE TABLE pulse_votes_new(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+    c.execute("""INSERT OR IGNORE INTO pulse_votes_new(id,county,race,candidate,issue,fp,constituency,ward,created_at)
+                 SELECT id,county,race,candidate,issue,fp,constituency,ward,created_at FROM pulse_votes""")
+    c.execute("DROP TABLE pulse_votes");c.execute("ALTER TABLE pulse_votes_new RENAME TO pulse_votes")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_unique ON pulse_votes(county,race,IFNULL(constituency,''),IFNULL(ward,''),fp)")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race,constituency,ward)")
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
