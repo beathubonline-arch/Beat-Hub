@@ -12,6 +12,8 @@ def init():
     with conn() as c:
        c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(county,race,fp));""")
        c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race);")
+       c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+       c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
 try:init()
 except Exception as e: print("db init",e)
 
@@ -19,18 +21,44 @@ HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" 
 *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui;background:#07150f;color:#f4fff8}.top{padding:18px 5%;display:flex;justify-content:space-between;border-bottom:1px solid #21432f;position:sticky;top:0;background:#07150fee;backdrop-filter:blur(12px)}.brand{font-weight:900;font-size:22px}.brand b{color:#ffd447}.wrap{max-width:1050px;margin:auto;padding:42px 20px}.hero{padding:28px 0}.hero h1{font-size:clamp(38px,7vw,72px);line-height:.98;margin:0 0 18px}.hero span{color:#ffd447}.muted{color:#a8c7b4}.card{background:#0d2117;border:1px solid #21432f;border-radius:22px;padding:22px;margin:18px 0}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}select,input,button{width:100%;padding:15px;border-radius:12px;border:1px solid #315942;background:#091810;color:white;font-size:16px}button{background:#ffd447;color:#132017;font-weight:900;border:0;cursor:pointer}.results{margin-top:18px}.row{padding:13px 0;border-bottom:1px solid #1c3b29}.bar{height:8px;background:#173522;border-radius:10px;overflow:hidden;margin-top:7px}.fill{height:100%;background:#ffd447}.pill{display:inline-block;padding:7px 11px;border:1px solid #315942;border-radius:999px;margin:4px;color:#cce8d6}.notice{font-size:13px;line-height:1.5;background:#10271b;padding:14px;border-radius:12px}.ad{margin-top:25px;border:1px dashed #577c65;padding:18px;border-radius:16px;text-align:center;color:#a8c7b4}@media(max-width:650px){.grid{grid-template-columns:1fr}}</style></head>
 <body><div class=top><div class=brand>KENYA <b>PULSE</b></div><div class=muted>47 Counties • Live</div></div><main class=wrap><section class=hero><div class=pill>Independent participation dashboard</div><h1>What are people in your <span>county</span> saying?</h1><p class=muted>Submit your current preference, then see aggregated participant results update live. This is an open online pulse, not a scientific election forecast.</p></section>
 <div class=card><h2>Join your county pulse</h2><div class=grid><select id=county><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race>{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><input id=candidate maxlength=80 placeholder="Type your preferred candidate's name" style="margin-top:12px"><input id=issue maxlength=120 placeholder="Optional: biggest issue influencing you (jobs, prices, roads…)" style="margin-top:12px"><button onclick=vote() style="margin-top:12px">Submit preference & see live results</button><div id=msg class=muted style="margin-top:10px"></div></div>
+<div class=card id=sharebox style="display:none"><h2>Bring your county into the conversation</h2><p class=muted>Share this county pulse. Participation is always free and sharing is optional.</p><div class=grid><button onclick="sharePulse()">Share county pulse</button><button onclick="copyPulse()">Copy county link</button></div><div id=sharemsg class=muted style="margin-top:10px"></div></div>
 <div class=card><h2 id=rt>Live participant results</h2><div id=results class=results><p class=muted>Select a county to load results.</p></div></div>
 <div class=notice><b>Transparency:</b> Results represent people who voluntarily participated on this website and should not be interpreted as representative of all registered voters. Individual choices are not displayed publicly. Duplicate submissions are restricted using a one-way technical fingerprint. Candidate names are participant-entered and are not endorsements. <a href="/methodology" style="color:#ffd447">Methodology</a>.</div>
 <div class=ad>Reserved advertising space — kept separate from poll choices and results.</div></main>
 <script>
-const C=document.getElementById('county'),R=document.getElementById('race'); C.onchange=load;R.onchange=load;
+const C=document.getElementById('county'),R=document.getElementById('race'); C.onchange=()=>{syncUrl();load()};R.onchange=load;
+const initialCounty={{ initial_county|tojson }}; if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';load()}
+function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
+function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}
+async function sharePulse(){let title='Kenya Pulse • '+C.value,text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}
+async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
 async function vote(){let candidate=document.getElementById('candidate').value.trim(),issue=document.getElementById('issue').value.trim(),msg=document.getElementById('msg');if(!C.value||candidate.length<2){msg.textContent='Choose a county and enter a candidate name.';return}let x=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate,issue})});let j=await x.json();msg.textContent=j.message||j.error;if(x.ok){document.getElementById('candidate').value='';load()}}
 async function load(){if(!C.value)return;let x=await fetch('/api/results?county='+encodeURIComponent(C.value)+'&race='+encodeURIComponent(R.value)),j=await x.json();document.getElementById('rt').textContent=C.value+' • '+R.value+' • '+j.total+' participants';let h='';for(let a of j.results){h+='<div class=row><b>'+esc(a.candidate)+'</b><span style="float:right">'+a.votes+' • '+a.pct+'%</span><div class=bar><div class=fill style="width:'+a.pct+'%"></div></div></div>'}document.getElementById('results').innerHTML=h||'<p class=muted>No responses yet. You can be the first participant in this county race.</p>'}
 function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 </script></body></html>'''
 
 @app.get("/")
-def home(): return render_template_string(HTML,counties=COUNTIES,races=RACES)
+def home():
+ src=re.sub(r"[^a-zA-Z0-9_-]","",request.args.get("src","direct"))[:60]
+ with conn() as c:c.execute("INSERT INTO pulse_visits(county,source) VALUES(?,?)",(None,src))
+ return render_template_string(HTML,counties=COUNTIES,races=RACES,initial_county=None)
+
+@app.get("/county/<slug>")
+def county_page(slug):
+ county=next((x for x in COUNTIES if re.sub(r"[^a-z0-9]+","-",x.lower()).strip("-")==slug.lower()),None)
+ if not county:return "County not found",404
+ src=re.sub(r"[^a-zA-Z0-9_-]","",request.args.get("src","direct"))[:60]
+ with conn() as c:c.execute("INSERT INTO pulse_visits(county,source) VALUES(?,?)",(county,src))
+ return render_template_string(HTML,counties=COUNTIES,races=RACES,initial_county=county)
+
+@app.get("/growth")
+def growth():
+ with conn() as c:
+  rows=c.execute("""SELECT COALESCE(county,'Homepage') county,source,count(*) visits FROM pulse_visits GROUP BY county,source ORDER BY visits DESC LIMIT 100""").fetchall()
+  votes=c.execute("SELECT county,count(*) n FROM pulse_votes GROUP BY county ORDER BY n DESC").fetchall()
+ data={"traffic":[dict(x) for x in rows],"responses":[dict(x) for x in votes]}
+ return jsonify(data)
 @app.get("/health")
 def health(): return {"ok":True,"counties":47}
 @app.get("/methodology")
