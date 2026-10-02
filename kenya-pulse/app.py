@@ -343,13 +343,29 @@ def methodology():
 def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
- sql="SELECT name,party,status FROM candidates WHERE active=1 AND race=?";args=[race]
+ sql="SELECT id,name,party,status FROM candidates WHERE active=1 AND race=?";args=[race]
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
  sql+=" ORDER BY name"
- with conn() as c: rows=c.execute(sql,args).fetchall()
- return jsonify(candidates=[dict(x) for x in rows])
+ with conn() as c:
+  rows=c.execute(sql,args).fetchall()
+  out=[]
+  for x in rows:
+   item=dict(x); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=1 ORDER BY alias",(item["id"],)).fetchall()
+   item["aliases"]=[a["alias"] for a in aliases];out.append(item)
+ return jsonify(candidates=out)
+
+@app.post("/api/candidates/resolve")
+def candidate_resolve():
+ d=request.get_json(silent=True) or {};typed=re.sub(r"\s+"," ",str(d.get("name") or "").strip())[:80];race=str(d.get("race") or "").strip();county=str(d.get("county") or "").strip();constituency=str(d.get("constituency") or "").strip();ward=str(d.get("ward") or "").strip()
+ if len(typed)<2 or race not in RACES:return jsonify(matches=[]),400
+ sql="SELECT DISTINCT c.id,c.name,c.party,c.status FROM candidates c LEFT JOIN candidate_aliases a ON a.candidate_id=c.id WHERE c.active=1 AND c.race=? AND (LOWER(c.name)=LOWER(?) OR (a.verified=1 AND LOWER(a.alias)=LOWER(?)))";args=[race,typed,typed]
+ if race!="President":sql+=" AND c.county=?";args.append(county)
+ if race in {"Member of Parliament","MCA"}:sql+=" AND c.constituency=?";args.append(constituency)
+ if race=="MCA":sql+=" AND c.ward=?";args.append(ward)
+ with conn() as c:rows=c.execute(sql,args).fetchall()
+ return jsonify(matches=[dict(x) for x in rows],typed=typed)
 
 @app.post("/api/vote")
 def vote():
