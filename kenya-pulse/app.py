@@ -333,7 +333,8 @@ def vote():
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
  # Neutral integrity control: cap rapid submissions from the same technical fingerprint.
  with conn() as c:
-  recent=c.execute("SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= datetime('now','-10 minutes')",(fp,)).fetchone()
+  rate_sql="SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= CURRENT_TIMESTAMP - INTERVAL '10 minutes'" if c.pg else "SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= datetime('now','-10 minutes')"
+  recent=c.execute(rate_sql,(fp,)).fetchone()
   n=recent["n"] if hasattr(recent,"keys") else recent[0]
   if n>=8:return jsonify(error="Too many submissions in a short period. Please try again later."),429
  try:
