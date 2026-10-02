@@ -1,27 +1,54 @@
 import os, hashlib, re, sqlite3, base64, json, hmac
+try:\n import psycopg2\n import psycopg2.extras\nexcept ImportError:\n psycopg2=None
 from flask import Flask, request, jsonify, render_template_string, abort, redirect
 app=Flask(__name__)
-DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
+DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")\nDATABASE_URL=os.environ.get("DATABASE_URL","")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
 ADMIN_KEY=os.environ.get("PULSE_ADMIN_KEY","")
 COUNTIES=["Mombasa","Kwale","Kilifi","Tana River","Lamu","Taita-Taveta","Garissa","Wajir","Mandera","Marsabit","Isiolo","Meru","Tharaka-Nithi","Embu","Kitui","Machakos","Makueni","Nyandarua","Nyeri","Kirinyaga","Murang'a","Kiambu","Turkana","West Pokot","Samburu","Trans Nzoia","Uasin Gishu","Elgeyo-Marakwet","Nandi","Baringo","Laikipia","Nakuru","Narok","Kajiado","Kericho","Bomet","Kakamega","Vihiga","Bungoma","Busia","Siaya","Kisumu","Homa Bay","Migori","Kisii","Nyamira","Nairobi City"]
 RACES=["President","Governor","Senator","Woman Representative","Member of Parliament","MCA"]
 
-def conn():
-    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
+class DBConn:
+ def __init__(self):
+  self.pg=bool(DATABASE_URL)
+  if self.pg:
+   self.c=psycopg2.connect(DATABASE_URL,sslmode="require")
+   self.cur=self.c.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+  else:
+   self.c=sqlite3.connect(DB);self.c.row_factory=sqlite3.Row;self.cur=None
+ def execute(self,sql,args=()):
+  if self.pg:
+   sql=sql.replace("?","%s").replace("datetime('now')","CURRENT_TIMESTAMP")
+   self.cur.execute(sql,args);return self.cur
+  return self.c.execute(sql,args)
+ def __enter__(self):return self
+ def __exit__(self,t,v,tb):
+  if t:self.c.rollback()
+  else:self.c.commit()
+  if self.cur:self.cur.close()
+  self.c.close()
+def conn():return DBConn()
 def init():
-    with conn() as c:
-       c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(county,race,fp));""")
-       c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race);")
-       for col in ["constituency","ward"]:
-        try:c.execute("ALTER TABLE pulse_votes ADD COLUMN "+col+" TEXT")
-        except sqlite3.OperationalError:pass
-       c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
-       c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
-       c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id INTEGER PRIMARY KEY AUTOINCREMENT,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
-       for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0")]:
-        try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
-        except sqlite3.OperationalError:pass
+ with conn() as c:
+  if c.pg:
+   c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id BIGSERIAL PRIMARY KEY,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_unique ON pulse_votes(county,race,COALESCE(constituency,''),COALESCE(ward,''),fp);")
+   c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race,constituency,ward);")
+   c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id BIGSERIAL PRIMARY KEY,county TEXT,source TEXT,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
+   c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id BIGSERIAL PRIMARY KEY,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',starts_at TIMESTAMPTZ,ends_at TIMESTAMPTZ,impressions INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+  else:
+   c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(county,race,fp));""")
+   c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race);")
+   for col in ["constituency","ward"]:
+    try:c.execute("ALTER TABLE pulse_votes ADD COLUMN "+col+" TEXT")
+    except sqlite3.OperationalError:pass
+   c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
+   c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id INTEGER PRIMARY KEY AUTOINCREMENT,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0")]:
+    try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
+    except sqlite3.OperationalError:pass
 try:init()
 except Exception as e: print("db init",e)
 
@@ -234,7 +261,7 @@ def vote():
   with conn() as c:
    c.execute("INSERT INTO pulse_votes(county,race,candidate,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?)",(county,race,candidate,issue,fp,constituency or None,ward or None))
   return jsonify(message="Preference counted. Live results updated.")
- except sqlite3.IntegrityError:return jsonify(error="A response from this device/network is already recorded for this county and race."),409
+ except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this device/network is already recorded for this area and race."),409
 @app.get("/api/results")
 def results():
  county=request.args.get("county","");race=request.args.get("race","President")
