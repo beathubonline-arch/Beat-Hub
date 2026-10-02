@@ -42,6 +42,11 @@ class DBConn:
   if self.cur:self.cur.close()
   self.c.close()
 def conn():return DBConn()
+def admin_authorized():
+ if not ADMIN_KEY:return False
+ auth=request.headers.get("Authorization","")
+ supplied=auth[7:].strip() if auth.lower().startswith("bearer ") else request.args.get("key","")
+ return hmac.compare_digest(str(supplied),str(ADMIN_KEY))
 def init():
  with conn() as c:
   if c.pg:
@@ -104,8 +109,8 @@ async function populateWards(){
  sel.innerHTML='<option value="">Choose ward</option>';if(!county||!con)return;
  try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)+'&constituency='+encodeURIComponent(con)),j=await r.json();(j.wards||[]).forEach(x=>sel.add(new Option(x,x)));loadCandidates();}catch(e){}
 }
-function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=()=>{populateConstituencies();syncUrl();clearAreas();loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';populateConstituencies();load()}
-function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}document.getElementById('constituency').addEventListener('change',load);document.getElementById('ward').addEventListener('change',load);
+function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=()=>{clearAreas();populateConstituencies();syncUrl();loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';populateConstituencies();load()}
+function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
 async function loadCandidates(){
@@ -216,7 +221,9 @@ document.getElementById('countySearch').addEventListener('keydown',e=>{if(e.key=
  return render_template_string(html,cards=cards,totalv=totalv,totalr=totalr,rate=rate,slug=lambda s:re.sub(r"[^a-z0-9]+","-",s.lower()).strip("-"))
 
 @app.get("/health")
-def health(): return {"ok":True,"counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":"postgres" if DATABASE_URL else "sqlite-fallback"}
+def health():
+ dbmode="postgres" if DATABASE_URL else "sqlite-fallback"
+ return {"ok":True,"production_ready":dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"candidate_registry":True,"warning":None if dbmode=="postgres" else "Persistent PostgreSQL is not attached; responses may be lost on service restart."}
 @app.get("/privacy")
 def privacy():
  return legal_page("Privacy Policy","Effective 2 October 2026",[
@@ -326,6 +333,7 @@ def results():
  constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race in {"Member of Parliament","MCA"} and not constituency:return jsonify(total=0,results=[],area_required="constituency")
  if race=="MCA" and not ward:return jsonify(total=0,results=[],area_required="ward")
+ if race in {"Member of Parliament","MCA"} and not geography_ok(county,constituency,ward if race=="MCA" else ""):return jsonify(error="Invalid constituency or ward for the selected county."),400
  sql="SELECT candidate,count(*) votes FROM pulse_votes WHERE county=? AND race=?";args=[county,race]
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
