@@ -59,11 +59,18 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS candidates(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,race TEXT NOT NULL,county TEXT,constituency TEXT,ward TEXT,party TEXT,status TEXT NOT NULL DEFAULT 'PROSPECTIVE',source_url TEXT,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_scope_unique ON candidates(name,race,COALESCE(county,''),COALESCE(constituency,''),COALESCE(ward,''));")
   else:
-   c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(county,race,fp));""")
-   c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race);")
-   for col in ["constituency","ward"]:
-    try:c.execute("ALTER TABLE pulse_votes ADD COLUMN "+col+" TEXT")
-    except sqlite3.OperationalError:pass
+   c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes_v2(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   old_exists=c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
+   if old_exists:
+    cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
+    con_expr="constituency" if "constituency" in cols else "NULL"
+    ward_expr="ward" if "ward" in cols else "NULL"
+    c.execute(f"""INSERT OR IGNORE INTO pulse_votes_v2(id,county,race,candidate,issue,fp,constituency,ward,created_at)
+                  SELECT id,county,race,candidate,issue,fp,{con_expr},{ward_expr},created_at FROM pulse_votes""")
+    c.execute("DROP TABLE pulse_votes")
+   c.execute("ALTER TABLE pulse_votes_v2 RENAME TO pulse_votes")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_unique ON pulse_votes(county,race,IFNULL(constituency,''),IFNULL(ward,''),fp)")
+   c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race,constituency,ward)")
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
    c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id INTEGER PRIMARY KEY AUTOINCREMENT,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
@@ -222,8 +229,11 @@ document.getElementById('countySearch').addEventListener('keydown',e=>{if(e.key=
 
 @app.get("/health")
 def health():
- dbmode="postgres" if DATABASE_URL else "sqlite-fallback"
- return {"ok":True,"production_ready":dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"candidate_registry":True,"warning":None if dbmode=="postgres" else "Persistent PostgreSQL is not attached; responses may be lost on service restart."}
+ dbmode="postgres" if DATABASE_URL else "sqlite-fallback";db_ok=False
+ try:
+  with conn() as c:c.execute("SELECT 1").fetchone();db_ok=True
+ except Exception:db_ok=False
+ return {"ok":db_ok,"production_ready":db_ok and dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"database_ok":db_ok,"candidate_registry":True,"warning":None if db_ok and dbmode=="postgres" else "Persistent PostgreSQL is not attached and verified; responses may be lost on service restart."}
 @app.get("/privacy")
 def privacy():
  return legal_page("Privacy Policy","Effective 2 October 2026",[
@@ -321,6 +331,11 @@ def vote():
  if race not in {"Member of Parliament","MCA"}: constituency=""; ward=""
  if race=="Member of Parliament": ward=""
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
+ # Neutral integrity control: cap rapid submissions from the same technical fingerprint.
+ with conn() as c:
+  recent=c.execute("SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= datetime('now','-10 minutes')",(fp,)).fetchone()
+  n=recent["n"] if hasattr(recent,"keys") else recent[0]
+  if n>=8:return jsonify(error="Too many submissions in a short period. Please try again later."),429
  try:
   with conn() as c:
    c.execute("INSERT INTO pulse_votes(county,race,candidate,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?)",(county,race,candidate,issue,fp,constituency or None,ward or None))
