@@ -24,7 +24,7 @@
 
 ## Tests and their limits
 
-1. Python suite against SQLite and real local PostgreSQL: **39 passed; 1 SQLite-only skip of the PostgreSQL import test**, including the final health/admin additions.
+1. Python suite against SQLite and real local PostgreSQL: **41 passed; 1 SQLite-only skip of the PostgreSQL import test**, including the final health/admin additions.
 2. Independent localhost HTTP journey: six seats, aliases, optional payment disabled safely, actual app-process restart, identical results/aliases and saved progress, duplicate rejection after restart.
 3. Node execution of the shipped UI script with a DOM model: no support on first five steps; support after MCA; dismissed prompt stays hidden after refresh; explicit identity confirmation; multiple matches; unknown name rejected. This is **not a visual browser or mobile test**.
 4. `pip-audit` on pinned runtime dependencies: no known vulnerabilities reported on 3 October 2026. This is not a guarantee against unknown vulnerabilities.
@@ -93,3 +93,9 @@ Use the chosen provider's exact MX, SPF and DKIM records. Publish only one SPF r
 - Existing inline JavaScript requires CSP `unsafe-inline`; the policy still restricts external origins, framing, base URLs and forms. A nonce/external-script refactor is a separate hardening step.
 - The proxy fingerprint trusts the nearest forwarded address only on Render. Confirm actual proxy behavior during staging tests; compare existing fingerprint continuity before launch.
 - No authenticated Render environment inspection, production backup, database attachment, custom-domain setup, email authentication or visual mobile verification was possible with the current access.
+
+## Resumed verification
+
+A newer production commit `896096d447e99f2024614eb19c369873c7bf8ff7` added Sauti ya Ground and was recorded live by Render at 03:43 UTC on 3 October. This branch now integrates that feature, protects its writes with CSRF, prevents repeated confirmations by the same technical fingerprint and includes its records in the conservative migration tool. No production restart was triggered by this work.
+
+The initial GitHub Actions run passed the 39 database tests and UI logic checks but failed the HTTP smoke startup. Reproduction from the repository root showed Python importing BeatHub's top-level `app` package instead of `kenya-pulse/app.py`. The smoke subprocess now explicitly starts in the Kenya Pulse directory. The expanded local suite and independent HTTP restart test cover the community-issues feature as well. Live health still timed out on the resumed check; the database preservation/deployment gate remains.

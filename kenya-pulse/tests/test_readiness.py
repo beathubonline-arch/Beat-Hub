@@ -346,3 +346,23 @@ def test_empty_target_import_dry_run_apply_and_refuse_overwrite(pulse, tmp_path)
     with pytest.raises(ValueError):migrate(source, pulse.conn, apply=True)
     with sqlite3.connect(source) as db:
         assert db.execute('SELECT count(*) FROM pulse_votes').fetchone()[0] == 1
+
+
+def test_community_issues_preserved_with_csrf_and_moderation(pulse):
+    c, h = client(pulse)
+    assert c.get('/ground').status_code == 200
+    assert 'X-CSRF-Token' in c.get('/ground').text
+    body = {'county':'Kericho','constituency':'Ainamoi','ward':'Kapsoit','category':'Water','description':'Local test water supply issue','landmark':'Test landmark','language':'English'}
+    assert c.post('/api/ground/issues',json=body).status_code == 403
+    assert c.post('/api/ground/issues',json=body,headers=h).status_code == 201
+    assert c.get('/api/ground/issues').json['issues'] == []
+    with pulse.conn() as db:
+        row=db.execute('SELECT id,status,description FROM ground_issues').fetchone()
+        assert row['status']=='UNDER_REVIEW'
+        assert row['description']==body['description']
+        issue_id=row['id']
+    assert c.post(f'/api/ground/issues/{issue_id}/confirm',headers=h).status_code == 404
+    with pulse.conn() as db:db.execute("UPDATE ground_issues SET status='PUBLISHED' WHERE id=?",(issue_id,))
+    assert c.post(f'/api/ground/issues/{issue_id}/confirm',headers=h).status_code == 200
+    assert c.post(f'/api/ground/issues/{issue_id}/confirm',headers=h).status_code == 409
+    assert c.get('/api/ground/issues').json['issues'][0]['confirmations'] == 2

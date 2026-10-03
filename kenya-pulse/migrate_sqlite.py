@@ -8,7 +8,7 @@ import argparse
 import sqlite3
 from pathlib import Path
 
-TABLES = ('candidates', 'candidate_aliases', 'pulse_votes', 'pulse_visits', 'ad_orders', 'support_contributions')
+TABLES = ('candidates', 'candidate_aliases', 'pulse_votes', 'pulse_visits', 'ad_orders', 'support_contributions', 'ground_issues', 'ground_confirmations')
 BOOLEAN_COLUMNS = {('candidates', 'active'), ('candidates', 'identity_verified'), ('candidate_aliases', 'verified')}
 
 

@@ -37,7 +37,7 @@ def call(path,data=None,headers=None):
 
 def start():
     global server
-    server=subprocess.Popen([sys.executable,'-c',f"from app import app;app.config['SESSION_COOKIE_SECURE']=False;app.run(host='127.0.0.1',port={port},use_reloader=False)"],env=env,stdout=log,stderr=log)
+    server=subprocess.Popen([sys.executable,'-c',f"from app import app;app.config['SESSION_COOKIE_SECURE']=False;app.run(host='127.0.0.1',port={port},use_reloader=False)"],env=env,cwd=root,stdout=log,stderr=log)
     for _ in range(100):
         try:
             if call('/health')[0]==200:return
@@ -68,7 +68,16 @@ try:
     before={r:call('/api/results?county=Kericho&race='+urllib.parse.quote(r)+('&constituency=Ainamoi' if i>=4 else '')+('&ward=Kapsoit' if i==5 else ''))[1] for i,r in enumerate(races)}
     registry=call('/api/candidates?race=President&county=Kericho')[1]
     assert call('/api/support/initialize',{'county':'Kericho'},headers)[0]==503
+    status,_=call('/api/ground/issues',{'county':'Kericho','constituency':'Ainamoi','ward':'Kapsoit','category':'Water','description':'HTTP test community water issue'},headers)
+    assert status==201 and call('/api/ground/issues')[1]['issues']==[]
+    with pg.cursor() as cur:
+        cur.execute('UPDATE '+schema+".ground_issues SET status='PUBLISHED' RETURNING id")
+        issue_id=cur.fetchone()[0]
+    assert call('/api/ground/issues/'+str(issue_id)+'/confirm',{},headers)[0]==200
+    issue_before=call('/api/ground/issues')[1]
     stop();start()
+    assert call('/api/ground/issues')[1]==issue_before
+    assert call('/api/ground/issues/'+str(issue_id)+'/confirm',{},headers)[0]==409
     assert call('/api/participation?county=Kericho')[1]['complete'] is True
     assert call('/api/candidates?race=President&county=Kericho')[1]==registry
     after={r:call('/api/results?county=Kericho&race='+urllib.parse.quote(r)+('&constituency=Ainamoi' if i>=4 else '')+('&ward=Kapsoit' if i==5 else ''))[1] for i,r in enumerate(races)}
@@ -76,7 +85,7 @@ try:
     token=call('/api/csrf')[1]['token']
     status,_=call('/api/vote',{**candidate,'candidate':candidate['name'],'candidate_id':cid},{'X-CSRF-Token':token})
     assert status==409
-    print('LOCAL HTTP PASS: six-seat journey, alias resolution, optional payment gate, app restart, preserved six responses/results/aliases, refresh and duplicate rejection.')
+    print('LOCAL HTTP PASS: six-seat journey, alias resolution, optional payment gate, app restart, preserved six responses/results/aliases, refresh, duplicate rejection and preserved moderated community issues.')
 finally:
     stop();log.close()
     with pg.cursor() as c:c.execute('DROP SCHEMA '+schema+' CASCADE')
