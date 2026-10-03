@@ -63,6 +63,8 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS ground_issues(id BIGSERIAL PRIMARY KEY,county TEXT NOT NULL,constituency TEXT,ward TEXT,landmark TEXT,category TEXT NOT NULL,description TEXT NOT NULL,transcript TEXT,language TEXT,media_type TEXT,media_url TEXT,status TEXT NOT NULL DEFAULT 'UNDER_REVIEW',confirmations INTEGER DEFAULT 1,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("""CREATE TABLE IF NOT EXISTS candidate_aliases(id BIGSERIAL PRIMARY KEY,candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,alias TEXT NOT NULL,verified BOOLEAN DEFAULT FALSE,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
+   c.execute("""CREATE TABLE IF NOT EXISTS support_payments(id BIGSERIAL PRIMARY KEY,reference TEXT NOT NULL UNIQUE,email TEXT NOT NULL,amount_kes INTEGER NOT NULL,currency TEXT NOT NULL DEFAULT 'KES',status TEXT NOT NULL DEFAULT 'INITIATED',paystack_transaction_id TEXT,channel TEXT,paid_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
    c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS candidate_id BIGINT REFERENCES candidates(id);")
   else:
    old_exists=c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
@@ -93,6 +95,8 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS ground_issues(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,constituency TEXT,ward TEXT,landmark TEXT,category TEXT NOT NULL,description TEXT NOT NULL,transcript TEXT,language TEXT,media_type TEXT,media_url TEXT,status TEXT NOT NULL DEFAULT 'UNDER_REVIEW',confirmations INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("""CREATE TABLE IF NOT EXISTS candidate_aliases(id INTEGER PRIMARY KEY AUTOINCREMENT,candidate_id INTEGER NOT NULL,alias TEXT NOT NULL,verified INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(candidate_id) REFERENCES candidates(id) ON DELETE CASCADE);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
+   c.execute("""CREATE TABLE IF NOT EXISTS support_payments(id INTEGER PRIMARY KEY AUTOINCREMENT,reference TEXT NOT NULL UNIQUE,email TEXT NOT NULL,amount_kes INTEGER NOT NULL,currency TEXT NOT NULL DEFAULT 'KES',status TEXT NOT NULL DEFAULT 'INITIATED',paystack_transaction_id TEXT,channel TEXT,paid_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
    if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
    for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0")]:
@@ -128,18 +132,34 @@ def support_initialize():
  if not re.match(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",email):return jsonify(error="Enter a valid email for the payment receipt."),400
  if not PAYSTACK_SECRET_KEY:return jsonify(error="Payments are being connected. Please try again shortly."),503
  ref="kp-"+secrets.token_hex(10); origin=request.url_root.rstrip("/")
+ with conn() as db: db.execute("INSERT INTO support_payments(reference,email,amount_kes,currency,status) VALUES(?,?,?,?,?)",(ref,email,amount,"KES","INITIATED"))
  payload={"email":email,"amount":str(amount*100),"currency":"KES","reference":ref,"callback_url":origin+"/support/callback","channels":["mobile_money","card"],"metadata":{"purpose":"optional_support","separate_from_participation":True}}
  try:
   out=paystack_request("/transaction/initialize",payload); d=out.get("data") or {}
-  return jsonify(authorization_url=d.get("authorization_url"),reference=d.get("reference"))
- except Exception:return jsonify(error="Could not start payment. Please try again."),502
+  if not d.get("authorization_url"): raise RuntimeError("missing authorization url")
+  return jsonify(authorization_url=d.get("authorization_url"),reference=ref)
+ except Exception:
+  with conn() as db: db.execute("UPDATE support_payments SET status='INIT_FAILED',updated_at=CURRENT_TIMESTAMP WHERE reference=?",(ref,))
+  return jsonify(error="Could not start payment. Please try again."),502
+
+def record_support_verification(ref,d):
+ if not ref or d.get("reference")!=ref:return False
+ with conn() as db:
+  row=db.execute("SELECT reference,amount_kes,currency,status FROM support_payments WHERE reference=?",(ref,)).fetchone()
+  if not row:return False
+  try: got=int(d.get("amount") or 0)
+  except: got=0
+  if d.get("status")!="success" or d.get("currency")!=row["currency"] or got!=int(row["amount_kes"])*100:return False
+  tx=str(d.get("id") or "")[:80]; channel=str(d.get("channel") or "")[:40]
+  db.execute("UPDATE support_payments SET status='SUCCESS',paystack_transaction_id=?,channel=?,paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE reference=? AND status<>'SUCCESS'",(tx,channel,ref))
+ return True
 
 @app.get("/support/callback")
 def support_callback():
  ref=request.args.get("reference","")[:100]
  if not ref:return redirect("/?support=missing")
  try:
-  out=paystack_request("/transaction/verify/"+ref); d=out.get("data") or {}; ok=d.get("status")=="success" and d.get("currency")=="KES"
+  d=(paystack_request("/transaction/verify/"+ref).get("data") or {}); ok=record_support_verification(ref,d)
   return redirect("/?support="+("success" if ok else "pending"))
  except Exception:return redirect("/?support=pending")
 
@@ -149,7 +169,8 @@ def paystack_webhook():
  raw=request.get_data(); sig=request.headers.get("x-paystack-signature",""); expected=hmac.new(PAYSTACK_SECRET_KEY.encode(),raw,hashlib.sha512).hexdigest()
  if not hmac.compare_digest(sig,expected):return "",401
  event=request.get_json(silent=True) or {}
- # Support remains strictly separate from participation/results. Fulfilment ledger follows after persistent DB is attached.
+ if event.get("event")=="charge.success":
+  d=event.get("data") or {}; record_support_verification(str(d.get("reference") or "")[:100],d)
  return "",200
 
 PULSE_95_CSS=r'''*{box-sizing:border-box}body{margin:0;color:#f8fff9;font-family:Inter,ui-sans-serif,system-ui;background:#0b2f1d;min-height:100vh}.world{position:fixed;inset:0;z-index:-3;background:radial-gradient(circle at 84% 12%,#ffe8a1 0 1.8%,#ffd9894d 2% 8%,transparent 17%),linear-gradient(180deg,#82aea8 0 23%,#72987b 37%,#2c7045 65%,#0b3c24 100%);transform:scale(1.015);filter:saturate(1.08) contrast(1.025)}.world:before{content:'';position:absolute;inset:23% -8% -8%;background:radial-gradient(ellipse at 64% 40%,rgba(194,224,190,.32),transparent 24%),linear-gradient(158deg,transparent 0 15%,#63885b 15.4% 27%,transparent 27.4%),linear-gradient(24deg,transparent 0 23%,#39774a 23.4% 50%,transparent 50.4%),linear-gradient(158deg,transparent 0 43%,#145a34 43.4% 70%,transparent 70.4%);filter:blur(.8px);opacity:.96}.world:after{content:'';position:absolute;inset:52% -4% -4%;background:radial-gradient(ellipse at 63% 8%,rgba(173,210,184,.42),transparent 26%),linear-gradient(8deg,#0b4227 0 46%,transparent 46.5%),linear-gradient(-8deg,#216a3d 0 57%,transparent 57.5%);filter:blur(1.2px);opacity:.98}.shade{position:fixed;inset:0;z-index:-2;background:linear-gradient(90deg,rgba(4,30,17,.70),transparent 48%),linear-gradient(0deg,rgba(3,28,15,.62),transparent 42%)}body:after{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 50% 48%,transparent 45%,rgba(3,24,13,.22) 100%);mix-blend-mode:multiply}.glass{background:linear-gradient(135deg,rgba(20,55,39,.58),rgba(39,73,56,.34));border:1px solid rgba(240,255,245,.34);box-shadow:inset 0 1px rgba(255,255,255,.38),inset 0 -1px rgba(255,255,255,.06),0 18px 48px rgba(3,25,14,.20);backdrop-filter:blur(22px) saturate(118%);-webkit-backdrop-filter:blur(22px) saturate(118%)}.kp95nav{max-width:1380px;width:calc(100% - 48px);height:66px;margin:18px auto 0;border-radius:24px;padding:0 20px;display:flex;align-items:center;gap:26px;background:linear-gradient(120deg,rgba(25,58,43,.54),rgba(44,76,60,.31));border:1px solid rgba(244,255,247,.32);box-shadow:inset 0 1px rgba(255,255,255,.40),0 16px 42px rgba(3,24,13,.16);backdrop-filter:blur(22px) saturate(118%);-webkit-backdrop-filter:blur(22px) saturate(118%)}.kp95nav .brand{font-size:21px;font-weight:950;letter-spacing:-.7px;margin-right:auto}.kp95nav .brand b{color:#7cf39d}.kp95nav a{color:#edf8f1;text-decoration:none;font-size:13px}.kp95wrap{max-width:1380px;margin:auto;padding:16px 24px 70px}.kp95panel{border-radius:30px;padding:28px}.kp95title{font-size:clamp(52px,6.3vw,88px);line-height:.91;letter-spacing:-4px}.kp95accent{color:#75f59b}.kp95muted{color:#bdd1c4}.kp95mark{font-size:30px;filter:drop-shadow(0 10px 20px rgba(3,25,14,.25))}.kp95btn{display:inline-flex;padding:14px 20px;border:0;border-radius:15px;background:#69ef91;color:#092817;font-weight:900;text-decoration:none;box-shadow:0 10px 28px rgba(30,205,92,.18)}@media(max-width:900px){.kp95nav{width:calc(100% - 24px);margin-top:10px}.kp95nav a{display:none}.kp95wrap{padding:10px 12px 50px}}@media(max-width:560px){.kp95nav{height:60px;border-radius:20px}.kp95panel{padding:19px;border-radius:24px}.kp95title{font-size:49px;letter-spacing:-2.7px}}'''
