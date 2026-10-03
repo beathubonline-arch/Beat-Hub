@@ -231,7 +231,7 @@ def ground_confirm(issue_id):
 def home():
  src=re.sub(r"[^a-zA-Z0-9_-]","",request.args.get("src","direct"))[:60]
  with conn() as c:c.execute("INSERT INTO pulse_visits(county,source) VALUES(?,?)",(None,src))
- return render_template_string(HTML,counties=COUNTIES,races=RACES,initial_county=None,county_mark='')
+ return redirect("/growth")
 
 @app.get("/county/<slug>")
 def county_page(slug):
