@@ -1,0 +1,38 @@
+name: Kenya Pulse readiness regression
+on:
+  push:
+    paths: ['kenya-pulse/**', '.github/workflows/kenya-pulse-readiness.yml']
+  pull_request:
+    paths: ['kenya-pulse/**', '.github/workflows/kenya-pulse-readiness.yml']
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-test-only
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PULSE_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=isolated-ci-test-only dbname=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r kenya-pulse/requirements.txt pytest
+      - run: python -m pytest --confcutdir=kenya-pulse kenya-pulse/tests -q
+      - run: node kenya-pulse/tests/test_ui.cjs
+      - run: python kenya-pulse/tests/smoke_local.py

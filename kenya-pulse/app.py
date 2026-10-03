@@ -1,11 +1,18 @@
-import os, hashlib, re, sqlite3, base64, json, hmac
+import os, hashlib, re, sqlite3, base64, json, hmac, secrets, time
+from urllib.parse import urlsplit
+from core import normalized_name, safe_url, validate_geography, unique_object, candidate_scope_coverage
 try:
  import psycopg2
  import psycopg2.extras
 except ImportError:
  psycopg2=None
-from flask import Flask, request, jsonify, render_template_string, abort, redirect
+from flask import Flask, request, jsonify, render_template_string, abort, redirect, session, g
 app=Flask(__name__)
+app.secret_key=os.environ.get("PULSE_SESSION_SECRET") or secrets.token_hex(32)
+app.config.update(SESSION_COOKIE_SECURE=True,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE="Lax",MAX_CONTENT_LENGTH=32768,MAX_FORM_MEMORY_SIZE=32768,MAX_FORM_PARTS=30)
+if os.environ.get("RENDER"):
+ app.config["TRUSTED_HOSTS"]=["kenya-pulse-live.onrender.com","kenyapulse.org","www.kenyapulse.org"]
+
 DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
 DATABASE_URL=os.environ.get("DATABASE_URL","")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
@@ -14,9 +21,10 @@ COUNTIES=["Mombasa","Kwale","Kilifi","Tana River","Lamu","Taita-Taveta","Garissa
 RACES=["President","Governor","Senator","Woman Representative","Member of Parliament","MCA"]
 GEOGRAPHY_PATH=os.path.join(os.path.dirname(__file__),"geography.json")
 try:
- with open(GEOGRAPHY_PATH,encoding="utf-8") as gf: GEOGRAPHY=json.load(gf)
+ with open(GEOGRAPHY_PATH,encoding="utf-8") as gf: GEOGRAPHY=json.load(gf,object_pairs_hook=unique_object)
 except Exception: GEOGRAPHY={}
 def geography_ok(county,constituency="",ward=""):
+ if county not in COUNTIES or county not in GEOGRAPHY:return False
  data=GEOGRAPHY.get(county,{})
  if constituency and constituency not in data:return False
  if ward and ward not in data.get(constituency,[]):return False
@@ -26,10 +34,10 @@ class DBConn:
  def __init__(self):
   self.pg=bool(DATABASE_URL)
   if self.pg:
-   self.c=psycopg2.connect(DATABASE_URL,sslmode="require")
+   self.c=psycopg2.connect(DATABASE_URL,sslmode=os.environ.get("PULSE_DB_SSLMODE","require"),connect_timeout=5)
    self.cur=self.c.cursor(cursor_factory=psycopg2.extras.DictCursor)
   else:
-   self.c=sqlite3.connect(DB);self.c.row_factory=sqlite3.Row;self.cur=None
+   self.c=sqlite3.connect(DB,timeout=10);self.c.row_factory=sqlite3.Row;self.c.execute("PRAGMA foreign_keys=ON");self.cur=None
  def execute(self,sql,args=()):
   if self.pg:
    sql=sql.replace("?","%s").replace("datetime('now')","CURRENT_TIMESTAMP")
@@ -45,7 +53,7 @@ def conn():return DBConn()
 def admin_authorized():
  if not ADMIN_KEY:return False
  auth=request.headers.get("Authorization","")
- supplied=auth[7:].strip() if auth.lower().startswith("bearer ") else request.args.get("key","")
+ supplied=auth[7:].strip() if auth.lower().startswith("bearer ") else ""
  return hmac.compare_digest(str(supplied),str(ADMIN_KEY))
 def init():
  with conn() as c:
@@ -71,14 +79,7 @@ def init():
     cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
     for col in ("constituency","ward"):
      if col not in cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN "+col+" TEXT")
-   # Remove only the legacy table-level uniqueness rule if present; never rebuild healthy tables on startup.
-   legacy_sql=c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
-   legacy_sql=(legacy_sql[0] or "") if legacy_sql else ""
-   if "UNIQUE(county,race,fp)" in legacy_sql.replace(" ",""):
-    c.execute("""CREATE TABLE pulse_votes_new(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
-    c.execute("""INSERT OR IGNORE INTO pulse_votes_new(id,county,race,candidate,issue,fp,constituency,ward,created_at)
-                 SELECT id,county,race,candidate,issue,fp,constituency,ward,created_at FROM pulse_votes""")
-    c.execute("DROP TABLE pulse_votes");c.execute("ALTER TABLE pulse_votes_new RENAME TO pulse_votes")
+   # Keep legacy constraints and all historical rows; never rebuild/drop tables at startup.
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_unique ON pulse_votes(county,race,IFNULL(constituency,''),IFNULL(ward,''),fp)")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race,constituency,ward)")
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT,source TEXT,path TEXT,session_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
@@ -93,12 +94,36 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS candidate_aliases(id INTEGER PRIMARY KEY AUTOINCREMENT,candidate_id INTEGER NOT NULL,alias TEXT NOT NULL,verified INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(candidate_id) REFERENCES candidates(id) ON DELETE CASCADE);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
-   if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
+   if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER REFERENCES candidates(id)")
    for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0")]:
     try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
     except sqlite3.OperationalError:pass
-try:init()
-except Exception as e: print("db init",e)
+   # Additive, repeatable migration. Legacy votes remain unresolved until audited.
+  for table,column,definition in [("candidates","identity_verified","BOOLEAN NOT NULL DEFAULT FALSE"),("candidates","normalized_name","TEXT"),("candidate_aliases","normalized_alias","TEXT")]:
+   if c.pg:c.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
+   elif column not in [x[1] for x in c.execute(f"PRAGMA table_info({table})").fetchall()]:c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+  for row in c.execute("SELECT id,name FROM candidates WHERE normalized_name IS NULL").fetchall():
+   c.execute("UPDATE candidates SET normalized_name=? WHERE id=?",(normalized_name(row["name"]),row["id"]))
+  for row in c.execute("SELECT id,alias FROM candidate_aliases WHERE normalized_alias IS NULL").fetchall():
+   c.execute("UPDATE candidate_aliases SET normalized_alias=? WHERE id=?",(normalized_name(row["alias"]),row["id"]))
+  c.execute("CREATE INDEX IF NOT EXISTS candidate_normalized_lookup ON candidates(race,county,constituency,ward,normalized_name)")
+  c.execute("CREATE INDEX IF NOT EXISTS alias_normalized_lookup ON candidate_aliases(normalized_alias,verified,candidate_id)")
+  c.execute("CREATE INDEX IF NOT EXISTS vote_candidate_lookup ON pulse_votes(candidate_id)")
+  c.execute("CREATE INDEX IF NOT EXISTS vote_participant_lookup ON pulse_votes(fp,county,race)")
+  c.execute("CREATE TABLE IF NOT EXISTS pulse_schema_migrations(version INTEGER PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+  c.execute("INSERT INTO pulse_schema_migrations(version) VALUES(2) ON CONFLICT(version) DO NOTHING")
+  identity_type="BIGSERIAL" if c.pg else "INTEGER"
+  c.execute(f"CREATE TABLE IF NOT EXISTS ground_confirmations(id {identity_type} PRIMARY KEY,issue_id BIGINT NOT NULL REFERENCES ground_issues(id),fp TEXT NOT NULL,UNIQUE(issue_id,fp))")
+  c.execute("CREATE TABLE IF NOT EXISTS request_limits(bucket TEXT PRIMARY KEY,count INTEGER NOT NULL,expires_at BIGINT NOT NULL)")
+  c.execute("CREATE INDEX IF NOT EXISTS request_limits_expiry ON request_limits(expires_at)")
+  c.execute("CREATE TABLE IF NOT EXISTS participation_slots(fp TEXT NOT NULL,county TEXT NOT NULL,race TEXT NOT NULL,PRIMARY KEY(fp,county,race))")
+  c.execute("INSERT INTO participation_slots(fp,county,race) SELECT DISTINCT fp,county,race FROM pulse_votes WHERE TRUE ON CONFLICT(fp,county,race) DO NOTHING")
+SCHEMA_OK=False
+try:
+ init();SCHEMA_OK=True
+except Exception:
+ app.logger.error("Database schema initialization failed; readiness is blocked.")
+
 
 @app.get("/api/geography")
 def geography_api():
@@ -116,13 +141,16 @@ HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" 
 .searchdock{position:sticky;top:14px;z-index:20;margin:0 0 18px;padding:10px 14px;display:flex;align-items:center;gap:10px;background:linear-gradient(120deg,rgba(255,255,255,.18),rgba(255,255,255,.055));border-color:rgba(255,255,255,.35);box-shadow:inset 0 1px rgba(255,255,255,.42),0 22px 70px rgba(0,0,0,.48),0 0 50px rgba(0,255,136,.12)}.searchdock:focus-within{border-color:#7affb899;box-shadow:inset 0 1px #ffffff45,0 20px 70px #0009,0 0 55px #00ff8840}.searchicon{font-size:28px;color:#7affb8;text-shadow:0 0 20px #00ff88}.searchdock input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:white;font-size:16px;padding:13px}.searchdock input::placeholder{color:#91a99d}.searchbtn{border:1px solid #8affbd66;background:linear-gradient(135deg,#79ffb4,#d7ff72);color:#04130b;font-weight:900;letter-spacing:.04em;border-radius:16px;padding:14px 18px;cursor:pointer;box-shadow:0 0 30px #49ff9930}.searchbtn:hover{transform:translateY(-1px);box-shadow:0 0 42px #49ff9950}.county:before{content:'';position:absolute;inset:-60% -40%;background:linear-gradient(120deg,transparent 35%,#ffffff12 50%,transparent 65%);transform:translateX(-60%) rotate(12deg);transition:.8s}.county:hover:before{transform:translateX(55%) rotate(12deg)}.county:after{content:'';position:absolute;width:100px;height:100px;border-radius:50%;right:-30px;top:-30px;background:#58ff9d12;filter:blur(4px);box-shadow:0 0 80px #58ff9d25}.county>*{position:relative;z-index:2}.hero{background:linear-gradient(120deg,rgba(255,255,255,.17),rgba(255,255,255,.045) 52%,rgba(100,255,180,.045));border-color:rgba(255,255,255,.32);box-shadow:inset 0 1px rgba(255,255,255,.42),0 40px 100px rgba(0,0,0,.38),0 0 80px rgba(0,255,140,.08)}.hero:before{content:'';position:absolute;width:340px;height:340px;border:1px solid #ffffff10;border-radius:50%;right:-80px;bottom:-220px;box-shadow:0 0 90px #00ff8830,inset 0 0 70px #ffffff08}.stat{position:relative;overflow:hidden;min-height:122px;transition:.3s}.stat:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.4)}.stat:after{content:'';position:absolute;inset:auto -20% -65% 30%;height:100px;background:#ffe45e16;border-radius:50%;filter:blur(25px)}.empty{display:none;text-align:center;padding:50px;color:#9fb4aa}.glass:after{content:'';pointer-events:none;position:absolute;inset:1px;border-radius:inherit;background:linear-gradient(125deg,rgba(255,255,255,.13),transparent 22%,transparent 72%,rgba(120,255,190,.035));mask:linear-gradient(#000,transparent 35%);opacity:.7} </style></head><body><div class=mesh></div><header class=top><div class=brand>KENYA <b>PULSE</b></div><div class=live><i class=dot></i> LIVE PARTICIPATION</div></header><main class=wrap>
 <section class=hero><div><span class=eyebrow>47 counties · voluntary participation</span><h1>Your county.<br><span>Your voice.</span></h1><p class=muted>Share your current preference and explore live aggregate responses from people participating on Kenya Pulse. This is an open online pulse, not a scientific election forecast.</p></div><aside class="glass heroStat"><small>COUNTIES AVAILABLE</small><div class=big>47</div><small>One transparent participation experience across Kenya.</small></aside></section>
 <div class=analytics><div class="glass metric"><strong id=metricTotal>—</strong><span>Selected race responses</span></div><div class="glass metric"><strong>47</strong><span>Counties available</span></div><div class="glass metric"><strong>LIVE</strong><span>Aggregate updates</span></div></div>
-<section class=layout><div class="glass card"><div class=cardHead><div><h2>Join the pulse</h2><span class=muted>Choose your county and race</span></div><span class=pill>Private choice</span></div><div class=formgrid><select id=county><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race onchange="areaMode()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><div id=areaBox class=formgrid style="display:none;margin-top:10px"><select id=constituency onchange="populateWards();load()"><option value="">Choose constituency</option></select><select id=ward onchange="load()"><option value="">Choose ward</option></select></div><input id=candidate list=candidateList maxlength=80 placeholder="Search or enter a name not yet listed" style="margin-top:10px"><datalist id=candidateList></datalist><div id=candidateConfirm class="glass" style="display:none;margin-top:10px;padding:14px"><b>Confirm the person</b><div id=candidateConfirmText class=muted style="margin-top:6px"></div><button id=confirmCandidateBtn style="margin-top:10px">Yes, this person →</button><button class=secondary onclick="cancelCandidateConfirm()" style="margin-top:8px">No, go back</button></div><div id=candidateNote class=muted style="font-size:12px;margin-top:6px">Names shown here are participation options, not endorsements. Before IEBC nomination, listed people may be prospective or publicly declared rather than IEBC-nominated candidates.</div><input id=issue maxlength=120 placeholder="Optional: issue influencing your choice" style="margin-top:10px"><button onclick=vote() style="margin-top:10px">Submit preference →</button><div id=msg class=muted style="margin-top:10px;font-size:13px"></div></div>
+<section class=layout><div class="glass card"><div class=cardHead><div><h2>Join the pulse</h2><span class=muted>Choose your county and race</span></div><span class=pill>Private choice</span></div><div class=formgrid><select id=county><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race onchange="areaMode()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><div id=areaBox class=formgrid style="display:none;margin-top:10px"><select id=constituency onchange="populateWards();load()"><option value="">Choose constituency</option></select><select id=ward onchange="load()"><option value="">Choose ward</option></select></div><input id=candidate list=candidateList maxlength=80 placeholder="Search a full name or verified alias" style="margin-top:10px"><datalist id=candidateList></datalist><div id=candidateConfirm class="glass" style="display:none;margin-top:10px;padding:14px"><b>Confirm the person</b><div id=candidateConfirmText class=muted style="margin-top:6px"></div><button id=confirmCandidateBtn style="margin-top:10px">Yes, this person →</button><button class=secondary onclick="cancelCandidateConfirm()" style="margin-top:8px">No, go back</button></div><div id=candidateNote class=muted style="font-size:12px;margin-top:6px">Names shown here are participation options, not endorsements. Before IEBC nomination, listed people may be prospective or publicly declared rather than IEBC-nominated candidates.</div><input id=issue maxlength=120 placeholder="Optional: issue influencing your choice" style="margin-top:10px"><button onclick=vote() style="margin-top:10px">Submit preference →</button><div id=msg class=muted style="margin-top:10px;font-size:13px"></div></div>
 <div class="glass card"><div class=cardHead><div><h2 id=rt>Live participant results</h2><span class=muted>Voluntary website responses</span></div><span class=pill>Live</span></div><div id=results><p class=muted>Select a county to explore aggregate participant results.</p></div></div></section>
-<section id=supportbox class="glass card" style="display:none"><div class=cardHead><div><h2>Support Kenya Pulse</h2><span class=muted>Optional platform support</span></div><span class=pill>Completely optional</span></div><p><b>Participation and results are completely free.</b> If you find Kenya Pulse useful, you can optionally help cover the cost of keeping the platform running.</p><p class=muted>Support with as low as KSh 5. Your contribution does not affect your response or the results.</p><div class=formgrid><input id=supportCustom type=number min=1 step=1 inputmode=numeric placeholder="Enter any amount (KSh)"><button class=secondary onclick="supportAmount()">Support Kenya Pulse</button></div><button class=secondary onclick="dismissSupport()">Not now</button><div id=supportmsg class=muted>No contribution is required to view results.</div></section><section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
+<section id=supportbox class="glass card" style="display:none"><div class=cardHead><div><h2>Support Kenya Pulse</h2><span class=muted>Optional platform support</span></div><span class=pill>Completely optional</span></div><p><b>Participation and results are completely free.</b> If you find Kenya Pulse useful, you can optionally help cover the cost of keeping the platform running.</p><p class=muted>Support with as low as KSh 5. Your contribution does not affect your response or the results.</p><div class=formgrid><input id=supportCustom type=number min=0.01 step=0.01 inputmode=decimal placeholder="Enter any amount (KSh)"><input id=supportEmail type=email placeholder="Email for payment receipt" autocomplete=email><button class=secondary onclick="supportAmount()">Support Kenya Pulse</button></div><button class=secondary onclick="dismissSupport()">Not now</button><div id=supportmsg class=muted>No contribution is required to view results.</div></section><section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
 <section class="glass adwrap"><div class=adlabel>Advertisement</div><div class=ad id=liveAd><div><b>Premium advertising space</b><small>Sponsored content will appear here, clearly separated from participation controls and results.</small></div></div></section>
-<section class="glass notice"><b>Transparency:</b> Results show voluntary Kenya Pulse participants and are not representative of all registered voters. They should not be interpreted as an election forecast. Individual choices are not publicly displayed. Candidate names are participant-entered and their appearance is not an endorsement. <a href="/methodology" style="color:#ffd54a">Read methodology →</a></section>
+<section class="glass notice"><b>Transparency:</b> Results show voluntary Kenya Pulse participants and are not representative of all registered voters. They should not be interpreted as an election forecast. Individual choices are not publicly displayed. Listed names are participation options, not endorsements. <a href="/methodology" style="color:#ffd54a">Read methodology →</a></section>
 <footer class=footer><span>© Kenya Pulse · Open participation dashboard</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/methodology">Methodology</a></span></footer></main>
 <script>
+const nativeFetch=window.fetch.bind(window);
+let csrfReady=nativeFetch('/api/csrf').then(r=>r.json()).then(j=>j.token);
+window.fetch=async function(url,options={}){if(options.method&&options.method.toUpperCase()!=='GET'){options.headers={...(options.headers||{}),'X-CSRF-Token':await csrfReady}}return nativeFetch(url,options)};
 const C=document.getElementById('county'),R=document.getElementById('race');async function populateConstituencies(){
  const county=document.getElementById('county').value,sel=document.getElementById('constituency'),ward=document.getElementById('ward');
  sel.innerHTML='<option value="">Choose constituency</option>';ward.innerHTML='<option value="">Choose ward</option>';
@@ -134,7 +162,7 @@ async function populateWards(){
  sel.innerHTML='<option value="">Choose ward</option>';if(!county||!con)return;
  try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)+'&constituency='+encodeURIComponent(con)),j=await r.json();(j.wards||[]).forEach(x=>sel.add(new Option(x,x)));loadCandidates();}catch(e){}
 }
-function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await loadCandidates();load()})()}
+function areaMode(){cancelCandidateConfirm();let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}C.onchange=async()=>{clearAreas();cancelCandidateConfirm();document.getElementById('supportbox').style.display='none';syncUrl();await populateConstituencies();await restoreProgress();await loadCandidates();load()};R.onchange=()=>{cancelCandidateConfirm();document.getElementById('supportbox').style.display='none';areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await restoreProgress();await loadCandidates();load()})()}
 function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
@@ -143,17 +171,65 @@ async function loadCandidates(){
  try{let r=await fetch(q),j=await r.json(),d=document.getElementById('candidateList');d.innerHTML='';(j.candidates||[]).forEach(x=>{let o=document.createElement('option');o.value=x.name;o.label=(x.party?x.party+' · ':'')+(x.status||'PROSPECTIVE');d.appendChild(o)})}catch(e){}
 }
 let confirmedCandidate=null;
-function cancelCandidateConfirm(){confirmedCandidate=null;document.getElementById('candidateConfirm').style.display='none'}
-async function vote(){let candidate=document.getElementById('candidate').value.trim(),issue=document.getElementById('issue').value.trim(),msg=document.getElementById('msg');if(!C.value||candidate.length<2){msg.textContent='Choose a county and enter a candidate name.';return}if(!confirmedCandidate||confirmedCandidate.typed!==candidate){let rr=await fetch('/api/candidates/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:candidate,race:R.value,county:C.value,constituency:document.getElementById('constituency').value.trim(),ward:document.getElementById('ward').value.trim()})});let rj=await rr.json(),matches=rj.matches||[],box=document.getElementById('candidateConfirm'),txt=document.getElementById('candidateConfirmText'),btn=document.getElementById('confirmCandidateBtn');if(matches.length===1){let m=matches[0];txt.textContent='You entered “'+candidate+'”. Confirm: '+m.name+(m.party?' · '+m.party:'')+'.';btn.style.display='inline-block';box.style.display='block';btn.onclick=()=>{confirmedCandidate={id:m.id,name:m.name,typed:candidate};box.style.display='none';vote()};return}if(matches.length>1){msg.textContent='More than one person matches that name. Please choose the full name from the list.';return}txt.textContent='That name is not yet a verified candidate or alias for this seat. Choose a listed person or check the spelling.';btn.style.display='none';box.style.display='block';return}let cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();if((R.value==='Member of Parliament'||R.value==='MCA')&&!cv){msg.textContent='Specify the constituency for this race.';return}if(R.value==='MCA'&&!wv){msg.textContent='Specify the ward for this MCA race.';return}let x=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate:confirmedCandidate.name,candidate_id:confirmedCandidate.id,issue,constituency:document.getElementById('constituency').value.trim(),ward:document.getElementById('ward').value.trim()})});let j=await x.json();msg.textContent=j.message||j.error;if(x.ok){document.getElementById('candidate').value='';confirmedCandidate=null;document.getElementById('candidateConfirm').style.display='none';await load();advanceParticipation()}}
+function cancelCandidateConfirm(){confirmedCandidate=null;document.querySelectorAll('.candidateChoice').forEach(x=>x.remove());document.getElementById('candidateConfirm').style.display='none'}
+function scopeKey(){return [C.value,R.value,document.getElementById('constituency').value,document.getElementById('ward').value].join('|')}
+async function vote(){
+ const typed=document.getElementById('candidate').value.trim(),msg=document.getElementById('msg'),scope=scopeKey();
+ const cv=document.getElementById('constituency').value,wv=document.getElementById('ward').value;
+ if(!C.value||typed.length<2){msg.textContent='Choose a county and enter a full name or verified alias.';return}
+ if(['Member of Parliament','MCA'].includes(R.value)&&!cv){msg.textContent='Choose your constituency.';return}
+ if(R.value==='MCA'&&!wv){msg.textContent='Choose your ward.';return}
+ try{
+ if(!confirmedCandidate||confirmedCandidate.typed!==typed||confirmedCandidate.scope!==scope){
+  cancelCandidateConfirm();
+  const response=await fetch('/api/candidates/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:typed,race:R.value,county:C.value,constituency:cv,ward:wv})}),j=await response.json();
+  if(scope!==scopeKey())return;
+  const matches=j.matches||[],box=document.getElementById('candidateConfirm'),txt=document.getElementById('candidateConfirmText'),btn=document.getElementById('confirmCandidateBtn');
+  box.style.display='block';btn.style.display='none';
+  const choose=m=>{if(scope!==scopeKey()||typed!==document.getElementById('candidate').value.trim()){cancelCandidateConfirm();return}confirmedCandidate={id:m.id,name:m.name,typed,scope};box.style.display='none';vote()};
+  if(matches.length===1){const m=matches[0];txt.textContent='You entered '+typed+'. Did you mean '+m.name+'?';btn.style.display='block';btn.onclick=()=>choose(m)}
+  else if(matches.length>1){txt.textContent='Several verified people match. Choose the person you mean:';matches.forEach(m=>{const b=document.createElement('button');b.className='candidateChoice secondary';b.textContent=m.name+(m.party?' · '+m.party:'')+' · ID '+m.id;b.onclick=()=>choose(m);box.appendChild(b)})}
+  else txt.textContent='No verified candidate or alias matches this seat. Correct the spelling or choose a listed person. No response has been created.';
+  return;
+ }
+ const response=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate:confirmedCandidate.name,candidate_id:confirmedCandidate.id,issue:document.getElementById('issue').value,constituency:cv,ward:wv})}),j=await response.json();
+ msg.textContent=j.message||j.error;
+ if(response.ok){document.getElementById('candidate').value='';document.getElementById('issue').value='';cancelCandidateConfirm();await advanceParticipation(j.progress)}
+ }catch(e){msg.textContent='Could not connect. Refresh to check your saved progress before trying again.'}
+}
 const PARTICIPATION_FLOW=['President','Governor','Senator','Woman Representative','Member of Parliament','MCA'];
-function advanceParticipation(){let i=PARTICIPATION_FLOW.indexOf(R.value);if(i<0)return;if(i<PARTICIPATION_FLOW.length-1){R.value=PARTICIPATION_FLOW[i+1];clearAreas();areaMode();loadCandidates();document.getElementById('msg').textContent='Response recorded. Next: '+R.value+'.';document.getElementById('supportbox').style.display='none';return}document.getElementById('msg').textContent='All six seat responses completed. Your responses are recorded.';document.getElementById('supportbox').style.display='block';document.getElementById('supportbox').scrollIntoView({behavior:'smooth',block:'center'})}
-function dismissSupport(){document.getElementById('supportbox').style.display='none'}function supportAmount(preset){let amount=preset||parseInt(document.getElementById('supportCustom').value||'0',10),msg=document.getElementById('supportmsg');if(!Number.isFinite(amount)||amount<1){msg.textContent='Enter any amount from KSh 1.';return}msg.textContent='KSh '+amount+' selected. Payment is not enabled yet, so no money has been taken. Your response is already recorded and results remain free.'}async function loadAd(){let x=await fetch('/api/ad?county='+encodeURIComponent(C.value||'')),j=await x.json();if(j.ad){let a=j.ad,box=document.getElementById('liveAd');box.innerHTML='<div><b>'+esc(a.headline||a.business)+'</b><small>Sponsored by '+esc(a.business)+'</small>'+(a.url?'<div style="margin-top:10px"><a href="'+a.click_url+'" rel="sponsored noopener" style="color:#ffd54a">Visit advertiser →</a></div>':'')+'</div>'}}loadAd();
-async function load(){if(!C.value)return;loadAd();let q='/api/results?county='+encodeURIComponent(C.value)+'&race='+encodeURIComponent(R.value);if(R.value==='Member of Parliament'||R.value==='MCA')q+='&constituency='+encodeURIComponent(document.getElementById('constituency').value.trim());if(R.value==='MCA')q+='&ward='+encodeURIComponent(document.getElementById('ward').value.trim());let x=await fetch(q),j=await x.json();document.getElementById('metricTotal').textContent=j.total;document.getElementById('rt').textContent=C.value+' · '+R.value;let h='';for(let a of j.results){h+='<div class=row><b>'+esc(a.candidate)+'</b><span style="float:right">'+a.votes+' · '+a.pct+'%</span><div class=bar><div class=fill style="width:'+a.pct+'%"></div></div></div>'}document.getElementById('results').innerHTML=h||'<p class=muted>No responses yet for this county and race.</p>'}function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+async function restoreProgress(){
+ if(!C.value)return;
+ const response=await fetch('/api/participation?county='+encodeURIComponent(C.value));if(!response.ok)return;
+ await advanceParticipation(await response.json(),true);
+}
+async function advanceParticipation(progress,restoring=false){
+ const box=document.getElementById('supportbox');box.style.display='none';
+ if(!progress)return;
+ if(progress.next_race){R.value=progress.next_race;document.getElementById('msg').textContent=(restoring?'Next: ':'Response recorded. Next: ')+R.value+'.'}
+ else document.getElementById('msg').textContent='All six seat responses completed. Your participation is complete; results are free.';
+ if(progress.constituency){document.getElementById('constituency').value=progress.constituency;await populateWards();if(progress.ward)document.getElementById('ward').value=progress.ward}
+ areaMode();await loadCandidates();
+ if(progress.complete&&progress.completed.length===6&&!sessionStorage.getItem('kp_support_dismissed_'+C.value)){box.style.display='block';if(!restoring)box.scrollIntoView({behavior:'smooth',block:'center'})}
+}
+function dismissSupport(){sessionStorage.setItem('kp_support_dismissed_'+C.value,'1');document.getElementById('supportbox').style.display='none'}
+let supportAttempt=null;
+async function supportAmount(){
+ const amount=document.getElementById('supportCustom').value,email=document.getElementById('supportEmail').value,msg=document.getElementById('supportmsg');
+ if(!/^\d+(\.\d{1,2})?$/.test(amount)||Number(amount)<=0){msg.textContent='Enter any positive amount in KSh.';return}
+ if(!document.getElementById('supportEmail').validity.valid||!email){msg.textContent='Enter an email address for the payment receipt.';return}
+ if(!supportAttempt||supportAttempt.amount!==amount)supportAttempt={amount,key:crypto.randomUUID()};
+ msg.textContent='Preparing test checkout…';
+ try{const r=await fetch('/api/support/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,email,county:C.value,idempotency_key:supportAttempt.key})}),j=await r.json();if(j.authorization_url){sessionStorage.setItem('kp_support_dismissed_'+C.value,'1');location.assign(j.authorization_url)}else msg.textContent=j.status==='PAID'?'Thank you. Your contribution was verified.':j.error}catch(e){msg.textContent='Unable to connect. Your participation is already complete.'}
+}
+document.getElementById('candidate').addEventListener('input',cancelCandidateConfirm);
+async function loadAd(){let x=await fetch('/api/ad?county='+encodeURIComponent(C.value||'')),j=await x.json();if(j.ad){let a=j.ad,box=document.getElementById('liveAd');box.innerHTML='<div><b>'+esc(a.headline||a.business)+'</b><small>Sponsored by '+esc(a.business)+'</small>'+(a.url?'<div style="margin-top:10px"><a href="'+a.click_url+'" rel="sponsored noopener" style="color:#ffd54a">Visit advertiser →</a></div>':'')+'</div>'}}loadAd();
+async function load(){if(!C.value)return;loadAd();let q='/api/results?county='+encodeURIComponent(C.value)+'&race='+encodeURIComponent(R.value);if(R.value==='Member of Parliament'||R.value==='MCA')q+='&constituency='+encodeURIComponent(document.getElementById('constituency').value.trim());if(R.value==='MCA')q+='&ward='+encodeURIComponent(document.getElementById('ward').value.trim());let x=await fetch(q),j=await x.json();document.getElementById('metricTotal').textContent=j.total||0;document.getElementById('rt').textContent=C.value+' · '+R.value;let h='';for(let a of (j.results||[])){h+='<div class=row><b>'+esc(a.candidate)+(a.identity_status==='historical-unresolved'?' (historical, unresolved)':'')+'</b><span style="float:right">'+a.votes+' · '+a.pct+'%</span><div class=bar><div class=fill style="width:'+a.pct+'%"></div></div></div>'}document.getElementById('results').innerHTML=h||'<p class=muted>No responses yet for this county and race.</p>'}function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 </script></body></html>'''
 
 
 GROUND_CATEGORIES=["Roads & bridges","Water","Health","Agriculture","Education","Security","Waste & environment","Electricity","Other"]
-GROUND_HTML=r'''<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Sauti ya Ground · Kenya Pulse</title><style>body{font-family:system-ui;margin:0;background:#eef5ee;color:#17351f}.wrap{max-width:900px;margin:auto;padding:24px}.card{background:rgba(255,255,255,.82);border:1px solid #fff;border-radius:24px;padding:20px;margin:16px 0;box-shadow:0 12px 35px #17351f18}input,select,textarea,button{box-sizing:border-box;width:100%;padding:13px;border-radius:14px;border:1px solid #ccd8cc;margin:6px 0;font:inherit}button{background:#17351f;color:white;font-weight:700}.muted{color:#607066;font-size:13px}.issue{border-top:1px solid #dce5dc;padding:14px 0}.pill{font-size:12px;background:#e4eee5;border-radius:999px;padding:5px 9px}</style></head><body><div class=wrap><a href="/">← Kenya Pulse</a><div class=card><h1>Sauti ya Ground</h1><p>Share a local community issue by text, photo, video or voice. Submissions are reviewed before public display.</p><select id=county><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><input id=constituency placeholder="Constituency"><input id=ward placeholder="Ward"><input id=landmark placeholder="Village / landmark (optional)"><select id=category>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><textarea id=description rows=4 placeholder="Tell us what is happening and what needs attention"></textarea><select id=language><option>Swahili</option><option>English</option><option>Sheng</option><option>Local language</option></select><input id=media type=file accept="audio/*,video/*,image/*"><p class=muted>Audio/video transcription and permanent media storage will activate after the media service is connected. You can submit the written description now.</p><button onclick=submitIssue()>Submit for review</button><div id=msg class=muted></div></div><div class=card><h2>Community issues</h2><div id=feed>Loading…</div></div></div><script>async function submitIssue(){let d={county:county.value,constituency:constituency.value,ward:ward.value,landmark:landmark.value,category:category.value,description:description.value,language:language.value};let r=await fetch('/api/ground/issues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}),j=await r.json();msg.textContent=j.message||j.error;if(r.ok){description.value='';load()}}async function load(){let r=await fetch('/api/ground/issues'),j=await r.json();feed.innerHTML=(j.issues||[]).map(x=>'<div class=issue><span class=pill>'+esc(x.category)+'</span> <span class=pill>'+esc(x.status)+'</span><h3>'+esc(x.ward||x.constituency||x.county)+'</h3><p>'+esc(x.description)+'</p><small>'+esc(x.county)+(x.constituency?' · '+esc(x.constituency):'')+(x.ward?' · '+esc(x.ward):'')+' · '+x.confirmations+' community confirmation(s)</small><button onclick="confirmIssue('+x.id+')">Same issue here</button></div>').join('')||'<p>No approved community issues yet.</p>'}async function confirmIssue(id){await fetch('/api/ground/issues/'+id+'/confirm',{method:'POST'});load()}function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}load()</script></body></html>'''
+GROUND_HTML=r'''<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Sauti ya Ground · Kenya Pulse</title><style>body{font-family:system-ui;margin:0;background:#eef5ee;color:#17351f}.wrap{max-width:900px;margin:auto;padding:24px}.card{background:rgba(255,255,255,.82);border:1px solid #fff;border-radius:24px;padding:20px;margin:16px 0;box-shadow:0 12px 35px #17351f18}input,select,textarea,button{box-sizing:border-box;width:100%;padding:13px;border-radius:14px;border:1px solid #ccd8cc;margin:6px 0;font:inherit}button{background:#17351f;color:white;font-weight:700}.muted{color:#607066;font-size:13px}.issue{border-top:1px solid #dce5dc;padding:14px 0}.pill{font-size:12px;background:#e4eee5;border-radius:999px;padding:5px 9px}</style></head><body><div class=wrap><a href="/">← Kenya Pulse</a><div class=card><h1>Sauti ya Ground</h1><p>Share a local community issue by text, photo, video or voice. Submissions are reviewed before public display.</p><select id=county><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><input id=constituency placeholder="Constituency"><input id=ward placeholder="Ward"><input id=landmark placeholder="Village / landmark (optional)"><select id=category>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><textarea id=description rows=4 placeholder="Tell us what is happening and what needs attention"></textarea><select id=language><option>Swahili</option><option>English</option><option>Sheng</option><option>Local language</option></select><input id=media type=file accept="audio/*,video/*,image/*"><p class=muted>Audio/video transcription and permanent media storage will activate after the media service is connected. You can submit the written description now.</p><button onclick=submitIssue()>Submit for review</button><div id=msg class=muted></div></div><div class=card><h2>Community issues</h2><div id=feed>Loading…</div></div></div><script>const originalFetch=window.fetch.bind(window);const csrfReady=originalFetch('/api/csrf').then(r=>r.json()).then(j=>j.token);window.fetch=async(url,options={})=>{if(options.method&&options.method!=='GET')options.headers={...(options.headers||{}),'X-CSRF-Token':await csrfReady};return originalFetch(url,options)};async function submitIssue(){let d={county:county.value,constituency:constituency.value,ward:ward.value,landmark:landmark.value,category:category.value,description:description.value,language:language.value};let r=await fetch('/api/ground/issues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}),j=await r.json();msg.textContent=j.message||j.error;if(r.ok){description.value='';load()}}async function load(){let r=await fetch('/api/ground/issues'),j=await r.json();feed.innerHTML=(j.issues||[]).map(x=>'<div class=issue><span class=pill>'+esc(x.category)+'</span> <span class=pill>'+esc(x.status)+'</span><h3>'+esc(x.ward||x.constituency||x.county)+'</h3><p>'+esc(x.description)+'</p><small>'+esc(x.county)+(x.constituency?' · '+esc(x.constituency):'')+(x.ward?' · '+esc(x.ward):'')+' · '+x.confirmations+' community confirmation(s)</small><button onclick="confirmIssue('+x.id+')">Same issue here</button></div>').join('')||'<p>No approved community issues yet.</p>'}async function confirmIssue(id){await fetch('/api/ground/issues/'+id+'/confirm',{method:'POST'});load()}function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}load()</script></body></html>'''
 
 @app.get("/ground")
 def ground():
@@ -172,7 +248,12 @@ def ground_issues():
 
 @app.post("/api/ground/issues/<int:issue_id>/confirm")
 def ground_confirm(issue_id):
- with conn() as c:c.execute("UPDATE ground_issues SET confirmations=confirmations+1 WHERE id=? AND status IN ('PUBLISHED','ACKNOWLEDGED','UPDATE_PROVIDED','RESOLVED')",(issue_id,))
+ with conn() as c:
+  row=c.execute("SELECT id FROM ground_issues WHERE id=? AND status IN ('PUBLISHED','ACKNOWLEDGED','UPDATE_PROVIDED','RESOLVED')",(issue_id,)).fetchone()
+  if not row:return jsonify(error="Published issue not found"),404
+  inserted=c.execute("INSERT INTO ground_confirmations(issue_id,fp) VALUES(?,?) ON CONFLICT(issue_id,fp) DO NOTHING RETURNING id",(issue_id,participant_fp())).fetchone()
+  if not inserted:return jsonify(error="You have already confirmed this issue"),409
+  c.execute("UPDATE ground_issues SET confirmations=confirmations+1 WHERE id=?",(issue_id,))
  return jsonify(ok=True)
 
 @app.get("/")
@@ -198,13 +279,13 @@ def advertise():
   package=request.form.get("package","County Starter"); headline=request.form.get("headline","").strip()[:140]; url=request.form.get("url","").strip()[:250]
   prices={"County Starter":5000,"County Pro":15000,"National":50000}
   is_commercial=not re.search(r"(?i)\b(candidate|campaign|vote for|elect|political party|president|governor|senator|mp|mca)\b",headline)
-  valid_url=(not url) or bool(re.match(r"^https?://",url))
-  if business and email and package in prices and (scope=="National" or county in COUNTIES) and is_commercial and valid_url:
+  valid_url=(not url) or safe_url(url)
+  if business and email and package in prices and (scope=="National" or (scope=="County" and county in COUNTIES)) and is_commercial and valid_url:
    with conn() as db: db.execute("INSERT INTO ad_orders(business,email,phone,scope,county,package,budget,headline,url) VALUES(?,?,?,?,?,?,?,?,?)",(business,email,phone,scope,county if scope=="County" else None,package,prices[package],headline,url))
    notice="Campaign submitted for review. No payment has been taken yet."
   else: notice="Campaign could not be submitted. Check the fields and commercial-ad policy; destination links must start with http:// or https://."
- html="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Advertise • Kenya Pulse</title><style>*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 10%,#00ff8840,transparent 28%),radial-gradient(circle at 90% 10%,#ffd90030,transparent 25%),#020806;color:white;font-family:Inter,system-ui}.w{max-width:1000px;margin:auto;padding:35px 18px}.glass{background:linear-gradient(135deg,#ffffff18,#ffffff06);border:1px solid #ffffff30;box-shadow:inset 0 1px #ffffff45,0 30px 90px #0008;backdrop-filter:blur(35px) saturate(170%);border-radius:30px}.hero,.form{padding:28px;margin-bottom:16px}h1{font-size:clamp(42px,7vw,70px);margin:8px 0}.muted{color:#a9beb1}.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.p{padding:20px}.price{font-size:32px;font-weight:900;color:#ffe064}input,select,button{width:100%;padding:15px;margin:6px 0;border-radius:15px;border:1px solid #ffffff25;background:#ffffff0b;color:white;font:inherit}option{color:#111}button{background:linear-gradient(135deg,#78ffb3,#e3ff72);color:#04120a;font-weight:900;cursor:pointer}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.notice{padding:14px;border:1px solid #8affb855;border-radius:14px;background:#48ff9a10}.tag{font:700 11px monospace;letter-spacing:.15em;color:#7dffb7}@media(max-width:700px){.plans,.grid{grid-template-columns:1fr}}</style></head><body><main class=w><section class="glass hero"><div class=tag>KENYA PULSE • ADVERTISER STUDIO</div><h1>Put your brand<br>inside the pulse.</h1><p class=muted>Choose a national or county placement. Advertising is clearly labelled and kept separate from participation choices and results.</p></section><section class=plans><div class="glass p"><b>COUNTY STARTER</b><div class=price>KSh 5K</div><span class=muted>County placement</span></div><div class="glass p"><b>COUNTY PRO</b><div class=price>KSh 15K</div><span class=muted>Premium county placement</span></div><div class="glass p"><b>NATIONAL</b><div class=price>KSh 50K</div><span class=muted>Across the network</span></div></section><form class="glass form" method=post><h2>Launch a campaign</h2>{% if notice %}<p class=notice>{{notice}}</p>{% endif %}<div class=grid><input name=business required placeholder="Business / brand"><input type=email name=email required placeholder="Business email"><input name=phone placeholder="Phone number"><input name=headline placeholder="Ad headline"></div><div class=grid><select name=scope id=scope onchange="county.disabled=this.value==='National'"><option>County</option><option>National</option></select><select name=county id=county>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><select name=package><option>County Starter</option><option>County Pro</option><option>National</option></select><input name=url placeholder="Business website / campaign link (optional)"><button>SUBMIT CAMPAIGN FOR REVIEW →</button><p class=muted>No payment is collected at this stage. Approved campaigns can be connected to M-Pesa once merchant payment credentials are configured.</p></form></main></body></html>"""
- return render_template_string(html,counties=COUNTIES,notice=notice)
+ html="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Advertise • Kenya Pulse</title><style>*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 10%,#00ff8840,transparent 28%),radial-gradient(circle at 90% 10%,#ffd90030,transparent 25%),#020806;color:white;font-family:Inter,system-ui}.w{max-width:1000px;margin:auto;padding:35px 18px}.glass{background:linear-gradient(135deg,#ffffff18,#ffffff06);border:1px solid #ffffff30;box-shadow:inset 0 1px #ffffff45,0 30px 90px #0008;backdrop-filter:blur(35px) saturate(170%);border-radius:30px}.hero,.form{padding:28px;margin-bottom:16px}h1{font-size:clamp(42px,7vw,70px);margin:8px 0}.muted{color:#a9beb1}.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.p{padding:20px}.price{font-size:32px;font-weight:900;color:#ffe064}input,select,button{width:100%;padding:15px;margin:6px 0;border-radius:15px;border:1px solid #ffffff25;background:#ffffff0b;color:white;font:inherit}option{color:#111}button{background:linear-gradient(135deg,#78ffb3,#e3ff72);color:#04120a;font-weight:900;cursor:pointer}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.notice{padding:14px;border:1px solid #8affb855;border-radius:14px;background:#48ff9a10}.tag{font:700 11px monospace;letter-spacing:.15em;color:#7dffb7}@media(max-width:700px){.plans,.grid{grid-template-columns:1fr}}</style></head><body><main class=w><section class="glass hero"><div class=tag>KENYA PULSE • ADVERTISER STUDIO</div><h1>Put your brand<br>inside the pulse.</h1><p class=muted>Choose a national or county placement. Advertising is clearly labelled and kept separate from participation choices and results.</p></section><section class=plans><div class="glass p"><b>COUNTY STARTER</b><div class=price>KSh 5K</div><span class=muted>County placement</span></div><div class="glass p"><b>COUNTY PRO</b><div class=price>KSh 15K</div><span class=muted>Premium county placement</span></div><div class="glass p"><b>NATIONAL</b><div class=price>KSh 50K</div><span class=muted>Across the network</span></div></section><form class="glass form" method=post><input type=hidden name=csrf_token value="{{csrf_token}}"><h2>Launch a campaign</h2>{% if notice %}<p class=notice>{{notice}}</p>{% endif %}<div class=grid><input name=business required placeholder="Business / brand"><input type=email name=email required placeholder="Business email"><input name=phone placeholder="Phone number"><input name=headline placeholder="Ad headline"></div><div class=grid><select name=scope id=scope onchange="county.disabled=this.value==='National'"><option>County</option><option>National</option></select><select name=county id=county>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><select name=package><option>County Starter</option><option>County Pro</option><option>National</option></select><input name=url placeholder="Business website / campaign link (optional)"><button>SUBMIT CAMPAIGN FOR REVIEW →</button><p class=muted>No payment is collected at this stage. Approved campaigns can be connected to M-Pesa once merchant payment credentials are configured.</p></form></main></body></html>"""
+ return render_template_string(html,counties=COUNTIES,notice=notice,csrf_token=csrf_token())
 
 
 @app.post("/api/analytics/pageview")
@@ -219,8 +300,8 @@ def serve_ad():
  county=request.args.get("county","")
  with conn() as db:
   row=db.execute("""SELECT id,business,headline,url,scope,county FROM ad_orders
-   WHERE status='ACTIVE' AND (starts_at IS NULL OR datetime(starts_at)<=datetime('now'))
-   AND (ends_at IS NULL OR datetime(ends_at)>=datetime('now'))
+   WHERE status='ACTIVE' AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
+   AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)
    AND (scope='National' OR county=?)
    ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1""",(county,)).fetchone()
   if not row:return jsonify(ad=None)
@@ -232,13 +313,13 @@ def serve_ad():
 def ad_click(ad_id):
  with conn() as db:
   row=db.execute("SELECT url FROM ad_orders WHERE id=? AND status='ACTIVE'",(ad_id,)).fetchone()
-  if not row or not row["url"]:return redirect("/")
+  if not row or not safe_url(row["url"]):return redirect("/")
   db.execute("UPDATE ad_orders SET clicks=COALESCE(clicks,0)+1 WHERE id=?",(ad_id,))
   return redirect(row["url"],code=302)
 
 @app.get("/admin/ad-metrics")
 def ad_metrics():
- if not ADMIN_KEY or not hmac.compare_digest(request.args.get("key",""),ADMIN_KEY): abort(404)
+ if not admin_authorized(): abort(404)
  with conn() as db:
   rows=[dict(x) for x in db.execute("""SELECT id,business,scope,county,package,budget,status,impressions,clicks,
    CASE WHEN COALESCE(impressions,0)>0 THEN ROUND(COALESCE(clicks,0)*100.0/impressions,2) ELSE 0 END ctr
@@ -247,7 +328,7 @@ def ad_metrics():
 
 @app.post("/admin/ads/<int:ad_id>/status")
 def ad_status(ad_id):
- if not ADMIN_KEY or not hmac.compare_digest(request.args.get("key",""),ADMIN_KEY): abort(404)
+ if not admin_authorized(): abort(404)
  status=(request.get_json(silent=True) or {}).get("status","")
  if status not in {"PENDING_REVIEW","ACTIVE","PAUSED","ENDED"}:return jsonify(error="Invalid status"),400
  with conn() as db:db.execute("UPDATE ad_orders SET status=? WHERE id=?",(status,ad_id))
@@ -255,7 +336,7 @@ def ad_status(ad_id):
 
 @app.get("/admin/ads")
 def admin_ads():
- if not ADMIN_KEY or not hmac.compare_digest(request.args.get("key",""),ADMIN_KEY): abort(404)
+ if not admin_authorized(): abort(404)
  with conn() as db: orders=[dict(x) for x in db.execute("SELECT * FROM ad_orders ORDER BY id DESC LIMIT 100").fetchall()]
  return jsonify({"orders":orders,"note":"Pending campaigns require review before activation."})
 
@@ -291,11 +372,20 @@ document.getElementById('countySearch').addEventListener('keydown',e=>{if(e.key=
 
 @app.get("/health")
 def health():
- dbmode="postgres" if DATABASE_URL else "sqlite-fallback";db_ok=False
+ geo=validate_geography(GEOGRAPHY,COUNTIES);db_ok=False;registry={"ok":False,"verified_candidates":0,"verified_aliases":0,"unresolved_responses":0}
  try:
-  with conn() as c:c.execute("SELECT 1").fetchone();db_ok=True
- except Exception:db_ok=False
- return {"ok":db_ok,"production_ready":db_ok and dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"database_ok":db_ok,"candidate_registry":True,"warning":None if db_ok and dbmode=="postgres" else "Persistent PostgreSQL is not attached and verified; responses may be lost on service restart."}
+  with conn() as c:
+   c.execute("SELECT 1").fetchone();db_ok=True
+   registry={"ok":SCHEMA_OK,"verified_candidates":c.execute("SELECT count(*) n FROM candidates WHERE identity_verified=TRUE AND active=TRUE").fetchone()["n"],"verified_aliases":c.execute("SELECT count(*) n FROM candidate_aliases WHERE verified=TRUE").fetchone()["n"],"unresolved_responses":c.execute("SELECT count(*) n FROM pulse_votes WHERE candidate_id IS NULL").fetchone()["n"]}
+   registry['coverage']=candidate_scope_coverage(GEOGRAPHY,c.execute("SELECT race,county,constituency,ward FROM candidates WHERE identity_verified=TRUE AND active=TRUE").fetchall())
+ except Exception:pass
+ security_ok=bool(ADMIN_KEY and os.environ.get("PULSE_SESSION_SECRET") and SALT!="kenya-pulse")
+ blockers=[]
+ for ok,reason in [(db_ok,"database_unavailable"),(bool(DATABASE_URL),"persistent_postgres_not_configured"),(geo["ok"],"invalid_geography"),(registry["ok"],"schema_not_ready"),(registry.get("coverage",{}).get("missing_scopes",1)==0,"candidate_registry_requires_review"),(security_ok,"security_configuration_incomplete")]:
+  if not ok:blockers.append(reason)
+ operational=db_ok and geo["ok"] and registry["ok"]
+ return jsonify(ok=operational,application="kenya-pulse",database="postgres" if DATABASE_URL else "sqlite-fallback",database_ok=db_ok,production_ready=False,participation_infrastructure_ready=not blockers,blockers=blockers,launch_verification="Requires deployed journey and restart persistence verification",geography=geo,counties=geo["counties"],constituencies=geo["constituencies"],wards=geo["wards"],candidate_registry=registry,payments=payment_configuration()),200 if operational else 503
+
 @app.get("/privacy")
 def privacy():
  return legal_page("Privacy Policy","Effective 2 October 2026",[
@@ -367,7 +457,7 @@ def methodology():
   ("Open participation","Kenya Pulse is an open, voluntary online participation dashboard. It is not a probability sample, and participant results are not representative of all Kenyan voters."),
   ("What participants submit","Participants select a county and race, then enter their current preferred candidate. Public results display aggregate participant counts and percentages rather than individual submissions."),
   ("Duplicate protection","A one-way technical fingerprint derived from limited network and client information is used to restrict duplicate submissions for the same county and race. Raw fingerprints are not displayed publicly."),
-  ("How results are calculated","No weighting or normalization is applied. Undecided participants may enter “Undecided”. Candidate names are participant-entered and spelling variants may be consolidated in future audited releases."),
+  ("How results are calculated","No weighting is applied. New responses are counted using permanent candidate IDs after explicit identity confirmation. Verified aliases resolve to the same ID. Historical unresolved names remain separately labelled until reviewed; no people are silently merged. Payments never affect counts or access to results."),
   ("Independence of results","Kenya Pulse does not endorse candidates or predict election outcomes. Advertising is clearly separated from participation controls and results, and advertising does not affect whether a response is counted.")
  ])
 
@@ -375,7 +465,7 @@ def methodology():
 def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
- sql="SELECT id,name,party,status FROM candidates WHERE active=1 AND race=?";args=[race]
+ sql="SELECT id,name,party,status FROM candidates WHERE active=TRUE AND identity_verified=TRUE AND race=?";args=[race]
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
@@ -384,7 +474,7 @@ def candidates_api():
   rows=c.execute(sql,args).fetchall()
   out=[]
   for x in rows:
-   item=dict(x); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=1 ORDER BY alias",(item["id"],)).fetchall()
+   item=dict(x); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=TRUE ORDER BY alias",(item["id"],)).fetchall()
    item["aliases"]=[a["alias"] for a in aliases];out.append(item)
  return jsonify(candidates=out)
 
@@ -392,7 +482,7 @@ def candidates_api():
 def candidate_resolve():
  d=request.get_json(silent=True) or {};typed=re.sub(r"\s+"," ",str(d.get("name") or "").strip())[:80];race=str(d.get("race") or "").strip();county=str(d.get("county") or "").strip();constituency=str(d.get("constituency") or "").strip();ward=str(d.get("ward") or "").strip()
  if len(typed)<2 or race not in RACES:return jsonify(matches=[]),400
- sql="SELECT DISTINCT c.id,c.name,c.party,c.status FROM candidates c LEFT JOIN candidate_aliases a ON a.candidate_id=c.id WHERE c.active=1 AND c.race=? AND (LOWER(c.name)=LOWER(?) OR (a.verified=1 AND LOWER(a.alias)=LOWER(?)))";args=[race,typed,typed]
+ sql="SELECT DISTINCT c.id,c.name,c.party,c.status FROM candidates c LEFT JOIN candidate_aliases a ON a.candidate_id=c.id WHERE c.active=TRUE AND c.identity_verified=TRUE AND c.race=? AND (c.normalized_name=? OR (a.verified=TRUE AND a.normalized_alias=?))";args=[race,normalized_name(typed),normalized_name(typed)]
  if race!="President":sql+=" AND c.county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND c.constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND c.ward=?";args.append(ward)
@@ -408,16 +498,22 @@ def vote():
  if race in {"Member of Parliament","MCA"} and not geography_ok(county,constituency,ward if race=="MCA" else ""):return jsonify(error="Invalid constituency or ward for the selected county."),400
  if race not in {"Member of Parliament","MCA"}: constituency=""; ward=""
  if race=="Member of Parliament": ward=""
- if not candidate_id:return jsonify(error="Please choose and confirm a listed person before submitting."),400
+ if type(candidate_id) is not int or candidate_id<1:return jsonify(error="Please choose and confirm a listed person before submitting."),400
  with conn() as c:
-  scope_sql="SELECT id,name FROM candidates WHERE id=? AND active=1 AND race=?";scope_args=[candidate_id,race]
+  scope_sql="SELECT id,name FROM candidates WHERE id=? AND active=TRUE AND identity_verified=TRUE AND race=?";scope_args=[candidate_id,race]
   if race!="President":scope_sql+=" AND county=?";scope_args.append(county)
   if race in {"Member of Parliament","MCA"}:scope_sql+=" AND constituency=?";scope_args.append(constituency)
   if race=="MCA":scope_sql+=" AND ward=?";scope_args.append(ward)
   canonical=c.execute(scope_sql,scope_args).fetchone()
  if not canonical:return jsonify(error="That person is not verified for the selected seat and area."),400
  candidate=canonical["name"]
- raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
+ fp=participant_fp()
+ with conn() as c:
+  prior=c.execute("SELECT race,constituency,ward FROM pulse_votes WHERE fp=? AND county=?",(fp,county)).fetchall()
+  completed={x["race"] for x in prior}
+  if race in completed:return jsonify(error="A response is already recorded for this county and race."),409
+  if any(r not in completed for r in RACES[:RACES.index(race)]):return jsonify(error="Complete the preceding seats first."),409
+  if race=="MCA" and any(x["race"]=="Member of Parliament" and x["constituency"]!=constituency for x in prior):return jsonify(error="Use the constituency selected for Member of Parliament."),400
  # Neutral integrity control: cap rapid submissions from the same technical fingerprint.
  with conn() as c:
   rate_sql="SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= CURRENT_TIMESTAMP - INTERVAL '10 minutes'" if c.pg else "SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= datetime('now','-10 minutes')"
@@ -426,8 +522,10 @@ def vote():
   if n>=8:return jsonify(error="Too many submissions in a short period. Please try again later."),429
  try:
   with conn() as c:
+   slot=c.execute("INSERT INTO participation_slots(fp,county,race) VALUES(?,?,?) ON CONFLICT(fp,county,race) DO NOTHING RETURNING race",(fp,county,race)).fetchone()
+   if not slot:return jsonify(error="A response is already recorded for this county and race."),409
    c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,issue,fp,constituency or None,ward or None))
-  return jsonify(message="Preference counted. Live results updated.")
+  return jsonify(message="Preference counted. Live results updated.",progress=participation_state(county))
  except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this device/network is already recorded for this area and race."),409
 @app.get("/api/results")
 def results():
@@ -437,11 +535,138 @@ def results():
  if race in {"Member of Parliament","MCA"} and not constituency:return jsonify(total=0,results=[],area_required="constituency")
  if race=="MCA" and not ward:return jsonify(total=0,results=[],area_required="ward")
  if race in {"Member of Parliament","MCA"} and not geography_ok(county,constituency,ward if race=="MCA" else ""):return jsonify(error="Invalid constituency or ward for the selected county."),400
- sql="SELECT candidate,count(*) votes FROM pulse_votes WHERE county=? AND race=?";args=[county,race]
- if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
- if race=="MCA":sql+=" AND ward=?";args.append(ward)
- sql+=" GROUP BY candidate ORDER BY votes DESC,candidate"
- with conn() as c:
-  rows=c.execute(sql,args).fetchall()
+ sql="SELECT v.candidate_id,c.name AS canonical_name,CASE WHEN v.candidate_id IS NULL THEN v.candidate ELSE NULL END AS legacy_name,count(*) votes FROM pulse_votes v LEFT JOIN candidates c ON c.id=v.candidate_id WHERE v.county=? AND v.race=?";args=[county,race]
+ if race in {"Member of Parliament","MCA"}:sql+=" AND v.constituency=?";args.append(constituency)
+ if race=="MCA":sql+=" AND v.ward=?";args.append(ward)
+ sql+=" GROUP BY v.candidate_id,c.name,CASE WHEN v.candidate_id IS NULL THEN v.candidate ELSE NULL END ORDER BY votes DESC,canonical_name,legacy_name"
+ with conn() as c:rows=c.execute(sql,args).fetchall()
  total=sum(x["votes"] for x in rows)
- return jsonify(total=total,results=[{"candidate":x["candidate"],"votes":x["votes"],"pct":round(x["votes"]*100/total,1) if total else 0} for x in rows])
+ return jsonify(total=total,results=[{"candidate_id":x["candidate_id"],"candidate":x["canonical_name"] or x["legacy_name"],"identity_status":"verified" if x["candidate_id"] else "historical-unresolved","votes":x["votes"],"pct":round(x["votes"]*100/total,1) if total else 0} for x in rows])
+
+
+def csrf_token():
+ if 'csrf' not in session:session['csrf']=secrets.token_urlsafe(32)
+ return session['csrf']
+
+
+def participant_fp():
+ # Render terminates the public connection; trust only the nearest forwarded address.
+ ip=request.remote_addr or ''
+ if os.environ.get('RENDER'):
+  ip=request.headers.get('X-Forwarded-For',ip).split(',')[-1].strip()
+ return hashlib.sha256((ip+request.headers.get('User-Agent','')+SALT).encode()).hexdigest()
+
+
+def participation_state(county):
+ with conn() as c:
+  rows=c.execute('SELECT race,constituency,ward FROM pulse_votes WHERE fp=? AND county=?',(participant_fp(),county)).fetchall()
+ done={r['race'] for r in rows}
+ next_race=next((r for r in RACES if r not in done),None)
+ return {'completed':[r for r in RACES if r in done],'next_race':next_race,'complete':next_race is None,'constituency':next((r['constituency'] for r in rows if r['race']=='Member of Parliament'),None),'ward':next((r['ward'] for r in rows if r['race']=='MCA'),None)}
+
+
+@app.get('/api/participation')
+def participation():
+ county=request.args.get('county','')
+ if county not in COUNTIES:return jsonify(error='Invalid county'),400
+ return jsonify(participation_state(county))
+
+
+@app.get('/api/csrf')
+def csrf():return jsonify(token=csrf_token())
+
+
+@app.before_request
+def protect_request():
+ if request.path in {'/api/vote','/api/geography'} and not validate_geography(GEOGRAPHY,COUNTIES)['ok']:
+  return jsonify(error='Geography integrity check failed. Participation is temporarily unavailable.'),503
+ if request.method in {'POST','PUT','PATCH','DELETE'}:
+  if request.path not in {'/api/support/webhook','/meta/data-deletion'} and not (request.path.startswith('/admin/') and admin_authorized()):
+   origin=request.headers.get('Origin')
+   if origin and urlsplit(origin).netloc!=request.host:abort(403)
+   token=request.headers.get('X-CSRF-Token','') or request.form.get('csrf_token','')
+   if not session.get('csrf') or not hmac.compare_digest(token,session['csrf']):return jsonify(error='Refresh this page before submitting.'),403
+  if request.is_json:
+   d=request.get_json(silent=True)
+   if not isinstance(d,dict):return jsonify(error='A JSON object is required.'),400
+   for k in ('county','race','constituency','ward','candidate','issue','name','status'):
+    if k in d and not isinstance(d[k],str):return jsonify(error='Invalid field type.'),400
+ # Shared database counters work across workers; signature-authenticated webhooks are exempt.
+ if request.path not in {'/health','/api/support/webhook','/meta/data-deletion'} and (request.method!='GET' or request.path.startswith(('/admin/','/support/return'))):
+  now=int(time.time());minute=now//60
+  category='admin' if request.path.startswith('/admin/') else 'write'
+  bucket=hashlib.sha256((participant_fp()+category+str(minute)).encode()).hexdigest()
+  with conn() as c:
+   row=c.execute('INSERT INTO request_limits(bucket,count,expires_at) VALUES(?,1,?) ON CONFLICT(bucket) DO UPDATE SET count=request_limits.count+1 RETURNING count',(bucket,now+120)).fetchone()
+   c.execute('DELETE FROM request_limits WHERE expires_at<?',(now,))
+  if row['count']>(20 if category=='admin' else 90):return jsonify(error='Too many requests. Try again shortly.'),429
+
+
+@app.after_request
+def secure_response(response):
+ response.headers['X-Content-Type-Options']='nosniff'
+ response.headers['X-Frame-Options']='DENY'
+ response.headers['Referrer-Policy']='strict-origin-when-cross-origin'
+ response.headers['Permissions-Policy']='camera=(), microphone=(), geolocation=()'
+ response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+ if os.environ.get('RENDER'):response.headers['Strict-Transport-Security']='max-age=31536000'
+ if request.path.startswith(('/api/','/admin/','/health','/support/')):response.headers['Cache-Control']='no-store'
+ return response
+
+
+@app.errorhandler(500)
+def server_error(error):return jsonify(error='Service temporarily unavailable. Please try again.'),500
+
+
+@app.post('/admin/candidates')
+def review_candidate():
+ if not admin_authorized():abort(404)
+ d=request.get_json(silent=True) or {}
+ name=' '.join(str(d.get('name') or '').split())
+ race=d.get('race','');county=d.get('county','');constituency=d.get('constituency','');ward=d.get('ward','')
+ source=str(d.get('source_url') or '');status=d.get('status','PROSPECTIVE')
+ if not 2<=len(name)<=120 or race not in RACES or not safe_url(source) or len(source)>500 or d.get('identity_verified') is not True:return jsonify(error='Explicit identity review, full name, race and source URL are required.'),400
+ if status not in {'PROSPECTIVE','DECLARED','NOMINATED'}:return jsonify(error='Invalid candidate status'),400
+ if race!='President' and not geography_ok(county,constituency,ward):return jsonify(error='Invalid candidate area'),400
+ if race in {'Member of Parliament','MCA'} and not constituency:return jsonify(error='Constituency required'),400
+ if race=='MCA' and not ward:return jsonify(error='Ward required'),400
+ if race=='President':county=''
+ if race not in {'Member of Parliament','MCA'}:constituency=''
+ if race!='MCA':ward=''
+ aliases=d.get('verified_aliases',[])
+ if not isinstance(aliases,list) or len(aliases)>30 or any(not isinstance(a,str) or not 2<=len(a.strip())<=120 for a in aliases):return jsonify(error='Invalid aliases'),400
+ cid=d.get('candidate_id')
+ if cid is not None and (type(cid) is not int or cid<1):return jsonify(error='Invalid candidate ID'),400
+ with conn() as c:
+  if cid:
+   old=c.execute('SELECT * FROM candidates WHERE id=?',(cid,)).fetchone()
+   if not old:return jsonify(error='Candidate not found'),404
+   if any((old[k] or '')!=v for k,v in [('race',race),('county',county),('constituency',constituency),('ward',ward)]):return jsonify(error='Existing candidate IDs cannot be reassigned to another race or area.'),409
+   c.execute('UPDATE candidates SET name=?,normalized_name=?,party=?,status=?,source_url=?,identity_verified=TRUE WHERE id=?',(name,normalized_name(name),str(d.get('party') or '')[:100],status,source,cid))
+  else:
+   duplicate=c.execute("SELECT id FROM candidates WHERE normalized_name=? AND race=? AND COALESCE(county,'')=? AND COALESCE(constituency,'')=? AND COALESCE(ward,'')=?",(normalized_name(name),race,county,constituency,ward)).fetchone()
+   if duplicate:return jsonify(error='Review the existing candidate ID instead of creating a duplicate.',candidate_id=duplicate['id']),409
+   cid=c.execute('INSERT INTO candidates(name,normalized_name,race,county,constituency,ward,party,status,source_url,identity_verified) VALUES(?,?,?,?,?,?,?,?,?,TRUE) RETURNING id',(name,normalized_name(name),race,county or None,constituency or None,ward or None,str(d.get('party') or '')[:100],status,source)).fetchone()['id']
+  for alias in aliases:
+   alias=' '.join(alias.split())
+   existing=c.execute('SELECT id FROM candidate_aliases WHERE candidate_id=? AND LOWER(alias)=LOWER(?)',(cid,alias)).fetchone()
+   if existing:c.execute('UPDATE candidate_aliases SET verified=TRUE,normalized_alias=? WHERE id=?',(normalized_name(alias),existing['id']))
+   else:c.execute('INSERT INTO candidate_aliases(candidate_id,alias,normalized_alias,verified) VALUES(?,?,?,TRUE)',(cid,alias,normalized_name(alias)))
+ return jsonify(candidate_id=cid,identity_verified=True)
+
+
+from payments import register_payments
+payment_configuration=register_payments(app,conn,participation_state,legal_page)
+
+
+@app.get('/admin/candidates')
+def candidate_review_queue():
+ if not admin_authorized():abort(404)
+ try:
+  offset=max(0,int(request.args.get('offset','0')))
+ except ValueError:return jsonify(error='Invalid offset'),400
+ with conn() as c:
+  rows=[dict(x) for x in c.execute('SELECT * FROM candidates ORDER BY id LIMIT 100 OFFSET ?',(offset,)).fetchall()]
+  for row in rows:
+   row['aliases']=[dict(a) for a in c.execute('SELECT id,alias,verified FROM candidate_aliases WHERE candidate_id=? ORDER BY id',(row['id'],)).fetchall()]
+ return jsonify(candidates=rows,next_offset=offset+len(rows) if len(rows)==100 else None)
