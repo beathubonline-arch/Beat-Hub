@@ -129,21 +129,25 @@ def support_initialize():
  try: amount=int(body.get("amount",0))
  except: amount=0
  if amount<5 or amount>1000000:return jsonify(error="Support starts from KSh 5."),400
- if not re.match(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",email):return jsonify(error="Enter a valid email for the payment receipt."),400
- if not PAYSTACK_SECRET_KEY:return jsonify(error="Payments are being connected. Please try again shortly."),503
+ if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$",email):return jsonify(error="Enter a valid email for the payment receipt."),400
+ if not PAYSTACK_SECRET_KEY.startswith("sk_test_"):return jsonify(error="Test checkout is not configured. Participation remains free."),503
+ county=str(body.get("county", ""))
+ with conn() as db:
+  rows=db.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,participation_fingerprint())).fetchall()
+ if not set(RACES).issubset({x["race"] for x in rows}):return jsonify(error="Complete all six seats before optional support."),409
  ref="kp-"+secrets.token_hex(10); origin=request.url_root.rstrip("/")
  with conn() as db: db.execute("INSERT INTO support_payments(reference,email,amount_kes,currency,status) VALUES(?,?,?,?,?)",(ref,email,amount,"KES","INITIATED"))
  payload={"email":email,"amount":str(amount*100),"currency":"KES","reference":ref,"callback_url":origin+"/support/callback","channels":["mobile_money","card"],"metadata":{"purpose":"optional_support","separate_from_participation":True}}
  try:
   out=paystack_request("/transaction/initialize",payload); d=out.get("data") or {}
-  if not d.get("authorization_url"): raise RuntimeError("missing authorization url")
+  if not str(d.get("authorization_url", "")).startswith("https://checkout.paystack.com/"): raise RuntimeError("invalid checkout url")
   return jsonify(authorization_url=d.get("authorization_url"),reference=ref)
  except Exception:
   with conn() as db: db.execute("UPDATE support_payments SET status='INIT_FAILED',updated_at=CURRENT_TIMESTAMP WHERE reference=?",(ref,))
   return jsonify(error="Could not start payment. Please try again."),502
 
 def record_support_verification(ref,d):
- if not ref or d.get("reference")!=ref:return False
+ if not ref or d.get("reference")!=ref or d.get("domain")!="test":return False
  with conn() as db:
   row=db.execute("SELECT reference,amount_kes,currency,status FROM support_payments WHERE reference=?",(ref,)).fetchone()
   if not row:return False
@@ -157,7 +161,7 @@ def record_support_verification(ref,d):
 @app.get("/support/callback")
 def support_callback():
  ref=request.args.get("reference","")[:100]
- if not ref:return redirect("/?support=missing")
+ if not re.fullmatch(r"kp-[a-f0-9]{20}",ref):return redirect("/?support=missing")
  try:
   d=(paystack_request("/transaction/verify/"+ref).get("data") or {}); ok=record_support_verification(ref,d)
   return redirect("/?support="+("success" if ok else "pending"))
@@ -165,7 +169,7 @@ def support_callback():
 
 @app.post("/api/paystack/webhook")
 def paystack_webhook():
- if not PAYSTACK_SECRET_KEY:return "",503
+ if not PAYSTACK_SECRET_KEY.startswith("sk_test_"):return "",503
  raw=request.get_data(); sig=request.headers.get("x-paystack-signature",""); expected=hmac.new(PAYSTACK_SECRET_KEY.encode(),raw,hashlib.sha512).hexdigest()
  if not hmac.compare_digest(sig,expected):return "",401
  event=request.get_json(silent=True) or {}
@@ -206,7 +210,7 @@ async function populateWards(){
  sel.innerHTML='<option value="">Choose ward</option>';if(!county||!con)return;
  try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)+'&constituency='+encodeURIComponent(con)),j=await r.json();(j.wards||[]).forEach(x=>sel.add(new Option(x,x)));loadCandidates();}catch(e){}
 }
-function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await loadCandidates();load()})()}
+function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await restoreParticipation();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await restoreParticipation();await loadCandidates();load()})()}
 function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
@@ -218,10 +222,22 @@ let confirmedCandidate=null;
 function cancelCandidateConfirm(){confirmedCandidate=null;let b=document.getElementById('candidateConfirm');b.style.display='none';document.getElementById('candidateConfirmText').textContent='';document.getElementById('confirmCandidateBtn').style.display='inline-block'}
 function onScopeChange(){cancelCandidateConfirm();document.getElementById('candidate').value='';areaMode();loadCandidates();load()}
 function onRaceChange(){cancelCandidateConfirm();document.getElementById('candidate').value='';areaMode();loadCandidates();load()}
-async function vote(){let candidate=document.getElementById('candidate').value.trim(),issue=document.getElementById('issue').value.trim(),msg=document.getElementById('msg');if(!C.value||candidate.length<2){msg.textContent='Choose a county and enter a candidate name.';return}if(!confirmedCandidate||confirmedCandidate.typed!==candidate){try{let rr=await fetch('/api/candidates/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:candidate,race:R.value,county:C.value,constituency:document.getElementById('constituency').value.trim(),ward:document.getElementById('ward').value.trim()})});let rj=await rr.json(),matches=rj.matches||[],box=document.getElementById('candidateConfirm'),txt=document.getElementById('candidateConfirmText'),btn=document.getElementById('confirmCandidateBtn');if(matches.length===1){let m=matches[0];txt.textContent='Full name: '+m.name+(candidate.toLowerCase()!==m.name.toLowerCase()?' · Alias entered: '+candidate:'')+(m.party?' · '+m.party:'')+'.';btn.style.display='inline-block';box.style.display='block';btn.onclick=()=>{confirmedCandidate={id:m.id,name:m.name,typed:candidate};box.style.display='none';vote()};return}if(matches.length>1){msg.textContent='More than one verified person matches that name. Please enter the full name.';return}confirmedCandidate={id:null,name:candidate,typed:candidate}}catch(e){confirmedCandidate={id:null,name:candidate,typed:candidate}}}let cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();if((R.value==='Member of Parliament'||R.value==='MCA')&&!cv){msg.textContent='Specify the constituency for this race.';return}if(R.value==='MCA'&&!wv){msg.textContent='Specify the ward for this MCA race.';return}let x=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate:confirmedCandidate.name,candidate_id:confirmedCandidate.id,issue,constituency:document.getElementById('constituency').value.trim(),ward:document.getElementById('ward').value.trim()})});let j=await x.json();msg.textContent=j.message||j.error;if(x.ok){document.getElementById('candidate').value='';confirmedCandidate=null;document.getElementById('candidateConfirm').style.display='none';await load();advanceParticipation()}}
+async function vote(){try{return await submitPreference()}catch(e){document.getElementById('msg').textContent='Could not confirm the response. Check your connection and retry.'}}
+async function submitPreference(){let candidate=document.getElementById('candidate').value.trim(),issue=document.getElementById('issue').value.trim(),msg=document.getElementById('msg');if(!C.value||candidate.length<2){msg.textContent='Choose a county and enter a candidate name.';return}if(!confirmedCandidate||confirmedCandidate.typed!==candidate){try{let rr=await fetch('/api/candidates/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:candidate,race:R.value,county:C.value,constituency:document.getElementById('constituency').value.trim(),ward:document.getElementById('ward').value.trim()})});if(!rr.ok)throw new Error('Candidate lookup unavailable');let rj=await rr.json(),matches=rj.matches||[],box=document.getElementById('candidateConfirm'),txt=document.getElementById('candidateConfirmText'),btn=document.getElementById('confirmCandidateBtn');if(matches.length===1){let m=matches[0];txt.textContent='Full name: '+m.name+(candidate.toLowerCase()!==m.name.toLowerCase()?' · Alias entered: '+candidate:'')+(m.party?' · '+m.party:'')+'.';btn.style.display='inline-block';box.style.display='block';btn.onclick=()=>{confirmedCandidate={id:m.id,name:m.name,typed:candidate};box.style.display='none';vote()};return}if(matches.length>1){msg.textContent='More than one verified person matches that name. Please enter the full name.';return}confirmedCandidate={id:null,name:candidate,typed:candidate}}catch(e){msg.textContent='Candidate lookup is temporarily unavailable. Please retry.';return}}let cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();if((R.value==='Member of Parliament'||R.value==='MCA')&&!cv){msg.textContent='Specify the constituency for this race.';return}if(R.value==='MCA'&&!wv){msg.textContent='Specify the ward for this MCA race.';return}let x=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate:confirmedCandidate.name,candidate_id:confirmedCandidate.id,issue,constituency:document.getElementById('constituency').value.trim(),ward:document.getElementById('ward').value.trim()})});let j=await x.json();msg.textContent=j.message||j.error;if(x.status===409){await restoreParticipation();await load();return}if(x.ok&&j.recorded===true){document.getElementById('candidate').value='';confirmedCandidate=null;document.getElementById('candidateConfirm').style.display='none';await restoreParticipation();await load()}}
+async function restoreParticipation(){
+ if(!C.value)return;
+ const response=await fetch('/api/participation/progress?county='+encodeURIComponent(C.value),{cache:'no-store'});
+ if(!response.ok)throw new Error('Could not check your saved progress. Please retry.');
+ const progress=await response.json();
+ if(progress.next_race)R.value=progress.next_race;
+ if(progress.next_race==='MCA'&&progress.constituency){document.getElementById('constituency').value=progress.constituency;await populateWards()}
+ areaMode();await loadCandidates();
+ document.getElementById('supportbox').style.display=progress.complete&&sessionStorage.getItem('kp_support_dismissed')!=='1'?'block':'none';
+ document.getElementById('msg').textContent=progress.complete?'All six responses are saved. Support is optional.':progress.completed.length+' of 6 responses saved. Next: '+progress.next_race+'.';
+}
 const PARTICIPATION_FLOW=['President','Governor','Senator','Woman Representative','Member of Parliament','MCA'];
-function advanceParticipation(){let i=PARTICIPATION_FLOW.indexOf(R.value);if(i<0)return;if(i<PARTICIPATION_FLOW.length-1){R.value=PARTICIPATION_FLOW[i+1];clearAreas();areaMode();loadCandidates();document.getElementById('msg').textContent='Response recorded. Next: '+R.value+'.';document.getElementById('supportbox').style.display='none';return}document.getElementById('msg').textContent='All six seat responses completed. Your responses are recorded.';document.getElementById('supportbox').style.display='block';document.getElementById('supportbox').scrollIntoView({behavior:'smooth',block:'center'})}
-function dismissSupport(){document.getElementById('supportbox').style.display='none'}async function supportAmount(preset){let amount=preset||parseInt(document.getElementById('supportCustom').value||'0',10),msg=document.getElementById('supportmsg'),email=(document.getElementById('supportEmail').value||'').trim();if(!Number.isFinite(amount)||amount<5){msg.textContent='Support starts from KSh 5.';return}if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)){msg.textContent='Enter a valid email for the payment receipt.';document.getElementById('supportEmail').focus();return}msg.textContent='Opening secure Paystack checkout…';try{let x=await fetch('/api/support/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,email})}),j=await x.json();if(!x.ok||!j.authorization_url)throw new Error(j.error||'Could not start payment');location.href=j.authorization_url}catch(e){msg.textContent=e.message+'. No money has been taken.'}}async function loadAd(){let x=await fetch('/api/ad?county='+encodeURIComponent(C.value||'')),j=await x.json();if(j.ad){let a=j.ad,box=document.getElementById('liveAd');box.innerHTML='<div><b>'+esc(a.headline||a.business)+'</b><small>Sponsored by '+esc(a.business)+'</small>'+(a.url?'<div style="margin-top:10px"><a href="'+a.click_url+'" rel="sponsored noopener" style="color:#ffd54a">Visit advertiser →</a></div>':'')+'</div>'}}loadAd();
+function advanceParticipation(){let i=PARTICIPATION_FLOW.indexOf(R.value);if(i<0)return;if(i<PARTICIPATION_FLOW.length-1){R.value=PARTICIPATION_FLOW[i+1];if(R.value!=='MCA')clearAreas();areaMode();loadCandidates();document.getElementById('msg').textContent='Response recorded. Next: '+R.value+'.';document.getElementById('supportbox').style.display='none';return}document.getElementById('msg').textContent='All six seat responses completed. Your responses are recorded.';document.getElementById('supportbox').style.display='block';document.getElementById('supportbox').scrollIntoView({behavior:'smooth',block:'center'})}
+function dismissSupport(){sessionStorage.setItem('kp_support_dismissed','1');document.getElementById('supportbox').style.display='none'}async function supportAmount(preset){let amount=preset||parseInt(document.getElementById('supportCustom').value||'0',10),msg=document.getElementById('supportmsg'),email=(document.getElementById('supportEmail').value||'').trim();if(!Number.isFinite(amount)||amount<5){msg.textContent='Support starts from KSh 5.';return}if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){msg.textContent='Enter a valid email for the payment receipt.';document.getElementById('supportEmail').focus();return}msg.textContent='Opening secure Paystack checkout…';try{let x=await fetch('/api/support/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,email,county:C.value})}),j=await x.json();if(!x.ok||!j.authorization_url)throw new Error(j.error||'Could not start payment');location.href=j.authorization_url}catch(e){msg.textContent=e.message+'. No money has been taken.'}}async function loadAd(){let x=await fetch('/api/ad?county='+encodeURIComponent(C.value||'')),j=await x.json();if(j.ad){let a=j.ad,box=document.getElementById('liveAd');box.innerHTML='<div><b>'+esc(a.headline||a.business)+'</b><small>Sponsored by '+esc(a.business)+'</small>'+(a.url?'<div style="margin-top:10px"><a href="'+a.click_url+'" rel="sponsored noopener" style="color:#ffd54a">Visit advertiser →</a></div>':'')+'</div>'}}loadAd();
 async function load(){if(!C.value)return;loadAd();let q='/api/results?county='+encodeURIComponent(C.value)+'&race='+encodeURIComponent(R.value);if(R.value==='Member of Parliament'||R.value==='MCA')q+='&constituency='+encodeURIComponent(document.getElementById('constituency').value.trim());if(R.value==='MCA')q+='&ward='+encodeURIComponent(document.getElementById('ward').value.trim());let x=await fetch(q,{cache:'no-store'}),j=await x.json();document.getElementById('metricTotal').textContent=j.total;document.getElementById('rt').textContent=C.value+' · '+R.value;let h='';for(let a of j.results){h+='<div class=row><b>'+esc(a.candidate)+'</b><span style="float:right">'+a.votes+' · '+a.pct+'%</span><div class=bar><div class=fill style="width:'+a.pct+'%"></div></div></div>'}document.getElementById('results').innerHTML=h||'<p class=muted>No responses yet for this county and race.</p>'}function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 let liveCountTimer=setInterval(()=>{if(C.value&&!document.hidden)load()},3000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&C.value)load()});
 </script></body></html>'''
@@ -466,7 +482,7 @@ def candidates_api():
   rows=c.execute(sql,args).fetchall()
   out=[]
   for x in rows:
-   item=dict(x); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=1 ORDER BY alias",(item["id"],)).fetchall()
+   item=dict(x); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=TRUE ORDER BY alias",(item["id"],)).fetchall()
    item["aliases"]=[a["alias"] for a in aliases];out.append(item)
  return jsonify(candidates=out)
 
@@ -480,6 +496,20 @@ def candidate_resolve():
  if race=="MCA":sql+=" AND c.ward=?";args.append(ward)
  with conn() as c:rows=c.execute(sql,args).fetchall()
  return jsonify(matches=[dict(x) for x in rows],typed=typed)
+
+def participation_fingerprint():
+ raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode()
+ return hashlib.sha256(raw).hexdigest()
+
+@app.get("/api/participation/progress")
+def participation_progress():
+ county=request.args.get("county","")
+ if county not in COUNTIES:return jsonify(error="Invalid county"),400
+ with conn() as c:
+  rows=c.execute("SELECT race,constituency,ward FROM pulse_votes WHERE county=? AND fp=? ORDER BY id",(county,participation_fingerprint())).fetchall()
+ completed=[race for race in RACES if any(x["race"]==race for x in rows)]
+ area=next((x for x in rows if x["race"]=="Member of Parliament"),None)
+ return jsonify(completed=completed,next_race=next((r for r in RACES if r not in completed),None),complete=len(completed)==6,constituency=area["constituency"] if area else ""),200,{"Cache-Control":"private, no-store"}
 
 @app.post("/api/vote")
 def vote():
@@ -500,11 +530,16 @@ def vote():
   if not canonical:return jsonify(error="That verified registry entry does not match the selected seat and area."),400
   candidate=canonical["name"]
  else:
-  candidate=re.sub(r"\\s+"," ",candidate).strip()
+  candidate=re.sub(r"\s+"," ",candidate).strip()
   # Free-text names are accepted after the client explicitly submits them; do not block
   # participation merely because the registry has no matching entry yet.
   if len(candidate)<2:return jsonify(error="Enter the person’s name."),400
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
+ with conn() as c:
+  completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,fp)).fetchall()}
+ if race not in completed:
+  next_race=next((r for r in RACES if r not in completed),None)
+  if race!=next_race:return jsonify(error="Complete the seats in order.",next_race=next_race),409
  # Neutral integrity control: cap rapid submissions from the same technical fingerprint.
  with conn() as c:
   rate_sql="SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= CURRENT_TIMESTAMP - INTERVAL '10 minutes'" if c.pg else "SELECT count(*) n FROM pulse_votes WHERE fp=? AND created_at >= datetime('now','-10 minutes')"
