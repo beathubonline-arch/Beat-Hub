@@ -41,6 +41,7 @@ from app.routers import (
     seo,
     sessions,
     track_catalog,
+    trend_dna,
 )
 from app.routers.growth_runner_v4 import router as growth_runner_router
 from app.services.payout_policy import PAYOUT_MINIMUM
@@ -269,6 +270,7 @@ app.include_router(merchandise.router)
 app.include_router(merchandise_account.router)
 app.include_router(notifications.router)
 app.include_router(sessions.router)
+app.include_router(trend_dna.router)
 app.include_router(growth_runner_router)
 
 

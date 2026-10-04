@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Trend DNA Studio — BeatHub{% endblock %}
+{% block content %}
+<style>
+.tdna{max-width:1200px;margin:24px auto 60px;color:#f5f5f5}
+.tdna-hero{padding:34px;border:1px solid rgba(212,175,55,.23);border-radius:24px;background:radial-gradient(circle at 90% 0,rgba(212,175,55,.16),transparent 32%),linear-gradient(145deg,#111,#17130d 65%,#101010);box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.tdna-kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#f0d878;font-weight:900}
+.tdna h1{font-size:clamp(34px,6vw,64px);line-height:.95;letter-spacing:-.05em;margin:9px 0 14px}
+.tdna h1 span{color:#d4af37}.tdna p{color:#969696;max-width:780px;line-height:1.7}
+.tdna-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:20px}
+.tdna-card{padding:24px;border:1px solid #2a2a2a;border-radius:18px;background:#111}
+.tdna label{display:block;color:#aaa;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin:0 0 7px}
+.tdna input,.tdna select{width:100%;box-sizing:border-box;background:#090909;color:#fff;border:1px solid #303030;border-radius:11px;padding:13px 14px;margin:0 0 15px}
+.tdna input:focus,.tdna select:focus{outline:none;border-color:#d4af37;box-shadow:0 0 0 3px rgba(212,175,55,.08)}
+.tdna-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tdna-btn{width:100%;border:0;border-radius:12px;padding:14px 18px;font-weight:950;cursor:pointer;background:linear-gradient(135deg,#f0d878,#c89d22);color:#17120a}
+.tdna-btn:disabled{opacity:.55;cursor:wait}.tdna-note{font-size:11px;color:#747474;margin-top:12px}
+.tdna-results{display:none;margin-top:20px}.tdna-results.show{display:block}
+.tdna-scoregrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+.tdna-score{padding:14px;border:1px solid #2d2d2d;border-radius:13px;background:#0b0b0b}
+.tdna-score b{display:block;font-size:25px;color:#f0d878}.tdna-score span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.06em}
+.tdna-drafts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.tdna-draft{padding:16px;border:1px solid #2b2b2b;border-radius:14px;background:#0c0c0c}
+.tdna-draft strong{display:block;margin-bottom:5px}.tdna-draft small{color:#777}.tdna-draft audio{width:100%;margin:12px 0}
+.tdna-link{display:inline-flex;padding:10px 12px;border:1px solid rgba(212,175,55,.35);border-radius:10px;color:#f0d878;text-decoration:none;font-size:11px;font-weight:900}
+.tdna-meta{display:flex;gap:14px;align-items:center}.tdna-thumb{width:118px;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#222}
+.tdna-pill{display:inline-flex;padding:6px 9px;border-radius:999px;background:rgba(212,175,55,.09);color:#f0d878;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+.tdna-error{display:none;margin-top:12px;padding:12px;border:1px solid rgba(231,95,95,.4);background:rgba(231,95,95,.08);border-radius:11px;color:#ffb0b0;font-size:12px}
+@media(max-width:850px){.tdna-grid,.tdna-drafts{grid-template-columns:1fr}.tdna-scoregrid{grid-template-columns:1fr 1fr}.tdna-row{grid-template-columns:1fr}}
+</style>
+
+<div class="tdna">
+  <section class="tdna-hero">
+    <div class="tdna-kicker">BeatHub Creator Tool</div>
+    <h1>Trend <span>DNA</span> Studio</h1>
+    <p>Paste a YouTube reference, choose the direction, and BeatHub creates three original beat drafts built around the reference's high-level trend intent — without copying its melody, lyrics, samples or recording.</p>
+  </section>
+
+  <div class="tdna-grid">
+    <section class="tdna-card">
+      <form id="trendForm">
+        <label for="youtube_url">YouTube reference</label>
+        <input id="youtube_url" name="youtube_url" placeholder="https://www.youtube.com/watch?v=..." required>
+        <div class="tdna-row">
+          <div><label for="genre">Genre direction</label><select id="genre"><option value="afrobeats">Afrobeats</option><option value="amapiano">Amapiano</option><option value="drill">Drill</option><option value="trap">Trap</option><option value="dancehall">Dancehall</option><option value="gengetone">Gengetone</option></select></div>
+          <div><label for="mood">Mood</label><input id="mood" value="energetic" maxlength="40"></div>
+        </div>
+        <div class="tdna-row">
+          <div><label for="energy">Energy: <span id="energyOut">85</span>%</label><input id="energy" type="range" min="20" max="100" value="85"></div>
+          <div><label for="bpm">BPM override</label><input id="bpm" type="number" min="60" max="200" placeholder="Auto by genre"></div>
+        </div>
+        <button class="tdna-btn" id="generateBtn" type="submit">Generate 3 Original Beat Drafts</button>
+        <div class="tdna-note">This MVP reads public YouTube metadata only. It does not download or reproduce the YouTube audio. Generated WAV drafts are new compositions created inside BeatHub.</div>
+        <div class="tdna-error" id="trendError"></div>
+      </form>
+    </section>
+    <aside class="tdna-card">
+      <span class="tdna-pill">Built into BeatHub</span>
+      <h3>One workflow</h3>
+      <p>Reference → Trend DNA → original WAV drafts → download → upload to your BeatHub store using the existing creator upload, pricing and licensing flow.</p>
+      <a class="tdna-link" href="/dashboard/upload">Open BeatHub Upload →</a>
+    </aside>
+  </div>
+
+  <section class="tdna-card tdna-results" id="results">
+    <div class="tdna-meta"><img class="tdna-thumb" id="thumb" alt=""><div><div class="tdna-kicker">Reference</div><h2 id="refTitle" style="margin:5px 0"></h2><div id="refAuthor" style="color:#777;font-size:12px"></div></div></div>
+    <div class="tdna-scoregrid" id="scoreGrid"></div>
+    <div id="blueprintText" style="color:#aaa;line-height:1.7;margin:12px 0 18px"></div>
+    <div class="tdna-drafts" id="drafts"></div>
+    <div style="margin-top:18px"><a class="tdna-link" href="/dashboard/upload">Upload a finished beat to BeatHub →</a></div>
+  </section>
+</div>
+
+<script>
+const form=document.getElementById('trendForm'), energy=document.getElementById('energy'), energyOut=document.getElementById('energyOut'), btn=document.getElementById('generateBtn'), errorBox=document.getElementById('trendError');
+energy.addEventListener('input',()=>energyOut.textContent=energy.value);
+form.addEventListener('submit', async (e)=>{
+  e.preventDefault(); errorBox.style.display='none'; btn.disabled=true; btn.textContent='Building Trend DNA + 3 drafts…';
+  const bpmRaw=document.getElementById('bpm').value.trim();
+  const payload={youtube_url:document.getElementById('youtube_url').value.trim(),genre:document.getElementById('genre').value,mood:document.getElementById('mood').value.trim()||'energetic',energy:Number(energy.value),bpm:bpmRaw?Number(bpmRaw):null};
+  try{
+    const r=await fetch('/dashboard/trend-dna/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await r.json(); if(!r.ok||!data.ok) throw new Error(data.error||data.detail||'Generation failed');
+    document.getElementById('results').classList.add('show');
+    document.getElementById('thumb').src=data.metadata.thumbnail||'/static/favicon.svg';
+    document.getElementById('refTitle').textContent=data.metadata.title;
+    document.getElementById('refAuthor').textContent=data.metadata.author||'YouTube reference';
+    const labels={trend_match:'Trend match',hook_strength:'Hook strength',short_form_readiness:'Short-form',artist_space:'Artist space'};
+    document.getElementById('scoreGrid').innerHTML=Object.entries(data.blueprint.scores).map(([k,v])=>'<div class="tdna-score"><b>'+v+'%</b><span>'+labels[k]+'</span></div>').join('');
+    document.getElementById('blueprintText').innerHTML='<b style="color:#fff">'+data.blueprint.genre.toUpperCase()+' · '+data.blueprint.bpm+' BPM · '+data.blueprint.mood+'</b><br>Hook entry: '+data.blueprint.hook_entry_seconds+'s · Short-form window: '+data.blueprint.short_form_window+'<br>'+data.blueprint.originality_rule;
+    document.getElementById('drafts').innerHTML=data.drafts.map(d=>'<div class="tdna-draft"><strong>'+d.name+'</strong><small>'+d.bpm+' BPM · original WAV</small><audio controls preload="none" src="'+d.url+'"></audio><a class="tdna-link" href="'+d.url+'" download>Download WAV</a></div>').join('');
+    document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(err){errorBox.textContent=err.message||String(err);errorBox.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Generate 3 Original Beat Drafts';}
+});
+</script>
+{% endblock %}
