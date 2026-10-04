@@ -617,36 +617,77 @@ def _county_domain_candidates(county):
 
 def _county_site_tenders(county):
  cache_key="county:"+county.lower();cached=TENDER_CACHE.get(cache_key)
- if cached and time.time()-cached["at"]<1800:return cached["items"]
- year=str(time.localtime().tm_year);next_year=str(time.localtime().tm_year+1);found=[];seen=set()
- paths=["/tenders","/tenders/","/procurement","/procurement/","/category/tenders","/downloads/tenders","/opportunities"]
+ if cached and time.time()-cached["at"]<900:return cached["items"]
+ found=[];seen=set()
+
+ # High-confidence official pages with structured/current tender listings.
+ official_pages={
+  "Kwale":["https://kwale.go.ke/active-tenders/"],
+  "Kericho":["https://www.kericho.go.ke/templates/tender_documents","https://kericho.go.ke/templates/all_documents"],
+  "Uasin Gishu":["https://uasingishu.go.ke/tenders/"],
+  "Nairobi City":["https://nairobi.go.ke/tenders/"],
+  "Tharaka-Nithi":["https://tharakanithi.go.ke/tharakanithi-county-tenders/"],
+  "Taita-Taveta":["https://www.taitataveta.go.ke/tenders/"]
+ }
+ urls=list(official_pages.get(county,[]))
  for base in _county_domain_candidates(county):
-  for path in paths:
-   try:
-    url=base.rstrip("/")+path
-    req=urllib.request.Request(url,headers={"User-Agent":"KenyaPulse/1.0 (+official-county-procurement)"})
-    with urllib.request.urlopen(req,timeout=5) as r:
-     final=r.geturl();raw=r.read(700000).decode("utf-8","ignore")
-    host=(urllib.parse.urlparse(final).hostname or "").lower()
-    if not host.endswith(".go.ke"):continue
-    p=_LinkTextParser();p.feed(raw)
-    for txt,href in p.links:
-     label=" ".join(txt.split())
-     low=label.lower()
-     if len(label)<8 or not re.search(r"(?i)\b(tender|quotation|rfq|rfp|procurement|bid)\b",label):continue
-     if year not in label and next_year not in label and year not in raw[max(0,raw.find(txt)-400):raw.find(txt)+500]:continue
-     absu=urllib.parse.urljoin(final,href)
-     ahost=(urllib.parse.urlparse(absu).hostname or "").lower()
-     if not ahost.endswith(".go.ke"):continue
-     sig=(label.lower(),absu)
-     if sig in seen:continue
-     seen.add(sig)
-     found.append({"title":label[:220],"entity":county+" County Government","county":county,"ocid":"","method":"","category":"","close_text":"","source_url":absu,"source_kind":"COUNTY SITE"})
-     if len(found)>=15:break
-    if len(found)>=15:break
-   except Exception:continue
-  if len(found)>=15:break
- if found:TENDER_CACHE[cache_key]={"at":time.time(),"items":found}
+  for path in ["/active-tenders/","/tenders/","/tenders","/procurement/","/procurement","/opportunities/"]:
+   u=base.rstrip("/")+path
+   if u not in urls:urls.append(u)
+
+ for url in urls[:10]:
+  try:
+   req=urllib.request.Request(url,headers={"User-Agent":"KenyaPulse/1.0 (+official-county-procurement)"})
+   with urllib.request.urlopen(req,timeout=6) as r:
+    final=r.geturl();raw=r.read(900000).decode("utf-8","ignore")
+   host=(urllib.parse.urlparse(final).hostname or "").lower()
+   # County governments sometimes use verified county-owned domains outside .go.ke.
+   allowed=host.endswith(".go.ke") or host in {"kwale.go.ke","www.kwale.go.ke"}
+   if not allowed:continue
+
+   # First parse structured table rows (works well for Kwale active tenders and many county portals).
+   for row in re.findall(r"(?is)<tr[^>]*>(.*?)</tr>",raw):
+    cells=[]
+    for cell in re.findall(r"(?is)<t[dh][^>]*>(.*?)</t[dh]>",row):
+     txt=html_lib.unescape(re.sub(r"<[^>]+>"," ",cell))
+     txt=" ".join(txt.split())
+     cells.append(txt)
+    if not cells:continue
+    rowtext=" | ".join(cells)
+    if not re.search(r"(?i)\b(tender|quotation|rfq|rfp|procurement|bid|open)\b",rowtext):continue
+    # Reject rows explicitly marked closed/completed.
+    if re.search(r"(?i)\bclosed\b|\bcompleted\b",rowtext):continue
+    title=cells[0][:220]
+    if not title or title.lower() in {"tender title","document name (click to download)","document name"}:continue
+    ref=cells[1][:140] if len(cells)>1 else ""
+    method=cells[2][:100] if len(cells)>2 else ""
+    category=cells[3][:100] if len(cells)>3 else ""
+    close=cells[4][:100] if len(cells)>4 else ""
+    hrefs=re.findall(r'''(?is)href=["']([^"']+)["']''',row)
+    detail=urllib.parse.urljoin(final,hrefs[0]) if hrefs else final
+    sig=(title.lower(),ref.lower(),detail)
+    if sig in seen:continue
+    seen.add(sig)
+    found.append({"title":title,"entity":county+" County Government","county":county,"ocid":ref,"method":method,"category":category,"close_text":close,"source_url":detail,"source_kind":"OFFICIAL COUNTY SITE"})
+
+   # Also capture named tender documents when the county publishes a document repository rather than a table.
+   p=_LinkTextParser();p.feed(raw)
+   for txt,href in p.links:
+    label=" ".join(txt.split())
+    if len(label)<10 or not re.search(r"(?i)\b(tender|quotation|rfq|rfp|procurement|insurance|supply|construction|works)\b",label):continue
+    if re.search(r"(?i)closed tender|archive",label):continue
+    absu=urllib.parse.urljoin(final,href)
+    ahost=(urllib.parse.urlparse(absu).hostname or "").lower()
+    if not (ahost.endswith(".go.ke") or ahost in {"kwale.go.ke","www.kwale.go.ke"}):continue
+    sig=(label.lower(),"",absu)
+    if sig in seen:continue
+    seen.add(sig)
+    found.append({"title":label[:220],"entity":county+" County Government","county":county,"ocid":"","method":"","category":"","close_text":"","source_url":absu,"source_kind":"OFFICIAL COUNTY SITE"})
+   if len(found)>=25:break
+  except Exception:
+   continue
+ found=found[:25]
+ TENDER_CACHE[cache_key]={"at":time.time(),"items":found}
  return found
 
 @app.get("/api/tenders-live")
