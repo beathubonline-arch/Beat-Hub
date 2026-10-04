@@ -158,21 +158,22 @@ class MkulimaPaymentsRegression(unittest.TestCase):
         r=client.get("/pricing")
         self.assertEqual(r.status_code,200)
         body=r.get_data(as_text=True)
-        self.assertIn("KES 49",body)
-        self.assertIn("KES 199",body)
-        self.assertIn("5 useful questions",body)
+        self.assertIn("KES 399",body)
+        self.assertIn("KES 999",body)
+        self.assertIn("KES 2,999",body)
+        self.assertIn("100 useful questions",body)
 
     def test_unsigned_checkout_is_rejected_before_paystack(self):
         client=app_module.app.test_client()
-        r=client.post("/pay/start",data={"plan":"day_pass","email":"farmer@example.com"})
+        r=client.post("/pay/start",data={"plan":"monthly","email":"farmer@example.com"})
         self.assertEqual(r.status_code,400)
         self.assertIn("WhatsApp",r.get_data(as_text=True))
 
     def test_plan_prices_are_server_controlled(self):
-        self.assertEqual(app_module.MZ_PLANS["day_pass"]["amount_kes"],49)
-        self.assertEqual(app_module.MZ_PLANS["plus_monthly"]["amount_kes"],199)
-        self.assertEqual(app_module.MZ_PLANS["day_pass"]["days"],1)
-        self.assertEqual(app_module.MZ_PLANS["plus_monthly"]["days"],30)
+        self.assertEqual(app_module.MZ_PLANS["season_pass"]["amount_kes"],999)
+        self.assertEqual(app_module.MZ_PLANS["monthly"]["amount_kes"],399)
+        self.assertEqual(app_module.MZ_PLANS["season_pass"]["days"],90)
+        self.assertEqual(app_module.MZ_PLANS["monthly"]["days"],30)
 
 
 
@@ -270,7 +271,8 @@ class ConversationLoopRegression(unittest.TestCase):
         reply=app_module.reply_for("no offer",state)
         self.assertIn("buyer-ready listing",reply.lower())
         self.assertIn("300 trays of eggs",reply.lower())
-        self.assertIn("not connected yet",reply.lower())
+        self.assertIn("send 'marketplace'",reply.lower())
+        self.assertNotIn("offer captured",reply.lower())
 
 
 class GrowthRevenueRegression(unittest.TestCase):

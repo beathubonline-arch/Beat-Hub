@@ -5,6 +5,7 @@ on:
     paths:
       - 'mkulima_ai/**'
       - 'tests/test_mkulima_intent_engine.py'
+      - 'tests/test_mkulima_sale_followups.py'
       - '.github/workflows/mkulima-intent-regression.yml'
   workflow_dispatch:
 jobs:
@@ -16,4 +17,5 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r mkulima_ai/requirements.txt
+      - run: python -m unittest tests.test_mkulima_sale_followups -v
       - run: python -m unittest tests.test_mkulima_intent_engine -v

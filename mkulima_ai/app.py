@@ -208,13 +208,14 @@ def init_db():
 def age_days():
     return (date.today()-datetime.strptime(OBSERVED_ON,"%Y-%m-%d").date()).days
 
-def detect_language(text):
+def detect_language(text, previous="en"):
     t=" "+(text or "").lower()+" "
     sw=sum(1 for w in [" niko "," gunia "," bei "," karibu "," nifanye "," aje "," eneo "," mahindi "," amekupea "," nataka "] if w in t)
     en=sum(1 for w in [" i "," have "," bags "," buyer "," price "," near "," what "," should "," sell "," broker "," offer "] if w in t)
     if sw and en: return "mixed"
     if sw>en: return "sw"
-    return "en"
+    if en: return "en"
+    return previous
 
 def extract_location(text):
     raw=" ".join((text or "").strip().split())
@@ -344,6 +345,8 @@ def parse(text):
     if loc: out["location"]=loc
     bare=re.fullmatch(r"(?:kes|ksh|sh)?\s*([0-9][0-9,]*(?:\.\d+)?)",t)
     if bare: out["_bare_number"]=float(bare.group(1).replace(",",""))
+    shorthand=re.fullmatch(r"(?:kes|ksh|sh)?\s*(\d+(?:\.\d+)?)\s*k(?:\s*(?:per|kwa)\s*(?:bag|gunia))?",t)
+    if shorthand: out["_bare_number"]=float(shorthand.group(1))*1000
     return out
 
 def capture_growth_signal(text,state):
@@ -373,7 +376,10 @@ def is_continue(text):
 
 def is_no_offer(text):
     t=" ".join((text or "").strip().lower().split())
-    return t in NO_OFFER_PHRASES
+    if re.search(r"\b(?:not|si)\s+(?:no offer|no buyer|sina offer)\b",t):
+        return False
+    return t in NO_OFFER_PHRASES or bool(re.search(
+        r"\b(?:have none|have no (?:buyer|offer)|no (?:buyer|offer)(?: yet)?|sina (?:mnunuzi|bei|offer|buyer)|hakuna (?:mnunuzi|offer|buyer))\b",t))
 
 def enrich_case_evidence(text,state):
     """Extract lightweight evidence from natural follow-ups without pretending it is diagnosis."""
@@ -396,15 +402,15 @@ def enrich_case_evidence(text,state):
 def apply_message(text,state):
     state=capture_growth_signal(text,state)
     normalized=" ".join((text or "").lower().split())
-    if any(p in normalized for p in ("new sale","new deal","bei mpya","mauzo mapya","start over","anza upya","reset")):
-        state={}
+    if re.fullmatch(r"(?:new sale|new deal|bei mpya|mauzo mapya|start over|anza upya|reset|(?:i (?:want to|would like to) |want to )?start (?:a ?fresh|again))[,!. ]*",normalized):
+        state={"language":state.get("language","en")}
     incoming=parse(text)
     bare=incoming.pop("_bare_number",None)
     stage=state.get("stage")
     # A newly named product starts a fresh selling case instead of inheriting
     # quantity/offer details from a previous crop or livestock sale.
     if incoming.get("product") and state.get("primary_intent")=="sell" and state.get("product") and incoming["product"]!=state.get("product"):
-        for k in ("bags","quantity","quantity_unit","offer","sale_timing"):
+        for k in ("bags","quantity","quantity_unit","offer","no_offer","sale_timing","market_listing_id"):
             state.pop(k,None)
     # A product named while a seller intake is already active is still part of
     # that sale, even when the follow-up itself contains no sell/buyer keyword.
@@ -427,6 +433,8 @@ def apply_message(text,state):
         if raw and not re.search(r"\b(?:bags?|gunia|buyer|broker|offer|bei)\b",raw,re.I) and not re.fullmatch(r"[0-9,. ]+",raw):
             incoming["location"]=raw[:160].title()
     state.update(incoming)
+    if "offer" in incoming:
+        state.pop("no_offer",None)
     # Normalize legacy bag state into the generic quantity model.
     if state.get("bags") is not None and state.get("quantity") is None:
         state["quantity"]=state["bags"]; state["quantity_unit"]="bags"
@@ -448,7 +456,7 @@ def apply_message(text,state):
         state["primary_intent"]="sell"
         state["intents"]=["sell"]
     state["plan"]=build_plan(text,state)
-    state["language"]=detect_language(text) if text else state.get("language","en")
+    state["language"]=detect_language(text,state.get("language","en")) if text else state.get("language","en")
     # Only the specialist selling flow requires location/bags/offer. Other
     # farmer intents must not be forced through the maize-sale questionnaire.
     if state.get("primary_intent")=="sell" or any(k in state for k in ("bags","quantity","offer")):
@@ -456,7 +464,7 @@ def apply_message(text,state):
         elif "quantity" not in state and "bags" not in state: state["stage"]="quantity" if state.get("product") in NON_BAG_SALE_PRODUCTS else "bags"
         elif state.get("product") in NON_BAG_SALE_PRODUCTS and "sale_timing" not in state: state["stage"]="sale_timing"
         elif state.get("product") in NON_BAG_SALE_PRODUCTS and not state.get("no_offer") and "offer" not in state: state["stage"]="offer"
-        elif state.get("quantity_unit")=="bags" and "offer" not in state: state["stage"]="offer"
+        elif state.get("quantity_unit")=="bags" and not state.get("no_offer") and "offer" not in state: state["stage"]="offer"
         else: state["stage"]="complete"
     else:
         state["stage"]="open"
@@ -472,10 +480,7 @@ def image_context_reply(state, caption=""):
 
 def reply_for(text, known=None):
     f=dict(known or {})
-    lang=detect_language(text)
-    # Preserve established language on short numeric follow-ups.
-    if re.fullmatch(r"(?:kes|ksh|sh)?\s*[0-9][0-9,.]*",(text or "").strip(),re.I):
-        lang=f.get("language",lang)
+    lang=detect_language(text,f.get("language","en"))
     # Safety/urgency reasoning runs before normal intent replies.
     reasoned=safe_reasoning_reply(text,f,lang)
     if reasoned is not None:
@@ -500,7 +505,7 @@ def reply_for(text, known=None):
         if lang=="mixed":
             return f"Sawa 👍 Uko na {quantity:g} {unit} za {product} {f['location']}. Unataka kuuza leo, within the next few days, ama tucheck best price first?"
         return f"Sawa 👍 Una {quantity:g} {unit} za {product} huko {f['location']}. Unataka kuuza leo, ndani ya siku chache, au tuangalie bei bora kwanza?"
-    if product in NON_BAG_SALE_PRODUCTS and f.get("no_offer"):
+    if f.get("no_offer"):
         if lang=="en":
             return (f"Okay. You have {quantity:g} {unit} of {product} in {f['location']} and no buyer offer yet. "
                     f"Buyer-ready listing: FOR SALE — {quantity:g} {unit} of {product}, location: {f['location']}. Seeking serious buyers and the best verified offer. "
@@ -516,7 +521,7 @@ def reply_for(text, known=None):
             return f"Sawa, tuendelee. Uko na buyer offer? Tuma price in KES per {per} (mfano 450 per {per}). Kama huna offer, reply 'no offer' nitengeneze buyer-ready listing na details ulizonipa."
         return f"Sawa, tuendelee. Una buyer offer? Tuma bei ya KES kwa kila {per}. Kama huna offer, sema 'no offer' nitengeneze buyer-ready listing kwa details ulizonipa."
     if unit=="bags" and "offer" not in f:
-        return {"sw":"Buyer/broker amekupea bei gani kwa gunia moja?","en":"What price per bag has the buyer or broker offered you?","mixed":"Buyer/broker amekuoffer how much per bag?"}[lang]
+        return {"sw":"Buyer/broker amekupea bei gani kwa gunia moja? Kama huna offer, sema 'sina offer'.","en":"What price per bag has the buyer or broker offered you? If you have none yet, say 'no offer'.","mixed":"Buyer/broker amekuoffer how much per bag? Kama huna, sema 'no offer'."}[lang]
     if product in NON_BAG_SALE_PRODUCTS and f.get("offer") is not None:
         gross=quantity*f["offer"]
         per=unit[:-1] if unit.endswith("s") else unit
@@ -988,6 +993,15 @@ def _critical_path_self_test():
         "no_90kg_assumption":"90kg" not in reply.lower() and "90 kg" not in reply.lower(),
         "no_hardcoded_sell":"sell now" not in reply.lower() and "uza sasa" not in reply.lower()
     }
+    maize={}
+    for message in ("Nataka kuuza mahindi","Kapsuser tegat factory","10"):
+        maize=apply_message(message,maize)
+    checks["sale_language_preserved"]=maize.get("language")=="sw"
+    maize=apply_message("Have none want to start a fresh",maize)
+    checks["maize_no_offer_advances"]=maize.get("no_offer") and maize.get("stage")=="complete" and "listing" in reply_for("Have none want to start a fresh",maize)
+    maize=apply_message("4K",maize)
+    checks["shorthand_offer_advances"]=maize.get("offer")==4000 and not maize.get("no_offer") and maize.get("stage")=="complete" and "40,000" in reply_for("4K",maize)
+    checks["sale_landmark_preserved"]=maize.get("location")=="Kapsuser Tegat Factory"
     return {"ok":all(checks.values()),"checks":checks}
 
 @app.get("/api/health")
