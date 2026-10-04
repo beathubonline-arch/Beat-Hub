@@ -512,8 +512,15 @@ def vote():
  try:
   with conn() as c:
    c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,issue,fp,constituency or None,ward or None))
-  return jsonify(message="Preference counted. Live results updated.")
+  with conn() as c:
+   check=c.execute("SELECT count(*) n FROM pulse_votes WHERE county=? AND race=? AND fp=? AND LOWER(candidate)=LOWER(?)",(county,race,fp,candidate)).fetchone()
+  saved=check["n"] if hasattr(check,"keys") else check[0]
+  if saved<1:return jsonify(error="The response could not be verified after saving. Please retry."),500
+  return jsonify(message="Preference counted and verified.",recorded=True)
  except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this device/network is already recorded for this area and race."),409
+ except Exception as e:
+  app.logger.exception("vote persistence failure")
+  return jsonify(error="Database error while recording this response. Please retry.",recorded=False),500
 @app.get("/api/results")
 def results():
  county=request.args.get("county","");race=request.args.get("race","President")
