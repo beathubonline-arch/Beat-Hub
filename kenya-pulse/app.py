@@ -394,10 +394,35 @@ document.getElementById('countySearch').addEventListener('keydown',e=>{if(e.key=
  return render_template_string(html,cards=cards,totalv=totalv,totalr=totalr,rate=rate,ad_impressions=ad_impressions,ad_clicks=ad_clicks,ad_ctr=ad_ctr,booked=booked,slug=lambda s:re.sub(r"[^a-z0-9]+","-",s.lower()).strip("-"))
 
 
+NOTICE_CATEGORIES={"EVENT","TENDER","JOB","BURSARY","PUBLIC_PARTICIPATION","ALERT"}
+
+def valid_official_source(url):
+ try:
+  from urllib.parse import urlparse
+  host=(urlparse(url).hostname or "").lower()
+  return url.startswith("https://") and (host.endswith(".go.ke") or host=="go.ke")
+ except Exception:return False
+
+@app.post("/admin/county-notices")
+def add_county_notice():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ d=request.get_json(silent=True) or {};county=str(d.get("county","")).strip();category=str(d.get("category","")).strip().upper();title=str(d.get("title","")).strip()[:180];summary=str(d.get("summary","")).strip()[:500];source_name=str(d.get("source_name","")).strip()[:120];source_url=str(d.get("source_url","")).strip()[:500];reference_no=str(d.get("reference_no","")).strip()[:120];published_at=d.get("published_at") or None;closes_at=d.get("closes_at") or None;event_at=d.get("event_at") or None
+ if county not in COUNTIES or category not in NOTICE_CATEGORIES or len(title)<4:return jsonify(error="Invalid county, category or title"),400
+ if not source_name or not valid_official_source(source_url):return jsonify(error="A verified HTTPS .go.ke source is required"),400
+ try:
+  with conn() as db:
+   exists=db.execute("SELECT id FROM county_notices WHERE county=? AND category=? AND source_url=? AND title=?",(county,category,source_url,title)).fetchone()
+   if exists:return jsonify(ok=True,id=exists["id"],duplicate=True),200
+   cur=db.execute("INSERT INTO county_notices(county,category,title,summary,source_name,source_url,reference_no,published_at,closes_at,event_at,status) VALUES(?,?,?,?,?,?,?,?,?,?,'VERIFIED')",(county,category,title,summary,source_name,source_url,reference_no,published_at,closes_at,event_at));nid=cur.lastrowid if not DATABASE_URL else None
+  return jsonify(ok=True,id=nid,duplicate=False),201
+ except Exception:
+  app.logger.exception("county notice insert failure");return jsonify(error="Could not save notice"),500
+
 @app.get("/api/county-notices")
 def county_notices_api():
  county=request.args.get("county","").strip(); category=request.args.get("category","").strip().upper()
  if county and county not in COUNTIES:return jsonify(error="Invalid county"),400
+ if category and category not in NOTICE_CATEGORIES:return jsonify(error="Invalid category"),400
  sql="SELECT id,county,category,title,summary,source_name,source_url,reference_no,published_at,closes_at,event_at FROM county_notices WHERE status='VERIFIED'";args=[]
  if county:sql+=" AND county=?";args.append(county)
  if category:sql+=" AND category=?";args.append(category)
