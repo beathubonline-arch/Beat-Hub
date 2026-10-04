@@ -501,7 +501,9 @@ def vote():
   candidate=canonical["name"]
  else:
   candidate=re.sub(r"\\s+"," ",candidate).strip()
-  if len(candidate)<3 or not re.search(r"[A-Za-zÀ-ÿ].+\\s+[A-Za-zÀ-ÿ]",candidate):return jsonify(error="Enter the person’s full name (at least two names)."),400
+  # Free-text names are accepted after the client explicitly submits them; do not block
+  # participation merely because the registry has no matching entry yet.
+  if len(candidate)<2:return jsonify(error="Enter the person’s name."),400
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
  # Neutral integrity control: cap rapid submissions from the same technical fingerprint.
  with conn() as c:
