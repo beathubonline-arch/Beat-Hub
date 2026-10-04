@@ -6,6 +6,7 @@ from markupsafe import escape
 from integrations import send_whatsapp_text
 from intent_engine import enrich_context, open_reply
 from planner import build_plan, safe_reasoning_reply
+from conversation_ai import reason_message, merge_turn, remember_turn, configuration as text_ai_configuration
 from farm_vision import download_whatsapp_media, analyze_farm_image, safe_vision_reply
 from weather_live import live_weather, weather_reply
 from state_store import load_state, save_state, claim_message, record_interaction, record_feedback, actor_ref, record_farm_event, list_farm_events, get_access, consume_free_question, create_payment_for_actor, get_payment, mark_payment_paid, register_buyer, get_buyer_by_token, list_marketplace_listings, create_seller_listing, matching_buyers_for_listing, submit_buyer_offer, seller_offers, accept_seller_offer
@@ -470,6 +471,18 @@ def apply_message(text,state):
         state["stage"]="open"
     return state
 
+def clarify_repeated_reply(text,state,response):
+    previous=[t.get("text") for t in state.get("recent_turns",[]) if t.get("role")=="assistant"]
+    if not previous or previous[-1]!=response or state.get("stage")=="complete":
+        return response
+    lang=state.get("language","en")
+    stage=state.get("stage")
+    if stage=="offer":
+        return ("I couldn't tell whether that is a buyer's offer or your asking price. You can send a price like 4K per bag, say 'no offer', or explain what you want to do next." if lang=="en" else "Sijaelewa kama hiyo ni offer ya buyer au bei unayotaka. Unaweza kutuma 4K kwa gunia, kusema 'sina offer', au kueleza unachotaka kufanya sasa.")
+    if stage in {"bags","quantity"}:
+        return ("I'm asking about the amount you want to sell. You can give a number and unit, such as 10 bags or 500 kg; if you're unsure, tell me that." if lang=="en" else "Nahitaji kuelewa kiasi unachotaka kuuza. Unaweza kutaja idadi na kipimo, kama gunia 10 au kilo 500; kama hujui, niambie.")
+    return ("I haven't understood that fully yet. Are you continuing this farm question or asking about something different? You can explain it in your own words." if lang=="en" else "Sijaelewa vizuri bado. Unaendelea na swali hili la shamba au unauliza jambo tofauti? Eleza kwa maneno yako.")
+
 def image_context_reply(state, caption=""):
     lang=state.get("language","en")
     crop=state.get("crop")
@@ -745,6 +758,7 @@ def readiness():
         ok=bool(number and _paystack_connection_ok() and _checkout_signing_secret()),
         whatsapp={"configured":bool(number)},
         payments={"configured":bool(_pay_secret()),"api_ok":_paystack_connection_ok(),"signed_checkout":bool(_checkout_signing_secret())},
+        text_ai=text_ai_configuration(),
         pwa={"manifest":True,"service_worker":True,"install_button":True}
     )
 
@@ -1010,7 +1024,7 @@ def health():
     regression_1=_critical_path_self_test()
     regression_2=_critical_path_self_test()
     app.logger.info("MKULIMA_PHASE5_REGRESSION pass1=%s pass2=%s checks1=%s checks2=%s",regression_1.get("ok"),regression_2.get("ok"),regression_1.get("checks"),regression_2.get("checks"))
-    return jsonify(ok=True,service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True,critical_path_regression={"ok":bool(regression_1.get("ok") and regression_2.get("ok")),"pass_1":regression_1,"pass_2":regression_2})
+    return jsonify(ok=True,text_ai=text_ai_configuration(),service="Mkulima AI WhatsApp",reference_date=None,reference_stale=True,market_price_policy="verified_current_product_specific_only",payments={"configured":bool(_pay_secret()),"plans":{"monthly_kes":399,"season_90d_kes":999,"yearly_kes":2999},"free_questions_per_month":100},morning_dashboard=True,critical_path_regression={"ok":bool(regression_1.get("ok") and regression_2.get("ok")),"pass_1":regression_1,"pass_2":regression_2})
 
 @app.route("/webhook/whatsapp",methods=["GET","POST"])
 def webhook():
@@ -1063,7 +1077,7 @@ def webhook():
                 save_state(phone,state)
             return jsonify(ok=True,image_received=True,media_status=media.get("status"),vision_status=vision.get("status")),200
         if msg.get("type")!="text":
-            send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Astra ina-support text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
+            send_whatsapp_text(phone,"Nimepokea message yako. Kwa sasa Mkulima inapokea text na farm photos; voice/video itaongezwa kwa hatua inayofuata.")
             return jsonify(ok=True,unsupported_type=msg.get("type")),200
         body=msg["text"]["body"]
         normalized_body=" ".join(body.strip().lower().split())
@@ -1141,7 +1155,16 @@ def webhook():
                 send_whatsapp_text(phone,ack)
                 return jsonify(ok=True,feedback=rating),200
         previous_state=dict(state or {})
-        state=apply_message(body,state)
+        reasoning=reason_message(body,state)
+        if reasoning.get("ok"):
+            state=merge_turn(state,reasoning["turn"])
+            if state.get("quantity") is not None and not state.get("quantity_unit"):
+                state["quantity_unit"]=DEFAULT_UNITS.get(state.get("product"),"units")
+                if state["quantity_unit"]=="bags": state["bags"]=state["quantity"]
+            state=apply_message("",state)
+        else:
+            state=apply_message(body,state)
+        state["text_reasoning_status"]=reasoning.get("status")
         # Durable Farm Memory: persist only meaningful changes, keyed by a
         # pseudonymous actor reference in state_store (never raw phone in the table).
         crop=state.get("product") or state.get("crop")
@@ -1167,7 +1190,19 @@ def webhook():
             if listing_id:
                 state["market_listing_id"]=listing_id
                 save_state(phone,state)
-        response=weather_reply(weather_result,state.get("language","en")) if weather_result and weather_result.get("ok") else reply_for(msg["text"]["body"],state)
+        response=weather_reply(weather_result,state.get("language","en")) if weather_result and weather_result.get("ok") else (reasoning["turn"]["reply"] if reasoning.get("ok") else reply_for(body,state))
+        if reasoning.get("ok") and not (weather_result and weather_result.get("ok")):
+            # The model explains/clarifies; only server code executes actions
+            # and calculates totals from the validated quantity and offer.
+            response=safe_reasoning_reply(body,state,state.get("language","en")) or reasoning["turn"]["reply"]
+            quantity=state.get("quantity",state.get("bags"))
+            offer=state.get("offer")
+            if state.get("primary_intent")=="sell" and quantity is not None and offer is not None and (reasoning["turn"].get("quantity") is not None or reasoning["turn"].get("offer") is not None):
+                response+=f"\n\n{quantity:g} {state.get('quantity_unit','units')} × KES {offer:,.0f} = KES {quantity*offer:,.0f}."
+        elif not reasoning.get("ok"):
+            response=clarify_repeated_reply(body,state,response)
+        state=remember_turn(state,body,response)
+        save_state(phone,state)
         send_whatsapp_text(phone,response)
         consume_free_question(phone)
         interaction_id=record_interaction(mid,phone,msg["text"]["body"],response,state)
