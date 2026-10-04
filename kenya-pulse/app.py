@@ -12,6 +12,14 @@ DATABASE_URL=os.environ.get("DATABASE_URL","")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
 ADMIN_KEY=os.environ.get("PULSE_ADMIN_KEY","")
 PAYSTACK_SECRET_KEY=os.environ.get("PAYSTACK_SECRET_KEY","")
+PAYSTACK_MODE=os.environ.get("PAYSTACK_MODE","").strip().lower()
+def paystack_mode():
+ if PAYSTACK_MODE in {"test","live"}:return PAYSTACK_MODE
+ if PAYSTACK_SECRET_KEY.startswith("sk_live_"):return "live"
+ if PAYSTACK_SECRET_KEY.startswith("sk_test_"):return "test"
+ return "unconfigured"
+def paystack_configured():
+ return paystack_mode() in {"test","live"} and PAYSTACK_SECRET_KEY.startswith("sk_"+paystack_mode()+"_")
 COUNTIES=["Mombasa","Kwale","Kilifi","Tana River","Lamu","Taita-Taveta","Garissa","Wajir","Mandera","Marsabit","Isiolo","Meru","Tharaka-Nithi","Embu","Kitui","Machakos","Makueni","Nyandarua","Nyeri","Kirinyaga","Murang'a","Kiambu","Turkana","West Pokot","Samburu","Trans Nzoia","Uasin Gishu","Elgeyo-Marakwet","Nandi","Baringo","Laikipia","Nakuru","Narok","Kajiado","Kericho","Bomet","Kakamega","Vihiga","Bungoma","Busia","Siaya","Kisumu","Homa Bay","Migori","Kisii","Nyamira","Nairobi City"]
 RACES=["President","Governor","Senator","Woman Representative","Member of Parliament","MCA"]
 GEOGRAPHY_PATH=os.path.join(os.path.dirname(__file__),"geography.json")
@@ -68,6 +76,9 @@ def init():
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
    c.execute("""CREATE TABLE IF NOT EXISTS support_payments(id BIGSERIAL PRIMARY KEY,reference TEXT NOT NULL UNIQUE,email TEXT NOT NULL,amount_kes INTEGER NOT NULL,currency TEXT NOT NULL DEFAULT 'KES',status TEXT NOT NULL DEFAULT 'INITIATED',paystack_transaction_id TEXT,channel TEXT,paid_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
+   c.execute("ALTER TABLE support_payments ADD COLUMN IF NOT EXISTS county TEXT;")
+   c.execute("ALTER TABLE support_payments ADD COLUMN IF NOT EXISTS paystack_domain TEXT;")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS support_payment_tx_unique ON support_payments(paystack_transaction_id) WHERE paystack_transaction_id IS NOT NULL;")
    c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS candidate_id BIGINT REFERENCES candidates(id);")
   else:
    old_exists=c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
@@ -101,6 +112,10 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS candidate_aliases(id INTEGER PRIMARY KEY AUTOINCREMENT,candidate_id INTEGER NOT NULL,alias TEXT NOT NULL,verified INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(candidate_id) REFERENCES candidates(id) ON DELETE CASCADE);""")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
    c.execute("""CREATE TABLE IF NOT EXISTS support_payments(id INTEGER PRIMARY KEY AUTOINCREMENT,reference TEXT NOT NULL UNIQUE,email TEXT NOT NULL,amount_kes INTEGER NOT NULL,currency TEXT NOT NULL DEFAULT 'KES',status TEXT NOT NULL DEFAULT 'INITIATED',paystack_transaction_id TEXT,channel TEXT,paid_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   spcols=[x[1] for x in c.execute("PRAGMA table_info(support_payments)").fetchall()]
+   for col in ("county","paystack_domain"):
+    if col not in spcols:c.execute("ALTER TABLE support_payments ADD COLUMN "+col+" TEXT")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS support_payment_tx_unique ON support_payments(paystack_transaction_id) WHERE paystack_transaction_id IS NOT NULL")
    c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
    if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
@@ -128,6 +143,11 @@ def paystack_request(path,payload=None):
  req=urllib.request.Request("https://api.paystack.co"+path,data=data,headers={"Authorization":"Bearer "+PAYSTACK_SECRET_KEY,"Content-Type":"application/json"},method="POST" if data is not None else "GET")
  with urllib.request.urlopen(req,timeout=20) as r:return json.loads(r.read().decode())
 
+@app.get("/api/support/config")
+def support_config():
+ mode=paystack_mode()
+ return jsonify(configured=paystack_configured(),mode=mode if mode in {"test","live"} else "unconfigured",currency="KES",minimum_kes=5,webhook_url=request.url_root.rstrip("/")+"/api/paystack/webhook",callback_url=request.url_root.rstrip("/")+"/support/callback"),200,{"Cache-Control":"no-store"}
+
 @app.post("/api/support/initialize")
 def support_initialize():
  body=request.get_json(silent=True) or {}; email=str(body.get("email","")).strip()[:160]
@@ -135,14 +155,14 @@ def support_initialize():
  except: amount=0
  if amount<5 or amount>1000000:return jsonify(error="Support starts from KSh 5."),400
  if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$",email):return jsonify(error="Enter a valid email for the payment receipt."),400
- if not PAYSTACK_SECRET_KEY.startswith("sk_test_"):return jsonify(error="Test checkout is not configured. Participation remains free."),503
+ if not paystack_configured():return jsonify(error="Paystack checkout is not configured. Participation remains free."),503
  county=str(body.get("county", ""))
  with conn() as db:
   rows=db.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,participation_fingerprint())).fetchall()
  if not set(RACES).issubset({x["race"] for x in rows}):return jsonify(error="Complete all six seats before optional support."),409
  ref="kp-"+secrets.token_hex(10); origin=request.url_root.rstrip("/")
- with conn() as db: db.execute("INSERT INTO support_payments(reference,email,amount_kes,currency,status) VALUES(?,?,?,?,?)",(ref,email,amount,"KES","INITIATED"))
- payload={"email":email,"amount":str(amount*100),"currency":"KES","reference":ref,"callback_url":origin+"/support/callback","channels":["mobile_money","card"],"metadata":{"purpose":"optional_support","separate_from_participation":True}}
+ with conn() as db: db.execute("INSERT INTO support_payments(reference,email,amount_kes,currency,status,county,paystack_domain) VALUES(?,?,?,?,?,?,?)",(ref,email,amount,"KES","INITIATED",county,paystack_mode()))
+ payload={"email":email,"amount":str(amount*100),"currency":"KES","reference":ref,"callback_url":origin+"/support/callback","channels":["mobile_money","card"],"metadata":{"purpose":"optional_support","separate_from_participation":True,"county":county,"mode":paystack_mode()}}
  try:
   out=paystack_request("/transaction/initialize",payload); d=out.get("data") or {}
   if not str(d.get("authorization_url", "")).startswith("https://checkout.paystack.com/"): raise RuntimeError("invalid checkout url")
@@ -152,29 +172,39 @@ def support_initialize():
   return jsonify(error="Could not start payment. Please try again."),502
 
 def record_support_verification(ref,d):
- if not ref or d.get("reference")!=ref or d.get("domain")!="test":return False
+ mode=paystack_mode()
+ if mode not in {"test","live"} or not ref or d.get("reference")!=ref or d.get("domain")!=mode:return False
  with conn() as db:
-  row=db.execute("SELECT reference,amount_kes,currency,status FROM support_payments WHERE reference=?",(ref,)).fetchone()
+  row=db.execute("SELECT reference,amount_kes,currency,status,paystack_domain FROM support_payments WHERE reference=?",(ref,)).fetchone()
   if not row:return False
-  try: got=int(d.get("amount") or 0)
-  except: got=0
+  try:got=int(d.get("amount") or 0)
+  except:got=0
   if d.get("status")!="success" or d.get("currency")!=row["currency"] or got!=int(row["amount_kes"])*100:return False
-  tx=str(d.get("id") or "")[:80]; channel=str(d.get("channel") or "")[:40]
-  db.execute("UPDATE support_payments SET status='SUCCESS',paystack_transaction_id=?,channel=?,paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE reference=? AND status<>'SUCCESS'",(tx,channel,ref))
+  if row["paystack_domain"] and row["paystack_domain"]!=mode:return False
+  tx=str(d.get("id") or "")[:80];channel=str(d.get("channel") or "")[:40]
+  if not tx:return False
+  dup=db.execute("SELECT reference FROM support_payments WHERE paystack_transaction_id=? AND reference<>?",(tx,ref)).fetchone()
+  if dup:return False
+  db.execute("UPDATE support_payments SET status='SUCCESS',paystack_transaction_id=?,channel=?,paystack_domain=?,paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE reference=? AND status<>'SUCCESS'",(tx,channel,mode,ref))
  return True
 
 @app.get("/support/callback")
 def support_callback():
  ref=request.args.get("reference","")[:100]
  if not re.fullmatch(r"kp-[a-f0-9]{20}",ref):return redirect("/?support=missing")
+ target="/"
  try:
-  d=(paystack_request("/transaction/verify/"+ref).get("data") or {}); ok=record_support_verification(ref,d)
-  return redirect("/?support="+("success" if ok else "pending"))
- except Exception:return redirect("/?support=pending")
+  with conn() as db:
+   row=db.execute("SELECT county FROM support_payments WHERE reference=?",(ref,)).fetchone()
+  if row and row["county"] in COUNTIES:
+   target="/county/"+re.sub(r"[^a-z0-9]+","-",row["county"].lower()).strip("-")
+  d=(paystack_request("/transaction/verify/"+ref).get("data") or {});ok=record_support_verification(ref,d)
+  return redirect(target+"?support="+("success" if ok else "pending"))
+ except Exception:return redirect(target+"?support=pending")
 
 @app.post("/api/paystack/webhook")
 def paystack_webhook():
- if not PAYSTACK_SECRET_KEY.startswith("sk_test_"):return "",503
+ if not paystack_configured():return "",503
  raw=request.get_data(); sig=request.headers.get("x-paystack-signature",""); expected=hmac.new(PAYSTACK_SECRET_KEY.encode(),raw,hashlib.sha512).hexdigest()
  if not hmac.compare_digest(sig,expected):return "",401
  event=request.get_json(silent=True) or {}
@@ -243,7 +273,8 @@ async function populateWards(){
  sel.innerHTML='<option value="">Choose ward</option>';if(!county||!con)return;
  try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)+'&constituency='+encodeURIComponent(con)),j=await r.json();(j.wards||[]).forEach(x=>sel.add(new Option(x,x)));loadCandidates();}catch(e){}
 }
-function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await restoreParticipation();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await restoreParticipation();await loadCandidates();load()})()}
+function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await restoreParticipation();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const supportState=new URLSearchParams(location.search).get('support');if(supportState){setTimeout(()=>{let box=document.getElementById('supportbox'),m=document.getElementById('supportmsg');if(box)box.style.display='block';if(m)m.textContent=supportState==='success'?'Payment verified. Thank you for supporting Kenya Pulse.':supportState==='pending'?'Payment is still being verified. No participation response is affected.':'Payment status could not be confirmed.'},50)}
+const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await restoreParticipation();await loadCandidates();load()})()}
 function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Take part in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
