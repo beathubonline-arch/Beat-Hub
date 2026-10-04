@@ -146,7 +146,7 @@ def paystack_request(path,payload=None):
 @app.get("/api/support/config")
 def support_config():
  mode=paystack_mode()
- return jsonify(configured=paystack_configured(),mode=mode if mode in {"test","live"} else "unconfigured",currency="KES",minimum_kes=5,webhook_url=request.url_root.rstrip("/")+"/api/paystack/webhook",callback_url=request.url_root.rstrip("/")+"/support/callback"),200,{"Cache-Control":"no-store"}
+ return jsonify(configured=paystack_configured(),mode=mode if mode in {"test","live"} else "unconfigured",currency="KES",minimum_kes=5,webhook_url=request.url_root.rstrip("/")+"/api/paystack/webhook",callback_url=request.url_root.rstrip("/")+"/support/callback",async_status_check=True,reconciliation=True),200,{"Cache-Control":"no-store"}
 
 @app.post("/api/support/initialize")
 def support_initialize():
@@ -188,6 +188,44 @@ def record_support_verification(ref,d):
   db.execute("UPDATE support_payments SET status='SUCCESS',paystack_transaction_id=?,channel=?,paystack_domain=?,paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE reference=? AND status<>'SUCCESS'",(tx,channel,mode,ref))
  return True
 
+@app.get("/api/support/status")
+def support_status():
+ ref=(request.args.get("reference") or "")[:100]
+ if not re.fullmatch(r"kp-[a-f0-9]{20}",ref):return jsonify(error="Invalid reference"),400
+ with conn() as db:
+  row=db.execute("SELECT status,amount_kes,currency,county,channel,paid_at FROM support_payments WHERE reference=?",(ref,)).fetchone()
+ if not row:return jsonify(error="Payment not found"),404
+ status=row["status"]
+ if status!="SUCCESS" and paystack_configured():
+  try:
+   d=(paystack_request("/transaction/verify/"+ref).get("data") or {})
+   if record_support_verification(ref,d):status="SUCCESS"
+  except Exception:pass
+ with conn() as db:
+  row=db.execute("SELECT status,amount_kes,currency,county,channel,paid_at FROM support_payments WHERE reference=?",(ref,)).fetchone()
+ return jsonify(reference=ref,status=row["status"],amount_kes=row["amount_kes"],currency=row["currency"],county=row["county"],channel=row["channel"],paid_at=str(row["paid_at"]) if row["paid_at"] else None),200,{"Cache-Control":"no-store"}
+
+@app.get("/admin/support-payments")
+def admin_support_payments():
+ if not admin_authorized():abort(404)
+ with conn() as db:
+  rows=[dict(x) for x in db.execute("SELECT reference,email,amount_kes,currency,status,county,paystack_domain,channel,paid_at,created_at,updated_at FROM support_payments ORDER BY id DESC LIMIT 100").fetchall()]
+ return jsonify(payments=rows,mode=paystack_mode())
+
+@app.post("/admin/support-payments/<ref>/reconcile")
+def admin_support_reconcile(ref):
+ if not admin_authorized():abort(404)
+ if not re.fullmatch(r"kp-[a-f0-9]{20}",ref):return jsonify(error="Invalid reference"),400
+ try:
+  d=(paystack_request("/transaction/verify/"+ref).get("data") or {})
+  ok=record_support_verification(ref,d)
+  with conn() as db:row=db.execute("SELECT status,amount_kes,currency,county,channel,paid_at FROM support_payments WHERE reference=?",(ref,)).fetchone()
+  if not row:return jsonify(error="Payment not found"),404
+  return jsonify(ok=ok,payment=dict(row)),200
+ except Exception:
+  app.logger.exception("support reconciliation failed")
+  return jsonify(error="Reconciliation failed"),502
+
 @app.get("/support/callback")
 def support_callback():
  ref=request.args.get("reference","")[:100]
@@ -199,8 +237,8 @@ def support_callback():
   if row and row["county"] in COUNTIES:
    target="/county/"+re.sub(r"[^a-z0-9]+","-",row["county"].lower()).strip("-")
   d=(paystack_request("/transaction/verify/"+ref).get("data") or {});ok=record_support_verification(ref,d)
-  return redirect(target+"?support="+("success" if ok else "pending"))
- except Exception:return redirect(target+"?support=pending")
+  return redirect(target+"?support="+("success" if ok else "pending")+"&reference="+urllib.parse.quote(ref))
+ except Exception:return redirect(target+"?support=pending&reference="+urllib.parse.quote(ref))
 
 @app.post("/api/paystack/webhook")
 def paystack_webhook():
@@ -273,7 +311,8 @@ async function populateWards(){
  sel.innerHTML='<option value="">Choose ward</option>';if(!county||!con)return;
  try{const r=await fetch('/api/geography?county='+encodeURIComponent(county)+'&constituency='+encodeURIComponent(con)),j=await r.json();(j.wards||[]).forEach(x=>sel.add(new Option(x,x)));loadCandidates();}catch(e){}
 }
-function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await restoreParticipation();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const supportState=new URLSearchParams(location.search).get('support');if(supportState){setTimeout(()=>{let box=document.getElementById('supportbox'),m=document.getElementById('supportmsg');if(box)box.style.display='block';if(m)m.textContent=supportState==='success'?'Payment verified. Thank you for supporting Kenya Pulse.':supportState==='pending'?'Payment is still being verified. No participation response is affected.':'Payment status could not be confirmed.'},50)}
+function areaMode(){let mp=R.value==='Member of Parliament',mca=R.value==='MCA',b=document.getElementById('areaBox');b.style.display=(mp||mca)?'grid':'none';document.getElementById('ward').style.display=mca?'block':'none';load()}areaMode();C.onchange=async()=>{clearAreas();syncUrl();await populateConstituencies();await restoreParticipation();await loadCandidates();load()};R.onchange=()=>{areaMode();loadCandidates()};const supportQS=new URLSearchParams(location.search),supportState=supportQS.get('support'),supportRef=supportQS.get('reference');if(supportState){setTimeout(()=>{let box=document.getElementById('supportbox'),m=document.getElementById('supportmsg');if(box)box.style.display='block';if(m)m.textContent=supportState==='success'?'Payment verified. Thank you for supporting Kenya Pulse.':supportState==='pending'?'Payment received by checkout; waiting for final Paystack verification…':'Payment status could not be confirmed.';if(supportState==='pending'&&supportRef)pollSupport(supportRef,0)},50)}
+async function pollSupport(ref,n){if(n>12)return;try{let r=await fetch('/api/support/status?reference='+encodeURIComponent(ref),{cache:'no-store'}),j=await r.json();let m=document.getElementById('supportmsg');if(j.status==='SUCCESS'){if(m)m.textContent='Payment verified. Thank you for supporting Kenya Pulse.';let u=new URL(location.href);u.searchParams.set('support','success');u.searchParams.delete('reference');history.replaceState({},'',u);return}if(m)m.textContent='Payment is still being verified securely…';}catch(e){}setTimeout(()=>pollSupport(ref,n+1),5000)}
 const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initialCounty;document.getElementById('sharebox').style.display='block';(async()=>{await populateConstituencies();await restoreParticipation();await loadCandidates();load()})()}
 function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
