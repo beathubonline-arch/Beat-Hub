@@ -428,7 +428,7 @@ def county_notices_api():
  if category:sql+=" AND category=?";args.append(category)
  if DATABASE_URL:sql+=" AND (closes_at IS NULL OR closes_at>=CURRENT_TIMESTAMP) AND (event_at IS NULL OR event_at>=CURRENT_TIMESTAMP)"
  else:sql+=" AND (closes_at IS NULL OR closes_at>=datetime('now')) AND (event_at IS NULL OR event_at>=datetime('now'))"
- sql+=" ORDER BY COALESCE(event_at,closes_at,published_at,created_at) ASC LIMIT 100"
+ sql+=" ORDER BY CASE WHEN event_at IS NOT NULL THEN 0 WHEN closes_at IS NOT NULL THEN 1 ELSE 2 END, COALESCE(event_at,closes_at,published_at,created_at) ASC LIMIT 100"
  with conn() as db:rows=db.execute(sql,args).fetchall()
  return jsonify(items=[dict(x) for x in rows]),200,{"Cache-Control":"public, max-age=120"}
 
@@ -443,7 +443,7 @@ def health():
  try:
   with conn() as c:c.execute("SELECT 1").fetchone();db_ok=True
  except Exception:db_ok=False
- return {"ok":db_ok,"production_ready":db_ok and dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"database_ok":db_ok,"candidate_registry":True,"warning":None if db_ok and dbmode=="postgres" else "Persistent PostgreSQL is not attached and verified; responses may be lost on service restart."}
+ return {"ok":db_ok,"production_ready":db_ok and dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"database_ok":db_ok,"candidate_registry":True,"county_noticeboard":True,"county_notice_categories":len(NOTICE_CATEGORIES),"warning":None if db_ok and dbmode=="postgres" else "Persistent PostgreSQL is not attached and verified; responses may be lost on service restart."}
 @app.get("/privacy")
 def privacy():
  return legal_page("Privacy Policy","Effective 2 October 2026",[
