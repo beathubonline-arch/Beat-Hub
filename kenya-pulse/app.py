@@ -5,6 +5,7 @@ try:
 except ImportError:
  psycopg2=None
 from flask import Flask, request, jsonify, render_template_string, abort, redirect
+from html.parser import HTMLParser
 app=Flask(__name__)
 DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
 DATABASE_URL=os.environ.get("DATABASE_URL","")
@@ -586,6 +587,68 @@ def _ppip_live_tenders(county):
  if found:TENDER_CACHE[key]={"at":time.time(),"items":found[:30]}
  return found[:30]
 
+class _LinkTextParser(HTMLParser):
+ def __init__(self):super().__init__();self.links=[];self._href=None;self._buf=[]
+ def handle_starttag(self,tag,attrs):
+  if tag=="a":
+   self._href=dict(attrs).get("href");self._buf=[]
+ def handle_data(self,data):
+  if self._href:self._buf.append(data)
+ def handle_endtag(self,tag):
+  if tag=="a" and self._href:
+   txt=" ".join("".join(self._buf).split())
+   self.links.append((txt,self._href));self._href=None;self._buf=[]
+
+def _county_domain_candidates(county):
+ slug=re.sub(r"[^a-z0-9]","",county.lower().replace("county",""))
+ known={
+  "Nairobi City":["https://nairobi.go.ke"],
+  "Uasin Gishu":["https://uasingishu.go.ke"],
+  "Kericho":["https://kericho.go.ke","https://procurement.kericho.go.ke"],
+  "Tharaka-Nithi":["https://tharakanithi.go.ke"],
+  "Taita-Taveta":["https://taitataveta.go.ke"],
+  "Elgeyo-Marakwet":["https://elgeyomarakwet.go.ke"],
+  "Trans Nzoia":["https://transnzoia.go.ke"]
+ }
+ out=list(known.get(county,[]))
+ for host in [f"https://{slug}.go.ke",f"https://www.{slug}.go.ke"]:
+  if host not in out:out.append(host)
+ return out
+
+def _county_site_tenders(county):
+ cache_key="county:"+county.lower();cached=TENDER_CACHE.get(cache_key)
+ if cached and time.time()-cached["at"]<1800:return cached["items"]
+ year=str(time.localtime().tm_year);next_year=str(time.localtime().tm_year+1);found=[];seen=set()
+ paths=["/tenders","/tenders/","/procurement","/procurement/","/category/tenders","/downloads/tenders","/opportunities"]
+ for base in _county_domain_candidates(county):
+  for path in paths:
+   try:
+    url=base.rstrip("/")+path
+    req=urllib.request.Request(url,headers={"User-Agent":"KenyaPulse/1.0 (+official-county-procurement)"})
+    with urllib.request.urlopen(req,timeout=5) as r:
+     final=r.geturl();raw=r.read(700000).decode("utf-8","ignore")
+    host=(urllib.parse.urlparse(final).hostname or "").lower()
+    if not host.endswith(".go.ke"):continue
+    p=_LinkTextParser();p.feed(raw)
+    for txt,href in p.links:
+     label=" ".join(txt.split())
+     low=label.lower()
+     if len(label)<8 or not re.search(r"(?i)\b(tender|quotation|rfq|rfp|procurement|bid)\b",label):continue
+     if year not in label and next_year not in label and year not in raw[max(0,raw.find(txt)-400):raw.find(txt)+500]:continue
+     absu=urllib.parse.urljoin(final,href)
+     ahost=(urllib.parse.urlparse(absu).hostname or "").lower()
+     if not ahost.endswith(".go.ke"):continue
+     sig=(label.lower(),absu)
+     if sig in seen:continue
+     seen.add(sig)
+     found.append({"title":label[:220],"entity":county+" County Government","county":county,"ocid":"","method":"","category":"","close_text":"","source_url":absu,"source_kind":"COUNTY SITE"})
+     if len(found)>=15:break
+    if len(found)>=15:break
+   except Exception:continue
+  if len(found)>=15:break
+ if found:TENDER_CACHE[cache_key]={"at":time.time(),"items":found}
+ return found
+
 @app.get("/api/tenders-live")
 def tenders_live():
  county=request.args.get("county","").strip()
@@ -598,18 +661,23 @@ def tenders_live():
  sql+=" ORDER BY COALESCE(closes_at,published_at,created_at) ASC LIMIT 50"
  with conn() as db:local=[dict(x) for x in db.execute(sql,args).fetchall()]
  live=_ppip_live_tenders(county) if county else []
- return jsonify(county=county,verified=local,ppip=live,official_portal="https://tenders.go.ke/tenders/"),200,{"Cache-Control":"public, max-age=120"}
+ county_site=_county_site_tenders(county) if county else []
+ return jsonify(county=county,verified=local,ppip=live,county_site=county_site,official_portal="https://tenders.go.ke/tenders/"),200,{"Cache-Control":"public, max-age=120"}
 
 @app.get("/tenders")
 def tenders_page():
  html="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>County Tenders · Kenya Pulse</title><link rel="stylesheet" href="/pulse95.css"><style>
-.tw{max-width:1460px;margin:auto;padding:22px 28px 70px}.th{padding:30px;border-radius:30px;margin:18px 0}.th h1{font-size:clamp(42px,5.5vw,72px);line-height:.95;letter-spacing:-3px;margin:8px 0 14px}.toolbar{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:20px}.toolbar select{padding:15px 48px 15px 16px;border-radius:15px}.toolbar button{border:0;border-radius:15px;padding:0 20px;background:#69ef91;color:#12351e;font-weight:900}.sourcebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:15px 0}.sourcebar a{color:#a8f4bf;font-weight:850;text-decoration:none}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{padding:21px;border-radius:24px}.tag{display:inline-flex;padding:6px 9px;border-radius:999px;background:#69ef91;color:#17351f;font-size:10px;font-weight:900}.meta{font-size:12px;color:#bdd1c4;line-height:1.55}.card h3{font-size:18px;line-height:1.3}.card a{color:#a8f4bf;text-decoration:none;font-weight:850}.empty{grid-column:1/-1;padding:32px}.count{margin-left:auto}.section{margin-top:26px}.sectionHead{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:0 0 12px}.sectionHead h2{margin:0}.notice{font-size:12px;color:#c5d9cb;line-height:1.5}@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:620px){.tw{padding:12px 14px 50px}.grid{grid-template-columns:1fr}.toolbar{grid-template-columns:1fr}.toolbar button{min-height:50px}.th{padding:21px}.th h1{font-size:48px}}
-</style></head><body><div class=world></div><div class=shade></div><nav class="glass kp95nav"><div class=brand>KENYA <b>PULSE</b></div><a href="/growth">Home</a><a href="/growth#counties">Counties</a><a href="/county-notices">Notices</a><a href="/ground">Sauti</a></nav><main class=tw><section class="glass th"><div class=kp10-kicker>OFFICIAL PROCUREMENT · LIVE COUNTY VIEW</div><h1>Real tenders, <span class=kp95accent>county by county.</span></h1><p class=kp10-lead>Choose a county to see current verified tender notices already indexed by Kenya Pulse plus live discoveries from Kenya's Public Procurement Information Portal (PPIP).</p><div class=toolbar><select id=county onchange=loadTenders()><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><button onclick=loadTenders()>Find tenders →</button></div><div class=sourcebar><span class=tag>OFFICIAL SOURCE</span><span class=notice>PPIP / tenders.go.ke is the canonical source. Always open the official notice before bidding.</span><a href="https://tenders.go.ke/tenders/" target=_blank rel="noopener">Open PPIP →</a></div></section><section class=section><div class=sectionHead><div><div class=kp10-kicker>ACTIVE OPPORTUNITIES</div><h2 id=title>Choose a county</h2></div><span class=tag id=count>0 FOUND</span></div><div id=feed class=grid><section class="glass card empty"><h3>Select a county to load current opportunities.</h3></section></div></section></main><script>
+.tw{max-width:1460px;margin:auto;padding:22px 28px 70px}.th{padding:30px;border-radius:30px;margin:18px 0}.th h1{font-size:clamp(42px,5.5vw,72px);line-height:.95;letter-spacing:-3px;margin:8px 0 14px}.toolbar{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:20px}.toolbar button{border:0;border-radius:15px;padding:0 20px;background:#69ef91;color:#12351e;font-weight:900}.selectx{position:relative}.selectbtn{width:100%;min-height:54px;border-radius:15px;padding:0 48px 0 16px;text-align:left;border:1px solid #a8ffd077!important;background:rgba(17,67,45,.72)!important;color:white!important;font-weight:800;position:relative}.selectbtn:after{content:'⌄';position:absolute;right:18px;font-size:20px}.menu{display:none;position:relative;margin-top:8px;background:rgba(247,253,249,.98);color:#17351f;border:1px solid #d9eee0;border-radius:20px;padding:10px;box-shadow:0 24px 70px #031b1040;max-height:360px;overflow:auto}.selectx.open .menu{display:block}.msearch{position:sticky;top:0;z-index:2;width:100%;padding:12px 14px;border-radius:12px!important;background:#eef4f0!important;color:#183d29!important;border:0!important;margin-bottom:7px}.opt{display:flex;align-items:center;gap:10px;width:100%;border:0!important;background:transparent!important;color:#203c2b!important;text-align:left;padding:11px 12px;border-radius:11px;font-weight:700}.opt:hover,.opt.active{background:#c9f5d5!important}.opt .oi{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:#e9f8ee}.sourcebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:15px 0}.sourcebar a{color:#a8f4bf;font-weight:850;text-decoration:none}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{padding:21px;border-radius:24px}.tag{display:inline-flex;padding:6px 9px;border-radius:999px;background:#69ef91;color:#17351f;font-size:10px;font-weight:900}.meta{font-size:12px;color:#bdd1c4;line-height:1.55}.card h3{font-size:18px;line-height:1.3}.card a{color:#a8f4bf;text-decoration:none;font-weight:850}.empty{grid-column:1/-1;padding:32px}.count{margin-left:auto}.section{margin-top:26px}.sectionHead{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:0 0 12px}.sectionHead h2{margin:0}.notice{font-size:12px;color:#c5d9cb;line-height:1.5}@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:620px){.tw{padding:12px 14px 50px}.grid{grid-template-columns:1fr}.toolbar{grid-template-columns:1fr}.toolbar button{min-height:50px}.th{padding:21px}.th h1{font-size:48px}}
+</style></head><body><div class=world></div><div class=shade></div><nav class="glass kp95nav"><div class=brand>KENYA <b>PULSE</b></div><a href="/growth">Home</a><a href="/growth#counties">Counties</a><a href="/county-notices">Notices</a><a href="/ground">Sauti</a></nav><main class=tw><section class="glass th"><div class=kp10-kicker>OFFICIAL PROCUREMENT · LIVE COUNTY VIEW</div><h1>Real tenders, <span class=kp95accent>county by county.</span></h1><p class=kp10-lead>Choose a county to see current verified tender notices already indexed by Kenya Pulse plus live discoveries from Kenya's Public Procurement Information Portal (PPIP).</p><div class=toolbar><div class=selectx id=tenderCountySelect><button type=button class=selectbtn onclick="toggleTenderMenu()"><span id=tenderCountyLabel>Choose county</span></button><div class=menu><input class=msearch placeholder="Search county…" oninput="filterTenderOptions(this)"><div id=tenderCountyMenu><button type=button class="opt active" data-value="" onclick="pickTenderCounty(this)"><span class=oi>🌐</span>Choose county</button>{% for c in counties %}<button type=button class=opt data-value="{{c}}" onclick="pickTenderCounty(this)"><span class=oi>{{marks.get(c,'🌿')}}</span>{{c}}</button>{% endfor %}</div></div></div><input type=hidden id=county><button onclick=loadTenders()>Find tenders →</button></div><div class=sourcebar><span class=tag>OFFICIAL SOURCE</span><span class=notice>PPIP / tenders.go.ke is the canonical source. Always open the official notice before bidding.</span><a href="https://tenders.go.ke/tenders/" target=_blank rel="noopener">Open PPIP →</a></div></section><section class=section><div class=sectionHead><div><div class=kp10-kicker>ACTIVE OPPORTUNITIES</div><h2 id=title>Choose a county</h2></div><span class=tag id=count>0 FOUND</span></div><div id=feed class=grid><section class="glass card empty"><h3>Select a county to load current opportunities.</h3></section></div></section></main><script>
 function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-async function loadTenders(){let c=county.value;if(!c){title.textContent='Choose a county';count.textContent='0 FOUND';return}title.textContent=c+' tenders';feed.innerHTML='<section class="glass card empty"><h3>Checking official procurement sources…</h3></section>';let r=await fetch('/api/tenders-live?county='+encodeURIComponent(c),{cache:'no-store'}),j=await r.json(),items=[];(j.verified||[]).forEach(x=>items.push({kind:'VERIFIED COUNTY',title:x.title,entity:x.source_name,ref:x.reference_no||'',close:x.closes_at||'',url:x.source_url,summary:x.summary||''}));(j.ppip||[]).forEach(x=>items.push({kind:'LIVE PPIP',title:x.title,entity:x.entity,ref:x.ocid||'',close:x.close_text||'',url:x.source_url,summary:[x.method,x.category].filter(Boolean).join(' · ')}));let uniq=[],seen=new Set();for(let x of items){let k=(x.title+'|'+x.entity).toLowerCase();if(!seen.has(k)){seen.add(k);uniq.push(x)}}count.textContent=uniq.length+' FOUND';feed.innerHTML=uniq.map(x=>'<article class="glass card"><span class=tag>'+esc(x.kind)+'</span><h3>'+esc(x.title)+'</h3><div class=meta>'+esc(x.entity)+(x.ref?'<br>Ref: '+esc(x.ref):'')+(x.close?'<br>Closing: '+esc(x.close):'')+'</div>'+(x.summary?'<p>'+esc(x.summary)+'</p>':'')+'<a href="'+esc(x.url)+'" target=_blank rel="noopener">Open official source →</a></article>').join('')||'<section class="glass card empty"><h3>No current tender card was found for '+esc(c)+'.</h3><p class=notice>That does not mean no procurement exists. Open PPIP below and search the county/procuring entity directly; Kenya Pulse never fabricates opportunities.</p><a href="https://tenders.go.ke/tenders/" target=_blank rel="noopener">Search official PPIP →</a></section>'}
+function toggleTenderMenu(){tenderCountySelect.classList.toggle('open')}
+function filterTenderOptions(inp){let q=inp.value.toLowerCase();document.querySelectorAll('#tenderCountyMenu .opt').forEach(x=>x.style.display=x.textContent.toLowerCase().includes(q)?'flex':'none')}
+function pickTenderCounty(el){county.value=el.dataset.value;tenderCountyLabel.textContent=el.textContent.trim();document.querySelectorAll('#tenderCountyMenu .opt').forEach(x=>x.classList.remove('active'));el.classList.add('active');tenderCountySelect.classList.remove('open');if(county.value)loadTenders()}
+document.addEventListener('click',e=>{if(!e.target.closest('#tenderCountySelect'))tenderCountySelect.classList.remove('open')})
+async function loadTenders(){let c=county.value;if(!c){title.textContent='Choose a county';count.textContent='0 FOUND';return}title.textContent=c+' tenders';feed.innerHTML='<section class="glass card empty"><h3>Checking official procurement sources…</h3></section>';let r=await fetch('/api/tenders-live?county='+encodeURIComponent(c),{cache:'no-store'}),j=await r.json(),items=[];(j.verified||[]).forEach(x=>items.push({kind:'VERIFIED COUNTY',title:x.title,entity:x.source_name,ref:x.reference_no||'',close:x.closes_at||'',url:x.source_url,summary:x.summary||''}));(j.ppip||[]).forEach(x=>items.push({kind:'LIVE PPIP',title:x.title,entity:x.entity,ref:x.ocid||'',close:x.close_text||'',url:x.source_url,summary:[x.method,x.category].filter(Boolean).join(' · ')}));(j.county_site||[]).forEach(x=>items.push({kind:'OFFICIAL COUNTY SITE',title:x.title,entity:x.entity,ref:'',close:x.close_text||'',url:x.source_url,summary:'Discovered on the official county government procurement/tender pages. Verify deadline on source.'}));let uniq=[],seen=new Set();for(let x of items){let k=(x.title+'|'+x.entity).toLowerCase();if(!seen.has(k)){seen.add(k);uniq.push(x)}}count.textContent=uniq.length+' FOUND';feed.innerHTML=uniq.map(x=>'<article class="glass card"><span class=tag>'+esc(x.kind)+'</span><h3>'+esc(x.title)+'</h3><div class=meta>'+esc(x.entity)+(x.ref?'<br>Ref: '+esc(x.ref):'')+(x.close?'<br>Closing: '+esc(x.close):'')+'</div>'+(x.summary?'<p>'+esc(x.summary)+'</p>':'')+'<a href="'+esc(x.url)+'" target=_blank rel="noopener">Open official source →</a></article>').join('')||'<section class="glass card empty"><h3>No current tender card was found for '+esc(c)+'.</h3><p class=notice>That does not mean no procurement exists. Open PPIP below and search the county/procuring entity directly; Kenya Pulse never fabricates opportunities.</p><a href="https://tenders.go.ke/tenders/" target=_blank rel="noopener">Search official PPIP →</a></section>'}
 let qs=new URLSearchParams(location.search),qc=qs.get('county');if(qc&&[...county.options].some(o=>o.value===qc)){county.value=qc;loadTenders()}
 </script></body></html>"""
- return render_template_string(html,counties=COUNTIES)
+ return render_template_string(html,counties=COUNTIES,marks=COUNTY_MARKS)
 
 @app.get("/api/county-notices")
 def county_notices_api():
