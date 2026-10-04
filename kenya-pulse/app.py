@@ -452,7 +452,7 @@ def methodology():
 def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
- sql="SELECT id,name,party,status FROM candidates WHERE active=1 AND race=?";args=[race]
+ sql="SELECT id,name,party,status FROM candidates WHERE active=TRUE AND race=?";args=[race]
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
@@ -469,7 +469,7 @@ def candidates_api():
 def candidate_resolve():
  d=request.get_json(silent=True) or {};typed=re.sub(r"\s+"," ",str(d.get("name") or "").strip())[:80];race=str(d.get("race") or "").strip();county=str(d.get("county") or "").strip();constituency=str(d.get("constituency") or "").strip();ward=str(d.get("ward") or "").strip()
  if len(typed)<2 or race not in RACES:return jsonify(matches=[]),400
- sql="SELECT DISTINCT c.id,c.name,c.party,c.status FROM candidates c LEFT JOIN candidate_aliases a ON a.candidate_id=c.id WHERE c.active=1 AND c.race=? AND (LOWER(c.name)=LOWER(?) OR (a.verified=1 AND LOWER(a.alias)=LOWER(?)))";args=[race,typed,typed]
+ sql="SELECT DISTINCT c.id,c.name,c.party,c.status FROM candidates c LEFT JOIN candidate_aliases a ON a.candidate_id=c.id WHERE c.active=TRUE AND c.race=? AND (LOWER(c.name)=LOWER(?) OR (a.verified=TRUE AND LOWER(a.alias)=LOWER(?)))";args=[race,typed,typed]
  if race!="President":sql+=" AND c.county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND c.constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND c.ward=?";args.append(ward)
@@ -487,7 +487,7 @@ def vote():
  if race=="Member of Parliament": ward=""
  if candidate_id:
   with conn() as c:
-   scope_sql="SELECT id,name FROM candidates WHERE id=? AND active=1 AND race=?";scope_args=[candidate_id,race]
+   scope_sql="SELECT id,name FROM candidates WHERE id=? AND active=TRUE AND race=?";scope_args=[candidate_id,race]
    if race!="President":scope_sql+=" AND county=?";scope_args.append(county)
    if race in {"Member of Parliament","MCA"}:scope_sql+=" AND constituency=?";scope_args.append(constituency)
    if race=="MCA":scope_sql+=" AND ward=?";scope_args.append(ward)
