@@ -295,11 +295,16 @@ def analytics_pageview():
 def serve_ad():
  county=request.args.get("county","")
  with conn() as db:
-  row=db.execute("""SELECT id,business,headline,url,scope,county FROM ad_orders
+  ad_sql="""SELECT id,business,headline,url,scope,county FROM ad_orders
+   WHERE status='ACTIVE' AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
+   AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)
+   AND (scope='National' OR county=?)
+   ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1""" if db.pg else """SELECT id,business,headline,url,scope,county FROM ad_orders
    WHERE status='ACTIVE' AND (starts_at IS NULL OR datetime(starts_at)<=datetime('now'))
    AND (ends_at IS NULL OR datetime(ends_at)>=datetime('now'))
    AND (scope='National' OR county=?)
-   ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1""",(county,)).fetchone()
+   ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1"""
+  row=db.execute(ad_sql,(county,)).fetchone()
   if not row:return jsonify(ad=None)
   db.execute("UPDATE ad_orders SET impressions=COALESCE(impressions,0)+1 WHERE id=?",(row["id"],))
   ad=dict(row); ad["click_url"]="/api/ad-click/"+str(row["id"])
