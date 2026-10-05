@@ -2651,7 +2651,8 @@ def live_analytics():
   else:label=str(max(1,seconds//86400))+" d ago"
   recent.append({"label":"New response","when":label})
  ratio=round(total*100/max(int(county_visits or 0),1),1) if county_visits else 0
- top_votes=sum(int(x.get("votes") or 0) for x in out);others_votes=max(0,total-top_votes);others_pct=round(others_votes*100/total,1) if total else 0\n return jsonify(total=total,results=out,others_votes=others_votes,others_pct=others_pct,response_ratio=min(ratio,100),ratio_note="Selected-race responses as a share of recorded Kenya Pulse visits for this county.",trend=trend,recent=recent,updated_at=now.isoformat(),disclosure="Voluntary Kenya Pulse website participants only. Not official IEBC voting, not representative of all Kenyan voters, and not an election forecast."),200,{"Cache-Control":"private, no-store"}
+ top_votes=sum(int(x.get("votes") or 0) for x in out);others_votes=max(0,total-top_votes);others_pct=round(others_votes*100/total,1) if total else 0
+ return jsonify(total=total,results=out,others_votes=others_votes,others_pct=others_pct,response_ratio=min(ratio,100),ratio_note="Selected-race responses as a share of recorded Kenya Pulse visits for this county.",trend=trend,recent=recent,updated_at=now.isoformat(),disclosure="Voluntary Kenya Pulse website participants only. Not official IEBC voting, not representative of all Kenyan voters, and not an election forecast."),200,{"Cache-Control":"private, no-store"}
 
 @app.errorhandler(500)
 def public_server_error(error):
