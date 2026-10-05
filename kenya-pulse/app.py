@@ -1442,14 +1442,39 @@ def _pick_ad(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None,exclude_
  if excluded:
   narrowed=[a for a in ads if str(a.get("business") or "").lower() not in excluded]
   if narrowed:ads=narrowed
+
+ # House fallback should visibly rotate for each visitor instead of repeatedly
+ # landing on one weighted-random brand. Paid inventory is still chosen first by
+ # _eligible_ads(), so this applies only when no paid campaign is eligible.
+ if ads and all(a.get("package")=="House Ad" for a in ads):
+  if db.pg:
+   hist_sql="""SELECT a.business,MAX(e.created_at) last_seen,COUNT(*) seen
+               FROM ad_impression_events e
+               JOIN ad_orders a ON a.id=e.ad_id
+               WHERE e.visitor_hash=? AND a.package='House Ad'
+                 AND e.created_at>=CURRENT_TIMESTAMP-INTERVAL '24 hours'
+               GROUP BY a.business"""
+  else:
+   hist_sql="""SELECT a.business,MAX(e.created_at) last_seen,COUNT(*) seen
+               FROM ad_impression_events e
+               JOIN ad_orders a ON a.id=e.ad_id
+               WHERE e.visitor_hash=? AND a.package='House Ad'
+                 AND datetime(e.created_at)>=datetime('now','-24 hours')
+               GROUP BY a.business"""
+  hist={str(x["business"]):{"seen":int(x["seen"] or 0),"last_seen":str(x["last_seen"] or "")}
+        for x in db.execute(hist_sql,(visitor_hash,)).fetchall()}
+  min_seen=min(hist.get(str(a.get("business") or ""),{"seen":0})["seen"] for a in ads)
+  pool=[a for a in ads if hist.get(str(a.get("business") or ""),{"seen":0})["seen"]==min_seen]
+  # Keep configured house priority as a tie-breaker only; the least-seen rule
+  # guarantees all active house brands surface before repeats dominate.
+  weighted=[(a,max(0.2,float(a.get("priority_weight") or 1.0))) for a in pool]
+  return _ad_choose(weighted)
+
  weighted=[]
  for ad in ads:
   base=float(ad.get("priority_weight") or 0) or AD_PACKAGE_WEIGHTS.get(ad.get("package"),1.0)
-  if ad.get("package")=="House Ad":
-   weight=max(0.2,float(ad.get("priority_weight") or 1.0))
-  else:
-   fairness=1.0/(1.0+int(ad.get("impressions") or 0)/1000.0)
-   weight=max(0.05,base*_ad_pacing_multiplier(ad)*(0.65+fairness))
+  fairness=1.0/(1.0+int(ad.get("impressions") or 0)/1000.0)
+  weight=max(0.05,base*_ad_pacing_multiplier(ad)*(0.65+fairness))
   weighted.append((ad,weight))
  return _ad_choose(weighted)
 
