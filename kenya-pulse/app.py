@@ -227,11 +227,14 @@ def paystack_request(path,payload=None):
  with urllib.request.urlopen(req,timeout=20) as r:return json.loads(r.read().decode())
 
 
-PROFILE_FEE_KES=100
 PRESIDENT_PROFILE_FEE_KES=5000
+STANDARD_PROFILE_FEE_KES=3000
+MCA_PROFILE_FEE_KES=1000
 PRESIDENT_PHOTO_PROFILE_LIMIT=20
 def profile_fee_for_race(race):
- return PRESIDENT_PROFILE_FEE_KES if race=="President" else PROFILE_FEE_KES
+ if race=="President":return PRESIDENT_PROFILE_FEE_KES
+ if race=="MCA":return MCA_PROFILE_FEE_KES
+ return STANDARD_PROFILE_FEE_KES
 def ensure_profile_claim_schema():
  with conn() as c:
   if c.pg:
@@ -348,9 +351,16 @@ def claim_profile():
   except Exception:return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
  page="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Claim your profile · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css><style>
  body{margin:0;background:#07180f;color:#f5fff8;font-family:Inter,system-ui}.w{max-width:880px;margin:auto;padding:32px 18px 70px}.card{padding:26px;border-radius:26px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}input,select,textarea,button{width:100%;padding:14px;border-radius:16px;border:1px solid #ffffff22;background:#ffffff0b;color:white;font:inherit}select{min-height:52px}textarea{min-height:120px}button{background:#69ef91;color:#0a2a18;font-weight:900;border:0}.muted{color:#a9c6b4}.fee{font-size:38px;font-weight:950;color:#ffd54a}@media(max-width:650px){.grid{grid-template-columns:1fr}}
- </style></head><body><div class=w><div class="glass card"><h1>Claim your Kenya Pulse AI profile</h1><p class=muted>For aspirants and candidates who want an enhanced public profile on Kenya Pulse AI. Payment covers profile activation and review only — it does not buy votes, ranking, or automatic inclusion in the preference ballot.</p><div class=fee>President profile: KSh 5,000</div>
- <form method=post enctype=multipart/form-data><div class=grid><input name=name required placeholder="Full name"><input name=email type=email required placeholder="Email for receipt"></div><div class=grid><select name=race required>{% for r in races %}<option>{{r}}</option>{% endfor %}</select><select name=county><option value="">County (not needed for President)</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><div class=grid><input name=constituency placeholder="Constituency (MP/MCA)"><input name=ward placeholder="Ward (MCA)"></div><div class=grid><input name=party placeholder="Party / Independent"><input name=public_contact placeholder="Public contact / campaign phone"></div><input name=campaign_url placeholder="Campaign website or social profile" style="margin-top:10px"><textarea name=bio placeholder="Short public bio, priorities and experience" style="margin-top:10px"></textarea><label style="display:block;margin-top:12px">Profile photo (JPG, PNG or WEBP, max 2 MB)<input name=photo type=file accept="image/jpeg,image/png,image/webp" required></label><button style="margin-top:14px">Submit profile →</button></form>
- <p class=muted style="margin-top:14px;font-size:12px">Profiles are reviewed before publication. Kenya Pulse AI may independently add sourced public-record information alongside candidate-submitted information.</p></div></div></body></html>"""
+ </style></head><body><div class=w><div class="glass card"><h1>Claim your Kenya Pulse AI profile</h1><p class=muted>For aspirants and candidates who want an enhanced public profile on Kenya Pulse AI. Payment covers profile activation and review only — it does not buy votes, ranking, or automatic inclusion in the preference ballot.</p><div class=fee id=profileFee>President: KSh 5,000</div><p class=muted style="margin-top:6px">Governor, Senator, Woman Rep & MP: KSh 3,000 · MCA: KSh 1,000</p>
+ <form method=post enctype=multipart/form-data><div class=grid><input name=name required placeholder="Full name"><input name=email type=email required placeholder="Email for receipt"></div><div class=grid><select name=race id=raceSelect required onchange="updateProfileFee()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select><select name=county><option value="">County (not needed for President)</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><div class=grid><input name=constituency placeholder="Constituency (MP/MCA)"><input name=ward placeholder="Ward (MCA)"></div><div class=grid><input name=party placeholder="Party / Independent"><input name=public_contact placeholder="Public contact / campaign phone"></div><input name=campaign_url placeholder="Campaign website or social profile" style="margin-top:10px"><textarea name=bio placeholder="Short public bio, priorities and experience" style="margin-top:10px"></textarea><label style="display:block;margin-top:12px">Profile photo (JPG, PNG or WEBP, max 2 MB)<input name=photo type=file accept="image/jpeg,image/png,image/webp" required></label><button style="margin-top:14px">Continue to payment →</button></form>
+ <p class=muted style="margin-top:14px;font-size:12px">Profiles are reviewed before publication. Kenya Pulse AI may independently add sourced public-record information alongside candidate-submitted information.</p></div></div><script>
+function updateProfileFee(){
+ const r=document.getElementById('raceSelect').value;
+ const fee=r==='President'?5000:(r==='MCA'?1000:3000);
+ document.getElementById('profileFee').textContent=r+': KSh '+fee.toLocaleString();
+}
+document.addEventListener('DOMContentLoaded',updateProfileFee);
+</script></body></html>"""
  return render_template_string(page,races=RACES,counties=COUNTIES)
 
 @app.get("/claim-profile/callback")
