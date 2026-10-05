@@ -1309,7 +1309,9 @@ def ground_confirm(issue_id):
 def home():
  src=re.sub(r"[^a-zA-Z0-9_-]","",request.args.get("src","direct"))[:60]
  with conn() as c:c.execute("INSERT INTO pulse_visits(county,source) VALUES(?,?)",(None,src))
- return redirect("/growth")
+ # Render the existing premium dashboard directly at the root URL so the
+ # public address stays https://kenyapulse.online/ without exposing /growth.
+ return growth()
 
 @app.get("/participate")
 def participate():
