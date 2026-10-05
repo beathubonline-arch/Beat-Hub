@@ -1,0 +1,23 @@
+name: Keep Kenya Pulse Render awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keep-awake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Wake Kenya Pulse backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://kenya-pulse-live.onrender.com"
+          curl --fail --silent --show-error --location             --retry 3 --retry-delay 5 --max-time 45             "$BASE/healthz" >/dev/null
+          curl --fail --silent --show-error --location             --retry 2 --retry-delay 3 --max-time 45             "$BASE/growth" >/dev/null
+          echo "Kenya Pulse is warm."
