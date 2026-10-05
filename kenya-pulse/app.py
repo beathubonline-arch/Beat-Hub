@@ -61,6 +61,8 @@ def init():
  with conn() as c:
   if c.pg:
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id BIGSERIAL PRIMARY KEY,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS candidate_id BIGINT;")
+   c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS submitted_candidate_text TEXT;")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_unique ON pulse_votes(county,race,COALESCE(constituency,''),COALESCE(ward,''),fp);")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race,constituency,ward);")
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id BIGSERIAL PRIMARY KEY,county TEXT,source TEXT,path TEXT,session_id TEXT,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
@@ -153,6 +155,7 @@ def init():
    c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
    if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
+   if "submitted_candidate_text" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN submitted_candidate_text TEXT")
    for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0"),("impression_goal","INTEGER DEFAULT 0"),("daily_impression_cap","INTEGER DEFAULT 0"),("frequency_cap","INTEGER DEFAULT 3"),("priority_weight","REAL DEFAULT 0"),("last_served_at","TEXT")]:
     try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
     except sqlite3.OperationalError:pass
@@ -949,7 +952,7 @@ body{background:#0b2f1d}.top.kp95nav{position:relative;top:auto;height:66px;max-
 </style></head><body><div class=world></div><div class=shade></div><header class="top kp95nav"><div class=brand>KENYA <b>PULSE</b></div><div class=live><i class=dot></i> LIVE PARTICIPATION</div></header><main class=wrap>
 <section class=hero><div>{% if initial_county %}<div class=kp95mark>{{county_mark}}</div>{% endif %}<span class=eyebrow>{% if initial_county %}{{initial_county}} · COUNTY PARTICIPATION{% else %}47 counties · voluntary participation{% endif %}</span><h1>{% if initial_county %}{{initial_county}}.<br><span>Your voice.</span>{% else %}Your county.<br><span>Your voice.</span>{% endif %}</h1><p class=muted>Share your current preference and explore live aggregate responses from people participating on Kenya Pulse AI. This is an open online pulse, not a scientific election forecast.</p></div><aside class="glass heroStat"><small>COUNTIES AVAILABLE</small><div class=big>47</div><small>One transparent participation experience across Kenya.</small></aside></section>
 <div class=analytics><div class="glass metric"><strong id=metricTotal>—</strong><span>Selected race responses</span></div><div class="glass metric"><strong>47</strong><span>Counties available</span></div><div class="glass metric"><strong>LIVE</strong><span>Aggregate updates</span></div></div>
-<section class=layout><div class="glass card"><div class=cardHead><div><h2>Join the pulse</h2><span class=muted>Complete all six seats</span></div><span class=pill>Private choice</span></div><div id=raceProgress class=raceProgress aria-label="Participation progress"></div><div class=formgrid><select id=county onchange="onScopeChange()"><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race onchange="onRaceChange()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><div id=areaBox class=formgrid style="display:none;margin-top:10px"><select id=constituency onchange="populateWards();load()"><option value="">Choose constituency</option></select><select id=ward onchange="load()"><option value="">Choose ward</option></select></div><div id=candidateGrid class=photoBallot aria-label="Candidate photo ballot"></div><div class=ballotHint>Tap one photo to record your current preference and continue automatically. Names are intentionally hidden on the ballot; the live Top 3 dashboard shows names separately.</div><div id=ballotFallback class=ballotFallback style="display:none"><button class=secondary onclick="toggleManualCandidate()">Candidate not shown / photo missing</button><div id=manualCandidateWrap style="display:none;margin-top:10px"><input id=candidate maxlength=80 placeholder="Enter full name" autocomplete="off"><button class=secondary onclick="voteManual()" style="margin-top:8px">Submit this person →</button></div></div><input id=issue maxlength=120 placeholder="Optional: issue influencing your choice" style="margin-top:10px"><div id=msg class=muted style="margin-top:10px;font-size:13px"></div></div>
+<section class=layout><div class="glass card"><div class=cardHead><div><h2>Join the pulse</h2><span class=muted>Complete all six seats</span></div><span class=pill>Private choice</span></div><div id=raceProgress class=raceProgress aria-label="Participation progress"></div><div class=formgrid><select id=county onchange="onScopeChange()"><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race onchange="onRaceChange()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><div id=areaBox class=formgrid style="display:none;margin-top:10px"><select id=constituency onchange="populateWards();load()"><option value="">Choose constituency</option></select><select id=ward onchange="load()"><option value="">Choose ward</option></select></div><div id=candidateGrid class=photoBallot aria-label="Candidate photo ballot"></div><div class=ballotHint>Tap one photo to record your current preference and continue automatically. Names are intentionally hidden on the ballot; the live Top 3 dashboard shows names separately.</div><div id=ballotFallback class=ballotFallback style="display:none"><button class=secondary onclick="toggleManualCandidate()">Candidate not shown / photo missing</button><div id=manualCandidateWrap style="display:none;margin-top:10px"><input id=candidate maxlength=80 placeholder="Enter full name or known alias" autocomplete="off"><div class=ballotHint style="margin-top:6px">If the name or alias matches a verified profile, Kenya Pulse will combine it with that candidate automatically. Otherwise your typed choice will still be recorded.</div><button class=secondary onclick="voteManual()" style="margin-top:8px">Record this choice →</button></div></div><input id=issue maxlength=120 placeholder="Optional: issue influencing your choice" style="margin-top:10px"><div id=msg class=muted style="margin-top:10px;font-size:13px"></div></div>
 <div class="glass card"><div class=cardHead><div><h2 id=rt>Live participant results</h2><span class=muted>Voluntary website responses</span></div><span class=pill>Live</span></div><div id=results><p class=muted>Select a county to explore aggregate participant results.</p></div></div></section>
 <section id=supportbox class="glass card kp95panel" style="display:none"><div class=cardHead><div><h2>Voting complete · Optional support</h2><span class=muted>Your 6 responses are already saved</span></div><span class=pill>Completely optional</span></div><p><b>Participation and results are completely free.</b> If you find Kenya Pulse AI useful, you can optionally help cover the cost of keeping the platform running.</p><p class=muted>Support with as low as KSh 5. Your contribution does not affect your response or the results.</p><div class=formgrid><input id=supportCustom type=number min=5 step=1 inputmode=numeric placeholder="KSh 5 or above"><input id=supportEmail type=email autocomplete=email placeholder="Email for payment receipt"></div><div class=formgrid style="margin-top:10px"><button id=supportPayButton class=secondary onclick="supportAmount()">Continue to secure Paystack checkout</button><button class=secondary onclick="dismissSupport()">Not now</button></div><div id=supportmsg class=muted>No contribution is required to view results.</div></section><section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
 <section class="glass adwrap"><div class=adlabel>Advertisement</div><div class=ad id=liveAd><div><b>Premium advertising space</b><small>Sponsored content will appear here, clearly separated from participation controls and results.</small></div></div></section>
@@ -1023,8 +1026,23 @@ async function submitPhotoPreference(candidateId,candidateName){
  if(x.ok&&j.recorded===true){await loadResultsFor(savedRace);await restoreParticipation();await load()}
 }
 async function voteManual(){
- let name=(document.getElementById('candidate').value||'').trim(),msg=document.getElementById('msg');
- if(name.length<2){msg.textContent='Enter the person’s full name.';return}
+ let name=(document.getElementById('candidate').value||'').trim(),msg=document.getElementById('msg'),cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();
+ if(name.length<2){msg.textContent='Enter the person’s full name or known alias.';return}
+ msg.textContent='Checking the name…';
+ try{
+  const r=await fetch('/api/candidates/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,race:R.value,county:C.value,constituency:cv,ward:wv})});
+  const j=await r.json(),matches=j.matches||[];
+  if(matches.length===1){
+   msg.textContent='Matched to '+matches[0].name+'. Recording…';
+   await submitPhotoPreference(matches[0].id,name);
+   return;
+  }
+  if(matches.length>1){
+   msg.textContent='That alias matches more than one person for this seat. Enter the full name.';
+   return;
+  }
+ }catch(e){}
+ msg.textContent='No verified alias match yet. Recording exactly what you entered…';
  await submitPhotoPreference(null,name);
 }
 async function restoreParticipation(){
@@ -2199,7 +2217,7 @@ def participation_progress():
 
 @app.post("/api/vote")
 def vote():
- d=request.get_json(silent=True) or {}; county=d.get("county","").strip(); race=d.get("race","").strip(); constituency=d.get("constituency","").strip()[:80]; ward=d.get("ward","").strip()[:80]; candidate=re.sub(r"\s+"," ",d.get("candidate","").strip())[:80]; candidate_id=d.get("candidate_id"); issue=d.get("issue","").strip()[:120]
+ d=request.get_json(silent=True) or {}; county=d.get("county","").strip(); race=d.get("race","").strip(); constituency=d.get("constituency","").strip()[:80]; ward=d.get("ward","").strip()[:80]; candidate=re.sub(r"\s+"," ",d.get("candidate","").strip())[:80]; submitted_candidate_text=candidate; candidate_id=d.get("candidate_id"); issue=d.get("issue","").strip()[:120]
  if county not in COUNTIES or race not in RACES or len(candidate)<2:return jsonify(error="Invalid county, race or candidate."),400
  if race in {"Member of Parliament","MCA"} and len(constituency)<2:return jsonify(error="Choose/enter the constituency for this race."),400
  if race=="MCA" and len(ward)<2:return jsonify(error="Choose/enter the ward for the MCA race."),400
@@ -2217,9 +2235,22 @@ def vote():
   candidate=canonical["name"]
  else:
   candidate=re.sub(r"\s+"," ",candidate).strip()
-  # Free-text names are accepted after the client explicitly submits them; do not block
-  # participation merely because the registry has no matching entry yet.
-  if len(candidate)<2:return jsonify(error="Enter the person’s name."),400
+  if len(candidate)<2:return jsonify(error="Enter the person’s full name or known alias."),400
+  # Resolve exact canonical name or a VERIFIED alias inside the selected seat/scope.
+  resolve_sql="""SELECT DISTINCT c.id,c.name FROM candidates c
+                 LEFT JOIN candidate_aliases a ON a.candidate_id=c.id
+                 WHERE c.active=TRUE AND c.race=?
+                 AND (LOWER(c.name)=LOWER(?) OR (a.verified=TRUE AND LOWER(a.alias)=LOWER(?)))"""
+  resolve_args=[race,candidate,candidate]
+  if race!="President":resolve_sql+=" AND c.county=?";resolve_args.append(county)
+  if race in {"Member of Parliament","MCA"}:resolve_sql+=" AND c.constituency=?";resolve_args.append(constituency)
+  if race=="MCA":resolve_sql+=" AND c.ward=?";resolve_args.append(ward)
+  with conn() as c:
+   matches=c.execute(resolve_sql,resolve_args).fetchall()
+  if len(matches)==1:
+   candidate_id=matches[0]["id"];candidate=matches[0]["name"]
+  elif len(matches)>1:
+   return jsonify(error="That alias matches more than one person for this seat. Enter the full name."),409
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
  with conn() as c:
   completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,fp)).fetchall()}
@@ -2234,12 +2265,12 @@ def vote():
   if n>=8:return jsonify(error="Too many submissions in a short period. Please try again later."),429
  try:
   with conn() as c:
-   c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,issue,fp,constituency or None,ward or None))
+   c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,submitted_candidate_text,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,submitted_candidate_text,issue,fp,constituency or None,ward or None))
   with conn() as c:
    check=c.execute("SELECT count(*) n FROM pulse_votes WHERE county=? AND race=? AND fp=? AND LOWER(candidate)=LOWER(?)",(county,race,fp,candidate)).fetchone()
   saved=check["n"] if hasattr(check,"keys") else check[0]
   if saved<1:return jsonify(error="The response could not be verified after saving. Please retry."),500
-  return jsonify(message="Preference counted and verified.",recorded=True)
+  return jsonify(message="Preference counted and verified.",recorded=True,candidate=candidate,candidate_id=candidate_id,submitted_as=submitted_candidate_text,alias_matched=bool(candidate_id and candidate.lower()!=submitted_candidate_text.lower()))
  except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this device/network is already recorded for this area and race."),409
  except Exception as e:
   app.logger.exception("vote persistence failure")
