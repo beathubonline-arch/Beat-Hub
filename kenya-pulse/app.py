@@ -498,9 +498,9 @@ def _run_officeholder_sync_once():
   app.logger.exception("KP_OFFICEHOLDER_SYNC failed: %s",e)
 
 def _start_officeholder_sync():
- try:threading.Timer(8.0,_run_officeholder_sync_once).start()
- except Exception:app.logger.exception("could not schedule officeholder sync")
-_start_officeholder_sync()
+ # Keep the public web process lightweight. Officeholder/Gazette ingestion must run
+ # out-of-band (scheduled/admin job), never on a visitor-facing cold start.
+ return None
 
 @app.get("/healthz")
 def healthz():
@@ -1155,7 +1155,7 @@ async function loadCandidates(){
  try{
   let r=await fetch(q,{cache:'no-store'}),j=await r.json(),items=j.candidates||[];
   grid.innerHTML='';
-  if(!items.length){grid.innerHTML='<div class="muted">No verified photo profiles are published for this seat yet. You can still submit a name below.</div>';fallback.style.display='block';return}
+  if(!items.length){grid.innerHTML='<div class="muted">The verified candidate registry for this seat is still being updated. Enter the person’s full name or known alias below — your choice will still be recorded.</div>';fallback.style.display='block';return}
   items.forEach(x=>{
    let b=document.createElement('button');b.type='button';b.className='candidatePhoto';b.title='Tap to select this person';b.setAttribute('aria-label','Select candidate photo');
    b.innerHTML=(x.photo_url?'<img src="'+escAttr(x.photo_url)+'" alt="'+escAttr(x.name)+'" loading="lazy">':'<div class="missing"><span>👤</span><small>Photo pending verification</small></div>')+'<span class="candidateMeta"><b>'+esc(x.name)+'</b><small>'+esc(x.party||x.status||'Public profile')+'</small></span>';
