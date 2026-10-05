@@ -1,6 +1,9 @@
 name: Keep Kenya Pulse Render awake
 
 on:
+  push:
+    branches: [kenya-pulse-mvp]
+    paths: ['.github/workflows/kenya-pulse-keep-awake.yml']
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
