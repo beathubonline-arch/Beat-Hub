@@ -892,6 +892,17 @@ GLOBAL_SHELL_JS=r'''(()=>{
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAd()});
 })();'''
 
+@app.get("/favicon.svg")
+def kenya_pulse_favicon():
+ svg='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+ <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8df7ac"/><stop offset=".55" stop-color="#45d87a"/><stop offset="1" stop-color="#d7ff72"/></linearGradient></defs>
+ <rect width="64" height="64" rx="16" fill="#082b1a"/>
+ <rect x="3" y="3" width="58" height="58" rx="13" fill="none" stroke="url(#g)" stroke-width="3"/>
+ <path d="M12 34h9l4-10 7 20 6-15 5 5h9" fill="none" stroke="url(#g)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+ <circle cx="51" cy="14" r="4" fill="#ffd95a"/>
+ </svg>'''
+ return svg,200,{"Content-Type":"image/svg+xml; charset=utf-8","Cache-Control":"public, max-age=86400"}
+
 @app.get("/pulse-global.js")
 def pulse_global_js():
  return GLOBAL_SHELL_JS,200,{"Content-Type":"application/javascript; charset=utf-8","Cache-Control":"public, max-age=300"}
@@ -904,6 +915,9 @@ def kenya_pulse_global_ui(response):
    scripts=""
    if "/pulse95.js" not in body:scripts+='<script src="/pulse95.js"></script>'
    if "/pulse-global.js" not in body:scripts+='<script src="/pulse-global.js"></script>'
+   if "<link rel=\"icon\"" not in body and "<link rel='icon'" not in body:
+    fav='<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261005"><link rel="shortcut icon" href="/favicon.svg?v=20261005">'
+    if "</head>" in body:body=body.replace("</head>",fav+"</head>")
    if "</body>" in body and scripts:
     body=body.replace("</body>",scripts+"</body>")
     response.set_data(body)
