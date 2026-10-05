@@ -1,4 +1,4 @@
-import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, datetime as dt, threading, xml.etree.ElementTree as ET, email.utils, html as html_lib
+import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, datetime as dt, threading, io, xml.etree.ElementTree as ET, email.utils, html as html_lib
 try:
  import psycopg2
  import psycopg2.extras
@@ -267,19 +267,20 @@ def _parse_directory_rows(html,base):
   rows.append({"cells":texts,"source_url":href,"photo_url":photo})
  return rows
 
-def _upsert_public_officeholder(c,name,race,county="",constituency="",party="",photo_url="",source_url=""):
+def _upsert_public_officeholder(c,name,race,county="",constituency="",ward="",party="",photo_url="",source_url=""):
  if not name or race not in RACES:return False
  sql="SELECT id FROM candidates WHERE LOWER(name)=LOWER(?) AND race=?";args=[name,race]
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
+ if race=="MCA":sql+=" AND ward=?";args.append(ward)
  row=c.execute(sql,args).fetchone()
  if row:
   c.execute("""UPDATE candidates SET party=COALESCE(NULLIF(?,''),party),status=CASE WHEN status IN ('IEBC_CLEARED','PARTY_NOMINEE','ASPIRANT') THEN status ELSE 'UNKNOWN' END,
                source_url=COALESCE(NULLIF(?,''),source_url),photo_url=COALESCE(NULLIF(?,''),photo_url),active=TRUE WHERE id=?""",
             (party,source_url,photo_url,row["id"]))
  else:
-  c.execute("""INSERT INTO candidates(name,race,county,constituency,party,status,source_url,photo_url,active)
-               VALUES(?,?,?,?,?,'UNKNOWN',?,?,TRUE)""",(name,race,county or None,constituency or None,party or None,source_url or None,photo_url or None))
+  c.execute("""INSERT INTO candidates(name,race,county,constituency,ward,party,status,source_url,photo_url,active)
+               VALUES(?,?,?,?,?,?,'UNKNOWN',?,?,TRUE)""",(name,race,county or None,constituency or None,ward or None,party or None,source_url or None,photo_url or None))
  return True
 
 def _sync_parliament_members():
@@ -327,6 +328,46 @@ def _sync_parliament_members():
    if empty>=3 and page>30:break
  return counts
 
+MCA_GAZETTE_URL="https://new.kenyalaw.org/akn/ke/officialGazette/gazette/2022-08-24/170/eng@2022-08-24/source"
+
+def _ward_canonical(county,constituency,raw):
+ if county not in GEOGRAPHY or constituency not in GEOGRAPHY[county]:return ""
+ n=re.sub(r"[^a-z0-9]","",str(raw or "").lower())
+ for w in GEOGRAPHY[county][constituency]:
+  if re.sub(r"[^a-z0-9]","",w.lower())==n:return w
+ return ""
+
+def _cell(v):
+ return re.sub(r"\s+"," ",str(v or "").replace("\n"," ")).strip()
+
+def _sync_mca_gazette():
+ count=0
+ try:
+  import pdfplumber
+  req=urllib.request.Request(MCA_GAZETTE_URL,headers={"User-Agent":"KenyaPulseAI/1.0 (+https://kenyapulse.online)"})
+  with urllib.request.urlopen(req,timeout=35) as r:payload=r.read()
+  with pdfplumber.open(io.BytesIO(payload)) as pdf, conn() as c:
+   for page in pdf.pages[2:]:
+    for table in page.extract_tables() or []:
+     for row in table or []:
+      cells=[_cell(x) for x in (row or [])]
+      if len(cells)<10:continue
+      # Gazette MCA schedule columns: county code/name, constituency code/name,
+      # ward code/name, surname, other names, party, abbreviation, votes.
+      if not re.fullmatch(r"\d{1,3}",cells[0] or ""):continue
+      county=_county_canonical(cells[1] if len(cells)>1 else "")
+      constituency=_constituency_canonical(county,cells[3] if len(cells)>3 else "")
+      ward=_ward_canonical(county,constituency,cells[5] if len(cells)>5 else "")
+      surname=cells[6] if len(cells)>6 else "";other=cells[7] if len(cells)>7 else ""
+      party=cells[8] if len(cells)>8 else ""
+      name=re.sub(r"\s+"," ",(surname+" "+other).strip())
+      if not county or not constituency or not ward or len(name)<3:continue
+      if _upsert_public_officeholder(c,name,"MCA",county=county,constituency=constituency,ward=ward,party=party,source_url=MCA_GAZETTE_URL):
+       count+=1
+ except Exception as e:
+  app.logger.exception("MCA Gazette sync failed")
+ return count
+
 def _sync_governors():
  count=0
  try:html=_fetch_public_html(GOVERNOR_DIRECTORY)
@@ -361,6 +402,7 @@ def sync_current_officeholders():
  try:
   counts=_sync_parliament_members()
   counts["Governor"]=_sync_governors()
+  counts["MCA"]=_sync_mca_gazette()
   OFFICEHOLDER_SYNC_STATE.update({"last_run":dt.datetime.now(dt.timezone.utc).isoformat(),"last_error":None,"counts":counts})
   app.logger.info("officeholder sync complete %s",counts)
  except Exception as e:
