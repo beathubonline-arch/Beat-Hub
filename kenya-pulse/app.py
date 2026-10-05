@@ -1341,7 +1341,7 @@ function dismissSupport(){document.getElementById('supportbox').style.display='n
 async function preSupportAmount(){
  let amount=parseInt(document.getElementById('preSupportCustom').value||'0',10),email=document.getElementById('preSupportEmail').value.trim(),m=document.getElementById('preSupportMsg');
  if(!Number.isFinite(amount)||amount<5){m.textContent='Choose KSh 5 or more.';return}
- let emailInput=document.getElementById('preSupportEmail');if(!email||!emailInput.checkValidity()){m.textContent='Enter a valid email for your secure receipt.';emailInput.focus();return}
+ let emailInput=document.getElementById('preSupportEmail');email=email.replace(/\s+/g,'');emailInput.value=email;if(!email||email.indexOf('@')<1||email.lastIndexOf('.')<email.indexOf('@')+2){m.textContent='Enter an email like name@example.com.';emailInput.focus();return}
  m.textContent='Opening secure Paystack checkout…';
  try{let x=await fetch('/api/support/initialize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,email,county:C.value||''})}),j=await x.json();if(x.ok&&j.authorization_url){location.href=j.authorization_url;return}m.textContent=j.error||'Could not start payment. No money has been taken.'}catch(e){m.textContent='Could not start payment. No money has been taken.'}
 }
