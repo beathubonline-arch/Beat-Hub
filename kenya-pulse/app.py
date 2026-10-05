@@ -63,7 +63,9 @@ def init():
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_votes(id BIGSERIAL PRIMARY KEY,county TEXT NOT NULL,race TEXT NOT NULL,candidate TEXT NOT NULL,issue TEXT,fp TEXT NOT NULL,constituency TEXT,ward TEXT,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS candidate_id BIGINT;")
    c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS submitted_candidate_text TEXT;")
+   c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS browser_token_hash TEXT;")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_unique ON pulse_votes(county,race,COALESCE(constituency,''),COALESCE(ward,''),fp);")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_browser_unique ON pulse_votes(county,race,COALESCE(constituency,''),COALESCE(ward,''),browser_token_hash) WHERE browser_token_hash IS NOT NULL;")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_lookup ON pulse_votes(county,race,constituency,ward);")
    c.execute("""CREATE TABLE IF NOT EXISTS pulse_visits(id BIGSERIAL PRIMARY KEY,county TEXT,source TEXT,path TEXT,session_id TEXT,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("ALTER TABLE pulse_visits ADD COLUMN IF NOT EXISTS path TEXT;");c.execute("ALTER TABLE pulse_visits ADD COLUMN IF NOT EXISTS session_id TEXT;")
@@ -156,6 +158,8 @@ def init():
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
    if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
    if "submitted_candidate_text" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN submitted_candidate_text TEXT")
+   if "browser_token_hash" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN browser_token_hash TEXT")
+   c.execute("CREATE UNIQUE INDEX IF NOT EXISTS pulse_vote_browser_unique ON pulse_votes(county,race,COALESCE(constituency,''),COALESCE(ward,''),browser_token_hash) WHERE browser_token_hash IS NOT NULL")
    for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0"),("impression_goal","INTEGER DEFAULT 0"),("daily_impression_cap","INTEGER DEFAULT 0"),("frequency_cap","INTEGER DEFAULT 3"),("priority_weight","REAL DEFAULT 0"),("last_served_at","TEXT")]:
     try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
     except sqlite3.OperationalError:pass
@@ -930,6 +934,8 @@ def kenya_pulse_global_ui(response):
     body=body.replace("</body>",scripts+"</body>")
     response.set_data(body)
     response.headers["Content-Length"]=str(len(body.encode("utf-8")))
+   if not _valid_vote_cookie(request.cookies.get(VOTE_COOKIE,"")):
+    response.set_cookie(VOTE_COOKIE,_make_vote_cookie(),max_age=31536000,secure=True,httponly=True,samesite="Lax",path="/")
  except Exception:pass
  return response
 
@@ -2203,12 +2209,35 @@ def participation_fingerprint():
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode()
  return hashlib.sha256(raw).hexdigest()
 
+VOTE_COOKIE="kp_vote_device"
+def _sign_vote_token(token):
+ return hmac.new(SALT.encode(),token.encode(),hashlib.sha256).hexdigest()
+
+def _make_vote_cookie():
+ token=secrets.token_urlsafe(24)
+ return token+"."+_sign_vote_token(token)
+
+def _valid_vote_cookie(raw):
+ try:
+  token,sig=(raw or "").rsplit(".",1)
+  if len(token)<20:return None
+  return token if hmac.compare_digest(sig,_sign_vote_token(token)) else None
+ except Exception:return None
+
+def browser_vote_token_hash():
+ token=_valid_vote_cookie(request.cookies.get(VOTE_COOKIE,""))
+ return hashlib.sha256((token+SALT).encode()).hexdigest() if token else None
+
 @app.get("/api/participation/progress")
 def participation_progress():
  county=request.args.get("county","")
  if county not in COUNTIES:return jsonify(error="Invalid county"),400
  with conn() as c:
-  rows=c.execute("SELECT race,constituency,ward FROM pulse_votes WHERE county=? AND fp=? ORDER BY id",(county,participation_fingerprint())).fetchall()
+  token_hash=browser_vote_token_hash();fp=participation_fingerprint()
+  if token_hash:
+   rows=c.execute("SELECT race,constituency,ward FROM pulse_votes WHERE county=? AND (fp=? OR browser_token_hash=?) ORDER BY id",(county,fp,token_hash)).fetchall()
+  else:
+   rows=c.execute("SELECT race,constituency,ward FROM pulse_votes WHERE county=? AND fp=? ORDER BY id",(county,fp)).fetchall()
  completed=[race for race in RACES if any(x["race"]==race for x in rows)]
  area=next((x for x in rows if x["race"]=="Member of Parliament"),None)
  return jsonify(
@@ -2256,8 +2285,12 @@ def vote():
   elif len(matches)>1:
    return jsonify(error="That alias matches more than one person for this seat. Enter the full name."),409
  raw=(request.headers.get("X-Forwarded-For",request.remote_addr or "").split(",")[0]+request.headers.get("User-Agent","")+SALT).encode(); fp=hashlib.sha256(raw).hexdigest()
+ token_hash=browser_vote_token_hash()
  with conn() as c:
-  completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,fp)).fetchall()}
+  if token_hash:
+   completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND (fp=? OR browser_token_hash=?)",(county,fp,token_hash)).fetchall()}
+  else:
+   completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,fp)).fetchall()}
  if race not in completed:
   next_race=next((r for r in RACES if r not in completed),None)
   if race!=next_race:return jsonify(error="Complete the seats in order.",next_race=next_race),409
@@ -2269,13 +2302,13 @@ def vote():
   if n>=8:return jsonify(error="Too many submissions in a short period. Please try again later."),429
  try:
   with conn() as c:
-   c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,submitted_candidate_text,issue,fp,constituency,ward) VALUES(?,?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,submitted_candidate_text,issue,fp,constituency or None,ward or None))
+   c.execute("INSERT INTO pulse_votes(county,race,candidate,candidate_id,submitted_candidate_text,issue,fp,browser_token_hash,constituency,ward) VALUES(?,?,?,?,?,?,?,?,?,?)",(county,race,candidate,candidate_id,submitted_candidate_text,issue,fp,token_hash,constituency or None,ward or None))
   with conn() as c:
    check=c.execute("SELECT count(*) n FROM pulse_votes WHERE county=? AND race=? AND fp=? AND LOWER(candidate)=LOWER(?)",(county,race,fp,candidate)).fetchone()
   saved=check["n"] if hasattr(check,"keys") else check[0]
   if saved<1:return jsonify(error="The response could not be verified after saving. Please retry."),500
   return jsonify(message="Preference counted and verified.",recorded=True,candidate=candidate,candidate_id=candidate_id,submitted_as=submitted_candidate_text,alias_matched=bool(candidate_id and candidate.lower()!=submitted_candidate_text.lower()))
- except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this device/network is already recorded for this area and race."),409
+ except (sqlite3.IntegrityError, psycopg2.IntegrityError if psycopg2 else sqlite3.IntegrityError):return jsonify(error="A response from this browser or device/network is already recorded for this area and race."),409
  except Exception as e:
   app.logger.exception("vote persistence failure")
   return jsonify(error="Database error while recording this response. Please retry.",recorded=False),500
