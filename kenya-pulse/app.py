@@ -636,7 +636,7 @@ body{background:#0b2f1d}.top.kp95nav{position:relative;top:auto;height:66px;max-
 <div class=analytics><div class="glass metric"><strong id=metricTotal>—</strong><span>Selected race responses</span></div><div class="glass metric"><strong>47</strong><span>Counties available</span></div><div class="glass metric"><strong>LIVE</strong><span>Aggregate updates</span></div></div>
 <section class=layout><div class="glass card"><div class=cardHead><div><h2>Join the pulse</h2><span class=muted>Complete all six seats</span></div><span class=pill>Private choice</span></div><div id=raceProgress class=raceProgress aria-label="Participation progress"></div><div class=formgrid><select id=county onchange="onScopeChange()"><option value="">Choose county</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select><select id=race onchange="onRaceChange()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select></div><div id=areaBox class=formgrid style="display:none;margin-top:10px"><select id=constituency onchange="populateWards();load()"><option value="">Choose constituency</option></select><select id=ward onchange="load()"><option value="">Choose ward</option></select></div><div id=candidateGrid class=photoBallot aria-label="Candidate photo ballot"></div><div class=ballotHint>Tap one photo to record your current preference and continue automatically. Names are intentionally hidden on the ballot; the live Top 3 dashboard shows names separately.</div><div id=ballotFallback class=ballotFallback style="display:none"><button class=secondary onclick="toggleManualCandidate()">Candidate not shown / photo missing</button><a class=secondary href="/claim-profile" style="display:inline-flex;margin-left:8px;text-decoration:none">Claim / add profile →</a><div id=manualCandidateWrap style="display:none;margin-top:10px"><input id=candidate maxlength=80 placeholder="Enter full name" autocomplete="off"><button class=secondary onclick="voteManual()" style="margin-top:8px">Submit this person →</button></div></div><input id=issue maxlength=120 placeholder="Optional: issue influencing your choice" style="margin-top:10px"><div id=msg class=muted style="margin-top:10px;font-size:13px"></div></div>
 <div class="glass card"><div class=cardHead><div><h2 id=rt>Live participant results</h2><span class=muted>Voluntary website responses</span></div><span class=pill>Live</span></div><div id=results><p class=muted>Select a county to explore aggregate participant results.</p></div></div></section>
-<section id=supportbox class="glass card kp95panel" style="display:none"><div class=cardHead><div><h2>Support Kenya Pulse AI</h2><span class=muted>Optional platform support</span></div><span class=pill>Completely optional</span></div><p><b>Participation and results are completely free.</b> If you find Kenya Pulse AI useful, you can optionally help cover the cost of keeping the platform running.</p><p class=muted>Support with as low as KSh 5. Your contribution does not affect your response or the results.</p><div class=formgrid><input id=supportCustom type=number min=5 step=1 inputmode=numeric placeholder="KSh 5 or above"><input id=supportEmail type=email autocomplete=email placeholder="Email for payment receipt"></div><div class=formgrid style="margin-top:10px"><button class=secondary onclick="supportAmount()">Continue to secure checkout</button><button class=secondary onclick="dismissSupport()">Not now</button></div><div id=supportmsg class=muted>No contribution is required to view results.</div></section><section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
+<section id=supportbox class="glass card kp95panel" style="display:none"><div class=cardHead><div><h2>Voting complete · Optional support</h2><span class=muted>Your 6 responses are already saved</span></div><span class=pill>Completely optional</span></div><p><b>Participation and results are completely free.</b> If you find Kenya Pulse AI useful, you can optionally help cover the cost of keeping the platform running.</p><p class=muted>Support with as low as KSh 5. Your contribution does not affect your response or the results.</p><div class=formgrid><input id=supportCustom type=number min=5 step=1 inputmode=numeric placeholder="KSh 5 or above"><input id=supportEmail type=email autocomplete=email placeholder="Email for payment receipt"></div><div class=formgrid style="margin-top:10px"><button id=supportPayButton class=secondary onclick="supportAmount()">Continue to secure Paystack checkout</button><button class=secondary onclick="dismissSupport()">Not now</button></div><div id=supportmsg class=muted>No contribution is required to view results.</div></section><section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
 <section class="glass adwrap"><div class=adlabel>Advertisement</div><div class=ad id=liveAd><div><b>Premium advertising space</b><small>Sponsored content will appear here, clearly separated from participation controls and results.</small></div></div></section>
 <section class="glass notice"><b>Transparency:</b> Results show voluntary Kenya Pulse AI participants and are not representative of all registered voters. They should not be interpreted as an election forecast. Individual choices are not publicly displayed. Candidate names are curated participation options and their appearance is not an endorsement. <a href="/methodology" style="color:#ffd54a">Read methodology →</a></section>
 <footer class=footer><span>© Kenya Pulse AI · Open participation dashboard</span><span><a href="https://www.facebook.com/people/Kenya-Pulse/61594936328345/" target="_blank" rel="noopener noreferrer">Kenya Pulse AI on Facebook</a> · <a href="/claim-profile">Claim profile</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/methodology">Methodology</a></span></footer></main>
@@ -675,8 +675,23 @@ async function loadCandidates(){
  }catch(e){grid.innerHTML='<div class="muted">Candidate photos are temporarily unavailable.</div>';fallback.style.display='block'}
 }
 function toggleManualCandidate(){let w=document.getElementById('manualCandidateWrap');w.style.display=w.style.display==='none'?'block':'none'}
-function onScopeChange(){areaMode();loadCandidates();load()}
-function onRaceChange(){areaMode();loadCandidates();load()}
+async function onScopeChange(){
+ document.getElementById('supportbox').style.display='none';
+ if(!C.value){areaMode();return}
+ try{await restoreParticipation();await load()}catch(e){document.getElementById('msg').textContent=e.message||'Could not restore participation progress.'}
+}
+async function onRaceChange(){
+ if(!C.value){areaMode();return}
+ try{
+  const response=await fetch('/api/participation/progress?county='+encodeURIComponent(C.value),{cache:'no-store'});
+  const progress=await response.json();
+  if(progress.next_race&&R.value!==progress.next_race){
+   R.value=progress.next_race;
+   document.getElementById('msg').textContent='Complete the seats in order. Next: '+progress.next_race+'.';
+  }
+  areaMode();await loadCandidates();await load();
+ }catch(e){areaMode();await loadCandidates();await load()}
+}
 async function voteCandidate(person,button){
  if(!C.value){document.getElementById('msg').textContent='Choose your county first.';return}
  document.querySelectorAll('.candidatePhoto').forEach(x=>x.classList.remove('selected'));button.classList.add('selected');
@@ -706,8 +721,22 @@ async function restoreParticipation(){
  if(progress.next_race)R.value=progress.next_race;
  if(progress.next_race==='MCA'&&progress.constituency){document.getElementById('constituency').value=progress.constituency;await populateWards()}
  areaMode();await loadCandidates();
- document.getElementById('supportbox').style.display=progress.complete&&sessionStorage.getItem('kp_support_dismissed')!=='1'?'block':'none';
- document.getElementById('msg').textContent=progress.complete?'All six responses are saved. Support is optional.':progress.completed.length+' of 6 responses saved. Next: '+progress.next_race+'.';
+ const support=progress.optional_support||{};
+ const showSupport=progress.complete&&sessionStorage.getItem('kp_support_dismissed')!=='1';
+ document.getElementById('supportbox').style.display=showSupport?'block':'none';
+ document.getElementById('msg').textContent=progress.complete?'6 of 6 complete. All responses are saved. Optional support is available below.':progress.completed.length+' of 6 responses saved. Next: '+progress.next_race+'.';
+ const supportMsg=document.getElementById('supportmsg');
+ const supportButton=document.getElementById('supportPayButton');
+ if(progress.complete){
+  if(support.configured){
+   if(supportMsg)supportMsg.textContent='Voting is complete. If you wish, you can support Kenya Pulse AI from KSh '+(support.minimum_kes||5)+'.';
+   if(supportButton){supportButton.disabled=false;supportButton.textContent='Continue to secure Paystack checkout';}
+  }else{
+   if(supportMsg)supportMsg.textContent='Voting is complete. Optional support is temporarily unavailable; your responses are already saved.';
+   if(supportButton){supportButton.disabled=true;supportButton.textContent='Optional support temporarily unavailable';}
+  }
+  if(showSupport)document.getElementById('supportbox').scrollIntoView({behavior:'smooth',block:'center'});
+ }
 }
 const PARTICIPATION_FLOW=['President','Governor','Senator','Woman Representative','Member of Parliament','MCA'];const RACE_SHORT={'President':'President','Governor':'Governor','Senator':'Senator','Woman Representative':'Woman Rep','Member of Parliament':'MP','MCA':'MCA'};function renderRaceProgress(completed=[],nextRace=null,complete=false){let box=document.getElementById('raceProgress');if(!box)return;box.innerHTML=PARTICIPATION_FLOW.map(r=>{let done=completed.includes(r),current=!complete&&r===nextRace,cls=done?'done':current?'current':'pending',icon=done?'✓':current?'●':'○';return '<div class="raceStep '+cls+'"><span class=check>'+icon+'</span>'+RACE_SHORT[r]+'</div>'}).join('')}
 function advanceParticipation(){let i=PARTICIPATION_FLOW.indexOf(R.value);if(i<0)return;if(i<PARTICIPATION_FLOW.length-1){R.value=PARTICIPATION_FLOW[i+1];if(R.value!=='MCA')clearAreas();areaMode();loadCandidates();document.getElementById('msg').textContent='Response recorded. Next: '+R.value+'.';document.getElementById('supportbox').style.display='none';return}document.getElementById('msg').textContent='All six seat responses completed. Your responses are recorded.';document.getElementById('supportbox').style.display='block';document.getElementById('supportbox').scrollIntoView({behavior:'smooth',block:'center'})}
@@ -1813,7 +1842,13 @@ def participation_progress():
   rows=c.execute("SELECT race,constituency,ward FROM pulse_votes WHERE county=? AND fp=? ORDER BY id",(county,participation_fingerprint())).fetchall()
  completed=[race for race in RACES if any(x["race"]==race for x in rows)]
  area=next((x for x in rows if x["race"]=="Member of Parliament"),None)
- return jsonify(completed=completed,next_race=next((r for r in RACES if r not in completed),None),complete=len(completed)==6,constituency=area["constituency"] if area else ""),200,{"Cache-Control":"private, no-store"}
+ return jsonify(
+  completed=completed,
+  next_race=next((r for r in RACES if r not in completed),None),
+  complete=len(completed)==6,
+  constituency=area["constituency"] if area else "",
+  optional_support={"unlocked":len(completed)==6,"configured":paystack_configured(),"minimum_kes":5}
+ ),200,{"Cache-Control":"private, no-store"}
 
 @app.post("/api/vote")
 def vote():
