@@ -134,6 +134,35 @@ def init():
 try:init()
 except Exception as e: print("db init",e)
 
+STARTER_PRESIDENTIAL_PROFILES=[
+ {"name":"William Ruto","party":"United Democratic Alliance (UDA)","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/politics/article/2001551641/ruto-opposition-will-see-dust-in-next-year-s-polls","photo_url":"https://www.stjohnchrisostom.com/build/assets/tile-president-pgxkfrxs.jpg","bio":"Incumbent President of Kenya since 2022. Public reporting in 2026 describes his campaign for a second term in the 2027 presidential election."},
+ {"name":"Rigathi Gachagua","party":"Democracy for Citizens Party (DCP)","status":"ASPIRANT","source_url":"https://citizen.digital/article/i-will-vie-for-presidency-in-2027-gachagua-says-as-he-attacks-ruto-n381911","photo_url":"https://cdn.radioafrica.digital/image/2024/10/Rigathi%20Gachagua%20%281%29.jpg","bio":"Former Deputy President and DCP leader. He has publicly stated his intention to seek the presidency in 2027, subject to opposition coalition arrangements."},
+ {"name":"Martha Karua","party":"People's Liberation Party (PLP)","status":"ASPIRANT","source_url":"https://nation.africa/kenya/news/politics/karua-nothing-short-of-the-presidency-for-me-5543082","photo_url":"https://vellum.co.ke/wp-content/uploads/2025/03/Martha-Karua.jpg","bio":"People's Liberation Party leader and former Justice Minister. She has publicly reaffirmed her intention to seek the presidency in 2027."},
+ {"name":"Kalonzo Musyoka","party":"Wiper Patriotic Front","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/counties/article/2001552697/kalonzo-im-best-placed-to-beat-ruto-but-ill-support-any-opposition-candidate","photo_url":"https://nation.africa/resource/image/3610526/landscape_ratio3x2/1620/1080/7bff3664d7fe914a603c9b188b01e3b6/hv/kalonzo-musyoka.jpg","bio":"Wiper Patriotic Front leader and former Vice-President. He has publicly pursued the opposition presidential ticket for 2027 while saying he would support a consensus opposition candidate."},
+ {"name":"Fred Matiang'i","party":"Jubilee Party","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/amp/national/article/2001549561/matiangi-backs-talks-for-opposition-presidential-candidate","photo_url":"https://images.hivisasa.com/1200/XuxlU16CLMFred_Matiangi_2013-e1459511321675.jpg","bio":"Former Interior Cabinet Secretary and Jubilee presidential hopeful. He has publicly campaigned for the 2027 presidential contest while participating in opposition coalition talks."}
+]
+def seed_starter_presidential_profiles():
+ try:
+  with conn() as c:
+   for p in STARTER_PRESIDENTIAL_PROFILES:
+    row=c.execute("SELECT id,status,photo_url,bio,source_url,party FROM candidates WHERE race='President' AND LOWER(name)=LOWER(?)",(p["name"],)).fetchone()
+    if row:
+     status=row["status"]
+     if (status or "").upper() in {"PROSPECTIVE","UNKNOWN",""}:status="ASPIRANT"
+     c.execute("""UPDATE candidates SET
+                  party=COALESCE(NULLIF(party,''),?),
+                  status=?,
+                  source_url=COALESCE(NULLIF(source_url,''),?),
+                  photo_url=COALESCE(NULLIF(photo_url,''),?),
+                  bio=COALESCE(NULLIF(bio,''),?),
+                  active=TRUE
+                  WHERE id=?""",(p["party"],status,p["source_url"],p["photo_url"],p["bio"],row["id"]))
+    else:
+     c.execute("""INSERT INTO candidates(name,race,party,status,source_url,photo_url,bio,active)
+                  VALUES(?,'President',?,?,?,?,?,TRUE)""",(p["name"],p["party"],p["status"],p["source_url"],p["photo_url"],p["bio"]))
+ except Exception as e: app.logger.exception("starter presidential profile seed failed")
+seed_starter_presidential_profiles()
+
 @app.get("/api/geography")
 def geography_api():
  county=(request.args.get("county") or "").strip()
@@ -1194,7 +1223,7 @@ def methodology():
 def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
- sql="SELECT id,name,party,status,photo_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
+ sql="SELECT id,name,party,status,photo_url,bio,source_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
@@ -1203,7 +1232,7 @@ def candidates_api():
   rows=c.execute(sql,args).fetchall()
   out=[]
   for x in rows:
-   item=dict(x); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=TRUE ORDER BY alias",(item["id"],)).fetchall()
+   item=dict(x);item["profile_url"]="/candidate/"+str(item["id"]); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=TRUE ORDER BY alias",(item["id"],)).fetchall()
    item["aliases"]=[a["alias"] for a in aliases];out.append(item)
  return jsonify(candidates=out)
 
@@ -1247,7 +1276,7 @@ def ensure_candidate_evidence_schema():
   c.execute("CREATE INDEX IF NOT EXISTS candidate_evidence_lookup ON candidate_evidence(candidate_id,status,category);")
 
 def candidate_scope_sql(race,county="",constituency="",ward=""):
- sql="SELECT id,name,party,status,source_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
+ sql="SELECT id,name,party,status,source_url,photo_url,bio,campaign_url,public_contact FROM candidates WHERE active=TRUE AND race=?";args=[race]
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
@@ -1528,6 +1557,22 @@ def candidate_evidence_admin():
                VALUES(?,?,?,?,?,?,?,?)""",(candidate_id,category,claim,evidence_type,source_title,source_url,source_date,notes))
  return jsonify(saved=True,message="Evidence record published."),201
 
+
+@app.get("/candidate/<int:candidate_id>")
+def public_candidate_profile(candidate_id):
+ ensure_candidate_evidence_schema()
+ with conn() as c:
+  row=c.execute("""SELECT id,name,race,county,constituency,ward,party,status,source_url,photo_url,bio,campaign_url,public_contact
+                   FROM candidates WHERE id=? AND active=TRUE""",(candidate_id,)).fetchone()
+  if not row:return "Candidate profile not found",404
+  evidence=c.execute("""SELECT category,claim,evidence_type,source_title,source_url,source_date
+                        FROM candidate_evidence WHERE candidate_id=? AND status='PUBLISHED'
+                        ORDER BY category,COALESCE(source_date,checked_at) DESC,id DESC""",(candidate_id,)).fetchall()
+ p=dict(row);ev=[dict(x) for x in evidence]
+ return render_template_string("""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>{{p.name}} · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css><style>
+ body{margin:0;background:#06140e;color:#f5fff8;font-family:Inter,system-ui}.w{max-width:940px;margin:auto;padding:30px 18px 70px}.hero{display:grid;grid-template-columns:280px 1fr;gap:28px;padding:28px}.portrait{width:100%;aspect-ratio:1/1;border-radius:28px;object-fit:cover;background:#103522}.tag{display:inline-flex;padding:6px 9px;border-radius:999px;border:1px solid #69ef9150;background:#69ef9116;font-size:10px;font-weight:900;letter-spacing:.06em}.muted{color:#a9c6b4}.facts{display:grid;gap:12px;margin-top:18px}.fact{padding:18px}.fact a{color:#8df7ac}.src{font-size:12px;color:#9db5a5}.note{margin-top:16px;padding:14px;border-radius:14px;background:#ffffff09;border:1px solid #ffffff18;font-size:12px;line-height:1.5}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.btn{display:inline-flex;padding:12px 16px;border-radius:14px;background:#69ef91;color:#092817;text-decoration:none;font-weight:900}@media(max-width:700px){.hero{grid-template-columns:1fr}.portrait{max-width:340px}}
+ </style></head><body><main class=w><section class="glass hero">{% if p.photo_url %}<img class=portrait src="{{p.photo_url}}" alt="">{% else %}<div class=portrait></div>{% endif %}<div><span class=tag>{{p.status}}</span><h1>{{p.name}}</h1><p class=muted>{{p.party or 'Party not verified'}} · {{p.race}}</p><p>{{p.bio or 'No public bio has been published yet.'}}</p><div class=actions><a class=btn href="/candidate-explorer?race={{p.race|urlencode}}">Compare candidates</a>{% if p.source_url %}<a class=btn href="{{p.source_url}}" target=_blank rel=noopener>Source record</a>{% endif %}</div><div class=note>Profile status reflects currently documented public information. ASPIRANT does not mean IEBC-cleared or officially on the final ballot.</div></div></section><section class=facts>{% if evidence %}{% for e in evidence %}<article class="glass fact"><span class=tag>{{e.evidence_type.replace('_',' ')}}</span><h3>{{e.category}}</h3><p>{{e.claim}}</p><div class=src><a href="{{e.source_url}}" target=_blank rel=noopener>{{e.source_title}}</a>{% if e.source_date %} · {{e.source_date}}{% endif %}</div></article>{% endfor %}{% else %}<article class="glass fact"><h3>Independent evidence</h3><p class=muted>No additional Kenya Pulse AI evidence records have been published yet. This is not a judgment about the candidate.</p></article>{% endif %}</section></main></body></html>""",p=p,evidence=ev)
+
 @app.get("/candidate-explorer")
 def candidate_explorer():
  counties=json.dumps(COUNTIES)
@@ -1578,7 +1623,7 @@ def candidate_explorer():
   const q=new URLSearchParams({race:race.value,county:county.value,constituency:cons.value,ward:ward.value});
   const d=await fetch('/api/candidates/compare?'+q).then(r=>r.json());
   if(!d.candidates?.length){cards.innerHTML='<div class="empty">No verified candidate registry entries are published for this exact race yet. Kenya Pulse AI will not invent names.</div>';return}
-  cards.innerHTML=d.candidates.map(c=>'<article class="card"><div class="name">'+esc(c.name)+'</div><div class="party">'+esc(c.party||'Party not verified')+' · '+esc(c.status||'Status not set')+'</div>'+
+  cards.innerHTML=d.candidates.map(c=>'<article class="card">'+(c.photo_url?'<img src="'+esc(c.photo_url)+'" alt="" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:16px;margin-bottom:14px">':'')+'<div class="name">'+esc(c.name)+'</div><div class="party">'+esc(c.party||'Party not verified')+' · '+esc(c.status||'Status not set')+'</div><div style="margin-bottom:14px"><a class="btn" href="/candidate/'+c.id+'">Open profile →</a></div>'+
    (c.evidence?.length?c.evidence.map(e=>'<div class="evidence"><span class="tag">'+esc(e.evidence_type.replaceAll('_',' '))+'</span><div class="claim">'+esc(e.claim)+'</div><div class="source">'+esc(e.category)+' · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">'+esc(e.source_title)+'</a>'+(e.source_date?' · '+esc(e.source_date):'')+'</div></div>').join(''):'<div class="empty">No published evidence records yet. Absence of evidence here is not a judgment about this candidate.</div>')+'</article>').join('');
   const url=location.origin+'/candidate-explorer?'+q.toString()+'&utm_source=social';document.getElementById('sharefb').href='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url);document.getElementById('sharewa').href='https://wa.me/?text='+encodeURIComponent('Compare the candidates using sourced records on Kenya Pulse AI: '+url);
  }
