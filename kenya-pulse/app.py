@@ -159,28 +159,32 @@ def init():
 try:init()
 except Exception as e: print("db init",e)
 
-def seed_beathub_house_ad():
+HOUSE_ADS=[
+ {"business":"BeatHub","url":"https://mybeathub.com","headline":"Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com"},
+ {"business":"Mkulima AI","url":"https://mkulima-ai-whatsapp.onrender.com","headline":"Mkulima AI — practical farming help, market guidance and farmer support powered by AI."}
+]
+def seed_house_ads():
  try:
   with conn() as c:
-   row=c.execute("""SELECT id FROM ad_orders
-                    WHERE LOWER(business)=LOWER(?) AND url=? AND package='House Ad'
-                    LIMIT 1""",("BeatHub","https://mybeathub.com")).fetchone()
-   if row:
-    c.execute("""UPDATE ad_orders
-                 SET headline=?,scope='National',county=NULL,budget=0,status='ACTIVE',
-                     starts_at=COALESCE(starts_at,CURRENT_TIMESTAMP),ends_at=NULL
-                 WHERE id=?""",
-              ("Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com",row["id"]))
-   else:
-    c.execute("""INSERT INTO ad_orders(
-                  business,email,phone,scope,county,package,budget,headline,url,status,starts_at,ends_at,impressions,clicks
-                 ) VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL,0,0)""",
-              ("BeatHub","kenyapulse2026@gmail.com",None,"National",None,"House Ad",0,
-               "Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com",
-               "https://mybeathub.com"))
- except Exception as e:
-  app.logger.exception("BeatHub house ad seed failed")
-seed_beathub_house_ad()
+   for ad in HOUSE_ADS:
+    row=c.execute("""SELECT id FROM ad_orders
+                     WHERE LOWER(business)=LOWER(?) AND url=? AND package='House Ad'
+                     LIMIT 1""",(ad["business"],ad["url"])).fetchone()
+    if row:
+     c.execute("""UPDATE ad_orders
+                  SET headline=?,scope='National',county=NULL,budget=0,status='ACTIVE',
+                      starts_at=COALESCE(starts_at,CURRENT_TIMESTAMP),ends_at=NULL,
+                      impression_goal=0,daily_impression_cap=0,frequency_cap=1000,priority_weight=1
+                  WHERE id=?""",(ad["headline"],row["id"]))
+    else:
+     c.execute("""INSERT INTO ad_orders(
+                   business,email,phone,scope,county,package,budget,headline,url,status,starts_at,ends_at,
+                   impressions,clicks,impression_goal,daily_impression_cap,frequency_cap,priority_weight
+                  ) VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL,0,0,0,0,1000,1)""",
+               (ad["business"],"kenyapulse2026@gmail.com",None,"National",None,"House Ad",0,ad["headline"],ad["url"]))
+ except Exception:
+  app.logger.exception("House ad seed failed")
+seed_house_ads()
 
 STARTER_PRESIDENTIAL_PROFILES=[
  {"name":"William Ruto","party":"United Democratic Alliance (UDA)","status":"ASPIRANT","source_url":"https://www.president.go.ke/administration/office-of-the-president/","photo_url":"https://commons.wikimedia.org/wiki/Special:Redirect/file/William%20Saomei%20Ruto%20official%20portrait.jpg","bio":"Incumbent President of Kenya since 2022. He is publicly pursuing re-election in the 2027 presidential election."},
@@ -962,6 +966,11 @@ def _eligible_ads(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None):
  rows=[dict(x) for x in db.execute(sql,args).fetchall()]
  if not rows:return []
 
+ # House inventory never competes with paid campaigns. Use it only when no paid ad is eligible.
+ paid_rows=[a for a in rows if a.get("package")!="House Ad"]
+ house_rows=[a for a in rows if a.get("package")=="House Ad"]
+ rows=paid_rows if paid_rows else house_rows
+
  recent_sql="""SELECT ad_id,COUNT(*) n FROM ad_impression_events
                WHERE visitor_hash=? AND created_at>=CURRENT_TIMESTAMP-INTERVAL '6 hours'
                GROUP BY ad_id""" if db.pg else """SELECT ad_id,COUNT(*) n FROM ad_impression_events
@@ -998,8 +1007,11 @@ def _pick_ad(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None,exclude_
  weighted=[]
  for ad in ads:
   base=float(ad.get("priority_weight") or 0) or AD_PACKAGE_WEIGHTS.get(ad.get("package"),1.0)
-  fairness=1.0/(1.0+int(ad.get("impressions") or 0)/1000.0)
-  weight=max(0.05,base*_ad_pacing_multiplier(ad)*(0.65+fairness))
+  if ad.get("package")=="House Ad":
+   weight=1.0
+  else:
+   fairness=1.0/(1.0+int(ad.get("impressions") or 0)/1000.0)
+   weight=max(0.05,base*_ad_pacing_multiplier(ad)*(0.65+fairness))
   weighted.append((ad,weight))
  return _ad_choose(weighted)
 
