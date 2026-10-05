@@ -1029,7 +1029,13 @@ def candidate_evidence_batch_admin():
  with conn() as c:
   for i,item in enumerate(items):
    try:
-    candidate_id=int(item.get("candidate_id"))
+    raw_candidate_id=item.get("candidate_id")
+    candidate_id=int(raw_candidate_id) if raw_candidate_id not in (None,"") else None
+    candidate_name=re.sub(r"\s+"," ",str(item.get("candidate_name") or "").strip())[:120]
+    candidate_race=str(item.get("race") or "").strip()
+    candidate_county=str(item.get("county") or "").strip()
+    candidate_constituency=str(item.get("constituency") or "").strip()
+    candidate_ward=str(item.get("ward") or "").strip()
     category=re.sub(r"\s+"," ",str(item.get("category") or "").strip())[:60]
     claim=re.sub(r"\s+"," ",str(item.get("claim") or "").strip())[:700]
     evidence_type=str(item.get("evidence_type") or "").strip().upper()
@@ -1039,7 +1045,22 @@ def candidate_evidence_batch_admin():
     notes=re.sub(r"\s+"," ",str(item.get("notes") or "").strip())[:500] or None
     if not category or not claim or evidence_type not in EVIDENCE_TYPES or not source_title or not source_url.startswith("https://"):
      raise ValueError("Invalid or incomplete evidence record")
-    if not c.execute("SELECT id FROM candidates WHERE id=? AND active=TRUE",(candidate_id,)).fetchone():
+    if candidate_id is None:
+     if not candidate_name or candidate_race not in RACES: raise ValueError("Provide candidate_id or candidate_name + valid race")
+     resolve_sql="SELECT id FROM candidates WHERE active=TRUE AND race=? AND LOWER(name)=LOWER(?)";resolve_args=[candidate_race,candidate_name]
+     if candidate_race!="President":
+      if candidate_county not in COUNTIES: raise ValueError("Valid county required for this race")
+      resolve_sql+=" AND county=?";resolve_args.append(candidate_county)
+     if candidate_race in {"Member of Parliament","MCA"}:
+      if not candidate_constituency: raise ValueError("Constituency required for this race")
+      resolve_sql+=" AND constituency=?";resolve_args.append(candidate_constituency)
+     if candidate_race=="MCA":
+      if not candidate_ward: raise ValueError("Ward required for MCA")
+      resolve_sql+=" AND ward=?";resolve_args.append(candidate_ward)
+     matches=c.execute(resolve_sql,resolve_args).fetchall()
+     if len(matches)!=1: raise ValueError("Candidate name did not resolve uniquely in the selected race and area")
+     candidate_id=matches[0]["id"]
+    elif not c.execute("SELECT id FROM candidates WHERE id=? AND active=TRUE",(candidate_id,)).fetchone():
      raise ValueError("Candidate not found or inactive")
     dup=c.execute("""SELECT id FROM candidate_evidence WHERE candidate_id=? AND LOWER(claim)=LOWER(?) AND source_url=? AND status='PUBLISHED'""",(candidate_id,claim,source_url)).fetchone()
     if dup:
@@ -1049,6 +1070,23 @@ def candidate_evidence_batch_admin():
     saved.append({"index":i,"candidate_id":candidate_id,"duplicate":False})
    except Exception as e:errors.append({"index":i,"error":str(e)[:180]})
  return jsonify(saved=saved,errors=errors,saved_count=len(saved),error_count=len(errors)),(207 if errors else 201)
+
+
+@app.get("/api/research/topics")
+def research_topics():
+ return jsonify(topics=[
+  {"key":"election_readiness","label":"Election readiness","preferred_sources":["IEBC","Kenya Gazette","Parliament"]},
+  {"key":"public_record","label":"Public record and offices held","preferred_sources":["Parliament","County Assembly","official government records"]},
+  {"key":"policy_positions","label":"Documented policy positions","preferred_sources":["candidate official statements","party manifestos","reputable independent reporting"]},
+  {"key":"public_finance","label":"Budgets, spending and audit findings","preferred_sources":["Controller of Budget","Auditor-General","Treasury","county records"]},
+  {"key":"integrity_legal","label":"Documented court or integrity matters","preferred_sources":["Kenya Law","EACC","court records","reputable independent reporting"]},
+  {"key":"delivery_record","label":"Documented delivery record","preferred_sources":["official project records","audits","budget implementation reports","reputable independent reporting"]}
+ ],rules=[
+  "Facts must be attributable to a source URL.",
+  "Candidate allegations must never be written as established fact unless supported by authoritative records.",
+  "Polls must identify pollster, field dates and sample limitations.",
+  "Evidence records inform voters; they are not candidate ratings or endorsements."
+ ])
 
 @app.get("/api/social/entry-link")
 def social_entry_link():
