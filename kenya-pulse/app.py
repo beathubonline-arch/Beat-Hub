@@ -368,6 +368,27 @@ def sync_current_officeholders():
   app.logger.exception("officeholder sync failed")
  finally:OFFICEHOLDER_SYNC_STATE["running"]=False
 
+CURRENT_GOVERNOR_BASELINE={
+ "Mombasa":"Abdulswamad Nassir","Kwale":"Fatuma Achani","Kilifi":"Gideon Mung'aro","Tana River":"Dhadho Godhana","Lamu":"Issa Abdallah Timamy",
+ "Taita-Taveta":"Andrew Mwadime","Garissa":"Nathif Jama","Wajir":"Ahmed Abdullahi","Mandera":"Mohamed Adan Khalif","Marsabit":"Mohamud Ali",
+ "Isiolo":"Abdi Hassan Guyo","Meru":"Isaac Mutuma","Tharaka-Nithi":"Muthomi Njuki","Embu":"Cecily Mbarire","Kitui":"Julius Malombe",
+ "Machakos":"Wavinya Ndeti","Makueni":"Mutula Kilonzo","Nyandarua":"Moses Badilisha Kiarie","Nyeri":"Mutahi Kahiga","Kirinyaga":"Anne Waiguru",
+ "Murang'a":"Irungu Kang'ata","Kiambu":"Kimani Wamatangi","Turkana":"Jeremiah Lomurkai","West Pokot":"Simon Kachapin","Samburu":"Jonathan Lati Leleliit",
+ "Trans Nzoia":"George Natembeya","Uasin Gishu":"Jonathan Bii","Elgeyo-Marakwet":"Wisley Rotich","Nandi":"Stephen Sang","Baringo":"Benjamin Cheboi",
+ "Laikipia":"Joshua Irungu","Nakuru":"Susan Kihika","Narok":"Patrick Ole Ntutu","Kajiado":"Joseph Ole Lenku","Kericho":"Erick Kipkoech Mutai",
+ "Bomet":"Hillary Barchok","Kakamega":"Fernandes Barasa","Vihiga":"Wilber Ottichilo","Bungoma":"Ken Lusaka","Busia":"Paul Otuoma",
+ "Siaya":"James Orengo","Kisumu":"Anyang' Nyong'o","Homa Bay":"Gladys Wanga","Migori":"Ochillo Ayacko","Kisii":"Simba Arati",
+ "Nyamira":"Amos Nyaribo","Nairobi City":"Johnson Sakaja"
+}
+def seed_current_governor_baseline():
+ src="https://ilovekenya.org/governors"
+ try:
+  with conn() as c:
+   for county,name in CURRENT_GOVERNOR_BASELINE.items():
+    _upsert_public_officeholder(c,name,"Governor",county=county,source_url=src)
+ except Exception:app.logger.exception("governor baseline seed failed")
+seed_current_governor_baseline()
+
 def _start_officeholder_sync():
  try:threading.Thread(target=sync_current_officeholders,name="kp-officeholder-sync",daemon=True).start()
  except Exception:app.logger.exception("could not start officeholder sync")
@@ -905,7 +926,7 @@ async function loadCandidates(){
   if(!items.length){grid.innerHTML='<div class="muted">No verified photo profiles are published for this seat yet. You can still submit a name below.</div>';fallback.style.display='block';return}
   items.forEach(x=>{
    let b=document.createElement('button');b.type='button';b.className='candidatePhoto';b.title='Tap to select this person';b.setAttribute('aria-label','Select candidate photo');
-   b.innerHTML=(x.photo_url?'<img src="'+escAttr(x.photo_url)+'" alt="'+escAttr(x.name)+'" loading="lazy">':'<div class="missing">👤</div>')+'<span class="candidateMeta"><b>'+esc(x.name)+'</b><small>'+esc(x.party||x.status||'Public profile')+'</small></span>';
+   b.innerHTML=(x.photo_url?'<img src="'+escAttr(x.photo_url)+'" alt="'+escAttr(x.name)+'" loading="lazy">':'<div class="missing"><span>👤</span><small>Photo pending verification</small></div>')+'<span class="candidateMeta"><b>'+esc(x.name)+'</b><small>'+esc(x.party||x.status||'Public profile')+'</small></span>';
    b.onclick=()=>voteCandidate(x,b);grid.appendChild(b)
   });
   fallback.style.display='block';
@@ -1675,7 +1696,7 @@ def methodology():
 def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
- sql="SELECT id,name,party,status,photo_url,bio,source_url FROM candidates WHERE active=TRUE AND race=? AND photo_url IS NOT NULL AND TRIM(photo_url)<>''";args=[race]
+ sql="SELECT id,name,party,status,photo_url,bio,source_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
  if race=="President":
   sql+=" AND LOWER(name) IN (LOWER(?),LOWER(?))";args.extend(["William Ruto","Edwin Sifuna"])
  if race!="President":sql+=" AND county=?";args.append(county)
