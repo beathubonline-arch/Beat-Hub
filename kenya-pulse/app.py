@@ -341,7 +341,7 @@ def _sync_parliament_members():
    if empty>=3 and page>30:break
  return counts
 
-MCA_GAZETTE_URL="https://new.kenyalaw.org/akn/ke/officialGazette/gazette/2022-08-24/170/eng@2022-08-24/source"
+MCA_GAZETTE_URL="https://new.kenyalaw.org/akn/ke/officialGazette/gazette/2022-08-24/170/eng@2022-08-24/source.pdf"
 
 def _ward_canonical(county,constituency,raw):
  if county not in GEOGRAPHY or constituency not in GEOGRAPHY[county]:return ""
@@ -453,20 +453,20 @@ def _officeholder_sync_due():
       sync_key TEXT PRIMARY KEY,last_attempt TIMESTAMPTZ,last_success TIMESTAMPTZ,last_note TEXT
     )""")
     mca=c.execute("SELECT COUNT(*) n FROM candidates WHERE active=TRUE AND race='MCA'").fetchone()["n"]
-    row=c.execute("SELECT last_attempt FROM kp_sync_meta WHERE sync_key='mca_recovery_v2'").fetchone()
+    row=c.execute("SELECT last_attempt FROM kp_sync_meta WHERE sync_key='mca_recovery_v3'").fetchone()
     if mca>0:return False
     if row and row["last_attempt"]:
      age=(dt.datetime.now(dt.timezone.utc)-row["last_attempt"]).total_seconds()
      if age<86400:return False
     c.execute("""INSERT INTO kp_sync_meta(sync_key,last_attempt,last_note)
-                 VALUES('mca_recovery_v2',CURRENT_TIMESTAMP,'scheduled')
+                 VALUES('mca_recovery_v3',CURRENT_TIMESTAMP,'scheduled')
                  ON CONFLICT(sync_key) DO UPDATE SET last_attempt=CURRENT_TIMESTAMP,last_note='scheduled'""")
    else:
     c.execute("""CREATE TABLE IF NOT EXISTS kp_sync_meta(
       sync_key TEXT PRIMARY KEY,last_attempt TEXT,last_success TEXT,last_note TEXT
     )""")
     mca=c.execute("SELECT COUNT(*) n FROM candidates WHERE active=1 AND race='MCA'").fetchone()["n"]
-    row=c.execute("SELECT last_attempt FROM kp_sync_meta WHERE sync_key='mca_recovery_v2'").fetchone()
+    row=c.execute("SELECT last_attempt FROM kp_sync_meta WHERE sync_key='mca_recovery_v3'").fetchone()
     if mca>0:return False
     if row and row["last_attempt"]:
      try:
@@ -475,7 +475,7 @@ def _officeholder_sync_due():
       if (dt.datetime.now(dt.timezone.utc)-last).total_seconds()<86400:return False
      except Exception:pass
     c.execute("""INSERT INTO kp_sync_meta(sync_key,last_attempt,last_note)
-                 VALUES('mca_recovery_v2',CURRENT_TIMESTAMP,'scheduled')
+                 VALUES('mca_recovery_v3',CURRENT_TIMESTAMP,'scheduled')
                  ON CONFLICT(sync_key) DO UPDATE SET last_attempt=CURRENT_TIMESTAMP,last_note='scheduled'""")
   return True
  except Exception:
@@ -490,9 +490,9 @@ def _run_officeholder_sync_once():
   with conn() as c:
    mca=c.execute("SELECT COUNT(*) n FROM candidates WHERE active=TRUE AND race='MCA'").fetchone()["n"] if c.pg else c.execute("SELECT COUNT(*) n FROM candidates WHERE active=1 AND race='MCA'").fetchone()["n"]
    if mca>0:
-    c.execute("UPDATE kp_sync_meta SET last_success=CURRENT_TIMESTAMP,last_note=? WHERE sync_key='mca_recovery_v2'",("success imported="+str(imported)+" mca="+str(mca),))
+    c.execute("UPDATE kp_sync_meta SET last_success=CURRENT_TIMESTAMP,last_note=? WHERE sync_key='mca_recovery_v3'",("success imported="+str(imported)+" mca="+str(mca),))
    else:
-    c.execute("UPDATE kp_sync_meta SET last_note=? WHERE sync_key='mca_recovery_v2'",("completed imported="+str(imported)+" with zero MCA records",))
+    c.execute("UPDATE kp_sync_meta SET last_note=? WHERE sync_key='mca_recovery_v3'",("completed imported="+str(imported)+" with zero MCA records",))
   app.logger.warning("KP_OFFICEHOLDER_SYNC completed imported=%s mca=%s",imported,mca)
  except Exception as e:
   app.logger.exception("KP_OFFICEHOLDER_SYNC failed: %s",e)
