@@ -10,6 +10,7 @@ def pulse(request,tmp_path,monkeypatch):
  monkeypatch.setenv('PULSE_DB',str(tmp_path/'pulse.db'))
  monkeypatch.setenv('PAYSTACK_SECRET_KEY','sk_test_fixture')
  monkeypatch.setenv('PAYSTACK_MODE','test')
+ monkeypatch.setenv('PULSE_TESTING','1')
  pg=None
  if request.param=="postgres":
   dsn=os.environ.get('PULSE_TEST_POSTGRES_DSN')
@@ -241,7 +242,9 @@ def test_all_registered_routes_are_safe_and_public_gets_do_not_500(pulse,monkeyp
   vals={}
   for arg in rule.arguments:
    vals[arg]=999 if arg.endswith('_id') or arg=='candidate_id' or arg=='content_id' or arg=='ad_id' or arg=='issue_id' or arg=='claim_id' else ('kp-'+('a'*20) if arg=='ref' else 'kericho')
-  try:path=rule.build(vals)
+  try:
+   built=rule.build(vals)
+   path=built[1] if isinstance(built,tuple) else built
   except Exception:continue
   r=c.open(path,method='OPTIONS')
   assert r.status_code<500,(str(rule),r.status_code)
