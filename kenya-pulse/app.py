@@ -76,6 +76,9 @@ def init():
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS candidate_alias_unique ON candidate_aliases(candidate_id,LOWER(alias));")
    cand_cols=[x[1] for x in c.execute("PRAGMA table_info(candidates)").fetchall()]
    if "photo_url" not in cand_cols:c.execute("ALTER TABLE candidates ADD COLUMN photo_url TEXT")
+   if "bio" not in cand_cols:c.execute("ALTER TABLE candidates ADD COLUMN bio TEXT")
+   if "campaign_url" not in cand_cols:c.execute("ALTER TABLE candidates ADD COLUMN campaign_url TEXT")
+   if "public_contact" not in cand_cols:c.execute("ALTER TABLE candidates ADD COLUMN public_contact TEXT")
    c.execute("""CREATE TABLE IF NOT EXISTS support_payments(id BIGSERIAL PRIMARY KEY,reference TEXT NOT NULL UNIQUE,email TEXT NOT NULL,amount_kes INTEGER NOT NULL,currency TEXT NOT NULL DEFAULT 'KES',status TEXT NOT NULL DEFAULT 'INITIATED',paystack_transaction_id TEXT,channel TEXT,paid_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
    c.execute("ALTER TABLE support_payments ADD COLUMN IF NOT EXISTS county TEXT;")
@@ -83,6 +86,9 @@ def init():
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS support_payment_tx_unique ON support_payments(paystack_transaction_id) WHERE paystack_transaction_id IS NOT NULL;")
    c.execute("ALTER TABLE pulse_votes ADD COLUMN IF NOT EXISTS candidate_id BIGINT REFERENCES candidates(id);")
    c.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_url TEXT;")
+   c.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS bio TEXT;")
+   c.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS campaign_url TEXT;")
+   c.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS public_contact TEXT;")
   else:
    old_exists=c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pulse_votes'").fetchone()
    if not old_exists:
@@ -145,6 +151,188 @@ def paystack_request(path,payload=None):
  data=json.dumps(payload).encode() if payload is not None else None
  req=urllib.request.Request("https://api.paystack.co"+path,data=data,headers={"Authorization":"Bearer "+PAYSTACK_SECRET_KEY,"Content-Type":"application/json"},method="POST" if data is not None else "GET")
  with urllib.request.urlopen(req,timeout=20) as r:return json.loads(r.read().decode())
+
+
+PROFILE_FEE_KES=100
+def ensure_profile_claim_schema():
+ with conn() as c:
+  if c.pg:
+   c.execute("""CREATE TABLE IF NOT EXISTS aspirant_profile_claims(
+    id BIGSERIAL PRIMARY KEY,
+    reference TEXT UNIQUE,
+    name TEXT NOT NULL,
+    race TEXT NOT NULL,
+    county TEXT,
+    constituency TEXT,
+    ward TEXT,
+    party TEXT,
+    bio TEXT,
+    campaign_url TEXT,
+    public_contact TEXT,
+    photo_bytes BYTEA NOT NULL,
+    photo_mime TEXT NOT NULL,
+    payment_status TEXT NOT NULL DEFAULT 'UNPAID',
+    verification_status TEXT NOT NULL DEFAULT 'PENDING_PAYMENT',
+    paystack_transaction_id TEXT,
+    submitted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    paid_at TIMESTAMPTZ,
+    reviewed_at TIMESTAMPTZ
+   );""")
+  else:
+   c.execute("""CREATE TABLE IF NOT EXISTS aspirant_profile_claims(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference TEXT UNIQUE,
+    name TEXT NOT NULL,
+    race TEXT NOT NULL,
+    county TEXT,
+    constituency TEXT,
+    ward TEXT,
+    party TEXT,
+    bio TEXT,
+    campaign_url TEXT,
+    public_contact TEXT,
+    photo_bytes BLOB NOT NULL,
+    photo_mime TEXT NOT NULL,
+    payment_status TEXT NOT NULL DEFAULT 'UNPAID',
+    verification_status TEXT NOT NULL DEFAULT 'PENDING_PAYMENT',
+    paystack_transaction_id TEXT,
+    submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    paid_at TEXT,
+    reviewed_at TEXT
+   );""")
+  c.execute("CREATE INDEX IF NOT EXISTS aspirant_claim_status ON aspirant_profile_claims(payment_status,verification_status,submitted_at);")
+
+def verify_profile_payment(ref,d):
+ ensure_profile_claim_schema()
+ if not ref.startswith("kpasp-") or d.get("reference")!=ref or d.get("domain")!=paystack_mode():return False
+ with conn() as c:
+  row=c.execute("SELECT id,payment_status FROM aspirant_profile_claims WHERE reference=?",(ref,)).fetchone()
+  if not row:return False
+  try:amount=int(d.get("amount") or 0)
+  except:amount=0
+  if d.get("status")!="success" or d.get("currency")!="KES" or amount!=PROFILE_FEE_KES*100:return False
+  tx=str(d.get("id") or "")[:80]
+  if not tx:return False
+  c.execute("""UPDATE aspirant_profile_claims
+               SET payment_status='PAID',verification_status=CASE WHEN verification_status='PENDING_PAYMENT' THEN 'PENDING_REVIEW' ELSE verification_status END,
+                   paystack_transaction_id=?,paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP)
+               WHERE reference=?""",(tx,ref))
+ return True
+
+@app.get("/claim-profile/photo/<int:claim_id>")
+def claim_profile_photo(claim_id):
+ ensure_profile_claim_schema()
+ with conn() as c:row=c.execute("SELECT photo_bytes,photo_mime FROM aspirant_profile_claims WHERE id=?",(claim_id,)).fetchone()
+ if not row:return "",404
+ return (bytes(row["photo_bytes"]),200,{"Content-Type":row["photo_mime"],"Cache-Control":"public, max-age=86400"})
+
+@app.route("/claim-profile",methods=["GET","POST"])
+def claim_profile():
+ ensure_profile_claim_schema()
+ if request.method=="POST":
+  name=re.sub(r"\s+"," ",(request.form.get("name") or "").strip())[:120]
+  race=(request.form.get("race") or "").strip();county=(request.form.get("county") or "").strip()
+  constituency=(request.form.get("constituency") or "").strip()[:100];ward=(request.form.get("ward") or "").strip()[:100]
+  party=re.sub(r"\s+"," ",(request.form.get("party") or "").strip())[:120]
+  bio=re.sub(r"\s+"," ",(request.form.get("bio") or "").strip())[:900]
+  campaign_url=(request.form.get("campaign_url") or "").strip()[:500]
+  public_contact=re.sub(r"\s+"," ",(request.form.get("public_contact") or "").strip())[:180]
+  photo=request.files.get("photo")
+  if race not in RACES or len(name)<2:return "Enter a valid name and seat.",400
+  if race!="President" and county not in COUNTIES:return "Choose a valid county.",400
+  if race in {"Member of Parliament","MCA"} and (not constituency or not geography_ok(county,constituency,ward if race=="MCA" else "")):return "Choose a valid constituency"+(" and ward." if race=="MCA" else "."),400
+  if not photo:return "Upload a profile photo.",400
+  raw=photo.read(2_100_000)
+  if not raw or len(raw)>2_000_000:return "Photo must be under 2 MB.",400
+  mime=(photo.mimetype or "").lower()
+  if mime not in {"image/jpeg","image/png","image/webp"}:return "Use JPG, PNG or WEBP.",400
+  if campaign_url and not campaign_url.startswith(("https://","http://")):return "Campaign link must start with http:// or https://",400
+  ref="kpasp-"+secrets.token_hex(10)
+  with conn() as c:
+   if c.pg:
+    row=c.execute("""INSERT INTO aspirant_profile_claims(reference,name,race,county,constituency,ward,party,bio,campaign_url,public_contact,photo_bytes,photo_mime)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",(ref,name,race,county or None,constituency or None,ward or None,party or None,bio or None,campaign_url or None,public_contact or None,psycopg2.Binary(raw),mime)).fetchone()
+    claim_id=row["id"]
+   else:
+    cur=c.execute("""INSERT INTO aspirant_profile_claims(reference,name,race,county,constituency,ward,party,bio,campaign_url,public_contact,photo_bytes,photo_mime)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(ref,name,race,county or None,constituency or None,ward or None,party or None,bio or None,campaign_url or None,public_contact or None,raw,mime))
+    claim_id=cur.lastrowid
+  if not paystack_configured():return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
+  email=(request.form.get("email") or "").strip()[:160]
+  if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$",email):return "Enter a valid email for the payment receipt.",400
+  payload={"email":email,"amount":str(PROFILE_FEE_KES*100),"currency":"KES","reference":ref,"callback_url":request.url_root.rstrip("/")+"/claim-profile/callback","channels":["mobile_money","card"],"metadata":{"purpose":"aspirant_profile_claim","claim_id":claim_id,"candidate_name":name,"race":race}}
+  try:
+   out=paystack_request("/transaction/initialize",payload);url=(out.get("data") or {}).get("authorization_url","")
+   if not url.startswith("https://checkout.paystack.com/"):raise RuntimeError("invalid checkout")
+   return redirect(url)
+  except Exception:return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
+ page="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Claim your profile · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css><style>
+ body{margin:0;background:#07180f;color:#f5fff8;font-family:Inter,system-ui}.w{max-width:880px;margin:auto;padding:32px 18px 70px}.card{padding:26px;border-radius:26px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}input,select,textarea,button{width:100%;padding:14px;border-radius:14px;border:1px solid #ffffff22;background:#ffffff0b;color:white;font:inherit}textarea{min-height:120px}button{background:#69ef91;color:#0a2a18;font-weight:900;border:0}.muted{color:#a9c6b4}.fee{font-size:38px;font-weight:950;color:#ffd54a}@media(max-width:650px){.grid{grid-template-columns:1fr}}
+ </style></head><body><div class=w><div class="glass card"><h1>Claim your Kenya Pulse AI profile</h1><p class=muted>For aspirants and candidates who want their photo and public profile available on Kenya Pulse AI. Payment covers profile activation and review — it does not buy votes, ranking or poll placement.</p><div class=fee>KSh 100</div>
+ <form method=post enctype=multipart/form-data><div class=grid><input name=name required placeholder="Full name"><input name=email type=email required placeholder="Email for receipt"></div><div class=grid><select name=race required>{% for r in races %}<option>{{r}}</option>{% endfor %}</select><select name=county><option value="">County (not needed for President)</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><div class=grid><input name=constituency placeholder="Constituency (MP/MCA)"><input name=ward placeholder="Ward (MCA)"></div><div class=grid><input name=party placeholder="Party / Independent"><input name=public_contact placeholder="Public contact / campaign phone"></div><input name=campaign_url placeholder="Campaign website or social profile" style="margin-top:10px"><textarea name=bio placeholder="Short public bio, priorities and experience" style="margin-top:10px"></textarea><label style="display:block;margin-top:12px">Profile photo (JPG, PNG or WEBP, max 2 MB)<input name=photo type=file accept="image/jpeg,image/png,image/webp" required></label><button style="margin-top:14px">Submit & pay KSh 100 →</button></form>
+ <p class=muted style="margin-top:14px;font-size:12px">Profiles are reviewed before publication. Kenya Pulse AI may independently add sourced public-record information alongside candidate-submitted information.</p></div></div></body></html>"""
+ return render_template_string(page,races=RACES,counties=COUNTIES)
+
+@app.get("/claim-profile/callback")
+def claim_profile_callback():
+ ref=(request.args.get("reference") or "")[:100]
+ if not ref.startswith("kpasp-"):return redirect("/claim-profile")
+ try:
+  d=(paystack_request("/transaction/verify/"+ref).get("data") or {});verify_profile_payment(ref,d)
+ except Exception:pass
+ return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
+
+@app.get("/claim-profile/status")
+def claim_profile_status():
+ ensure_profile_claim_schema();ref=(request.args.get("reference") or "")[:100]
+ with conn() as c:row=c.execute("SELECT id,name,race,payment_status,verification_status FROM aspirant_profile_claims WHERE reference=?",(ref,)).fetchone()
+ if not row:return "Profile claim not found.",404
+ return render_template_string("""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Profile status · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css></head><body><main class="kp95wrap" style="max-width:760px;margin:auto;padding:60px 20px"><section class="glass kp95panel" style="padding:28px"><h1>Profile submitted</h1><p><b>{{name}}</b> · {{race}}</p><p>Payment: <b>{{payment}}</b></p><p>Review: <b>{{status}}</b></p><p>Your profile will appear publicly only after review and approval.</p><a href="/">Return to Kenya Pulse AI</a></section></main></body></html>""",name=row["name"],race=row["race"],payment=row["payment_status"],status=row["verification_status"])
+
+@app.get("/api/admin/profile-claims")
+def admin_profile_claims():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_profile_claim_schema()
+ with conn() as c:rows=c.execute("""SELECT id,reference,name,race,county,constituency,ward,party,bio,campaign_url,public_contact,payment_status,verification_status,submitted_at,paid_at
+                                    FROM aspirant_profile_claims ORDER BY id DESC LIMIT 100""").fetchall()
+ return jsonify(claims=[dict(x) for x in rows])
+
+@app.post("/api/admin/profile-claims/<int:claim_id>/review")
+def admin_profile_claim_review(claim_id):
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_profile_claim_schema();d=request.get_json(silent=True) or {};decision=(d.get("decision") or "").strip().upper()
+ if decision not in {"APPROVE","REJECT"}:return jsonify(error="decision must be APPROVE or REJECT"),400
+ with conn() as c:
+  row=c.execute("SELECT * FROM aspirant_profile_claims WHERE id=?",(claim_id,)).fetchone()
+  if not row:return jsonify(error="Claim not found"),404
+  if row["payment_status"]!="PAID":return jsonify(error="Profile fee has not been verified"),409
+  if decision=="REJECT":
+   c.execute("UPDATE aspirant_profile_claims SET verification_status='REJECTED',reviewed_at=CURRENT_TIMESTAMP WHERE id=?",(claim_id,))
+   return jsonify(updated=True,status="REJECTED")
+  existing_sql="SELECT id FROM candidates WHERE LOWER(name)=LOWER(?) AND race=?";args=[row["name"],row["race"]]
+  if row["race"]!="President":existing_sql+=" AND county=?";args.append(row["county"])
+  if row["race"] in {"Member of Parliament","MCA"}:existing_sql+=" AND constituency=?";args.append(row["constituency"])
+  if row["race"]=="MCA":existing_sql+=" AND ward=?";args.append(row["ward"])
+  existing=c.execute(existing_sql,args).fetchone()
+  photo_url=request.url_root.rstrip("/")+"/claim-profile/photo/"+str(claim_id)
+  if existing:
+   c.execute("""UPDATE candidates SET party=?,status='ASPIRANT',photo_url=?,bio=?,campaign_url=?,public_contact=?,active=TRUE WHERE id=?""",
+             (row["party"],photo_url,row["bio"],row["campaign_url"],row["public_contact"],existing["id"]))
+   candidate_id=existing["id"]
+  else:
+   if c.pg:
+    created=c.execute("""INSERT INTO candidates(name,race,county,constituency,ward,party,status,photo_url,bio,campaign_url,public_contact,active)
+                         VALUES(?,?,?,?,?,?, 'ASPIRANT',?,?,?,?,TRUE) RETURNING id""",
+                      (row["name"],row["race"],row["county"],row["constituency"],row["ward"],row["party"],photo_url,row["bio"],row["campaign_url"],row["public_contact"])).fetchone()
+    candidate_id=created["id"]
+   else:
+    cur=c.execute("""INSERT INTO candidates(name,race,county,constituency,ward,party,status,photo_url,bio,campaign_url,public_contact,active)
+                     VALUES(?,?,?,?,?,?, 'ASPIRANT',?,?,?,?,1)""",
+                  (row["name"],row["race"],row["county"],row["constituency"],row["ward"],row["party"],photo_url,row["bio"],row["campaign_url"],row["public_contact"]))
+    candidate_id=cur.lastrowid
+  c.execute("UPDATE aspirant_profile_claims SET verification_status='APPROVED',reviewed_at=CURRENT_TIMESTAMP WHERE id=?",(claim_id,))
+ return jsonify(updated=True,status="APPROVED",candidate_id=candidate_id,photo_url=photo_url)
+
 
 @app.get("/api/support/config")
 def support_config():
@@ -250,7 +438,9 @@ def paystack_webhook():
  if not hmac.compare_digest(sig,expected):return "",401
  event=request.get_json(silent=True) or {}
  if event.get("event")=="charge.success":
-  d=event.get("data") or {}; record_support_verification(str(d.get("reference") or "")[:100],d)
+  d=event.get("data") or {};ref=str(d.get("reference") or "")[:100]
+  if ref.startswith("kpasp-"):verify_profile_payment(ref,d)
+  else:record_support_verification(ref,d)
  return "",200
 
 PULSE_95_CSS=r'''*{box-sizing:border-box}body{margin:0;color:#f8fff9;font-family:Inter,ui-sans-serif,system-ui;background:#0b2f1d;min-height:100vh}.world{position:fixed;inset:0;z-index:-3;background:radial-gradient(circle at 84% 12%,#ffe8a1 0 1.8%,#ffd9894d 2% 8%,transparent 17%),linear-gradient(180deg,#82aea8 0 23%,#72987b 37%,#2c7045 65%,#0b3c24 100%);transform:scale(1.015);filter:saturate(1.08) contrast(1.025)}.world:before{content:'';position:absolute;inset:23% -8% -8%;background:radial-gradient(ellipse at 64% 40%,rgba(194,224,190,.32),transparent 24%),linear-gradient(158deg,transparent 0 15%,#63885b 15.4% 27%,transparent 27.4%),linear-gradient(24deg,transparent 0 23%,#39774a 23.4% 50%,transparent 50.4%),linear-gradient(158deg,transparent 0 43%,#145a34 43.4% 70%,transparent 70.4%);filter:blur(.8px);opacity:.96}.world:after{content:'';position:absolute;inset:52% -4% -4%;background:radial-gradient(ellipse at 63% 8%,rgba(173,210,184,.42),transparent 26%),linear-gradient(8deg,#0b4227 0 46%,transparent 46.5%),linear-gradient(-8deg,#216a3d 0 57%,transparent 57.5%);filter:blur(1.2px);opacity:.98}.shade{position:fixed;inset:0;z-index:-2;background:linear-gradient(90deg,rgba(4,30,17,.70),transparent 48%),linear-gradient(0deg,rgba(3,28,15,.62),transparent 42%)}body:after{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 50% 48%,transparent 45%,rgba(3,24,13,.22) 100%);mix-blend-mode:multiply}.glass{background:linear-gradient(135deg,rgba(20,55,39,.58),rgba(39,73,56,.34));border:1px solid rgba(240,255,245,.34);box-shadow:inset 0 1px rgba(255,255,255,.38),inset 0 -1px rgba(255,255,255,.06),0 18px 48px rgba(3,25,14,.20);backdrop-filter:blur(22px) saturate(118%);-webkit-backdrop-filter:blur(22px) saturate(118%)}.kp95nav{max-width:1380px;width:calc(100% - 48px);height:66px;margin:18px auto 0;border-radius:24px;padding:0 20px;display:flex;align-items:center;gap:26px;background:linear-gradient(120deg,rgba(25,58,43,.54),rgba(44,76,60,.31));border:1px solid rgba(244,255,247,.32);box-shadow:inset 0 1px rgba(255,255,255,.40),0 16px 42px rgba(3,24,13,.16);backdrop-filter:blur(22px) saturate(118%);-webkit-backdrop-filter:blur(22px) saturate(118%)}.kp95nav .brand{font-size:21px;font-weight:950;letter-spacing:-.7px;margin-right:auto}.kp95nav .brand b{color:#7cf39d}.kp95nav a{color:#edf8f1;text-decoration:none;font-size:13px}.kp95wrap{max-width:1380px;margin:auto;padding:16px 24px 70px}.kp95panel{border-radius:30px;padding:28px}.kp95title{font-size:clamp(52px,6.3vw,88px);line-height:.91;letter-spacing:-4px}.kp95accent{color:#75f59b}.kp95muted{color:#bdd1c4}.kp95mark{font-size:30px;filter:drop-shadow(0 10px 20px rgba(3,25,14,.25))}.kp95btn{display:inline-flex;padding:14px 20px;border:0;border-radius:15px;background:#69ef91;color:#092817;font-weight:900;text-decoration:none;box-shadow:0 10px 28px rgba(30,205,92,.18)}@media(max-width:900px){.kp95nav{width:calc(100% - 24px);margin-top:10px}.kp95nav a{display:none}.kp95wrap{padding:10px 12px 50px}}@media(max-width:560px){.kp95nav{height:60px;border-radius:20px}.kp95panel{padding:19px;border-radius:24px}.kp95title{font-size:49px;letter-spacing:-2.7px}}
@@ -313,7 +503,7 @@ body{background:#0b2f1d}.top.kp95nav{position:relative;top:auto;height:66px;max-
 <section id=supportbox class="glass card kp95panel" style="display:none"><div class=cardHead><div><h2>Support Kenya Pulse AI</h2><span class=muted>Optional platform support</span></div><span class=pill>Completely optional</span></div><p><b>Participation and results are completely free.</b> If you find Kenya Pulse AI useful, you can optionally help cover the cost of keeping the platform running.</p><p class=muted>Support with as low as KSh 5. Your contribution does not affect your response or the results.</p><div class=formgrid><input id=supportCustom type=number min=5 step=1 inputmode=numeric placeholder="KSh 5 or above"><input id=supportEmail type=email autocomplete=email placeholder="Email for payment receipt"></div><div class=formgrid style="margin-top:10px"><button class=secondary onclick="supportAmount()">Continue to secure checkout</button><button class=secondary onclick="dismissSupport()">Not now</button></div><div id=supportmsg class=muted>No contribution is required to view results.</div></section><section id=sharebox class="glass card share" style="display:none"><div class=cardHead><div><h2>Share your county pulse</h2><span class=muted>Your response is counted whether or not you share.</span></div><span class=pill>Optional</span></div><div class=formgrid><button onclick=sharePulse()>Share county pulse</button><button class=secondary onclick=copyPulse()>Copy county link</button></div><div id=sharemsg class=muted style="margin-top:9px;font-size:12px"></div></section>
 <section class="glass adwrap"><div class=adlabel>Advertisement</div><div class=ad id=liveAd><div><b>Premium advertising space</b><small>Sponsored content will appear here, clearly separated from participation controls and results.</small></div></div></section>
 <section class="glass notice"><b>Transparency:</b> Results show voluntary Kenya Pulse AI participants and are not representative of all registered voters. They should not be interpreted as an election forecast. Individual choices are not publicly displayed. Candidate names are curated participation options and their appearance is not an endorsement. <a href="/methodology" style="color:#ffd54a">Read methodology →</a></section>
-<footer class=footer><span>© Kenya Pulse AI · Open participation dashboard</span><span><a href="https://www.facebook.com/people/Kenya-Pulse/61594936328345/" target="_blank" rel="noopener noreferrer">Kenya Pulse AI on Facebook</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/methodology">Methodology</a></span></footer></main>
+<footer class=footer><span>© Kenya Pulse AI · Open participation dashboard</span><span><a href="https://www.facebook.com/people/Kenya-Pulse/61594936328345/" target="_blank" rel="noopener noreferrer">Kenya Pulse AI on Facebook</a> · <a href="/claim-profile">Claim profile</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/methodology">Methodology</a></span></footer></main>
 <script>
 const C=document.getElementById('county'),R=document.getElementById('race');async function populateConstituencies(){
  const county=document.getElementById('county').value,sel=document.getElementById('constituency'),ward=document.getElementById('ward');
