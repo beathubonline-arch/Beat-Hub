@@ -34,4 +34,7 @@ jobs:
         with:
           node-version: '22'
       - run: pip install -r kenya-pulse/requirements.txt pytest
-      - run: python -m pytest --confcutdir=kenya-pulse kenya-pulse/tests/test_live_recovery.py -q
+      - name: Full Kenya Pulse audit — pass 1
+        run: python -m pytest --confcutdir=kenya-pulse kenya-pulse/tests/test_live_recovery.py -q
+      - name: Full Kenya Pulse audit — pass 2
+        run: python -m pytest --confcutdir=kenya-pulse kenya-pulse/tests/test_live_recovery.py -q
