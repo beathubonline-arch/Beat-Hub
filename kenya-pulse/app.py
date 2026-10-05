@@ -927,6 +927,8 @@ def candidates_api():
 
 
 EVIDENCE_TYPES={"OFFICIAL_RECORD","CANDIDATE_STATEMENT","INDEPENDENT_REPORTING","DISPUTED_CLAIM","NOT_INDEPENDENTLY_VERIFIED"}
+CANDIDATE_STAGES={"ASPIRANT","PARTY_NOMINEE","IEBC_CLEARED","WITHDRAWN","DISQUALIFIED","UNKNOWN"}
+
 def ensure_candidate_evidence_schema():
  with conn() as c:
   if c.pg:
@@ -969,6 +971,11 @@ def candidate_scope_sql(race,county="",constituency="",ward=""):
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
  return sql,args
 
+
+def normalized_candidate_stage(status):
+ raw=(status or "").strip().upper().replace(" ","_")
+ return raw if raw in CANDIDATE_STAGES else "UNKNOWN"
+
 @app.get("/api/candidates/compare")
 def candidates_compare_api():
  ensure_candidate_evidence_schema()
@@ -983,6 +990,8 @@ def candidates_compare_api():
   rows=c.execute(sql,args).fetchall();out=[]
   for row in rows:
    item=dict(row)
+   item["stage"]=normalized_candidate_stage(item.get("status"))
+   item["stage_note"]="IEBC_CLEARED means formally cleared by IEBC. ASPIRANT and PARTY_NOMINEE do not mean the person is on the final ballot."
    ev=c.execute("""SELECT id,category,claim,evidence_type,source_title,source_url,source_date,notes,checked_at
                    FROM candidate_evidence WHERE candidate_id=? AND status='PUBLISHED'
                    ORDER BY category,COALESCE(source_date,checked_at) DESC,id DESC""",(item["id"],)).fetchall()
@@ -1194,6 +1203,7 @@ def research_topics():
   {"key":"delivery_record","label":"Documented delivery record","preferred_sources":["official project records","audits","budget implementation reports","reputable independent reporting"]}
  ],rules=[
   "Facts must be attributable to a source URL.",
+  "Do not label anyone an official candidate unless IEBC has formally cleared them; use aspirant or party nominee where appropriate.",
   "Candidate allegations must never be written as established fact unless supported by authoritative records.",
   "Polls must identify pollster, field dates and sample limitations.",
   "Evidence records inform voters; they are not candidate ratings or endorsements."
