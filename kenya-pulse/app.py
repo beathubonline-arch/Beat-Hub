@@ -6,7 +6,9 @@ except ImportError:
  psycopg2=None
 from flask import Flask, request, jsonify, render_template_string, abort, redirect
 from html.parser import HTMLParser
+from PIL import Image, UnidentifiedImageError
 app=Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"]=3_000_000
 DB=os.environ.get("PULSE_DB","/tmp/kenya-pulse.db")
 DATABASE_URL=os.environ.get("DATABASE_URL","")
 SALT=os.environ.get("PULSE_SALT","kenya-pulse")
@@ -36,7 +38,7 @@ class DBConn:
  def __init__(self):
   self.pg=bool(DATABASE_URL)
   if self.pg:
-   self.c=psycopg2.connect(DATABASE_URL,sslmode="require")
+   self.c=psycopg2.connect(DATABASE_URL,sslmode="require",connect_timeout=8)
    self.cur=self.c.cursor(cursor_factory=psycopg2.extras.DictCursor)
   else:
    self.c=sqlite3.connect(DB);self.c.row_factory=sqlite3.Row;self.cur=None
@@ -155,6 +157,9 @@ def init():
     if col not in spcols:c.execute("ALTER TABLE support_payments ADD COLUMN "+col+" TEXT")
    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS support_payment_tx_unique ON support_payments(paystack_transaction_id) WHERE paystack_transaction_id IS NOT NULL")
    c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
+   candidate_cols=[x[1] for x in c.execute("PRAGMA table_info(candidates)").fetchall()]
+   for col in ("photo_url","bio","campaign_url","public_contact"):
+    if col not in candidate_cols:c.execute("ALTER TABLE candidates ADD COLUMN "+col+" TEXT")
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
    if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
    if "submitted_candidate_text" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN submitted_candidate_text TEXT")
@@ -219,7 +224,7 @@ def seed_starter_presidential_profiles():
      c.execute("""INSERT INTO candidates(name,race,party,status,source_url,photo_url,bio,active)
                   VALUES(?,'President',?,?,?,?,?,TRUE)""",(p["name"],p["party"],p["status"],p["source_url"],p["photo_url"],p["bio"]))
  except Exception as e: app.logger.exception("starter presidential profile seed failed")
-seed_starter_presidential_profiles()
+# Seed data must be explicitly reviewed, never overwritten during web startup.
 
 PARLIAMENT_MP_DIRECTORY="https://www.parliament.go.ke/the-national-assembly/mps?field_parliament_value=2022&page={page}"
 PARLIAMENT_SENATE_DIRECTORY="https://www.parliament.go.ke/index.php/the-senate/senators?field_parliament_value=2022&page={page}&title="
@@ -283,7 +288,7 @@ def _upsert_public_officeholder(c,name,race,county="",constituency="",ward="",pa
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
  row=c.execute(sql,args).fetchone()
  if row:
-  c.execute("""UPDATE candidates SET party=COALESCE(NULLIF(?,''),party),status=CASE WHEN status IN ('IEBC_CLEARED','PARTY_NOMINEE','ASPIRANT') THEN status ELSE 'UNKNOWN' END,
+  c.execute("""UPDATE candidates SET party=COALESCE(NULLIF(?,''),party),status=CASE WHEN status IN ('IEBC_CLEARED','PARTY_NOMINEE','ASPIRANT','WITHDRAWN','DISQUALIFIED') THEN status ELSE 'UNKNOWN' END,
                source_url=COALESCE(NULLIF(?,''),source_url),photo_url=COALESCE(NULLIF(?,''),photo_url),active=TRUE WHERE id=?""",
             (party,source_url,photo_url,row["id"]))
  else:
@@ -437,7 +442,7 @@ def seed_current_governor_baseline():
    for county,name in CURRENT_GOVERNOR_BASELINE.items():
     _upsert_public_officeholder(c,name,"Governor",county=county,source_url=src)
  except Exception:app.logger.exception("governor baseline seed failed")
-seed_current_governor_baseline()
+# Import officeholder records explicitly outside web startup.
 
 def _start_officeholder_sync():
  # Do not perform external candidate-directory/PDF work during web-service boot.
@@ -544,6 +549,7 @@ def verify_profile_payment(ref,d):
   if d.get("status")!="success" or d.get("currency")!="KES" or amount!=expected_fee*100:return False
   tx=str(d.get("id") or "")[:80]
   if not tx:return False
+  if c.execute("SELECT id FROM aspirant_profile_claims WHERE paystack_transaction_id=? AND reference<>?",(tx,ref)).fetchone():return False
   c.execute("""UPDATE aspirant_profile_claims
                SET payment_status='PAID',verification_status=CASE WHEN verification_status='PENDING_PAYMENT' THEN 'PENDING_REVIEW' ELSE verification_status END,
                    paystack_transaction_id=?,paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP)
@@ -569,13 +575,21 @@ def claim_profile():
   campaign_url=(request.form.get("campaign_url") or "").strip()[:500]
   public_contact=re.sub(r"\s+"," ",(request.form.get("public_contact") or "").strip())[:180]
   photo=request.files.get("photo")
+  email=(request.form.get("email") or "").strip()[:160]
+  if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):return legal_page("Check your email","Profile not submitted",[("Receipt email","Enter a valid email address, then return to the form and retry.")]),400
+  if not paystack_configured():return legal_page("Checkout unavailable","Profile not submitted",[("Please try later","Profile checkout is temporarily unavailable. No payment or claim has been created. Participation remains free.")]),503
   if race not in RACES or len(name)<2:return "Enter a valid name and seat.",400
   if race!="President" and county not in COUNTIES:return "Choose a valid county.",400
-  if race in {"Member of Parliament","MCA"} and (not constituency or not geography_ok(county,constituency,ward if race=="MCA" else "")):return "Choose a valid constituency"+(" and ward." if race=="MCA" else "."),400
+  if race in {"Member of Parliament","MCA"} and (not constituency or (race=="MCA" and not ward) or not geography_ok(county,constituency,ward if race=="MCA" else "")):return "Choose a valid constituency"+(" and ward." if race=="MCA" else "."),400
   if not photo:return "Upload a profile photo.",400
   raw=photo.read(2_100_000)
   if not raw or len(raw)>2_000_000:return "Photo must be under 2 MB.",400
-  mime=(photo.mimetype or "").lower()
+  try:
+   with Image.open(io.BytesIO(raw)) as image:
+    if image.width*image.height>20_000_000:raise ValueError("oversized image")
+    image.verify()
+    mime={"JPEG":"image/jpeg","PNG":"image/png","WEBP":"image/webp"}.get(image.format,"")
+  except (UnidentifiedImageError,ValueError,OSError,Image.DecompressionBombError):return "Upload a valid JPG, PNG or WEBP image.",400
   if mime not in {"image/jpeg","image/png","image/webp"}:return "Use JPG, PNG or WEBP.",400
   if campaign_url and not campaign_url.startswith(("https://","http://")):return "Campaign link must start with http:// or https://",400
   ref="kpasp-"+secrets.token_hex(10)
@@ -597,7 +611,10 @@ def claim_profile():
    out=paystack_request("/transaction/initialize",payload);url=(out.get("data") or {}).get("authorization_url","")
    if not url.startswith("https://checkout.paystack.com/"):raise RuntimeError("invalid checkout")
    return redirect(url)
-  except Exception:return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
+  except Exception:
+   app.logger.exception("Profile checkout initialization failed")
+   with conn() as c:c.execute("UPDATE aspirant_profile_claims SET payment_status='INIT_FAILED' WHERE reference=?",(ref,))
+   return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
  page="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Claim your profile · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css><style>
  *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 8%,#1d7b4a44,transparent 26%),radial-gradient(circle at 88% 4%,#d4a90022,transparent 22%),#06150e;color:#f5fff8;font-family:Inter,system-ui}.top{max-width:1080px;margin:18px auto 0;padding:0 18px}.nav{display:flex;align-items:center;gap:18px;padding:16px 20px;border-radius:22px}.nav .brand{font-weight:950;margin-right:auto}.nav .brand b{color:#ffd54a}.nav a{color:#e9f6ed;text-decoration:none;font-size:13px}.w{max-width:1080px;margin:auto;padding:24px 18px 70px}.hero{padding:30px;border-radius:28px;margin-bottom:16px}.hero h1{font-size:clamp(38px,6vw,64px);line-height:.98;margin:8px 0 14px;letter-spacing:-2px}.hero p{max-width:760px}.card{padding:28px;border-radius:28px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}input,select,textarea,button{width:100%;padding:14px;border-radius:16px;border:1px solid #ffffff22;background:#ffffff0b;color:white;font:inherit}select{min-height:52px}textarea{min-height:120px}button{background:#69ef91;color:#0a2a18;font-weight:900;border:0;cursor:pointer}.muted{color:#a9c6b4}.fee{font-size:34px;font-weight:950;color:#ffd54a}.notice{padding:14px 16px;border-radius:16px;background:#ffffff0b;border:1px solid #ffffff1f;margin:14px 0}.ey{font-size:11px;font-weight:850;letter-spacing:.14em;color:#baf5ca;text-transform:uppercase}@media(max-width:650px){.grid{grid-template-columns:1fr}.nav{flex-wrap:wrap}}
  </style></head><body><div class=top><nav class="glass nav"><div class=brand>KENYA <b>PULSE</b></div><a href="/growth">Home</a><a href="/participate">Take part</a><a href="/candidate-explorer">Candidate Explorer</a></nav></div><div class=w><section class="glass hero"><div class=ey>CANDIDATE PROFILE STUDIO</div><h1>Claim or create your public candidate profile.</h1><p class=muted>Submit your photo and public details for review. This profile service is separate from voting results and does not buy votes, ranking, or preferential placement.</p></section><div class="glass card"><div class=notice><b>Profile review fees</b><div class=muted>President KSh 5,000 · Governor/Senator/Woman Rep KSh 2,000 · MP KSh 1,500 · MCA KSh 500.</div></div><p class=muted>Payment covers profile activation and review only. Candidate eligibility and ballot inclusion remain subject to verification and the platform's neutral listing rules.</p><div class=fee id=profileFee>President: KSh 5,000</div><p class=muted style="margin-top:6px">Governor, Senator & Woman Rep: KSh 2,000 · MP: KSh 1,500 · MCA: KSh 500</p>
@@ -626,7 +643,7 @@ def claim_profile_status():
  ensure_profile_claim_schema();ref=(request.args.get("reference") or "")[:100]
  with conn() as c:row=c.execute("SELECT id,name,race,payment_status,verification_status FROM aspirant_profile_claims WHERE reference=?",(ref,)).fetchone()
  if not row:return "Profile claim not found.",404
- return render_template_string("""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Profile status · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css></head><body><main class="kp95wrap" style="max-width:760px;margin:auto;padding:60px 20px"><section class="glass kp95panel" style="padding:28px"><h1>Profile submitted</h1><p><b>{{name}}</b> · {{race}}</p><p>Payment: <b>{{payment}}</b></p><p>Review: <b>{{status}}</b></p><p>Your profile will appear publicly only after review and approval.</p><a href="/">Return to Kenya Pulse AI</a></section></main></body></html>""",name=row["name"],race=row["race"],payment=row["payment_status"],status=row["verification_status"])
+ return render_template_string("""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Profile status · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css></head><body><main class="kp95wrap" style="max-width:760px;margin:auto;padding:60px 20px"><section class="glass kp95panel" style="padding:28px"><h1>Profile submitted</h1><p><b>{{name}}</b> · {{race}}</p><p>Payment: <b>{{payment}}</b></p><p>Review: <b>{{status}}</b></p><p>{% if payment=="INIT_FAILED" %}Checkout could not be started. No payment has been confirmed. Please return to the claim form and try again.{% elif payment!="PAID" %}Payment has not been confirmed. An unpaid submission does not activate a profile.{% else %}Payment verified. Your profile details are awaiting review; payment does not buy ballot inclusion or influence results.{% endif %}</p><a href="/claim-profile">Return to profile form</a><a href="/">Return to Kenya Pulse AI</a></section></main></body></html>""",name=row["name"],race=row["race"],payment=row["payment_status"],status=row["verification_status"])
 
 @app.get("/api/admin/profile-claims")
 def admin_profile_claims():
@@ -688,7 +705,8 @@ def support_initialize():
  if not paystack_configured():return jsonify(error="Paystack checkout is not configured. Participation remains free."),503
  county=str(body.get("county", ""))
  with conn() as db:
-  rows=db.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,participation_fingerprint())).fetchall()
+  token_hash=browser_vote_token_hash()
+  rows=db.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND (fp=? OR browser_token_hash=?)",(county,participation_fingerprint(),token_hash)).fetchall()
  if not set(RACES).issubset({x["race"] for x in rows}):return jsonify(error="Complete all six seats before optional support."),409
  ref="kp-"+secrets.token_hex(10); origin=request.url_root.rstrip("/")
  with conn() as db: db.execute("INSERT INTO support_payments(reference,email,amount_kes,currency,status,county,paystack_domain) VALUES(?,?,?,?,?,?,?)",(ref,email,amount,"KES","INITIATED",county,paystack_mode()))
@@ -850,6 +868,9 @@ def pulse95_js():
 
 GLOBAL_SHELL_JS=r'''(()=>{
  const path=location.pathname;
+ const fallbackPhoto=img=>{const box=document.createElement('div');box.className='missing';box.textContent='Photo pending verification';box.style.cssText='display:grid;place-items:center;min-height:90px;padding:12px;background:#123723;color:#c6dfce;font-size:12px';img.replaceWith(box)};
+ document.addEventListener('error',e=>{if(e.target.tagName==='IMG' && (e.target.closest('.candidatePhoto,.topResult,.cards')||path.startsWith('/candidate/')))fallbackPhoto(e.target)},true);
+ document.querySelectorAll('img').forEach(img=>{if(img.complete&&!img.naturalWidth&&(img.closest('.candidatePhoto,.topResult,.cards')||path.startsWith('/candidate/')))fallbackPhoto(img)});
  if(path.startsWith('/api/')||path.startsWith('/admin/'))return;
  const css=document.createElement('style');
  css.textContent=`
@@ -871,7 +892,7 @@ GLOBAL_SHELL_JS=r'''(()=>{
  });
  if(!hasHome){
    const home=document.createElement('a');
-   home.href='/growth';home.className='kpGlobalHome';home.innerHTML='⌂ <span>Home</span>';
+   home.href='https://kenyapulse.online/';home.className='kpGlobalHome';home.innerHTML='⌂ <span>Home</span>';
    home.setAttribute('aria-label','Back to Kenya Pulse AI homepage');
    document.body.appendChild(home);
  }
@@ -904,6 +925,7 @@ GLOBAL_SHELL_JS=r'''(()=>{
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAd()});
 })();'''
 
+@app.get("/favicon.ico")
 @app.get("/favicon.svg")
 def kenya_pulse_favicon():
  svg='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -937,6 +959,9 @@ def kenya_pulse_global_ui(response):
    if not _valid_vote_cookie(request.cookies.get(VOTE_COOKIE,"")):
     response.set_cookie(VOTE_COOKIE,_make_vote_cookie(),max_age=31536000,secure=True,httponly=True,samesite="Lax",path="/")
  except Exception:pass
+ if request.path.startswith("/api/") and not _valid_vote_cookie(request.cookies.get(VOTE_COOKIE,"")):
+  response.set_cookie(VOTE_COOKIE,_make_vote_cookie(),max_age=31536000,secure=True,httponly=True,samesite="Lax",path="/")
+  response.headers["Cache-Control"]="private, no-store"
  origin=request.headers.get("Origin","")
  if origin in {"https://kenya-pulse-static.onrender.com","https://kenyapulse.online","https://www.kenyapulse.online"}:
   response.headers["Access-Control-Allow-Origin"]=origin
@@ -965,7 +990,7 @@ body{background:#0b2f1d}.top.kp95nav{position:relative;top:auto;height:66px;max-
 .topResult{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #ffffff12}
 .topResult:last-child{border:0}.topResult img,.topResult .avatar{width:52px;height:52px;border-radius:50%;object-fit:cover;background:#123723;display:grid;place-items:center;font-size:20px}
 .rank{font-size:11px;color:#89a595}.topResult b{display:block}.topResult .score{text-align:right;font-weight:900}
-@media(max-width:620px){.photoBallot{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:620px){.photoBallot{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style></head><body><div class=world></div><div class=shade></div><header class="top kp95nav"><div class=brand>KENYA <b>PULSE</b></div><div class=live><i class=dot></i> LIVE PARTICIPATION</div></header><main class=wrap>
 <section class=hero><div>{% if initial_county %}<div class=kp95mark>{{county_mark}}</div>{% endif %}<span class=eyebrow>{% if initial_county %}{{initial_county}} · COUNTY PARTICIPATION{% else %}47 counties · voluntary participation{% endif %}</span><h1>{% if initial_county %}{{initial_county}}.<br><span>Your voice.</span>{% else %}Your county.<br><span>Your voice.</span>{% endif %}</h1><p class=muted>Share your current preference and explore live aggregate responses from people participating on Kenya Pulse AI. This is an open online pulse, not a scientific election forecast.</p></div><aside class="glass heroStat"><small>COUNTIES AVAILABLE</small><div class=big>47</div><small>One transparent participation experience across Kenya.</small></aside></section>
 <div class=analytics><div class="glass metric"><strong id=metricTotal>—</strong><span>Selected race responses</span></div><div class="glass metric"><strong>47</strong><span>Counties available</span></div><div class="glass metric"><strong>LIVE</strong><span>Aggregate updates</span></div></div>
@@ -1043,8 +1068,8 @@ async function submitPhotoPreference(candidateId,candidateName){
  if(x.ok&&j.recorded===true){await loadResultsFor(savedRace);await restoreParticipation();await load()}
 }
 async function voteManual(){
- let name=(document.getElementById('candidate').value||'').trim(),msg=document.getElementById('msg'),cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();
- if(name.length<2){msg.textContent='Enter the person’s full name or known alias.';return}
+ let name=(document.getElementById('candidate').value||''),msg=document.getElementById('msg'),cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();
+ if(name.trim().length<2){msg.textContent='Enter the person’s full name or known alias.';return}
  msg.textContent='Checking the name…';
  try{
   const r=await fetch('/api/candidates/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,race:R.value,county:C.value,constituency:cv,ward:wv})});
@@ -1250,7 +1275,7 @@ def _eligible_ads(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None):
  # House inventory never competes with paid campaigns. Use it only when no paid ad is eligible.
  paid_rows=[a for a in rows if a.get("package")!="House Ad"]
  house_rows=[a for a in rows if a.get("package")=="House Ad"]
- rows=paid_rows if paid_rows else house_rows
+ # Apply all caps before choosing paid versus house inventory.
 
  recent_sql="""SELECT ad_id,COUNT(*) n FROM ad_impression_events
                WHERE visitor_hash=? AND created_at>=CURRENT_TIMESTAMP-INTERVAL '6 hours'
@@ -1273,6 +1298,8 @@ def _eligible_ads(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None):
   dcap=int(ad.get("daily_impression_cap") or 0)
   if dcap>0 and daily.get(aid,0)>=dcap:continue
   eligible.append(ad)
+ paid=[a for a in eligible if a.get("package")!="House Ad"]
+ eligible=paid if paid else [a for a in eligible if a.get("package")=="House Ad"]
  if scope_mode!="national" and county:
   local=[a for a in eligible if a.get("scope")=="County" and a.get("county")==county]
   if local:eligible=local
@@ -1709,7 +1736,7 @@ def health():
  try:
   with conn() as c:c.execute("SELECT 1").fetchone();db_ok=True
  except Exception:db_ok=False
- return {"ok":db_ok,"production_ready":db_ok and dbmode=="postgres","counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"database_ok":db_ok,"candidate_registry":True,"county_noticeboard":True,"county_notice_categories":len(NOTICE_CATEGORIES),"warning":None if db_ok and dbmode=="postgres" else "Persistent PostgreSQL is not attached and verified; responses may be lost on service restart."}
+ return {"ok":db_ok,"database_ready":db_ok and dbmode=="postgres","signing_configured":bool(os.environ.get("PULSE_SALT")),"counties":len(COUNTIES),"constituencies":sum(len(x) for x in GEOGRAPHY.values()),"wards":sum(len(w) for x in GEOGRAPHY.values() for w in x.values()),"database":dbmode,"database_ok":db_ok,"candidate_registry":True,"county_noticeboard":True,"county_notice_categories":len(NOTICE_CATEGORIES),"warning":None if db_ok and dbmode=="postgres" else "Persistent PostgreSQL is not attached and verified; responses may be lost on service restart."}
 @app.get("/privacy")
 def privacy():
  return legal_page("Privacy Policy","Effective 2 October 2026",[
@@ -1790,17 +1817,15 @@ def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
  sql="SELECT id,name,party,status,photo_url,bio,source_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
- if race=="President":
-  sql+=" AND LOWER(name) IN (LOWER(?),LOWER(?))";args.extend(["William Ruto","Edwin Sifuna"])
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
- sql+=" ORDER BY name LIMIT 20"
+ sql+=" ORDER BY name"
  with conn() as c:
   rows=c.execute(sql,args).fetchall()
   out=[]
   for x in rows:
-   item=dict(x);item["profile_url"]="/candidate/"+str(item["id"]); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=TRUE ORDER BY alias",(item["id"],)).fetchall()
+   item=dict(x);item["status"]=normalized_candidate_stage(item.get("status"));item["profile_url"]="/candidate/"+str(item["id"]); aliases=c.execute("SELECT alias FROM candidate_aliases WHERE candidate_id=? AND verified=TRUE ORDER BY alias",(item["id"],)).fetchall()
    item["aliases"]=[a["alias"] for a in aliases];out.append(item)
  return jsonify(candidates=out)
 
@@ -1862,7 +1887,7 @@ def candidates_compare_api():
  constituency=(request.args.get("constituency") or "").strip();ward=(request.args.get("ward") or "").strip()
  if race not in RACES:return jsonify(error="Invalid race"),400
  if race!="President" and county not in COUNTIES:return jsonify(error="Choose a valid county"),400
- if race in {"Member of Parliament","MCA"} and (not constituency or not geography_ok(county,constituency,ward if race=="MCA" else "")):
+ if race in {"Member of Parliament","MCA"} and (not constituency or (race=="MCA" and not ward) or not geography_ok(county,constituency,ward if race=="MCA" else "")):
   return jsonify(error="Choose a valid constituency"+(" and ward" if race=="MCA" else "")),400
  sql,args=candidate_scope_sql(race,county,constituency,ward);sql+=" ORDER BY name"
  with conn() as c:
@@ -2096,7 +2121,7 @@ def social_entry_link():
  constituency=(request.args.get("constituency") or "").strip();ward=(request.args.get("ward") or "").strip()
  if race not in RACES:return jsonify(error="Invalid race"),400
  if race!="President" and county not in COUNTIES:return jsonify(error="Choose a valid county"),400
- if race in {"Member of Parliament","MCA"} and (not constituency or not geography_ok(county,constituency,ward if race=="MCA" else "")):
+ if race in {"Member of Parliament","MCA"} and (not constituency or (race=="MCA" and not ward) or not geography_ok(county,constituency,ward if race=="MCA" else "")):
   return jsonify(error="Choose a valid constituency"+(" and ward" if race=="MCA" else "")),400
  q=urllib.parse.urlencode({"race":race,"county":county,"constituency":constituency,"ward":ward,"utm_source":platform,"utm_medium":"social","utm_campaign":"candidate_explorer"})
  return jsonify(url=request.url_root.rstrip("/")+"/candidate-explorer?"+q,platform=platform,cta="Compare the candidates using sourced facts on Kenya Pulse AI.")
@@ -2257,7 +2282,7 @@ def participation_progress():
 
 @app.post("/api/vote")
 def vote():
- d=request.get_json(silent=True) or {}; county=d.get("county","").strip(); race=d.get("race","").strip(); constituency=d.get("constituency","").strip()[:80]; ward=d.get("ward","").strip()[:80]; candidate=re.sub(r"\s+"," ",d.get("candidate","").strip())[:80]; submitted_candidate_text=candidate; candidate_id=d.get("candidate_id"); issue=d.get("issue","").strip()[:120]
+ d=request.get_json(silent=True) or {}; county=d.get("county","").strip(); race=d.get("race","").strip(); constituency=d.get("constituency","").strip()[:80]; ward=d.get("ward","").strip()[:80]; candidate=re.sub(r"\s+"," ",str(d.get("candidate") or "").strip())[:80]; submitted_candidate_text=str(d.get("candidate") or "")[:500]; candidate_id=d.get("candidate_id"); issue=d.get("issue","").strip()[:120]
  if county not in COUNTIES or race not in RACES or len(candidate)<2:return jsonify(error="Invalid county, race or candidate."),400
  if race in {"Member of Parliament","MCA"} and len(constituency)<2:return jsonify(error="Choose/enter the constituency for this race."),400
  if race=="MCA" and len(ward)<2:return jsonify(error="Choose/enter the ward for the MCA race."),400
@@ -2298,6 +2323,11 @@ def vote():
    completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND (fp=? OR browser_token_hash=?)",(county,fp,token_hash)).fetchall()}
   else:
    completed={x["race"] for x in c.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND fp=?",(county,fp)).fetchall()}
+ if race in completed:return jsonify(error="A response from this browser or device/network is already recorded for this seat."),409
+ if race=="MCA":
+  with conn() as c:
+   mp=c.execute("SELECT constituency FROM pulse_votes WHERE county=? AND race='Member of Parliament' AND (fp=? OR browser_token_hash=?) ORDER BY id LIMIT 1",(county,fp,token_hash)).fetchone()
+  if mp and mp["constituency"]!=constituency:return jsonify(error="Choose a ward in the constituency used for your MP response."),409
  if race not in completed:
   next_race=next((r for r in RACES if r not in completed),None)
   if race!=next_race:return jsonify(error="Complete the seats in order.",next_race=next_race),409
@@ -2327,10 +2357,10 @@ def results():
  if race in {"Member of Parliament","MCA"} and not constituency:return jsonify(total=0,results=[],area_required="constituency")
  if race=="MCA" and not ward:return jsonify(total=0,results=[],area_required="ward")
  if race in {"Member of Parliament","MCA"} and not geography_ok(county,constituency,ward if race=="MCA" else ""):return jsonify(error="Invalid constituency or ward for the selected county."),400
- sql="SELECT MIN(v.candidate) candidate,MIN(v.candidate_id) candidate_id,count(*) votes FROM pulse_votes v WHERE v.county=? AND v.race=?";args=[county,race]
+ sql="SELECT COALESCE(MAX(c.name),MIN(v.candidate)) candidate,MIN(v.candidate_id) candidate_id,count(*) votes FROM pulse_votes v LEFT JOIN candidates c ON c.id=v.candidate_id WHERE v.county=? AND v.race=?";args=[county,race]
  if race in {"Member of Parliament","MCA"}:sql+=" AND v.constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND v.ward=?";args.append(ward)
- sql+=" GROUP BY LOWER(v.candidate) ORDER BY votes DESC,candidate"
+ sql+=" GROUP BY v.candidate_id,CASE WHEN v.candidate_id IS NULL THEN LOWER(v.candidate) ELSE NULL END ORDER BY votes DESC,candidate"
  with conn() as c:
   rows=c.execute(sql,args).fetchall()
   total=sum(x["votes"] for x in rows)
@@ -2341,4 +2371,20 @@ def results():
     p=c.execute("SELECT photo_url FROM candidates WHERE id=?",(x["candidate_id"],)).fetchone()
     photo=p["photo_url"] if p else None
    out.append({"candidate":x["candidate"],"candidate_id":x["candidate_id"],"photo_url":photo,"votes":x["votes"],"pct":round(x["votes"]*100/total,1) if total else 0})
- return jsonify(total=total,results=out,top=3)
+ return jsonify(total=total,results=out,top=3,disclosure="Voluntary Kenya Pulse website participants only. Not official IEBC voting, not representative of all Kenyan voters, and not an election forecast.")
+
+@app.errorhandler(500)
+def public_server_error(error):
+ if request.path.startswith('/api/'):
+  return jsonify(error="Kenya Pulse is temporarily unavailable. Please retry shortly. Your response is only counted after confirmation."),503
+ return legal_page("Temporarily unavailable","Kenya Pulse AI",[("Please retry","The live service could not complete this request. Please return Home and try again shortly.")]),503
+
+@app.before_request
+def validate_api_body():
+ if request.path.startswith('/api/') and request.method in {'POST','PATCH','PUT'} and request.is_json:
+  body=request.get_json(silent=True)
+  if not isinstance(body,dict):return jsonify(error="Send a valid JSON object."),400
+  if request.path=='/api/vote':
+   for key in ('county','race','constituency','ward','candidate','issue'):
+    if key in body and not isinstance(body[key],str):return jsonify(error="Invalid "+key+" value."),400
+   if body.get('candidate_id') is not None and (isinstance(body['candidate_id'],bool) or not str(body['candidate_id']).isdigit()):return jsonify(error="Invalid candidate identifier."),400
