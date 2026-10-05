@@ -859,11 +859,10 @@ def support_initialize():
  if amount<5 or amount>1000000:return jsonify(error="Support starts from KSh 5."),400
  if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$",email):return jsonify(error="Enter a valid email for the payment receipt."),400
  if not paystack_configured():return jsonify(error="Paystack checkout is not configured. Participation remains free."),503
- county=str(body.get("county", ""))
- with conn() as db:
-  token_hash=browser_vote_token_hash()
-  rows=db.execute("SELECT DISTINCT race FROM pulse_votes WHERE county=? AND (fp=? OR browser_token_hash=?)",(county,participation_fingerprint(),token_hash)).fetchall()
- if not set(RACES).issubset({x["race"] for x in rows}):return jsonify(error="Complete all six seats before optional support."),409
+ county=str(body.get("county", "")).strip()
+ # Optional support is deliberately independent of participation. A visitor may
+ # contribute before, during or after adding any county/seat responses.
+ if county and county not in COUNTIES: county=""
  ref="kp-"+secrets.token_hex(10); origin=request.url_root.rstrip("/")
  with conn() as db: db.execute("INSERT INTO support_payments(reference,email,amount_kes,currency,status,county,paystack_domain) VALUES(?,?,?,?,?,?,?)",(ref,email,amount,"KES","INITIATED",county,paystack_mode()))
  payload={"email":email,"amount":str(amount*100),"currency":"KES","reference":ref,"callback_url":origin+"/support/callback","channels":["mobile_money","card"],"metadata":{"purpose":"optional_support","separate_from_participation":True,"county":county,"mode":paystack_mode()}}
