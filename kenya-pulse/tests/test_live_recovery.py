@@ -205,3 +205,69 @@ def test_custom_select_javascript_and_readiness(pulse):
  assert payload['geography']=={'counties':47,'constituencies':290,'wards':1450}
  assert payload['paystack']['configured'] is True
  assert payload['paystack']['mode']=='test'
+
+
+def test_support_line_on_major_html_surfaces(pulse):
+ c=pulse.app.test_client()
+ paths=[
+  '/', '/growth', '/participate', '/county/kericho', '/candidate-explorer',
+  '/claim-profile', '/ground', '/advertise', '/tenders', '/county-notices',
+  '/privacy', '/terms', '/methodology', '/data-deletion'
+ ]
+ for path in paths:
+  r=c.get(path)
+  assert r.status_code==200,(path,r.status_code)
+  assert '+254 708 463 368' in r.text,path
+  assert 'https://wa.me/254708463368' in r.text,path
+  assert 'id="kpSupportLine"' in r.text,path
+
+
+def test_all_registered_routes_are_safe_and_public_gets_do_not_500(pulse,monkeypatch):
+ c=pulse.app.test_client()
+
+ # Make the live-news external dependency fail immediately; the endpoint must
+ # degrade gracefully rather than making route health depend on Google News.
+ original_urlopen=pulse.urllib.request.urlopen
+ def fast_urlopen(req,*args,**kwargs):
+  url=getattr(req,'full_url',str(req))
+  if 'news.google.com' in url:
+   raise RuntimeError('isolated audit: external news disabled')
+  return original_urlopen(req,*args,**kwargs)
+ monkeypatch.setattr(pulse.urllib.request,'urlopen',fast_urlopen)
+
+ # Every Flask route must at least be registered and safely answer OPTIONS.
+ rules=[r for r in pulse.app.url_map.iter_rules() if r.endpoint!='static']
+ for rule in rules:
+  vals={}
+  for arg in rule.arguments:
+   vals[arg]=999 if arg.endswith('_id') or arg=='candidate_id' or arg=='content_id' or arg=='ad_id' or arg=='issue_id' or arg=='claim_id' else ('kp-'+('a'*20) if arg=='ref' else 'kericho')
+  try:path=rule.build(vals)
+  except Exception:continue
+  r=c.open(path,method='OPTIONS')
+  assert r.status_code<500,(str(rule),r.status_code)
+
+ # Read-only public/admin GETs: expected validation/auth 4xx is fine; 5xx is not.
+ paths=[
+  '/healthz','/api/readiness','/api/officeholder-sync-status',
+  '/api/geography?county=Kericho','/claim-profile/photo/999',
+  '/claim-profile','/claim-profile/callback?reference=bad',
+  '/claim-profile/status?reference=bad','/api/admin/profile-claims',
+  '/api/support/config','/api/support/status?reference=bad',
+  '/admin/support-payments','/support/callback?reference=bad',
+  '/pulse95.css','/pulse95.js','/favicon.ico','/favicon.svg','/pulse-global.js',
+  '/ground','/api/ground/issues','/','/participate','/county/kericho',
+  '/advertise','/api/ad-strip','/api/ad','/api/ad-click/999',
+  '/admin/ad-metrics','/admin/ads','/growth','/api/live-news',
+  '/api/tenders-live','/tenders','/api/county-notices','/county-notices',
+  '/health','/privacy','/terms','/data-deletion-instructions','/data-deletion',
+  '/data-deletion-status?code=bad','/methodology',
+  '/api/candidates?race=President','/api/candidates/compare',
+  '/api/admin/evidence-gaps','/api/admin/social-content/queue',
+  '/api/research/topics','/api/social/entry-link?platform=facebook&race=President',
+  '/candidate/999','/candidate-explorer',
+  '/api/participation/progress?county=Kericho',
+  '/api/results?county=Kericho&race=President'
+ ]
+ for path in paths:
+  r=c.get(path)
+  assert r.status_code<500,(path,r.status_code,r.text[:300])
