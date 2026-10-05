@@ -1072,6 +1072,117 @@ def candidate_evidence_batch_admin():
  return jsonify(saved=saved,errors=errors,saved_count=len(saved),error_count=len(errors)),(207 if errors else 201)
 
 
+
+def ensure_social_content_schema():
+ with conn() as c:
+  if c.pg:
+   c.execute("""CREATE TABLE IF NOT EXISTS social_content_queue(
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    hook TEXT NOT NULL,
+    body TEXT NOT NULL,
+    cta TEXT NOT NULL,
+    target_url TEXT NOT NULL,
+    sources_json TEXT NOT NULL,
+    race TEXT,
+    county TEXT,
+    constituency TEXT,
+    ward TEXT,
+    status TEXT NOT NULL DEFAULT 'READY',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMPTZ
+   );""")
+  else:
+   c.execute("""CREATE TABLE IF NOT EXISTS social_content_queue(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    hook TEXT NOT NULL,
+    body TEXT NOT NULL,
+    cta TEXT NOT NULL,
+    target_url TEXT NOT NULL,
+    sources_json TEXT NOT NULL,
+    race TEXT,
+    county TEXT,
+    constituency TEXT,
+    ward TEXT,
+    status TEXT NOT NULL DEFAULT 'READY',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    published_at TEXT
+   );""")
+  c.execute("CREATE INDEX IF NOT EXISTS social_content_status ON social_content_queue(status,platform,created_at);")
+
+@app.post("/api/admin/social-content/batch")
+def social_content_batch_admin():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_social_content_schema()
+ d=request.get_json(silent=True) or {};items=d.get("items") or []
+ if not isinstance(items,list) or not items or len(items)>30:return jsonify(error="items must contain 1 to 30 posts"),400
+ saved=[];errors=[]
+ with conn() as c:
+  for i,item in enumerate(items):
+   try:
+    platform=str(item.get("platform") or "").strip().lower()
+    if platform not in {"facebook","instagram","tiktok"}:raise ValueError("platform must be facebook, instagram or tiktok")
+    topic=re.sub(r"\s+"," ",str(item.get("topic") or "").strip())[:120]
+    hook=re.sub(r"\s+"," ",str(item.get("hook") or "").strip())[:220]
+    body=str(item.get("body") or "").strip()[:2200]
+    cta=re.sub(r"\s+"," ",str(item.get("cta") or "").strip())[:240]
+    race=str(item.get("race") or "").strip();county=str(item.get("county") or "").strip()
+    constituency=str(item.get("constituency") or "").strip();ward=str(item.get("ward") or "").strip()
+    sources=item.get("sources") or []
+    if not topic or not hook or not body or not cta or not isinstance(sources,list) or not sources:raise ValueError("topic, hook, body, cta and sources are required")
+    clean_sources=[]
+    for src in sources[:8]:
+     title=re.sub(r"\s+"," ",str((src or {}).get("title") or "").strip())[:180]
+     url=str((src or {}).get("url") or "").strip()[:800]
+     if not title or not url.startswith("https://"):raise ValueError("Every source needs a title and https URL")
+     clean_sources.append({"title":title,"url":url})
+    if race and race not in RACES:raise ValueError("Invalid race")
+    if race!="President" and race and county not in COUNTIES:raise ValueError("Valid county required")
+    if race in {"Member of Parliament","MCA"} and not constituency:raise ValueError("Constituency required")
+    if race=="MCA" and not ward:raise ValueError("Ward required")
+    q={"race":race or "President","county":county,"constituency":constituency,"ward":ward,"utm_source":platform,"utm_medium":"social","utm_campaign":"candidate_explorer"}
+    target=request.url_root.rstrip("/")+"/candidate-explorer?"+urllib.parse.urlencode(q)
+    c.execute("""INSERT INTO social_content_queue(platform,topic,hook,body,cta,target_url,sources_json,race,county,constituency,ward)
+                 VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(platform,topic,hook,body,cta,target,json.dumps(clean_sources),race or None,county or None,constituency or None,ward or None))
+    saved.append({"index":i,"platform":platform,"target_url":target})
+   except Exception as e:errors.append({"index":i,"error":str(e)[:180]})
+ return jsonify(saved=saved,errors=errors,saved_count=len(saved),error_count=len(errors)),(207 if errors else 201)
+
+@app.get("/api/admin/social-content/queue")
+def social_content_queue_admin():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_social_content_schema()
+ platform=(request.args.get("platform") or "").strip().lower();status=(request.args.get("status") or "READY").strip().upper()
+ sql="SELECT id,platform,topic,hook,body,cta,target_url,sources_json,race,county,constituency,ward,status,created_at,published_at FROM social_content_queue WHERE status=?";args=[status]
+ if platform:
+  if platform not in {"facebook","instagram","tiktok"}:return jsonify(error="Invalid platform"),400
+  sql+=" AND platform=?";args.append(platform)
+ sql+=" ORDER BY created_at DESC LIMIT 50"
+ with conn() as c:rows=c.execute(sql,args).fetchall()
+ out=[]
+ for row in rows:
+  item=dict(row)
+  try:item["sources"]=json.loads(item.pop("sources_json") or "[]")
+  except:item["sources"]=[]
+  out.append(item)
+ return jsonify(posts=out)
+
+@app.post("/api/admin/social-content/<int:content_id>/status")
+def social_content_status_admin(content_id):
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_social_content_schema()
+ d=request.get_json(silent=True) or {};status=str(d.get("status") or "").strip().upper()
+ if status not in {"READY","SCHEDULED","PUBLISHED","REJECTED"}:return jsonify(error="Invalid status"),400
+ with conn() as c:
+  row=c.execute("SELECT id FROM social_content_queue WHERE id=?",(content_id,)).fetchone()
+  if not row:return jsonify(error="Post not found"),404
+  if status=="PUBLISHED":c.execute("UPDATE social_content_queue SET status=?,published_at=CURRENT_TIMESTAMP WHERE id=?",(status,content_id))
+  else:c.execute("UPDATE social_content_queue SET status=? WHERE id=?",(status,content_id))
+ return jsonify(updated=True,status=status)
+
 @app.get("/api/research/topics")
 def research_topics():
  return jsonify(topics=[
