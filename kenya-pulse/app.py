@@ -1,4 +1,4 @@
-import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, datetime as dt, xml.etree.ElementTree as ET, email.utils, html as html_lib
+import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, datetime as dt, threading, xml.etree.ElementTree as ET, email.utils, html as html_lib
 try:
  import psycopg2
  import psycopg2.extras
@@ -212,6 +212,173 @@ def seed_starter_presidential_profiles():
                   VALUES(?,'President',?,?,?,?,?,TRUE)""",(p["name"],p["party"],p["status"],p["source_url"],p["photo_url"],p["bio"]))
  except Exception as e: app.logger.exception("starter presidential profile seed failed")
 seed_starter_presidential_profiles()
+
+PARLIAMENT_MP_DIRECTORY="https://www.parliament.go.ke/the-national-assembly/mps?field_parliament_value=2022&page={page}"
+PARLIAMENT_SENATE_DIRECTORY="https://www.parliament.go.ke/index.php/the-senate/senators?field_parliament_value=2022&page={page}&title="
+GOVERNOR_DIRECTORY="https://ilovekenya.org/governors"
+OFFICEHOLDER_SYNC_STATE={"running":False,"last_run":None,"last_error":None,"counts":{}}
+
+def _clean_html_text(v):
+ v=re.sub(r"<[^>]+>"," ",v or "")
+ return re.sub(r"\s+"," ",html_lib.unescape(v)).strip()
+
+def _fetch_public_html(url,timeout=18):
+ req=urllib.request.Request(url,headers={"User-Agent":"KenyaPulseAI/1.0 (+https://kenyapulse.online)"})
+ with urllib.request.urlopen(req,timeout=timeout) as r:return r.read().decode("utf-8","ignore")
+
+def _abs_url(base,url):
+ return urllib.parse.urljoin(base,html_lib.unescape(url or "")) if url else ""
+
+def _county_canonical(raw):
+ n=re.sub(r"[^a-z]","",str(raw or "").lower())
+ aliases={
+  "nairobi":"Nairobi City","nairobicity":"Nairobi City","homabay":"Homa Bay","taitataveta":"Taita-Taveta",
+  "tharakanithi":"Tharaka-Nithi","elgeyomarakwet":"Elgeyo-Marakwet","transnzoia":"Trans Nzoia",
+  "muranga":"Murang'a"
+ }
+ if n in aliases:return aliases[n]
+ for c in COUNTIES:
+  if re.sub(r"[^a-z]","",c.lower())==n:return c
+ return ""
+
+def _constituency_canonical(county,raw):
+ if county not in GEOGRAPHY:return ""
+ n=re.sub(r"[^a-z0-9]","",str(raw or "").lower())
+ for c in GEOGRAPHY[county]:
+  if re.sub(r"[^a-z0-9]","",c.lower())==n:return c
+ return ""
+
+def _strip_title(name):
+ name=_clean_html_text(name)
+ name=re.sub(r"(?i)^\s*(hon\.?|sen\.?)\s*","",name)
+ name=re.sub(r"(?i),?\s*(cbs|mp|sc|egm|phd)\b.*$","",name).strip(" ,")
+ return re.sub(r"\s+"," ",name)
+
+def _parse_directory_rows(html,base):
+ rows=[]
+ for row_html in re.findall(r"(?is)<tr\b[^>]*>(.*?)</tr>",html):
+  cells=re.findall(r"(?is)<t[dh]\b[^>]*>(.*?)</t[dh]>",row_html)
+  if len(cells)<4:continue
+  texts=[_clean_html_text(x) for x in cells]
+  links=re.findall(r'(?is)<a\b[^>]*href=["\']([^"\']+)["\']',row_html)
+  imgs=re.findall(r'(?is)<img\b[^>]*(?:src|data-src)=["\']([^"\']+)["\']',row_html)
+  href=_abs_url(base,links[-1]) if links else base
+  photo=_abs_url(base,imgs[0]) if imgs else ""
+  rows.append({"cells":texts,"source_url":href,"photo_url":photo})
+ return rows
+
+def _upsert_public_officeholder(c,name,race,county="",constituency="",party="",photo_url="",source_url=""):
+ if not name or race not in RACES:return False
+ sql="SELECT id FROM candidates WHERE LOWER(name)=LOWER(?) AND race=?";args=[name,race]
+ if race!="President":sql+=" AND county=?";args.append(county)
+ if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
+ row=c.execute(sql,args).fetchone()
+ if row:
+  c.execute("""UPDATE candidates SET party=COALESCE(NULLIF(?,''),party),status=CASE WHEN status IN ('IEBC_CLEARED','PARTY_NOMINEE','ASPIRANT') THEN status ELSE 'UNKNOWN' END,
+               source_url=COALESCE(NULLIF(?,''),source_url),photo_url=COALESCE(NULLIF(?,''),photo_url),active=TRUE WHERE id=?""",
+            (party,source_url,photo_url,row["id"]))
+ else:
+  c.execute("""INSERT INTO candidates(name,race,county,constituency,party,status,source_url,photo_url,active)
+               VALUES(?,?,?,?,?,'UNKNOWN',?,?,TRUE)""",(name,race,county or None,constituency or None,party or None,source_url or None,photo_url or None))
+ return True
+
+def _sync_parliament_members():
+ counts={"Senator":0,"Woman Representative":0,"Member of Parliament":0}
+ with conn() as c:
+  # Senate directory currently spans a small number of pages; stop after repeated empties.
+  empty=0
+  for page in range(0,10):
+   url=PARLIAMENT_SENATE_DIRECTORY.format(page=page)
+   try:rows=_parse_directory_rows(_fetch_public_html(url),url)
+   except Exception:rows=[]
+   elected=0
+   for r in rows:
+    cells=r["cells"]
+    joined=" | ".join(cells)
+    if "Elected" not in joined or "Nominated" in joined:continue
+    name=_strip_title(cells[0]);county=_county_canonical(cells[2] if len(cells)>2 else "");party=cells[3] if len(cells)>3 else ""
+    if not county or not name:continue
+    if _upsert_public_officeholder(c,name,"Senator",county=county,party=party,photo_url=r["photo_url"],source_url=r["source_url"]):
+     counts["Senator"]+=1;elected+=1
+   empty=empty+1 if elected==0 else 0
+   if empty>=2 and page>2:break
+
+  empty=0
+  for page in range(0,45):
+   url=PARLIAMENT_MP_DIRECTORY.format(page=page)
+   try:rows=_parse_directory_rows(_fetch_public_html(url),url)
+   except Exception:rows=[]
+   elected=0
+   for r in rows:
+    cells=r["cells"];joined=" | ".join(cells)
+    if "Elected" not in joined or "Nominated" in joined:continue
+    name=_strip_title(cells[0]);county=_county_canonical(cells[2] if len(cells)>2 else "")
+    area=cells[3] if len(cells)>3 else "";party=cells[4] if len(cells)>4 else ""
+    if not county or not name:continue
+    area_county=_county_canonical(area)
+    if area_county==county:
+     race="Woman Representative";constituency=""
+    else:
+     race="Member of Parliament";constituency=_constituency_canonical(county,area)
+     if not constituency:continue
+    if _upsert_public_officeholder(c,name,race,county=county,constituency=constituency,party=party,photo_url=r["photo_url"],source_url=r["source_url"]):
+     counts[race]+=1;elected+=1
+   empty=empty+1 if elected==0 else 0
+   if empty>=3 and page>30:break
+ return counts
+
+def _sync_governors():
+ count=0
+ try:html=_fetch_public_html(GOVERNOR_DIRECTORY)
+ except Exception:return 0
+ # Current public directory cards expose governor name/county/profile image. Only accept records whose county resolves to our canonical list.
+ cards=re.findall(r"(?is)<(?:article|div)\b[^>]*>(.*?)(?=</(?:article|div)>)",html)
+ seen=set()
+ with conn() as c:
+  for card in cards:
+   txt=_clean_html_text(card)
+   county=next((x for x in COUNTIES if re.search(r"(?i)(?:^|\b)"+re.escape(x.replace("-","[- ]"))+r"(?:\b|$)",txt.replace("Nairobi City","Nairobi"))),None)
+   if not county:continue
+   # Prefer heading text as candidate name.
+   heads=re.findall(r"(?is)<h[2-4]\b[^>]*>(.*?)</h[2-4]>",card)
+   if not heads:continue
+   name=_strip_title(heads[0])
+   if not name or name.lower() in {"county governors","governors"} or (county,name.lower()) in seen:continue
+   seen.add((county,name.lower()))
+   imgs=re.findall(r'(?is)<img\b[^>]*(?:src|data-src)=["\']([^"\']+)["\']',card)
+   links=re.findall(r'(?is)<a\b[^>]*href=["\']([^"\']+)["\']',card)
+   photo=_abs_url(GOVERNOR_DIRECTORY,imgs[0]) if imgs else ""
+   source=_abs_url(GOVERNOR_DIRECTORY,links[0]) if links else GOVERNOR_DIRECTORY
+   party=""
+   for p in ["UDA","ODM","WDM","WIPER","ANC","UDM","DAP-K","JP","JUBILEE","FORD-K","UPA","IND"]:
+    if re.search(r"(?i)\b"+re.escape(p)+r"\b",txt):party=p;break
+   if _upsert_public_officeholder(c,name,"Governor",county=county,party=party,photo_url=photo,source_url=source):count+=1
+ return count
+
+def sync_current_officeholders():
+ if OFFICEHOLDER_SYNC_STATE["running"]:return
+ OFFICEHOLDER_SYNC_STATE["running"]=True
+ try:
+  counts=_sync_parliament_members()
+  counts["Governor"]=_sync_governors()
+  OFFICEHOLDER_SYNC_STATE.update({"last_run":dt.datetime.now(dt.timezone.utc).isoformat(),"last_error":None,"counts":counts})
+  app.logger.info("officeholder sync complete %s",counts)
+ except Exception as e:
+  OFFICEHOLDER_SYNC_STATE.update({"last_run":dt.datetime.now(dt.timezone.utc).isoformat(),"last_error":str(e)[:500]})
+  app.logger.exception("officeholder sync failed")
+ finally:OFFICEHOLDER_SYNC_STATE["running"]=False
+
+def _start_officeholder_sync():
+ try:threading.Thread(target=sync_current_officeholders,name="kp-officeholder-sync",daemon=True).start()
+ except Exception:app.logger.exception("could not start officeholder sync")
+_start_officeholder_sync()
+
+@app.get("/api/officeholder-sync-status")
+def officeholder_sync_status():
+ with conn() as c:
+  rows=c.execute("""SELECT race,COUNT(*) total,SUM(CASE WHEN photo_url IS NOT NULL AND TRIM(photo_url)<>'' THEN 1 ELSE 0 END) with_photo
+                    FROM candidates WHERE active=TRUE GROUP BY race ORDER BY race""").fetchall()
+ return jsonify(state=OFFICEHOLDER_SYNC_STATE,inventory=[dict(x) for x in rows]),200,{"Cache-Control":"no-store"}
 
 @app.get("/api/geography")
 def geography_api():
@@ -692,7 +859,7 @@ body{background:#0b2f1d}.top.kp95nav{position:relative;top:auto;height:66px;max-
 .photoBallot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-top:14px}
 .candidatePhoto{aspect-ratio:1/1;border:2px solid #ffffff24;border-radius:22px;overflow:hidden;padding:0;background:#0a2116;position:relative;cursor:pointer;box-shadow:0 12px 28px #0005}
 .candidatePhoto:hover{transform:translateY(-2px);border-color:#69ef91}
-.candidatePhoto img{width:100%;height:100%;object-fit:cover;display:block}
+.candidatePhoto img{width:100%;height:100%;object-fit:cover;display:block}.candidatePhoto{overflow:hidden;position:relative;padding:0!important}.candidatePhoto .candidateMeta{position:absolute;left:0;right:0;bottom:0;padding:26px 9px 9px;background:linear-gradient(transparent,rgba(0,0,0,.82));text-align:left;color:white}.candidatePhoto .candidateMeta b{display:block;font-size:12px;line-height:1.15}.candidatePhoto .candidateMeta small{display:block;font-size:9px;color:#d9e7dd;margin-top:2px}
 .candidatePhoto .missing{width:100%;height:100%;display:grid;place-items:center;font-size:34px;color:#8cad98;background:linear-gradient(145deg,#153d29,#0b2417)}
 .candidatePhoto.selected{outline:3px solid #ffd54a;outline-offset:2px}
 .ballotHint{font-size:12px;color:#a9c6b4;margin-top:9px;line-height:1.45}
@@ -738,7 +905,7 @@ async function loadCandidates(){
   if(!items.length){grid.innerHTML='<div class="muted">No verified photo profiles are published for this seat yet. You can still submit a name below.</div>';fallback.style.display='block';return}
   items.forEach(x=>{
    let b=document.createElement('button');b.type='button';b.className='candidatePhoto';b.title='Tap to select this person';b.setAttribute('aria-label','Select candidate photo');
-   b.innerHTML=x.photo_url?'<img src="'+escAttr(x.photo_url)+'" alt="" loading="lazy">':'<div class="missing">👤</div>';
+   b.innerHTML=(x.photo_url?'<img src="'+escAttr(x.photo_url)+'" alt="'+escAttr(x.name)+'" loading="lazy">':'<div class="missing">👤</div>')+'<span class="candidateMeta"><b>'+esc(x.name)+'</b><small>'+esc(x.party||x.status||'Public profile')+'</small></span>';
    b.onclick=()=>voteCandidate(x,b);grid.appendChild(b)
   });
   fallback.style.display='block';
