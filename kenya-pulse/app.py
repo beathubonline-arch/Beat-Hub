@@ -442,12 +442,65 @@ def seed_current_governor_baseline():
    for county,name in CURRENT_GOVERNOR_BASELINE.items():
     _upsert_public_officeholder(c,name,"Governor",county=county,source_url=src)
  except Exception:app.logger.exception("governor baseline seed failed")
-# Import officeholder records explicitly outside web startup.
+# Import officeholder records in a delayed background task only when the critical MCA
+# baseline is still empty. Persist a cooldown in the database so free-tier cold starts do
+# not repeatedly download Parliament/Gazette sources.
+def _officeholder_sync_due():
+ try:
+  with conn() as c:
+   if c.pg:
+    c.execute("""CREATE TABLE IF NOT EXISTS kp_sync_meta(
+      sync_key TEXT PRIMARY KEY,last_attempt TIMESTAMPTZ,last_success TIMESTAMPTZ,last_note TEXT
+    )""")
+    mca=c.execute("SELECT COUNT(*) n FROM candidates WHERE active=TRUE AND race='MCA'").fetchone()["n"]
+    row=c.execute("SELECT last_attempt FROM kp_sync_meta WHERE sync_key='officeholders'").fetchone()
+    if mca>0:return False
+    if row and row["last_attempt"]:
+     age=(dt.datetime.now(dt.timezone.utc)-row["last_attempt"]).total_seconds()
+     if age<86400:return False
+    c.execute("""INSERT INTO kp_sync_meta(sync_key,last_attempt,last_note)
+                 VALUES('officeholders',CURRENT_TIMESTAMP,'scheduled')
+                 ON CONFLICT(sync_key) DO UPDATE SET last_attempt=CURRENT_TIMESTAMP,last_note='scheduled'""")
+   else:
+    c.execute("""CREATE TABLE IF NOT EXISTS kp_sync_meta(
+      sync_key TEXT PRIMARY KEY,last_attempt TEXT,last_success TEXT,last_note TEXT
+    )""")
+    mca=c.execute("SELECT COUNT(*) n FROM candidates WHERE active=1 AND race='MCA'").fetchone()["n"]
+    row=c.execute("SELECT last_attempt FROM kp_sync_meta WHERE sync_key='officeholders'").fetchone()
+    if mca>0:return False
+    if row and row["last_attempt"]:
+     try:
+      last=dt.datetime.fromisoformat(str(row["last_attempt"]).replace("Z","+00:00"))
+      if last.tzinfo is None:last=last.replace(tzinfo=dt.timezone.utc)
+      if (dt.datetime.now(dt.timezone.utc)-last).total_seconds()<86400:return False
+     except Exception:pass
+    c.execute("""INSERT INTO kp_sync_meta(sync_key,last_attempt,last_note)
+                 VALUES('officeholders',CURRENT_TIMESTAMP,'scheduled')
+                 ON CONFLICT(sync_key) DO UPDATE SET last_attempt=CURRENT_TIMESTAMP,last_note='scheduled'""")
+  return True
+ except Exception:
+  app.logger.exception("officeholder sync scheduling check failed")
+  return False
+
+def _run_officeholder_sync_once():
+ if not _officeholder_sync_due():return
+ app.logger.warning("KP_OFFICEHOLDER_SYNC starting background recovery because MCA inventory is empty")
+ sync_current_officeholders()
+ try:
+  with conn() as c:
+   mca=c.execute("SELECT COUNT(*) n FROM candidates WHERE active=TRUE AND race='MCA'").fetchone()["n"] if c.pg else c.execute("SELECT COUNT(*) n FROM candidates WHERE active=1 AND race='MCA'").fetchone()["n"]
+   if mca>0:
+    c.execute("UPDATE kp_sync_meta SET last_success=CURRENT_TIMESTAMP,last_note=? WHERE sync_key='officeholders'",("success mca="+str(mca),))
+   else:
+    c.execute("UPDATE kp_sync_meta SET last_note='completed with zero MCA records' WHERE sync_key='officeholders'")
+  app.logger.warning("KP_OFFICEHOLDER_SYNC completed mca=%s",mca)
+ except Exception:
+  app.logger.exception("officeholder sync result check failed")
 
 def _start_officeholder_sync():
- # Do not perform external candidate-directory/PDF work during web-service boot.
- # Render free instances may cold-start, so startup must stay lightweight.
- return None
+ try:threading.Timer(8.0,_run_officeholder_sync_once).start()
+ except Exception:app.logger.exception("could not schedule officeholder sync")
+_start_officeholder_sync()
 
 @app.get("/healthz")
 def healthz():
