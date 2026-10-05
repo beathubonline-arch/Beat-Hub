@@ -172,14 +172,13 @@ try:init()
 except Exception as e: print("db init",e)
 
 HOUSE_ADS=[
- {"business":"Mkulima AI","url":"https://mkulima-ai-whatsapp.onrender.com","headline":"Mkulima AI — practical farming help, market guidance and farmer support powered by AI.","weight":1.5},
- {"business":"Mizizi","url":"https://mizizi-family.onrender.com","headline":"Mizizi — preserve family stories, photos, voices and memories for generations.","weight":1.4},
- {"business":"OneBob","url":"https://myonebob.online","headline":"OneBob — simple online chama saving built for everyday Kenyan groups.","weight":1.3},
- {"business":"BeatHub","url":"https://mybeathub.com","headline":"Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com","weight":1.2}
+ {"business":"BeatHub","url":"https://mybeathub.com","headline":"Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com","weight":1.0}
 ]
 def seed_house_ads():
  try:
   with conn() as c:
+   # Kenya Pulse currently retains BeatHub as its only house advertisement.
+   c.execute("UPDATE ad_orders SET status='PAUSED' WHERE package='House Ad' AND LOWER(business)<>LOWER(?)",("BeatHub",))
    for ad in HOUSE_ADS:
     row=c.execute("""SELECT id FROM ad_orders
                      WHERE LOWER(business)=LOWER(?) AND url=? AND package='House Ad'
@@ -1641,15 +1640,14 @@ def _public_ad(ad):
 
 @app.get("/api/ad-strip")
 def ad_strip():
- visitor=participation_fingerprint();items=[];used=[];brands=[]
+ visitor=participation_fingerprint();items=[]
  with conn() as db:
-  for _ in range(8):
-   ad=_pick_ad(db,"",visitor,"national",used,brands)
-   if not ad:break
-   _record_ad_impression(db,ad,visitor,"national_strip")
-   used.append(int(ad["id"]));brands.append(ad.get("business") or "")
-   items.append(_public_ad(ad))
- return jsonify(items=items,rotation="weighted_fair_paced"),200,{"Cache-Control":"private, no-store"}
+  rows=[dict(x) for x in db.execute("""SELECT * FROM ad_orders WHERE status='ACTIVE' AND LOWER(business)=LOWER('BeatHub')
+    AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP) ORDER BY id DESC LIMIT 1""").fetchall()]
+  if rows:
+   _record_ad_impression(db,rows[0],visitor,"national_strip")
+   items=[_public_ad(rows[0])]
+ return jsonify(items=items,rotation="beathub_only"),200,{"Cache-Control":"private, no-store"}
 
 @app.get("/api/ad")
 def serve_ad():
@@ -1657,7 +1655,10 @@ def serve_ad():
  if county and county not in COUNTIES:county=""
  visitor=participation_fingerprint()
  with conn() as db:
-  ad=_pick_ad(db,county,visitor,"mixed")
+  # Public ad inventory is intentionally restricted to BeatHub only.
+  rows=[dict(x) for x in db.execute("""SELECT * FROM ad_orders WHERE status='ACTIVE' AND LOWER(business)=LOWER('BeatHub')
+    AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP) ORDER BY id DESC""").fetchall()]
+  ad=rows[0] if rows else None
   if not ad:return jsonify(ad=None),200,{"Cache-Control":"private, no-store"}
   _record_ad_impression(db,ad,visitor,"county_card" if county else "general_card",county)
   return jsonify(ad=_public_ad(ad)),200,{"Cache-Control":"private, no-store"}
@@ -1665,7 +1666,7 @@ def serve_ad():
 @app.get("/api/ad-click/<int:ad_id>")
 def ad_click(ad_id):
  with conn() as db:
-  row=db.execute("""SELECT url FROM ad_orders WHERE id=? AND status='ACTIVE'
+  row=db.execute("""SELECT url FROM ad_orders WHERE id=? AND status='ACTIVE' AND LOWER(business)=LOWER('BeatHub')
                     AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
                     AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)""",(ad_id,)).fetchone()
   if not row or not row["url"]:return redirect("/")
