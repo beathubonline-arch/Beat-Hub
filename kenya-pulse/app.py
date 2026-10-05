@@ -158,11 +158,8 @@ def seed_beathub_house_ad():
 seed_beathub_house_ad()
 
 STARTER_PRESIDENTIAL_PROFILES=[
- {"name":"William Ruto","party":"United Democratic Alliance (UDA)","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/politics/article/2001551641/ruto-opposition-will-see-dust-in-next-year-s-polls","photo_url":"https://www.stjohnchrisostom.com/build/assets/tile-president-pgxkfrxs.jpg","bio":"Incumbent President of Kenya since 2022. Public reporting in 2026 describes his campaign for a second term in the 2027 presidential election."},
- {"name":"Rigathi Gachagua","party":"Democracy for Citizens Party (DCP)","status":"ASPIRANT","source_url":"https://citizen.digital/article/i-will-vie-for-presidency-in-2027-gachagua-says-as-he-attacks-ruto-n381911","photo_url":"https://cdn.radioafrica.digital/image/2024/10/Rigathi%20Gachagua%20%281%29.jpg","bio":"Former Deputy President and DCP leader. He has publicly stated his intention to seek the presidency in 2027, subject to opposition coalition arrangements."},
- {"name":"Martha Karua","party":"People's Liberation Party (PLP)","status":"ASPIRANT","source_url":"https://nation.africa/kenya/news/politics/karua-nothing-short-of-the-presidency-for-me-5543082","photo_url":"https://vellum.co.ke/wp-content/uploads/2025/03/Martha-Karua.jpg","bio":"People's Liberation Party leader and former Justice Minister. She has publicly reaffirmed her intention to seek the presidency in 2027."},
- {"name":"Kalonzo Musyoka","party":"Wiper Patriotic Front","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/counties/article/2001552697/kalonzo-im-best-placed-to-beat-ruto-but-ill-support-any-opposition-candidate","photo_url":"https://nation.africa/resource/image/3610526/landscape_ratio3x2/1620/1080/7bff3664d7fe914a603c9b188b01e3b6/hv/kalonzo-musyoka.jpg","bio":"Wiper Patriotic Front leader and former Vice-President. He has publicly pursued the opposition presidential ticket for 2027 while saying he would support a consensus opposition candidate."},
- {"name":"Fred Matiang'i","party":"Jubilee Party","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/amp/national/article/2001549561/matiangi-backs-talks-for-opposition-presidential-candidate","photo_url":"https://images.hivisasa.com/1200/XuxlU16CLMFred_Matiangi_2013-e1459511321675.jpg","bio":"Former Interior Cabinet Secretary and Jubilee presidential hopeful. He has publicly campaigned for the 2027 presidential contest while participating in opposition coalition talks."}
+ {"name":"William Ruto","party":"United Democratic Alliance (UDA)","status":"ASPIRANT","source_url":"https://www.president.go.ke/administration/office-of-the-president/","photo_url":"https://commons.wikimedia.org/wiki/Special:Redirect/file/William%20Saomei%20Ruto%20official%20portrait.jpg","bio":"Incumbent President of Kenya since 2022. He is publicly pursuing re-election in the 2027 presidential election."},
+ {"name":"Edwin Sifuna","party":"The Equitable Party (TEP)","status":"ASPIRANT","source_url":"https://www.the-star.co.ke/news/2026-10-04-sifuna-unveils-tep-as-political-vehicle-for-2027-presidential-bid","photo_url":"https://commons.wikimedia.org/wiki/Special:Redirect/file/Sifuna%20in%202024.jpg","bio":"Nairobi Senator and The Equitable Party leader. He was unveiled in October 2026 as the party's preferred presidential candidate for the 2027 election."}
 ]
 def seed_starter_presidential_profiles():
  try:
@@ -173,11 +170,11 @@ def seed_starter_presidential_profiles():
      status=row["status"]
      if (status or "").upper() in {"PROSPECTIVE","UNKNOWN",""}:status="ASPIRANT"
      c.execute("""UPDATE candidates SET
-                  party=COALESCE(NULLIF(party,''),?),
+                  party=?,
                   status=?,
-                  source_url=COALESCE(NULLIF(source_url,''),?),
-                  photo_url=COALESCE(NULLIF(photo_url,''),?),
-                  bio=COALESCE(NULLIF(bio,''),?),
+                  source_url=?,
+                  photo_url=?,
+                  bio=?,
                   active=TRUE
                   WHERE id=?""",(p["party"],status,p["source_url"],p["photo_url"],p["bio"],row["id"]))
     else:
@@ -206,6 +203,10 @@ def paystack_request(path,payload=None):
 
 
 PROFILE_FEE_KES=100
+PRESIDENT_PROFILE_FEE_KES=5000
+PRESIDENT_PHOTO_PROFILE_LIMIT=20
+def profile_fee_for_race(race):
+ return PRESIDENT_PROFILE_FEE_KES if race=="President" else PROFILE_FEE_KES
 def ensure_profile_claim_schema():
  with conn() as c:
   if c.pg:
@@ -258,11 +259,12 @@ def verify_profile_payment(ref,d):
  ensure_profile_claim_schema()
  if not ref.startswith("kpasp-") or d.get("reference")!=ref or d.get("domain")!=paystack_mode():return False
  with conn() as c:
-  row=c.execute("SELECT id,payment_status FROM aspirant_profile_claims WHERE reference=?",(ref,)).fetchone()
+  row=c.execute("SELECT id,race,payment_status FROM aspirant_profile_claims WHERE reference=?",(ref,)).fetchone()
   if not row:return False
   try:amount=int(d.get("amount") or 0)
   except:amount=0
-  if d.get("status")!="success" or d.get("currency")!="KES" or amount!=PROFILE_FEE_KES*100:return False
+  expected_fee=profile_fee_for_race(row["race"])
+  if d.get("status")!="success" or d.get("currency")!="KES" or amount!=expected_fee*100:return False
   tx=str(d.get("id") or "")[:80]
   if not tx:return False
   c.execute("""UPDATE aspirant_profile_claims
@@ -312,7 +314,8 @@ def claim_profile():
   if not paystack_configured():return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
   email=(request.form.get("email") or "").strip()[:160]
   if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$",email):return "Enter a valid email for the payment receipt.",400
-  payload={"email":email,"amount":str(PROFILE_FEE_KES*100),"currency":"KES","reference":ref,"callback_url":request.url_root.rstrip("/")+"/claim-profile/callback","channels":["mobile_money","card"],"metadata":{"purpose":"aspirant_profile_claim","claim_id":claim_id,"candidate_name":name,"race":race}}
+  fee=profile_fee_for_race(race)
+  payload={"email":email,"amount":str(fee*100),"currency":"KES","reference":ref,"callback_url":request.url_root.rstrip("/")+"/claim-profile/callback","channels":["mobile_money","card"],"metadata":{"purpose":"candidate_profile_activation","claim_id":claim_id,"candidate_name":name,"race":race,"profile_fee_kes":fee,"does_not_buy_ballot_rank":True}}
   try:
    out=paystack_request("/transaction/initialize",payload);url=(out.get("data") or {}).get("authorization_url","")
    if not url.startswith("https://checkout.paystack.com/"):raise RuntimeError("invalid checkout")
@@ -320,8 +323,8 @@ def claim_profile():
   except Exception:return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
  page="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Claim your profile · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css><style>
  body{margin:0;background:#07180f;color:#f5fff8;font-family:Inter,system-ui}.w{max-width:880px;margin:auto;padding:32px 18px 70px}.card{padding:26px;border-radius:26px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}input,select,textarea,button{width:100%;padding:14px;border-radius:16px;border:1px solid #ffffff22;background:#ffffff0b;color:white;font:inherit}select{min-height:52px}textarea{min-height:120px}button{background:#69ef91;color:#0a2a18;font-weight:900;border:0}.muted{color:#a9c6b4}.fee{font-size:38px;font-weight:950;color:#ffd54a}@media(max-width:650px){.grid{grid-template-columns:1fr}}
- </style></head><body><div class=w><div class="glass card"><h1>Claim your Kenya Pulse AI profile</h1><p class=muted>For aspirants and candidates who want their photo and public profile available on Kenya Pulse AI. Payment covers profile activation and review — it does not buy votes, ranking or poll placement.</p><div class=fee>KSh 100</div>
- <form method=post enctype=multipart/form-data><div class=grid><input name=name required placeholder="Full name"><input name=email type=email required placeholder="Email for receipt"></div><div class=grid><select name=race required>{% for r in races %}<option>{{r}}</option>{% endfor %}</select><select name=county><option value="">County (not needed for President)</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><div class=grid><input name=constituency placeholder="Constituency (MP/MCA)"><input name=ward placeholder="Ward (MCA)"></div><div class=grid><input name=party placeholder="Party / Independent"><input name=public_contact placeholder="Public contact / campaign phone"></div><input name=campaign_url placeholder="Campaign website or social profile" style="margin-top:10px"><textarea name=bio placeholder="Short public bio, priorities and experience" style="margin-top:10px"></textarea><label style="display:block;margin-top:12px">Profile photo (JPG, PNG or WEBP, max 2 MB)<input name=photo type=file accept="image/jpeg,image/png,image/webp" required></label><button style="margin-top:14px">Submit & pay KSh 100 →</button></form>
+ </style></head><body><div class=w><div class="glass card"><h1>Claim your Kenya Pulse AI profile</h1><p class=muted>For aspirants and candidates who want an enhanced public profile on Kenya Pulse AI. Payment covers profile activation and review only — it does not buy votes, ranking, or automatic inclusion in the preference ballot.</p><div class=fee>President profile: KSh 5,000</div>
+ <form method=post enctype=multipart/form-data><div class=grid><input name=name required placeholder="Full name"><input name=email type=email required placeholder="Email for receipt"></div><div class=grid><select name=race required>{% for r in races %}<option>{{r}}</option>{% endfor %}</select><select name=county><option value="">County (not needed for President)</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><div class=grid><input name=constituency placeholder="Constituency (MP/MCA)"><input name=ward placeholder="Ward (MCA)"></div><div class=grid><input name=party placeholder="Party / Independent"><input name=public_contact placeholder="Public contact / campaign phone"></div><input name=campaign_url placeholder="Campaign website or social profile" style="margin-top:10px"><textarea name=bio placeholder="Short public bio, priorities and experience" style="margin-top:10px"></textarea><label style="display:block;margin-top:12px">Profile photo (JPG, PNG or WEBP, max 2 MB)<input name=photo type=file accept="image/jpeg,image/png,image/webp" required></label><button style="margin-top:14px">Submit profile →</button></form>
  <p class=muted style="margin-top:14px;font-size:12px">Profiles are reviewed before publication. Kenya Pulse AI may independently add sourced public-record information alongside candidate-submitted information.</p></div></div></body></html>"""
  return render_template_string(page,races=RACES,counties=COUNTIES)
 
@@ -1255,10 +1258,12 @@ def candidates_api():
  race=request.args.get("race","").strip();county=request.args.get("county","").strip();constituency=request.args.get("constituency","").strip();ward=request.args.get("ward","").strip()
  if race not in RACES:return jsonify(candidates=[])
  sql="SELECT id,name,party,status,photo_url,bio,source_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
+ if race=="President":
+  sql+=" AND LOWER(name) IN (LOWER(?),LOWER(?))";args.extend(["William Ruto","Edwin Sifuna"])
  if race!="President":sql+=" AND county=?";args.append(county)
  if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
  if race=="MCA":sql+=" AND ward=?";args.append(ward)
- sql+=" ORDER BY name"
+ sql+=" ORDER BY name LIMIT "+str(PRESIDENT_PHOTO_PROFILE_LIMIT if race=="President" else 200)
  with conn() as c:
   rows=c.execute(sql,args).fetchall()
   out=[]
