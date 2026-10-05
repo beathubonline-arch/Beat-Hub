@@ -160,8 +160,9 @@ try:init()
 except Exception as e: print("db init",e)
 
 HOUSE_ADS=[
- {"business":"BeatHub","url":"https://mybeathub.com","headline":"Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com"},
- {"business":"Mkulima AI","url":"https://mkulima-ai-whatsapp.onrender.com","headline":"Mkulima AI — practical farming help, market guidance and farmer support powered by AI."}
+ {"business":"Mkulima AI","url":"https://mkulima-ai-whatsapp.onrender.com","headline":"Mkulima AI — practical farming help, market guidance and farmer support powered by AI.","weight":1.5},
+ {"business":"OneBob","url":"https://myonebob.online","headline":"OneBob — simple online chama saving built for everyday Kenyan groups.","weight":1.3},
+ {"business":"BeatHub","url":"https://mybeathub.com","headline":"Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com","weight":1.2}
 ]
 def seed_house_ads():
  try:
@@ -174,14 +175,14 @@ def seed_house_ads():
      c.execute("""UPDATE ad_orders
                   SET headline=?,scope='National',county=NULL,budget=0,status='ACTIVE',
                       starts_at=COALESCE(starts_at,CURRENT_TIMESTAMP),ends_at=NULL,
-                      impression_goal=0,daily_impression_cap=0,frequency_cap=1000,priority_weight=1
-                  WHERE id=?""",(ad["headline"],row["id"]))
+                      impression_goal=0,daily_impression_cap=0,frequency_cap=1000,priority_weight=?
+                  WHERE id=?""",(ad["headline"],ad["weight"],row["id"]))
     else:
      c.execute("""INSERT INTO ad_orders(
                    business,email,phone,scope,county,package,budget,headline,url,status,starts_at,ends_at,
                    impressions,clicks,impression_goal,daily_impression_cap,frequency_cap,priority_weight
-                  ) VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL,0,0,0,0,1000,1)""",
-               (ad["business"],"kenyapulse2026@gmail.com",None,"National",None,"House Ad",0,ad["headline"],ad["url"]))
+                  ) VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL,0,0,0,0,1000,?)""",
+               (ad["business"],"kenyapulse2026@gmail.com",None,"National",None,"House Ad",0,ad["headline"],ad["url"],ad["weight"]))
  except Exception:
   app.logger.exception("House ad seed failed")
 seed_house_ads()
@@ -1008,7 +1009,7 @@ def _pick_ad(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None,exclude_
  for ad in ads:
   base=float(ad.get("priority_weight") or 0) or AD_PACKAGE_WEIGHTS.get(ad.get("package"),1.0)
   if ad.get("package")=="House Ad":
-   weight=1.0
+   weight=max(0.2,float(ad.get("priority_weight") or 1.0))
   else:
    fairness=1.0/(1.0+int(ad.get("impressions") or 0)/1000.0)
    weight=max(0.05,base*_ad_pacing_multiplier(ad)*(0.65+fairness))
