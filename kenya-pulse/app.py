@@ -1114,7 +1114,7 @@ def kenya_pulse_global_ui(response):
     #kpSupportLine .kpSupportCall{color:#082918;background:#78f49b}
     #kpSupportLine .kpSupportWa{color:#fff;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18)}
     #kpSupportLine .kpSupportText{white-space:nowrap}
-    @media(max-width:640px){#kpSupportLine{left:10px;right:10px;bottom:10px;transform:none;max-width:none;display:grid;grid-template-columns:1fr 1fr;padding:10px}.kpSupportText{grid-column:1/-1;text-align:center}#kpSupportLine a{padding:10px 8px}}
+    @media(max-width:640px){ #kpSupportLine{left:10px;right:10px;bottom:10px;transform:none;max-width:none;display:grid;grid-template-columns:1fr 1fr;padding:10px}.kpSupportText{grid-column:1/-1;text-align:center}#kpSupportLine a{padding:10px 8px}}
    </style>'''
    if "id=\"kpSupportLine\"" not in body and "</body>" in body:
     body=body.replace("</body>",support_html+"</body>")
@@ -1175,7 +1175,7 @@ body{background:#0b2f1d}.top.kp95nav{position:relative;top:auto;height:66px;max-
 #supportPayButton.supportPrimary{width:100%!important;min-height:62px!important;margin-top:12px!important;border:0!important;border-radius:16px!important;background:linear-gradient(135deg,#ffd95a,#ffe989)!important;color:#19341f!important;font-size:16px!important;font-weight:1000!important;letter-spacing:-.15px!important;box-shadow:0 12px 30px rgba(255,217,90,.20),inset 0 1px rgba(255,255,255,.65)!important}#supportPayButton.supportPrimary:hover{transform:translateY(-1px);filter:brightness(1.04)}
 .supportSkip{display:block;width:100%;margin-top:9px;padding:10px;border:0;background:transparent;color:#bcd3c4;text-align:center;font-size:11px;font-weight:750;cursor:pointer}.supportTrust{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;color:#b8d1c0;font-size:10px}.supportTrust b{color:#eaffef}
 #supportmsg.supportMessage{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.15);color:#d9eee0!important;font-size:11px}
-@media(max-width:620px){#supportbox.supportSpotlight{padding:20px!important;margin:18px 0}.supportHero{grid-template-columns:1fr}.supportOptional{width:max-content}.supportFields{grid-template-columns:1fr}#supportPayButton.supportPrimary{min-height:66px!important;font-size:15px!important}}
+@media(max-width:620px){ #supportbox.supportSpotlight{padding:20px!important;margin:18px 0}.supportHero{grid-template-columns:1fr}.supportOptional{width:max-content}.supportFields{grid-template-columns:1fr}#supportPayButton.supportPrimary{min-height:66px!important;font-size:15px!important}}
 /* Premium county analytics + candidate enrichment */
 .countyWorkspace{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(420px,.92fr);gap:16px;align-items:stretch}
 .countyWorkspace>.card{min-height:610px}
