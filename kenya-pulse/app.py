@@ -925,6 +925,157 @@ def candidates_api():
    item["aliases"]=[a["alias"] for a in aliases];out.append(item)
  return jsonify(candidates=out)
 
+
+EVIDENCE_TYPES={"OFFICIAL_RECORD","CANDIDATE_STATEMENT","INDEPENDENT_REPORTING","DISPUTED_CLAIM","NOT_INDEPENDENTLY_VERIFIED"}
+def ensure_candidate_evidence_schema():
+ with conn() as c:
+  if c.pg:
+   c.execute("""CREATE TABLE IF NOT EXISTS candidate_evidence(
+    id BIGSERIAL PRIMARY KEY,
+    candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    claim TEXT NOT NULL,
+    evidence_type TEXT NOT NULL,
+    source_title TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    source_date DATE,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'PUBLISHED',
+    checked_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+   );""")
+  else:
+   c.execute("""CREATE TABLE IF NOT EXISTS candidate_evidence(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    claim TEXT NOT NULL,
+    evidence_type TEXT NOT NULL,
+    source_title TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    source_date TEXT,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'PUBLISHED',
+    checked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+   );""")
+  c.execute("CREATE INDEX IF NOT EXISTS candidate_evidence_lookup ON candidate_evidence(candidate_id,status,category);")
+
+def candidate_scope_sql(race,county="",constituency="",ward=""):
+ sql="SELECT id,name,party,status,source_url FROM candidates WHERE active=TRUE AND race=?";args=[race]
+ if race!="President":sql+=" AND county=?";args.append(county)
+ if race in {"Member of Parliament","MCA"}:sql+=" AND constituency=?";args.append(constituency)
+ if race=="MCA":sql+=" AND ward=?";args.append(ward)
+ return sql,args
+
+@app.get("/api/candidates/compare")
+def candidates_compare_api():
+ ensure_candidate_evidence_schema()
+ race=(request.args.get("race") or "").strip();county=(request.args.get("county") or "").strip()
+ constituency=(request.args.get("constituency") or "").strip();ward=(request.args.get("ward") or "").strip()
+ if race not in RACES:return jsonify(error="Invalid race"),400
+ if race!="President" and county not in COUNTIES:return jsonify(error="Choose a valid county"),400
+ if race in {"Member of Parliament","MCA"} and (not constituency or not geography_ok(county,constituency,ward if race=="MCA" else "")):
+  return jsonify(error="Choose a valid constituency"+(" and ward" if race=="MCA" else "")),400
+ sql,args=candidate_scope_sql(race,county,constituency,ward);sql+=" ORDER BY name"
+ with conn() as c:
+  rows=c.execute(sql,args).fetchall();out=[]
+  for row in rows:
+   item=dict(row)
+   ev=c.execute("""SELECT id,category,claim,evidence_type,source_title,source_url,source_date,notes,checked_at
+                   FROM candidate_evidence WHERE candidate_id=? AND status='PUBLISHED'
+                   ORDER BY category,COALESCE(source_date,checked_at) DESC,id DESC""",(item["id"],)).fetchall()
+   item["evidence"]=[dict(x) for x in ev]
+   item["evidence_count"]=len(item["evidence"])
+   item["evidence_note"]="Evidence count measures published sourced records only. It is not a candidate score or endorsement."
+   out.append(item)
+ return jsonify(race=race,county=county,constituency=constituency,ward=ward,candidates=out,
+  methodology="Compare documented facts and source records. Kenya Pulse does not rank, endorse or recommend candidates."),200,{"Cache-Control":"public, max-age=60"}
+
+@app.post("/api/admin/candidate-evidence")
+def candidate_evidence_admin():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_candidate_evidence_schema()
+ d=request.get_json(silent=True) or {}
+ try:candidate_id=int(d.get("candidate_id"))
+ except:return jsonify(error="candidate_id is required"),400
+ category=re.sub(r"\s+"," ",str(d.get("category") or "").strip())[:60]
+ claim=re.sub(r"\s+"," ",str(d.get("claim") or "").strip())[:700]
+ evidence_type=str(d.get("evidence_type") or "").strip().upper()
+ source_title=re.sub(r"\s+"," ",str(d.get("source_title") or "").strip())[:180]
+ source_url=str(d.get("source_url") or "").strip()[:800]
+ source_date=str(d.get("source_date") or "").strip()[:10] or None
+ notes=re.sub(r"\s+"," ",str(d.get("notes") or "").strip())[:500] or None
+ if not category or not claim or evidence_type not in EVIDENCE_TYPES or not source_title or not source_url.startswith(("https://","http://")):
+  return jsonify(error="category, claim, a valid evidence_type, source_title and source_url are required",allowed_evidence_types=sorted(EVIDENCE_TYPES)),400
+ with conn() as c:
+  exists=c.execute("SELECT id FROM candidates WHERE id=?",(candidate_id,)).fetchone()
+  if not exists:return jsonify(error="Candidate not found"),404
+  c.execute("""INSERT INTO candidate_evidence(candidate_id,category,claim,evidence_type,source_title,source_url,source_date,notes)
+               VALUES(?,?,?,?,?,?,?,?)""",(candidate_id,category,claim,evidence_type,source_title,source_url,source_date,notes))
+ return jsonify(saved=True,message="Evidence record published."),201
+
+@app.get("/candidate-explorer")
+def candidate_explorer():
+ counties=json.dumps(COUNTIES)
+ races=json.dumps(RACES)
+ return render_template_string("""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+ <title>Candidate Explorer — Kenya Pulse</title><link rel='stylesheet' href='/pulse95.css'>
+ <style>
+ *{box-sizing:border-box}body{margin:0;background:#06140e;color:#f5fff8;font-family:Inter,system-ui,sans-serif}.wrap{max-width:1180px;margin:auto;padding:24px}
+ .top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 0}.brand{font-weight:950;font-size:23px}.brand b,.gold{color:#ffd447}
+ a{color:#ffd447}.hero{padding:52px 0 24px}.hero h1{font-size:clamp(42px,7vw,76px);line-height:.96;letter-spacing:-3px;margin:8px 0 18px}.hero p{max-width:800px;color:#bcd2c4;font-size:18px;line-height:1.65}
+ .panel,.card{background:linear-gradient(145deg,#0d2318,#091a12);border:1px solid #21432f;border-radius:22px}.panel{padding:20px;margin:22px 0}.filters{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+ label{font-size:12px;color:#9ab5a4;font-weight:800;text-transform:uppercase;letter-spacing:.8px}select{width:100%;margin-top:7px;background:#07160f;color:#fff;border:1px solid #315c42;border-radius:12px;padding:13px}
+ .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:22px}.name{font-size:25px;font-weight:900}.party{color:#9ab5a4;margin:4px 0 16px}
+ .evidence{padding:14px 0;border-top:1px solid #1e3a29}.tag{display:inline-block;border:1px solid #41664d;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:900;letter-spacing:.6px;color:#d7eadf}
+ .claim{font-size:15px;line-height:1.55;margin:9px 0}.source{font-size:12px;color:#91ad9b}.empty{padding:22px;color:#abc4b4;border:1px dashed #315c42;border-radius:16px}
+ .notice{font-size:13px;color:#9cb4a5;line-height:1.55}.share{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.btn{background:#ffd447;color:#07150e;border:0;border-radius:12px;padding:11px 14px;font-weight:900;text-decoration:none}
+ @media(max-width:850px){.filters,.cards{grid-template-columns:1fr}.hero h1{letter-spacing:-2px}}
+ </style></head><body><div class='wrap'>
+ <div class='top'><div class='brand'>KENYA <b>PULSE</b></div><div><a href='/'>Participation</a> · <a href='/methodology'>Methodology</a></div></div>
+ <section class='hero'><div class='gold' style='font-weight:900;text-transform:uppercase;letter-spacing:1.3px;font-size:12px'>Vote with facts, not rumours</div>
+ <h1>Know the people asking for your vote.</h1><p>Choose your area and seat. Kenya Pulse shows sourced records side by side so you can decide what matters to you. No candidate ranking. No endorsement. Open the evidence and judge for yourself.</p></section>
+ <section class='panel'><div class='filters'>
+ <div><label>County<select id='county'></select></label></div><div><label>Seat<select id='race'></select></label></div>
+ <div><label>Constituency<select id='constituency'><option value=''>Not required</option></select></label></div><div><label>Ward<select id='ward'><option value=''>Not required</option></select></label></div>
+ </div><div class='share'><a class='btn' id='sharefb' target='_blank' rel='noopener'>Share on Facebook</a><a class='btn' id='sharewa' target='_blank' rel='noopener'>Share on WhatsApp</a></div>
+ <div class='notice'>Evidence labels: Official record · Candidate statement · Independent reporting · Disputed claim · Not independently verified. Evidence volume is never treated as a score.</div></section>
+ <main id='cards' class='cards'><div class='empty'>Choose a county and seat to compare candidates.</div></main>
+ </div><script>
+ const COUNTIES={{counties|safe}},RACES={{races|safe}},county=document.getElementById('county'),race=document.getElementById('race'),cons=document.getElementById('constituency'),ward=document.getElementById('ward'),cards=document.getElementById('cards');
+ county.innerHTML='<option value="">Choose county</option>'+COUNTIES.map(x=>'<option>'+x+'</option>').join('');
+ race.innerHTML=RACES.map(x=>'<option>'+x+'</option>').join('');
+ const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+ async function geog(){
+  cons.innerHTML='<option value="">Not required</option>';ward.innerHTML='<option value="">Not required</option>';
+  if(!county.value)return;
+  const d=await fetch('/api/geography?county='+encodeURIComponent(county.value)).then(r=>r.json());
+  cons.innerHTML='<option value="">Choose constituency</option>'+(d.constituencies||[]).map(x=>'<option>'+esc(x)+'</option>').join('');
+ }
+ async function wards(){
+  ward.innerHTML='<option value="">Choose ward</option>';if(!county.value||!cons.value)return;
+  const d=await fetch('/api/geography?county='+encodeURIComponent(county.value)+'&constituency='+encodeURIComponent(cons.value)).then(r=>r.json());
+  ward.innerHTML='<option value="">Choose ward</option>'+(d.wards||[]).map(x=>'<option>'+esc(x)+'</option>').join('');
+ }
+ function scopeOK(){if(race.value==='President')return true;if(!county.value)return false;if(['Member of Parliament','MCA'].includes(race.value)&&!cons.value)return false;if(race.value==='MCA'&&!ward.value)return false;return true}
+ async function load(){
+  const needCons=['Member of Parliament','MCA'].includes(race.value),needWard=race.value==='MCA';
+  cons.disabled=!needCons;ward.disabled=!needWard;if(!scopeOK()){cards.innerHTML='<div class="empty">Choose the required location to load this race.</div>';return}
+  const q=new URLSearchParams({race:race.value,county:county.value,constituency:cons.value,ward:ward.value});
+  const d=await fetch('/api/candidates/compare?'+q).then(r=>r.json());
+  if(!d.candidates?.length){cards.innerHTML='<div class="empty">No verified candidate registry entries are published for this exact race yet. Kenya Pulse will not invent names.</div>';return}
+  cards.innerHTML=d.candidates.map(c=>'<article class="card"><div class="name">'+esc(c.name)+'</div><div class="party">'+esc(c.party||'Party not verified')+' · '+esc(c.status||'Status not set')+'</div>'+
+   (c.evidence?.length?c.evidence.map(e=>'<div class="evidence"><span class="tag">'+esc(e.evidence_type.replaceAll('_',' '))+'</span><div class="claim">'+esc(e.claim)+'</div><div class="source">'+esc(e.category)+' · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">'+esc(e.source_title)+'</a>'+(e.source_date?' · '+esc(e.source_date):'')+'</div></div>').join(''):'<div class="empty">No published evidence records yet. Absence of evidence here is not a judgment about this candidate.</div>')+'</article>').join('');
+  const url=location.origin+'/candidate-explorer?'+q.toString()+'&utm_source=social';document.getElementById('sharefb').href='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url);document.getElementById('sharewa').href='https://wa.me/?text='+encodeURIComponent('Compare the candidates using sourced records on Kenya Pulse: '+url);
+ }
+ county.onchange=async()=>{await geog();await load()};race.onchange=load;cons.onchange=async()=>{await wards();await load()};ward.onchange=load;
+ const p=new URLSearchParams(location.search);if(p.get('county')&&COUNTIES.includes(p.get('county')))county.value=p.get('county');if(p.get('race')&&RACES.includes(p.get('race')))race.value=p.get('race');
+ (async()=>{if(county.value){await geog();if(p.get('constituency')){cons.value=p.get('constituency');await wards()}if(p.get('ward'))ward.value=p.get('ward')}await load()})();
+ </script></body></html>""",counties=counties,races=races)
+
+
 @app.post("/api/candidates/resolve")
 def candidate_resolve():
  d=request.get_json(silent=True) or {};typed=re.sub(r"\s+"," ",str(d.get("name") or "").strip())[:80];race=str(d.get("race") or "").strip();county=str(d.get("county") or "").strip();constituency=str(d.get("constituency") or "").strip();ward=str(d.get("ward") or "").strip()
