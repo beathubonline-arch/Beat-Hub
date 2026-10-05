@@ -1095,6 +1095,21 @@ def kenya_pulse_global_ui(response):
  try:
   if "text/html" in response.headers.get("Content-Type","") and not response.direct_passthrough:
    body=response.get_data(as_text=True)
+   support_html='''<div id="kpSupportLine" role="complementary" aria-label="Kenya Pulse support">
+    <span class="kpSupportText"><b>Need help?</b> Kenya Pulse support</span>
+    <a class="kpSupportCall" href="tel:+254708463368">Call +254 708 463 368</a>
+    <a class="kpSupportWa" href="https://wa.me/254708463368" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+   </div>
+   <style id="kpSupportStyle">
+    #kpSupportLine{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:9997;display:flex;align-items:center;gap:10px;max-width:calc(100% - 28px);padding:9px 10px 9px 14px;border:1px solid rgba(255,255,255,.28);border-radius:18px;background:linear-gradient(135deg,rgba(8,43,27,.94),rgba(20,72,44,.92));box-shadow:0 16px 46px rgba(1,20,11,.34),inset 0 1px rgba(255,255,255,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);color:#eaffef;font:700 12px/1.2 Inter,ui-sans-serif,system-ui}
+    #kpSupportLine a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:900;border-radius:12px;white-space:nowrap;padding:9px 11px}
+    #kpSupportLine .kpSupportCall{color:#082918;background:#78f49b}
+    #kpSupportLine .kpSupportWa{color:#fff;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18)}
+    #kpSupportLine .kpSupportText{white-space:nowrap}
+    @media(max-width:640px){#kpSupportLine{left:10px;right:10px;bottom:10px;transform:none;max-width:none;display:grid;grid-template-columns:1fr 1fr;padding:10px}.kpSupportText{grid-column:1/-1;text-align:center}#kpSupportLine a{padding:10px 8px}}
+   </style>'''
+   if "id=\"kpSupportLine\"" not in body and "</body>" in body:
+    body=body.replace("</body>",support_html+"</body>")
    scripts=""
    if "/pulse95.js" not in body:scripts+='<script src="/pulse95.js"></script>'
    if "/pulse-global.js" not in body:scripts+='<script src="/pulse-global.js"></script>'
@@ -1103,8 +1118,8 @@ def kenya_pulse_global_ui(response):
     if "</head>" in body:body=body.replace("</head>",fav+"</head>")
    if "</body>" in body and scripts:
     body=body.replace("</body>",scripts+"</body>")
-    response.set_data(body)
-    response.headers["Content-Length"]=str(len(body.encode("utf-8")))
+   response.set_data(body)
+   response.headers["Content-Length"]=str(len(body.encode("utf-8")))
    if not _valid_vote_cookie(request.cookies.get(VOTE_COOKIE,"")):
     response.set_cookie(VOTE_COOKIE,_make_vote_cookie(),max_age=31536000,secure=True,httponly=True,samesite="Lax",path="/")
  except Exception:pass
