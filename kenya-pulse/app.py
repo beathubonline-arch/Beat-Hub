@@ -605,7 +605,12 @@ COUNTY_MARKS={"Mombasa":"🌊","Kwale":"🌴","Kilifi":"🌴","Tana River":"🏞
 def paystack_request(path,payload=None):
  if not PAYSTACK_SECRET_KEY: raise RuntimeError("Paystack is not configured")
  data=json.dumps(payload).encode() if payload is not None else None
- req=urllib.request.Request("https://api.paystack.co"+path,data=data,headers={"Authorization":"Bearer "+PAYSTACK_SECRET_KEY,"Content-Type":"application/json"},method="POST" if data is not None else "GET")
+ req=urllib.request.Request("https://api.paystack.co"+path,data=data,headers={
+  "Authorization":"Bearer "+PAYSTACK_SECRET_KEY,
+  "Content-Type":"application/json",
+  "Accept":"application/json",
+  "User-Agent":"KenyaPulseAI/1.0 (+https://kenyapulse.online)"
+ },method="POST" if data is not None else "GET")
  try:
   with urllib.request.urlopen(req,timeout=20) as r:
    out=json.loads(r.read().decode())
