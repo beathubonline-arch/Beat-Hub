@@ -134,6 +134,29 @@ def init():
 try:init()
 except Exception as e: print("db init",e)
 
+def seed_beathub_house_ad():
+ try:
+  with conn() as c:
+   row=c.execute("""SELECT id FROM ad_orders
+                    WHERE LOWER(business)=LOWER(?) AND url=? AND package='House Ad'
+                    LIMIT 1""",("BeatHub","https://mybeathub.com")).fetchone()
+   if row:
+    c.execute("""UPDATE ad_orders
+                 SET headline=?,scope='National',county=NULL,budget=0,status='ACTIVE',
+                     starts_at=COALESCE(starts_at,CURRENT_TIMESTAMP),ends_at=NULL
+                 WHERE id=?""",
+              ("Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com",row["id"]))
+   else:
+    c.execute("""INSERT INTO ad_orders(
+                  business,email,phone,scope,county,package,budget,headline,url,status,starts_at,ends_at,impressions,clicks
+                 ) VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL,0,0)""",
+              ("BeatHub","kenyapulse2026@gmail.com",None,"National",None,"House Ad",0,
+               "Find your next beat on BeatHub — buy, sell and discover music at mybeathub.com",
+               "https://mybeathub.com"))
+ except Exception as e:
+  app.logger.exception("BeatHub house ad seed failed")
+seed_beathub_house_ad()
+
 STARTER_PRESIDENTIAL_PROFILES=[
  {"name":"William Ruto","party":"United Democratic Alliance (UDA)","status":"ASPIRANT","source_url":"https://www.standardmedia.co.ke/politics/article/2001551641/ruto-opposition-will-see-dust-in-next-year-s-polls","photo_url":"https://www.stjohnchrisostom.com/build/assets/tile-president-pgxkfrxs.jpg","bio":"Incumbent President of Kenya since 2022. Public reporting in 2026 describes his campaign for a second term in the 2027 presidential election."},
  {"name":"Rigathi Gachagua","party":"Democracy for Citizens Party (DCP)","status":"ASPIRANT","source_url":"https://citizen.digital/article/i-will-vie-for-presidency-in-2027-gachagua-says-as-he-attacks-ruto-n381911","photo_url":"https://cdn.radioafrica.digital/image/2024/10/Rigathi%20Gachagua%20%281%29.jpg","bio":"Former Deputy President and DCP leader. He has publicly stated his intention to seek the presidency in 2027, subject to opposition coalition arrangements."},
