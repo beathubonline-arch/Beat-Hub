@@ -937,6 +937,13 @@ def kenya_pulse_global_ui(response):
    if not _valid_vote_cookie(request.cookies.get(VOTE_COOKIE,"")):
     response.set_cookie(VOTE_COOKIE,_make_vote_cookie(),max_age=31536000,secure=True,httponly=True,samesite="Lax",path="/")
  except Exception:pass
+ origin=request.headers.get("Origin","")
+ if origin in {"https://kenya-pulse-static.onrender.com","https://kenyapulse.online","https://www.kenyapulse.online"}:
+  response.headers["Access-Control-Allow-Origin"]=origin
+  response.headers["Vary"]="Origin"
+  response.headers["Access-Control-Allow-Methods"]="GET,POST,OPTIONS"
+  response.headers["Access-Control-Allow-Headers"]="Content-Type,Authorization"
+  response.headers["Access-Control-Allow-Credentials"]="true"
  return response
 
 HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kenya Pulse AI — Live Participation</title><link rel="stylesheet" href="/pulse95.css"><style>
