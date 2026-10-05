@@ -190,3 +190,18 @@ def png_fixture():
  import io
  from PIL import Image
  out=io.BytesIO();Image.new('RGB',(2,2)).save(out,format='PNG');return out.getvalue()
+
+
+def test_custom_select_javascript_and_readiness(pulse):
+ import subprocess
+ c=pulse.app.test_client()
+ js=c.get('/pulse95.js')
+ assert js.status_code==200
+ subprocess.run(['node','--check'],input=js.text,text=True,check=True,capture_output=True)
+ ready=c.get('/api/readiness')
+ assert ready.status_code==200
+ payload=ready.json
+ assert payload['database']=='ok'
+ assert payload['geography']=={'counties':47,'constituencies':290,'wards':1450}
+ assert payload['paystack']['configured'] is True
+ assert payload['paystack']['mode']=='test'
