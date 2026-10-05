@@ -606,7 +606,20 @@ def paystack_request(path,payload=None):
  if not PAYSTACK_SECRET_KEY: raise RuntimeError("Paystack is not configured")
  data=json.dumps(payload).encode() if payload is not None else None
  req=urllib.request.Request("https://api.paystack.co"+path,data=data,headers={"Authorization":"Bearer "+PAYSTACK_SECRET_KEY,"Content-Type":"application/json"},method="POST" if data is not None else "GET")
- with urllib.request.urlopen(req,timeout=20) as r:return json.loads(r.read().decode())
+ try:
+  with urllib.request.urlopen(req,timeout=20) as r:
+   out=json.loads(r.read().decode())
+   if not out.get("status"): raise RuntimeError("Paystack rejected request: "+str(out.get("message") or "unknown error")[:300])
+   return out
+ except urllib.error.HTTPError as e:
+  try:
+   raw=e.read().decode("utf-8","ignore")[:1500]
+   msg=(json.loads(raw).get("message") if raw.strip().startswith("{") else raw) or ("HTTP "+str(e.code))
+  except Exception:
+   msg="HTTP "+str(getattr(e,"code","error"))
+  raise RuntimeError("Paystack HTTP "+str(getattr(e,"code","error"))+": "+str(msg)[:500])
+ except urllib.error.URLError as e:
+  raise RuntimeError("Paystack network error: "+str(getattr(e,"reason",e))[:300])
 
 
 PRESIDENT_PROFILE_FEE_KES=5000
@@ -845,7 +858,8 @@ def support_initialize():
   out=paystack_request("/transaction/initialize",payload); d=out.get("data") or {}
   if not str(d.get("authorization_url", "")).startswith("https://checkout.paystack.com/"): raise RuntimeError("invalid checkout url")
   return jsonify(authorization_url=d.get("authorization_url"),reference=ref)
- except Exception:
+ except Exception as e:
+  app.logger.error("KP_PAYSTACK_INIT_FAILED ref=%s county=%s amount=%s mode=%s error=%s",ref,county,amount,paystack_mode(),str(e)[:700])
   with conn() as db: db.execute("UPDATE support_payments SET status='INIT_FAILED',updated_at=CURRENT_TIMESTAMP WHERE reference=?",(ref,))
   return jsonify(error="Could not start payment. Please try again."),502
 
