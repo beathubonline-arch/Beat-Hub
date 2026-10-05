@@ -601,13 +601,76 @@ PULSE_95_JS=r'''(()=>{const STYLE=\`.kpSelectWrap{position:relative;width:100%;f
 def pulse95_js():
  return PULSE_95_JS,200,{"Content-Type":"application/javascript; charset=utf-8","Cache-Control":"public, max-age=300"}
 
+GLOBAL_SHELL_JS=r'''(()=>{
+ const path=location.pathname;
+ if(path.startsWith('/api/')||path.startsWith('/admin/'))return;
+ const css=document.createElement('style');
+ css.textContent=`
+ .kpGlobalHome{position:fixed;left:16px;bottom:18px;z-index:9998;display:inline-flex;align-items:center;gap:8px;padding:11px 15px;border-radius:999px;background:linear-gradient(135deg,rgba(24,91,59,.94),rgba(80,147,111,.86));border:1px solid rgba(255,255,255,.34);box-shadow:inset 0 1px rgba(255,255,255,.28),0 14px 36px rgba(0,0,0,.30);backdrop-filter:blur(18px);color:white!important;text-decoration:none!important;font:850 12px Inter,system-ui;letter-spacing:.02em}
+ .kpGlobalHome:hover{transform:translateY(-1px);filter:brightness(1.06)}
+ .kpGlobalAdRail{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9997;width:min(720px,calc(100vw - 150px));min-height:46px;display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:18px;background:linear-gradient(120deg,rgba(9,50,31,.94),rgba(38,100,67,.90),rgba(82,91,35,.78));border:1px solid rgba(255,255,255,.25);box-shadow:inset 0 1px rgba(255,255,255,.24),0 16px 38px rgba(0,0,0,.34);backdrop-filter:blur(22px);overflow:hidden}
+ .kpGlobalAdRail .kpAdTag{flex:0 0 auto;padding:6px 8px;border-radius:999px;background:#69ef91;color:#12351f;font:900 9px Inter,system-ui;letter-spacing:.11em}
+ .kpGlobalAdRail a{min-width:0;display:flex;align-items:center;gap:8px;color:white;text-decoration:none;font:700 12px Inter,system-ui;overflow:hidden}
+ .kpGlobalAdRail b{color:#a8f7be;white-space:nowrap}.kpGlobalAdRail span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#edf8f1}
+ .kpGlobalAdRail .kpAdDot{width:7px;height:7px;border-radius:50%;background:#ffd95a;box-shadow:0 0 0 4px rgba(255,217,90,.12);flex:0 0 auto}
+ @media(max-width:640px){.kpGlobalHome{left:10px;bottom:10px;padding:10px 12px}.kpGlobalAdRail{right:10px;left:auto;transform:none;bottom:10px;width:calc(100vw - 118px);min-height:42px;padding:7px 10px}.kpGlobalAdRail .kpAdTag{display:none}}
+ `;
+ document.head.appendChild(css);
+
+ const hasHome=[...document.querySelectorAll('a')].some(a=>{
+   const h=(a.getAttribute('href')||'').trim();
+   const t=(a.textContent||'').trim().toLowerCase();
+   return (h==='/'||h==='/growth')&&(t.includes('home')||t.includes('kenya pulse'));
+ });
+ if(!hasHome){
+   const home=document.createElement('a');
+   home.href='/growth';home.className='kpGlobalHome';home.innerHTML='⌂ <span>Home</span>';
+   home.setAttribute('aria-label','Back to Kenya Pulse AI homepage');
+   document.body.appendChild(home);
+ }
+
+ const hasAd=document.querySelector('#liveAd,.adTicker,.adwrap,.kpGlobalAdRail,[aria-label*="Sponsored"],[aria-label*="sponsored"]');
+ if(hasAd)return;
+ const rail=document.createElement('div');
+ rail.className='kpGlobalAdRail';rail.setAttribute('aria-label','Sponsored commercial message');
+ rail.innerHTML='<span class="kpAdTag">SPONSORED</span><span style="font:700 12px Inter,system-ui;color:#dcece2">Loading message…</span>';
+ document.body.appendChild(rail);
+
+ async function refreshAd(){
+   try{
+     let county='';
+     const q=new URLSearchParams(location.search).get('county');
+     if(q)county=q;
+     const countyEl=document.querySelector('#county,[name="county"]');
+     if(!county&&countyEl&&countyEl.value)county=countyEl.value;
+     const r=await fetch('/api/ad?county='+encodeURIComponent(county),{cache:'no-store'});
+     const j=await r.json();
+     if(!j.ad){rail.style.display='none';return}
+     const a=j.ad;
+     rail.style.display='flex';
+     rail.innerHTML='<span class="kpAdTag">SPONSORED</span><a href="'+a.click_url+'" rel="sponsored noopener"><i class="kpAdDot"></i><b>'+esc(a.business)+'</b><span>'+esc(a.headline||'Explore this sponsor')+' →</span></a>';
+   }catch(e){rail.style.display='none'}
+ }
+ function esc(v){return String(v||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+ refreshAd();
+ setInterval(()=>{if(!document.hidden)refreshAd()},30000);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAd()});
+})();'''
+
+@app.get("/pulse-global.js")
+def pulse_global_js():
+ return GLOBAL_SHELL_JS,200,{"Content-Type":"application/javascript; charset=utf-8","Cache-Control":"public, max-age=300"}
+
 @app.after_request
 def kenya_pulse_global_ui(response):
  try:
   if "text/html" in response.headers.get("Content-Type","") and not response.direct_passthrough:
    body=response.get_data(as_text=True)
-   if "</body>" in body and "/pulse95.js" not in body:
-    body=body.replace("</body>",'<script src="/pulse95.js"></script></body>')
+   scripts=""
+   if "/pulse95.js" not in body:scripts+='<script src="/pulse95.js"></script>'
+   if "/pulse-global.js" not in body:scripts+='<script src="/pulse-global.js"></script>'
+   if "</body>" in body and scripts:
+    body=body.replace("</body>",scripts+"</body>")
     response.set_data(body)
     response.headers["Content-Length"]=str(len(body.encode("utf-8")))
  except Exception:pass
