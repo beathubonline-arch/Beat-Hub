@@ -545,6 +545,44 @@ try:
 except Exception:
  pass
 
+def _production_safe_smoke_pass(pass_no):
+ checks=[]
+ try:
+  with app.test_client() as c:
+   targets=[
+    ("/healthz",200),
+    ("/api/readiness",200),
+    ("/api/geography?county=Kericho",200),
+    ("/api/candidates?race=President&county=Kericho",200),
+    ("/api/candidates?race=Governor&county=Kericho",200),
+    ("/api/candidates?race=Senator&county=Kericho",200),
+    ("/api/candidates?race=Woman%20Representative&county=Kericho",200),
+    ("/api/candidates?race=Member%20of%20Parliament&county=Kericho&constituency=Ainamoi",200),
+    ("/api/candidates?race=MCA&county=Kericho&constituency=Ainamoi&ward=Kapsoit",200),
+    ("/participate",200),
+    ("/candidate-explorer",200),
+    ("/claim-profile",200),
+    ("/ground",200),
+    ("/privacy",200),
+    ("/terms",200),
+    ("/methodology",200),
+    ("/pulse95.js",200),
+    ("/favicon.svg",200),
+   ]
+   for url,expected in targets:
+    r=c.get(url)
+    checks.append({"path":url,"status":r.status_code,"ok":r.status_code==expected})
+  ok=all(x["ok"] for x in checks)
+  app.logger.warning("KP_SMOKE pass=%s ok=%s checks=%s",pass_no,ok,json.dumps(checks,separators=(",",":")))
+ except Exception as e:
+  app.logger.exception("KP_SMOKE pass=%s crashed: %s",pass_no,e)
+
+try:
+ threading.Timer(4.0,_production_safe_smoke_pass,args=(1,)).start()
+ threading.Timer(16.0,_production_safe_smoke_pass,args=(2,)).start()
+except Exception:
+ pass
+
 @app.get("/api/officeholder-sync-status")
 def officeholder_sync_status():
  with conn() as c:
