@@ -228,13 +228,15 @@ def paystack_request(path,payload=None):
 
 
 PRESIDENT_PROFILE_FEE_KES=5000
-STANDARD_PROFILE_FEE_KES=3000
-MCA_PROFILE_FEE_KES=1000
+COUNTY_PROFILE_FEE_KES=2000
+MP_PROFILE_FEE_KES=1500
+MCA_PROFILE_FEE_KES=500
 PRESIDENT_PHOTO_PROFILE_LIMIT=20
 def profile_fee_for_race(race):
  if race=="President":return PRESIDENT_PROFILE_FEE_KES
+ if race=="Member of Parliament":return MP_PROFILE_FEE_KES
  if race=="MCA":return MCA_PROFILE_FEE_KES
- return STANDARD_PROFILE_FEE_KES
+ return COUNTY_PROFILE_FEE_KES
 def ensure_profile_claim_schema():
  with conn() as c:
   if c.pg:
@@ -351,12 +353,12 @@ def claim_profile():
   except Exception:return redirect("/claim-profile/status?reference="+urllib.parse.quote(ref))
  page="""<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>Claim your profile · Kenya Pulse AI</title><link rel=stylesheet href=/pulse95.css><style>
  *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 8%,#1d7b4a44,transparent 26%),radial-gradient(circle at 88% 4%,#d4a90022,transparent 22%),#06150e;color:#f5fff8;font-family:Inter,system-ui}.top{max-width:1080px;margin:18px auto 0;padding:0 18px}.nav{display:flex;align-items:center;gap:18px;padding:16px 20px;border-radius:22px}.nav .brand{font-weight:950;margin-right:auto}.nav .brand b{color:#ffd54a}.nav a{color:#e9f6ed;text-decoration:none;font-size:13px}.w{max-width:1080px;margin:auto;padding:24px 18px 70px}.hero{padding:30px;border-radius:28px;margin-bottom:16px}.hero h1{font-size:clamp(38px,6vw,64px);line-height:.98;margin:8px 0 14px;letter-spacing:-2px}.hero p{max-width:760px}.card{padding:28px;border-radius:28px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}input,select,textarea,button{width:100%;padding:14px;border-radius:16px;border:1px solid #ffffff22;background:#ffffff0b;color:white;font:inherit}select{min-height:52px}textarea{min-height:120px}button{background:#69ef91;color:#0a2a18;font-weight:900;border:0;cursor:pointer}.muted{color:#a9c6b4}.fee{font-size:34px;font-weight:950;color:#ffd54a}.notice{padding:14px 16px;border-radius:16px;background:#ffffff0b;border:1px solid #ffffff1f;margin:14px 0}.ey{font-size:11px;font-weight:850;letter-spacing:.14em;color:#baf5ca;text-transform:uppercase}@media(max-width:650px){.grid{grid-template-columns:1fr}.nav{flex-wrap:wrap}}
- </style></head><body><div class=top><nav class="glass nav"><div class=brand>KENYA <b>PULSE</b></div><a href="/growth">Home</a><a href="/participate">Take part</a><a href="/candidate-explorer">Candidate Explorer</a></nav></div><div class=w><section class="glass hero"><div class=ey>CANDIDATE PROFILE STUDIO</div><h1>Claim or create your public candidate profile.</h1><p class=muted>Submit your photo and public details for review. This profile service is separate from voting results and does not buy votes, ranking, or preferential placement.</p></section><div class="glass card"><div class=notice><b>Profile review fees</b><div class=muted>President KSh 5,000 · Governor/Senator/Woman Rep/MP KSh 3,000 · MCA KSh 1,000.</div></div><p class=muted>Payment covers profile activation and review only. Candidate eligibility and ballot inclusion remain subject to verification and the platform's neutral listing rules.</p><div class=fee id=profileFee>President: KSh 5,000</div><p class=muted style="margin-top:6px">Governor, Senator, Woman Rep & MP: KSh 3,000 · MCA: KSh 1,000</p>
+ </style></head><body><div class=top><nav class="glass nav"><div class=brand>KENYA <b>PULSE</b></div><a href="/growth">Home</a><a href="/participate">Take part</a><a href="/candidate-explorer">Candidate Explorer</a></nav></div><div class=w><section class="glass hero"><div class=ey>CANDIDATE PROFILE STUDIO</div><h1>Claim or create your public candidate profile.</h1><p class=muted>Submit your photo and public details for review. This profile service is separate from voting results and does not buy votes, ranking, or preferential placement.</p></section><div class="glass card"><div class=notice><b>Profile review fees</b><div class=muted>President KSh 5,000 · Governor/Senator/Woman Rep KSh 2,000 · MP KSh 1,500 · MCA KSh 500.</div></div><p class=muted>Payment covers profile activation and review only. Candidate eligibility and ballot inclusion remain subject to verification and the platform's neutral listing rules.</p><div class=fee id=profileFee>President: KSh 5,000</div><p class=muted style="margin-top:6px">Governor, Senator & Woman Rep: KSh 2,000 · MP: KSh 1,500 · MCA: KSh 500</p>
  <form method=post enctype=multipart/form-data><div class=grid><input name=name required placeholder="Full name"><input name=email type=email required placeholder="Email for receipt"></div><div class=grid><select name=race id=raceSelect required onchange="updateProfileFee()">{% for r in races %}<option>{{r}}</option>{% endfor %}</select><select name=county><option value="">County (not needed for President)</option>{% for c in counties %}<option>{{c}}</option>{% endfor %}</select></div><div class=grid><input name=constituency placeholder="Constituency (MP/MCA)"><input name=ward placeholder="Ward (MCA)"></div><div class=grid><input name=party placeholder="Party / Independent"><input name=public_contact placeholder="Public contact / campaign phone"></div><input name=campaign_url placeholder="Campaign website or social profile" style="margin-top:10px"><textarea name=bio placeholder="Short public bio, priorities and experience" style="margin-top:10px"></textarea><label style="display:block;margin-top:12px">Profile photo (JPG, PNG or WEBP, max 2 MB)<input name=photo type=file accept="image/jpeg,image/png,image/webp" required></label><button style="margin-top:14px">Continue to payment →</button></form>
  <p class=muted style="margin-top:14px;font-size:12px">Profiles are reviewed before publication. Kenya Pulse AI may independently add sourced public-record information alongside candidate-submitted information.</p></div></div><script>
 function updateProfileFee(){
  const r=document.getElementById('raceSelect').value;
- const fee=r==='President'?5000:(r==='MCA'?1000:3000);
+ const fee=r==='President'?5000:(r==='Member of Parliament'?1500:(r==='MCA'?500:2000));
  document.getElementById('profileFee').textContent=r+': KSh '+fee.toLocaleString();
 }
 document.addEventListener('DOMContentLoaded',updateProfileFee);
