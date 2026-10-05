@@ -540,10 +540,11 @@ def _log_production_readiness():
  except Exception as e:
   app.logger.exception("KP_READINESS database=error: %s",e)
 
-try:
- threading.Timer(2.0,_log_production_readiness).start()
-except Exception:
- pass
+if os.environ.get("PULSE_TESTING")!="1":
+ try:
+  threading.Timer(2.0,_log_production_readiness).start()
+ except Exception:
+  pass
 
 def _production_safe_smoke_pass(pass_no):
  checks=[]
@@ -577,11 +578,12 @@ def _production_safe_smoke_pass(pass_no):
  except Exception as e:
   app.logger.exception("KP_SMOKE pass=%s crashed: %s",pass_no,e)
 
-try:
- threading.Timer(4.0,_production_safe_smoke_pass,args=(1,)).start()
- threading.Timer(16.0,_production_safe_smoke_pass,args=(2,)).start()
-except Exception:
- pass
+if os.environ.get("PULSE_TESTING")!="1":
+ try:
+  threading.Timer(4.0,_production_safe_smoke_pass,args=(1,)).start()
+  threading.Timer(16.0,_production_safe_smoke_pass,args=(2,)).start()
+ except Exception:
+  pass
 
 @app.get("/api/officeholder-sync-status")
 def officeholder_sync_status():
