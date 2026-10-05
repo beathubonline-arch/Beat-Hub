@@ -1206,6 +1206,13 @@ const initialCounty={{ initial_county|tojson }};if(initialCounty){C.value=initia
 function clearAreas(){let a=document.getElementById('constituency'),w=document.getElementById('ward');if(a)a.value='';if(w)w.value=''}
 function slugCounty(v){return v.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}function syncUrl(){if(C.value){history.replaceState({},'', '/county/'+slugCounty(C.value)+(location.search||''));document.getElementById('sharebox').style.display='block'}}
 function pulseUrl(){let u=new URL(location.href);u.searchParams.set('src','share');return u.toString()}async function sharePulse(){let text='Add Your Voice in the '+C.value+' county pulse and see aggregate participant results live. Open online pulse — not a scientific election forecast.';if(navigator.share){await navigator.share({title:'Kenya Pulse AI • '+C.value,text,url:pulseUrl()})}else{await navigator.clipboard.writeText(text+' '+pulseUrl());document.getElementById('sharemsg').textContent='Share text copied.'}}async function copyPulse(){await navigator.clipboard.writeText(pulseUrl());document.getElementById('sharemsg').textContent='County link copied.'}
+function applySelectedCandidateTick(candidateId,candidateName){
+ document.querySelectorAll('.candidatePhoto').forEach(card=>{
+  const sameId=candidateId!=null&&String(card.dataset.candidateId||'')===String(candidateId);
+  const sameName=candidateName&&String(card.dataset.candidateName||'').toLowerCase()===String(candidateName).toLowerCase();
+  const on=sameId||sameName;card.classList.toggle('selected',!!on);card.setAttribute('aria-pressed',on?'true':'false');
+ });
+}
 async function loadCandidates(){
  updateClaimLink();
  const grid=document.getElementById('candidateGrid'),fallback=document.getElementById('ballotFallback');
@@ -1219,7 +1226,7 @@ async function loadCandidates(){
   if(!items.length){grid.innerHTML='<div class="muted">The verified candidate registry for this seat is still being updated. Enter the person’s full name or known alias below — your choice will still be recorded.</div>';fallback.style.display='block';return}
   items.forEach(x=>{
    let pct=pctById.has(String(x.id))?pctById.get(String(x.id)):(pctByName.get(String(x.name||'').trim().toLowerCase())||0);
-   let b=document.createElement('button');b.type='button';b.className='candidatePhoto';b.title='Tap to select this person · '+pct+'% of current Kenya Pulse responses';b.setAttribute('aria-label','Select '+x.name+', currently '+pct+' percent of Kenya Pulse responses');
+   let b=document.createElement('button');b.type='button';b.className='candidatePhoto';b.dataset.candidateId=x.id==null?'':String(x.id);b.dataset.candidateName=x.name||'';b.setAttribute('aria-pressed','false');b.title='Tap to select this person · '+pct+'% of current Kenya Pulse responses';b.setAttribute('aria-label','Select '+x.name+', currently '+pct+' percent of Kenya Pulse responses');
    let initials=String(x.name||'?').trim().split(/\s+/).slice(0,2).map(v=>v[0]||'').join('').toUpperCase();b.innerHTML=(x.photo_url?'<img src="'+escAttr(x.photo_url)+'" alt="'+escAttr(x.name)+'" loading="lazy">':'<div class="missing namePlaceholder"><span class=initials>'+esc(initials)+'</span><b>'+esc(x.name)+'</b><small>Photo pending verification</small></div>')+'<span class=selectedTick aria-hidden=true>✓</span><span class="candidatePct '+(pct?'':'zero')+'">'+pct+'%<small> pulse</small></span><span class="candidateMeta"><b>'+esc(x.name)+'</b><small>'+esc(x.party||x.status||'Public profile')+'</small></span>';
    b.onclick=()=>voteCandidate(x,b);grid.appendChild(b)
   });
@@ -1244,7 +1251,7 @@ async function onRaceChange(){
 }
 async function voteCandidate(person,button){
  if(!C.value){document.getElementById('msg').textContent='Choose your county first.';return}
- document.querySelectorAll('.candidatePhoto').forEach(x=>x.classList.remove('selected'));button.classList.add('selected');
+ applySelectedCandidateTick(person.id,person.name);
  await submitPhotoPreference(person.id,person.name);
 }
 async function submitPhotoPreference(candidateId,candidateName){
@@ -1255,7 +1262,7 @@ async function submitPhotoPreference(candidateId,candidateName){
  let savedRace=R.value,x=await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({county:C.value,race:R.value,candidate:candidateName,candidate_id:candidateId,issue,constituency:cv,ward:wv})}),j=await x.json();
  msg.textContent=j.message||j.error;
  if(x.status===409){await restoreParticipation();await load();return}
- if(x.ok&&j.recorded===true){await loadResultsFor(savedRace);await restoreParticipation();await load()}
+ if(x.ok&&j.recorded===true){applySelectedCandidateTick(candidateId,candidateName);await loadResultsFor(savedRace);await restoreParticipation();await load();setTimeout(()=>applySelectedCandidateTick(candidateId,candidateName),0)}
 }
 async function voteManual(){
  let name=(document.getElementById('candidate').value||''),msg=document.getElementById('msg'),cv=document.getElementById('constituency').value.trim(),wv=document.getElementById('ward').value.trim();
