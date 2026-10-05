@@ -436,9 +436,13 @@ def seed_current_governor_baseline():
 seed_current_governor_baseline()
 
 def _start_officeholder_sync():
- try:threading.Thread(target=sync_current_officeholders,name="kp-officeholder-sync",daemon=True).start()
- except Exception:app.logger.exception("could not start officeholder sync")
-_start_officeholder_sync()
+ # Do not perform external candidate-directory/PDF work during web-service boot.
+ # Render free instances may cold-start, so startup must stay lightweight.
+ return None
+
+@app.get("/healthz")
+def healthz():
+ return jsonify(ok=True,service="kenya-pulse-ai"),200,{"Cache-Control":"no-store"}
 
 @app.get("/api/officeholder-sync-status")
 def officeholder_sync_status():
