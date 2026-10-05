@@ -1,4 +1,4 @@
-import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, xml.etree.ElementTree as ET, email.utils, html as html_lib
+import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, datetime as dt, xml.etree.ElementTree as ET, email.utils, html as html_lib
 try:
  import psycopg2
  import psycopg2.extras
@@ -67,6 +67,21 @@ def init():
    c.execute("ALTER TABLE pulse_visits ADD COLUMN IF NOT EXISTS path TEXT;");c.execute("ALTER TABLE pulse_visits ADD COLUMN IF NOT EXISTS session_id TEXT;")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
    c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id BIGSERIAL PRIMARY KEY,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',starts_at TIMESTAMPTZ,ends_at TIMESTAMPTZ,impressions INTEGER DEFAULT 0,clicks INTEGER DEFAULT 0,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("ALTER TABLE ad_orders ADD COLUMN IF NOT EXISTS impression_goal INTEGER DEFAULT 0;")
+   c.execute("ALTER TABLE ad_orders ADD COLUMN IF NOT EXISTS daily_impression_cap INTEGER DEFAULT 0;")
+   c.execute("ALTER TABLE ad_orders ADD COLUMN IF NOT EXISTS frequency_cap INTEGER DEFAULT 3;")
+   c.execute("ALTER TABLE ad_orders ADD COLUMN IF NOT EXISTS priority_weight REAL DEFAULT 0;")
+   c.execute("ALTER TABLE ad_orders ADD COLUMN IF NOT EXISTS last_served_at TIMESTAMPTZ;")
+   c.execute("""CREATE TABLE IF NOT EXISTS ad_impression_events(
+    id BIGSERIAL PRIMARY KEY,
+    ad_id BIGINT NOT NULL REFERENCES ad_orders(id) ON DELETE CASCADE,
+    visitor_hash TEXT NOT NULL,
+    slot TEXT NOT NULL,
+    county TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+   );""")
+   c.execute("CREATE INDEX IF NOT EXISTS ad_impression_recent ON ad_impression_events(visitor_hash,created_at,ad_id);")
+   c.execute("CREATE INDEX IF NOT EXISTS ad_impression_daily ON ad_impression_events(ad_id,created_at);")
    c.execute("""CREATE TABLE IF NOT EXISTS county_notices(id BIGSERIAL PRIMARY KEY,county TEXT NOT NULL,category TEXT NOT NULL,title TEXT NOT NULL,summary TEXT,source_name TEXT NOT NULL,source_url TEXT NOT NULL,reference_no TEXT,published_at TIMESTAMPTZ,closes_at TIMESTAMPTZ,event_at TIMESTAMPTZ,status TEXT NOT NULL DEFAULT 'VERIFIED',created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE INDEX IF NOT EXISTS county_notice_lookup ON county_notices(county,category,status,closes_at,event_at);")
    c.execute("""CREATE TABLE IF NOT EXISTS candidates(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,race TEXT NOT NULL,county TEXT,constituency TEXT,ward TEXT,party TEXT,status TEXT NOT NULL DEFAULT 'PROSPECTIVE',source_url TEXT,active BOOLEAN DEFAULT TRUE,created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);""")
@@ -113,6 +128,17 @@ def init():
     if col not in vcols:c.execute("ALTER TABLE pulse_visits ADD COLUMN "+col+" TEXT")
    c.execute("CREATE INDEX IF NOT EXISTS pulse_visit_lookup ON pulse_visits(county,source);")
    c.execute("""CREATE TABLE IF NOT EXISTS ad_orders(id INTEGER PRIMARY KEY AUTOINCREMENT,business TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,scope TEXT NOT NULL,county TEXT,package TEXT NOT NULL,budget INTEGER NOT NULL,headline TEXT,url TEXT,status TEXT DEFAULT 'PENDING_REVIEW',created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
+   c.execute("""CREATE TABLE IF NOT EXISTS ad_impression_events(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ad_id INTEGER NOT NULL,
+    visitor_hash TEXT NOT NULL,
+    slot TEXT NOT NULL,
+    county TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(ad_id) REFERENCES ad_orders(id) ON DELETE CASCADE
+   );""")
+   c.execute("CREATE INDEX IF NOT EXISTS ad_impression_recent ON ad_impression_events(visitor_hash,created_at,ad_id)")
+   c.execute("CREATE INDEX IF NOT EXISTS ad_impression_daily ON ad_impression_events(ad_id,created_at)")
    c.execute("""CREATE TABLE IF NOT EXISTS county_notices(id INTEGER PRIMARY KEY AUTOINCREMENT,county TEXT NOT NULL,category TEXT NOT NULL,title TEXT NOT NULL,summary TEXT,source_name TEXT NOT NULL,source_url TEXT NOT NULL,reference_no TEXT,published_at TEXT,closes_at TEXT,event_at TEXT,status TEXT NOT NULL DEFAULT 'VERIFIED',created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
    c.execute("CREATE INDEX IF NOT EXISTS county_notice_lookup ON county_notices(county,category,status,closes_at,event_at);")
    c.execute("""CREATE TABLE IF NOT EXISTS candidates(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,race TEXT NOT NULL,county TEXT,constituency TEXT,ward TEXT,party TEXT,status TEXT NOT NULL DEFAULT 'PROSPECTIVE',source_url TEXT,active INTEGER DEFAULT 1,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
@@ -128,7 +154,7 @@ def init():
    c.execute("CREATE INDEX IF NOT EXISTS support_payment_status ON support_payments(status,created_at);")
    vote_cols=[x[1] for x in c.execute("PRAGMA table_info(pulse_votes)").fetchall()]
    if "candidate_id" not in vote_cols:c.execute("ALTER TABLE pulse_votes ADD COLUMN candidate_id INTEGER")
-   for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0")]:
+   for col,typ in [("starts_at","TEXT"),("ends_at","TEXT"),("impressions","INTEGER DEFAULT 0"),("clicks","INTEGER DEFAULT 0"),("impression_goal","INTEGER DEFAULT 0"),("daily_impression_cap","INTEGER DEFAULT 0"),("frequency_cap","INTEGER DEFAULT 3"),("priority_weight","REAL DEFAULT 0"),("last_served_at","TEXT")]:
     try:c.execute("ALTER TABLE ad_orders ADD COLUMN "+col+" "+typ)
     except sqlite3.OperationalError:pass
 try:init()
@@ -782,48 +808,134 @@ def analytics_pageview():
  with conn() as db:db.execute("INSERT INTO pulse_visits(county,source,path,session_id) VALUES(?,?,?,?)",(county or None,src,path,sid or None))
  return jsonify(ok=True)
 
+AD_PACKAGE_WEIGHTS={"House Ad":0.35,"County Starter":1.0,"County Pro":2.5,"National":4.0}
+AD_RECENT_HOURS=6
+
+def _ad_time(v):
+ if not v:return None
+ if isinstance(v,dt.datetime):
+  return v if v.tzinfo else v.replace(tzinfo=dt.timezone.utc)
+ try:return dt.datetime.fromisoformat(str(v).replace("Z","+00:00")).replace(tzinfo=dt.timezone.utc) if "T" not in str(v) else dt.datetime.fromisoformat(str(v).replace("Z","+00:00"))
+ except Exception:return None
+
+def _ad_pacing_multiplier(ad):
+ goal=int(ad.get("impression_goal") or 0);served=int(ad.get("impressions") or 0)
+ if goal<=0:return 1.0/(1.0+served/250.0)
+ start=_ad_time(ad.get("starts_at"));end=_ad_time(ad.get("ends_at"));now=dt.datetime.now(dt.timezone.utc)
+ if start and end and end>start:
+  frac=max(0.02,min(1.0,(now-start).total_seconds()/(end-start).total_seconds()))
+ else:
+  frac=min(1.0,max(0.02,served/max(goal,1)))
+ expected=max(1.0,goal*frac);deficit=max(0.0,expected-served)
+ return 1.0+min(6.0,deficit/max(1.0,goal/20.0))
+
+def _ad_choose(weighted):
+ if not weighted:return None
+ scaled=[max(1,int(w*1000)) for _,w in weighted];total=sum(scaled);pick=secrets.randbelow(total)
+ for (ad,_),w in zip(weighted,scaled):
+  if pick<w:return ad
+  pick-=w
+ return weighted[-1][0]
+
+def _eligible_ads(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None):
+ exclude_ids=set(exclude_ids or [])
+ sql="""SELECT id,business,headline,url,scope,county,package,budget,starts_at,ends_at,
+               COALESCE(impressions,0) impressions,COALESCE(clicks,0) clicks,
+               COALESCE(impression_goal,0) impression_goal,
+               COALESCE(daily_impression_cap,0) daily_impression_cap,
+               COALESCE(frequency_cap,3) frequency_cap,
+               COALESCE(priority_weight,0) priority_weight,last_served_at
+        FROM ad_orders
+        WHERE status='ACTIVE'
+          AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
+          AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)
+          AND (COALESCE(impression_goal,0)=0 OR COALESCE(impressions,0)<impression_goal)"""
+ args=[]
+ if scope_mode=="national":
+  sql+=" AND scope='National'"
+ else:
+  sql+=" AND (scope='National' OR county=?)";args.append(county)
+ sql+=" ORDER BY id LIMIT 5000"
+ rows=[dict(x) for x in db.execute(sql,args).fetchall()]
+ if not rows:return []
+
+ recent_sql="""SELECT ad_id,COUNT(*) n FROM ad_impression_events
+               WHERE visitor_hash=? AND created_at>=CURRENT_TIMESTAMP-INTERVAL '6 hours'
+               GROUP BY ad_id""" if db.pg else """SELECT ad_id,COUNT(*) n FROM ad_impression_events
+               WHERE visitor_hash=? AND datetime(created_at)>=datetime('now','-6 hours')
+               GROUP BY ad_id"""
+ day_sql="""SELECT ad_id,COUNT(*) n FROM ad_impression_events
+            WHERE created_at>=date_trunc('day',CURRENT_TIMESTAMP)
+            GROUP BY ad_id""" if db.pg else """SELECT ad_id,COUNT(*) n FROM ad_impression_events
+            WHERE datetime(created_at)>=datetime('now','start of day')
+            GROUP BY ad_id"""
+ recent={int(x["ad_id"]):int(x["n"]) for x in db.execute(recent_sql,(visitor_hash,)).fetchall()}
+ daily={int(x["ad_id"]):int(x["n"]) for x in db.execute(day_sql).fetchall()}
+ eligible=[]
+ for ad in rows:
+  aid=int(ad["id"])
+  if aid in exclude_ids:continue
+  fcap=max(1,int(ad.get("frequency_cap") or 3))
+  if recent.get(aid,0)>=fcap:continue
+  dcap=int(ad.get("daily_impression_cap") or 0)
+  if dcap>0 and daily.get(aid,0)>=dcap:continue
+  eligible.append(ad)
+ if scope_mode!="national" and county:
+  local=[a for a in eligible if a.get("scope")=="County" and a.get("county")==county]
+  if local:eligible=local
+  else:eligible=[a for a in eligible if a.get("scope")=="National"]
+ return eligible
+
+def _pick_ad(db,county,visitor_hash,scope_mode="mixed",exclude_ids=None,exclude_businesses=None):
+ ads=_eligible_ads(db,county,visitor_hash,scope_mode,exclude_ids)
+ excluded={str(x).lower() for x in (exclude_businesses or [])}
+ if excluded:
+  narrowed=[a for a in ads if str(a.get("business") or "").lower() not in excluded]
+  if narrowed:ads=narrowed
+ weighted=[]
+ for ad in ads:
+  base=float(ad.get("priority_weight") or 0) or AD_PACKAGE_WEIGHTS.get(ad.get("package"),1.0)
+  fairness=1.0/(1.0+int(ad.get("impressions") or 0)/1000.0)
+  weight=max(0.05,base*_ad_pacing_multiplier(ad)*(0.65+fairness))
+  weighted.append((ad,weight))
+ return _ad_choose(weighted)
+
+def _record_ad_impression(db,ad,visitor_hash,slot,county=""):
+ db.execute("UPDATE ad_orders SET impressions=COALESCE(impressions,0)+1,last_served_at=CURRENT_TIMESTAMP WHERE id=?",(ad["id"],))
+ db.execute("INSERT INTO ad_impression_events(ad_id,visitor_hash,slot,county) VALUES(?,?,?,?)",(ad["id"],visitor_hash,slot,county or None))
+
+def _public_ad(ad):
+ return {"id":ad["id"],"business":ad["business"],"headline":ad["headline"],"scope":ad["scope"],"county":ad.get("county"),"package":ad.get("package"),"click_url":"/api/ad-click/"+str(ad["id"])}
+
 @app.get("/api/ad-strip")
 def ad_strip():
+ visitor=participation_fingerprint();items=[];used=[];brands=[]
  with conn() as db:
-  sql="""SELECT id,business,headline,url FROM ad_orders
-   WHERE status='ACTIVE' AND scope='National'
-   AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
-   AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)
-   ORDER BY impressions ASC,id ASC LIMIT 8""" if db.pg else """SELECT id,business,headline,url FROM ad_orders
-   WHERE status='ACTIVE' AND scope='National'
-   AND (starts_at IS NULL OR datetime(starts_at)<=datetime('now'))
-   AND (ends_at IS NULL OR datetime(ends_at)>=datetime('now'))
-   ORDER BY impressions ASC,id ASC LIMIT 8"""
-  rows=db.execute(sql).fetchall()
-  items=[]
-  for row in rows:
-   db.execute("UPDATE ad_orders SET impressions=COALESCE(impressions,0)+1 WHERE id=?",(row["id"],))
-   items.append({"id":row["id"],"business":row["business"],"headline":row["headline"],"click_url":"/api/ad-click/"+str(row["id"])})
- return jsonify(items=items),200,{"Cache-Control":"public, max-age=60"}
+  for _ in range(8):
+   ad=_pick_ad(db,"",visitor,"national",used,brands)
+   if not ad:break
+   _record_ad_impression(db,ad,visitor,"national_strip")
+   used.append(int(ad["id"]));brands.append(ad.get("business") or "")
+   items.append(_public_ad(ad))
+ return jsonify(items=items,rotation="weighted_fair_paced"),200,{"Cache-Control":"private, no-store"}
 
 @app.get("/api/ad")
 def serve_ad():
- county=request.args.get("county","")
+ county=(request.args.get("county") or "").strip()
+ if county and county not in COUNTIES:county=""
+ visitor=participation_fingerprint()
  with conn() as db:
-  ad_sql="""SELECT id,business,headline,url,scope,county FROM ad_orders
-   WHERE status='ACTIVE' AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
-   AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)
-   AND (scope='National' OR county=?)
-   ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1""" if db.pg else """SELECT id,business,headline,url,scope,county FROM ad_orders
-   WHERE status='ACTIVE' AND (starts_at IS NULL OR datetime(starts_at)<=datetime('now'))
-   AND (ends_at IS NULL OR datetime(ends_at)>=datetime('now'))
-   AND (scope='National' OR county=?)
-   ORDER BY CASE WHEN scope='County' THEN 0 ELSE 1 END, impressions ASC, id ASC LIMIT 1"""
-  row=db.execute(ad_sql,(county,)).fetchone()
-  if not row:return jsonify(ad=None)
-  db.execute("UPDATE ad_orders SET impressions=COALESCE(impressions,0)+1 WHERE id=?",(row["id"],))
-  ad=dict(row); ad["click_url"]="/api/ad-click/"+str(row["id"])
-  return jsonify(ad=ad)
+  ad=_pick_ad(db,county,visitor,"mixed")
+  if not ad:return jsonify(ad=None),200,{"Cache-Control":"private, no-store"}
+  _record_ad_impression(db,ad,visitor,"county_card" if county else "general_card",county)
+  return jsonify(ad=_public_ad(ad)),200,{"Cache-Control":"private, no-store"}
 
 @app.get("/api/ad-click/<int:ad_id>")
 def ad_click(ad_id):
  with conn() as db:
-  row=db.execute("SELECT url FROM ad_orders WHERE id=? AND status='ACTIVE'",(ad_id,)).fetchone()
+  row=db.execute("""SELECT url FROM ad_orders WHERE id=? AND status='ACTIVE'
+                    AND (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP)
+                    AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP)""",(ad_id,)).fetchone()
   if not row or not row["url"]:return redirect("/")
   db.execute("UPDATE ad_orders SET clicks=COALESCE(clicks,0)+1 WHERE id=?",(ad_id,))
   return redirect(row["url"],code=302)
