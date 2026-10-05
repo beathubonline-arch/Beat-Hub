@@ -567,6 +567,7 @@ def _production_safe_smoke_pass(pass_no):
     ("/api/live-analytics?county=Kericho&race=MCA&constituency=Ainamoi&ward=Kapsoit",200),
     ("/county/kisii?src=smoke",200),
     ("/participate",200),
+    ("/api/support/preflight?email=support-preflight%40kenyapulse.online&amount=5",200),
     ("/candidate-explorer",200),
     ("/claim-profile",200),
     ("/ground",200),
@@ -845,6 +846,16 @@ def admin_profile_claim_review(claim_id):
   c.execute("UPDATE aspirant_profile_claims SET verification_status='APPROVED',reviewed_at=CURRENT_TIMESTAMP WHERE id=?",(claim_id,))
  return jsonify(updated=True,status="APPROVED",candidate_id=candidate_id,photo_url=photo_url)
 
+
+@app.get("/api/support/preflight")
+def support_preflight():
+ """Non-charge test proving support is available without any voting progress."""
+ email=(request.args.get("email") or "support-preflight@kenyapulse.online").strip()
+ try: amount=int(request.args.get("amount") or 5)
+ except: amount=5
+ valid_email=bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$",email))
+ ok=paystack_configured() and valid_email and 5<=amount<=1000000
+ return jsonify(ok=ok,configured=paystack_configured(),amount_kes=amount,email_valid=valid_email,requires_voting=False,requires_county=False,message="Optional support is independent of voting progress." if ok else "Support preflight failed."),(200 if ok else 400),{"Cache-Control":"no-store"}
 
 @app.get("/api/support/config")
 def support_config():
