@@ -476,6 +476,22 @@ def readiness():
   data["ok"]=False;data["database"]="error"
  return jsonify(data),200 if data["ok"] else 503,{"Cache-Control":"no-store"}
 
+def _log_production_readiness():
+ try:
+  with conn() as c:
+   c.execute("SELECT 1").fetchone()
+   rows=c.execute("SELECT race,COUNT(*) n,COUNT(*) FILTER (WHERE photo_url IS NOT NULL AND photo_url<>'') with_photo FROM candidates WHERE active=TRUE GROUP BY race ORDER BY race").fetchall() if c.pg else c.execute("SELECT race,COUNT(*) n,SUM(CASE WHEN photo_url IS NOT NULL AND photo_url<>'' THEN 1 ELSE 0 END) with_photo FROM candidates WHERE active=1 GROUP BY race ORDER BY race").fetchall()
+   inventory={x["race"]:{"active":int(x["n"]),"with_photo":int(x["with_photo"] or 0)} for x in rows}
+  app.logger.warning("KP_READINESS database=ok paystack_mode=%s paystack_configured=%s geography=%s/%s/%s candidates=%s",
+   paystack_mode(),paystack_configured(),len(GEOGRAPHY),sum(len(v) for v in GEOGRAPHY.values()),sum(len(w) for v in GEOGRAPHY.values() for w in v.values()),json.dumps(inventory,sort_keys=True))
+ except Exception as e:
+  app.logger.exception("KP_READINESS database=error: %s",e)
+
+try:
+ threading.Timer(2.0,_log_production_readiness).start()
+except Exception:
+ pass
+
 @app.get("/api/officeholder-sync-status")
 def officeholder_sync_status():
  with conn() as c:
