@@ -1022,7 +1022,7 @@ GLOBAL_SHELL_JS=r'''(()=>{
  });
  if(!hasHome){
    const home=document.createElement('a');
-   home.href='https://kenya-pulse-static.onrender.com/';home.className='kpGlobalHome';home.innerHTML='⌂ <span>Home</span>';
+   home.href='https://kenyapulse.online/';home.className='kpGlobalHome';home.innerHTML='⌂ <span>Home</span>';
    home.setAttribute('aria-label','Back to Kenya Pulse AI homepage');
    document.body.appendChild(home);
  }
