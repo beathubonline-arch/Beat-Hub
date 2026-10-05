@@ -993,6 +993,77 @@ def candidates_compare_api():
  return jsonify(race=race,county=county,constituency=constituency,ward=ward,candidates=out,
   methodology="Compare documented facts and source records. Kenya Pulse does not rank, endorse or recommend candidates."),200,{"Cache-Control":"public, max-age=60"}
 
+
+@app.get("/api/admin/evidence-gaps")
+def evidence_gaps_admin():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_candidate_evidence_schema()
+ try:limit=max(1,min(100,int(request.args.get("limit","30"))))
+ except:limit=30
+ race=(request.args.get("race") or "").strip()
+ county=(request.args.get("county") or "").strip()
+ sql="""SELECT c.id,c.name,c.race,c.county,c.constituency,c.ward,c.party,c.status,c.source_url,
+        COUNT(e.id) AS evidence_count
+        FROM candidates c
+        LEFT JOIN candidate_evidence e ON e.candidate_id=c.id AND e.status='PUBLISHED'
+        WHERE c.active=TRUE"""
+ args=[]
+ if race:
+  if race not in RACES:return jsonify(error="Invalid race"),400
+  sql+=" AND c.race=?";args.append(race)
+ if county:
+  if county not in COUNTIES:return jsonify(error="Invalid county"),400
+  sql+=" AND (c.county=? OR c.race='President')";args.append(county)
+ sql+=" GROUP BY c.id,c.name,c.race,c.county,c.constituency,c.ward,c.party,c.status,c.source_url ORDER BY evidence_count ASC,c.race,c.county,c.name LIMIT ?"
+ args.append(limit)
+ with conn() as c:rows=c.execute(sql,args).fetchall()
+ return jsonify(candidates=[dict(x) for x in rows],research_rule="Research lowest-evidence candidates first. Only publish sourced, attributable facts; do not infer a ranking or endorsement.")
+
+@app.post("/api/admin/candidate-evidence/batch")
+def candidate_evidence_batch_admin():
+ if not admin_authorized():return jsonify(error="Unauthorized"),401
+ ensure_candidate_evidence_schema()
+ d=request.get_json(silent=True) or {};items=d.get("items") or []
+ if not isinstance(items,list) or not items or len(items)>50:return jsonify(error="items must contain 1 to 50 evidence records"),400
+ saved=[];errors=[]
+ with conn() as c:
+  for i,item in enumerate(items):
+   try:
+    candidate_id=int(item.get("candidate_id"))
+    category=re.sub(r"\s+"," ",str(item.get("category") or "").strip())[:60]
+    claim=re.sub(r"\s+"," ",str(item.get("claim") or "").strip())[:700]
+    evidence_type=str(item.get("evidence_type") or "").strip().upper()
+    source_title=re.sub(r"\s+"," ",str(item.get("source_title") or "").strip())[:180]
+    source_url=str(item.get("source_url") or "").strip()[:800]
+    source_date=str(item.get("source_date") or "").strip()[:10] or None
+    notes=re.sub(r"\s+"," ",str(item.get("notes") or "").strip())[:500] or None
+    if not category or not claim or evidence_type not in EVIDENCE_TYPES or not source_title or not source_url.startswith("https://"):
+     raise ValueError("Invalid or incomplete evidence record")
+    if not c.execute("SELECT id FROM candidates WHERE id=? AND active=TRUE",(candidate_id,)).fetchone():
+     raise ValueError("Candidate not found or inactive")
+    dup=c.execute("""SELECT id FROM candidate_evidence WHERE candidate_id=? AND LOWER(claim)=LOWER(?) AND source_url=? AND status='PUBLISHED'""",(candidate_id,claim,source_url)).fetchone()
+    if dup:
+     saved.append({"index":i,"candidate_id":candidate_id,"duplicate":True});continue
+    c.execute("""INSERT INTO candidate_evidence(candidate_id,category,claim,evidence_type,source_title,source_url,source_date,notes)
+                 VALUES(?,?,?,?,?,?,?,?)""",(candidate_id,category,claim,evidence_type,source_title,source_url,source_date,notes))
+    saved.append({"index":i,"candidate_id":candidate_id,"duplicate":False})
+   except Exception as e:errors.append({"index":i,"error":str(e)[:180]})
+ return jsonify(saved=saved,errors=errors,saved_count=len(saved),error_count=len(errors)),(207 if errors else 201)
+
+@app.get("/api/social/entry-link")
+def social_entry_link():
+ platform=(request.args.get("platform") or "facebook").strip().lower()
+ if platform not in {"facebook","instagram","tiktok","whatsapp","direct"}:return jsonify(error="Invalid platform"),400
+ race=(request.args.get("race") or "President").strip();county=(request.args.get("county") or "").strip()
+ constituency=(request.args.get("constituency") or "").strip();ward=(request.args.get("ward") or "").strip()
+ if race not in RACES:return jsonify(error="Invalid race"),400
+ if race!="President" and county not in COUNTIES:return jsonify(error="Choose a valid county"),400
+ if race in {"Member of Parliament","MCA"} and (not constituency or not geography_ok(county,constituency,ward if race=="MCA" else "")):
+  return jsonify(error="Choose a valid constituency"+(" and ward" if race=="MCA" else "")),400
+ q=urllib.parse.urlencode({"race":race,"county":county,"constituency":constituency,"ward":ward,"utm_source":platform,"utm_medium":"social","utm_campaign":"candidate_explorer"})
+ return jsonify(url=request.url_root.rstrip("/")+"/candidate-explorer?"+q,platform=platform,cta="Compare the candidates using sourced facts on Kenya Pulse.")
+
+
 @app.post("/api/admin/candidate-evidence")
 def candidate_evidence_admin():
  if not admin_authorized():return jsonify(error="Unauthorized"),401
