@@ -1488,6 +1488,27 @@ def marketing_summary():
   referrals=c.execute("SELECT source,COUNT(*) n FROM pulse_visits WHERE source LIKE '%share%' GROUP BY source ORDER BY n DESC").fetchall()
  return jsonify(shares=[dict(x) for x in shares],referrals=[dict(x) for x in referrals]),200,{"Cache-Control":"no-store"}
 
+@app.get("/campaign-kit")
+def campaign_kit():
+ cards=[
+  {"title":"Launch","copy":"🇰🇪 Kenya Pulse AI is live across all 47 counties. Add your voice, explore voluntary participant results and share your county pulse. Independent public-participation platform — not IEBC voting and not a scientific poll.","src":"launch"},
+  {"title":"County challenge","copy":"Which county can bring the strongest public participation? Add your voice on Kenya Pulse AI, then challenge 3 people from your county. Results reflect voluntary participants only.","src":"county-challenge"},
+  {"title":"Ground issues","copy":"What issue needs attention where you live? Kenya Pulse AI lets residents report local issues and follow the public pulse. Keep it factual, peaceful and non-partisan.","src":"ground"}]
+ rows=''.join(f"<article style=padding:18px;border:1px solid #315b45;border-radius:16px;margin:12px 0><h2>{html.escape(x['title'])}</h2><p>{html.escape(x['copy'])}</p><a href='/?src={x['src']}' style=color:#69ef91>Tracked campaign link →</a></article>" for x in cards)
+ body=f"""<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Kenya Pulse Campaign Kit</title><body style='font-family:system-ui;background:#062b1b;color:#effff4;max-width:850px;margin:40px auto;padding:18px'><h1>Kenya Pulse AI · Campaign Kit</h1><p>Zero-budget launch assets. Neutral, county-first, measurable.</p>{rows}<p><a style=color:#ffd54a href='/marketing-dashboard'>Open marketing dashboard →</a></p></body>"""
+ return body
+
+@app.get("/marketing-dashboard")
+def marketing_dashboard():
+ with conn() as c:
+  total=c.execute("SELECT COUNT(*) n FROM pulse_visits").fetchone()["n"]
+  shares=c.execute("SELECT COUNT(*) n FROM marketing_shares").fetchone()["n"]
+  channels=c.execute("SELECT channel,COUNT(*) n FROM marketing_shares GROUP BY channel ORDER BY n DESC").fetchall()
+  sources=c.execute("SELECT source,COUNT(*) n FROM pulse_visits GROUP BY source ORDER BY n DESC LIMIT 12").fetchall()
+ rows=''.join(f"<tr><td>{html.escape(str(x['channel']))}</td><td>{x['n']}</td></tr>" for x in channels) or '<tr><td colspan=2>No shares yet</td></tr>'
+ src=''.join(f"<tr><td>{html.escape(str(x['source'] or 'direct'))}</td><td>{x['n']}</td></tr>" for x in sources)
+ return f"""<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Kenya Pulse Growth</title><body style='font-family:system-ui;background:#062b1b;color:#effff4;max-width:900px;margin:40px auto;padding:18px'><h1>Kenya Pulse · Growth Dashboard</h1><div style='display:flex;gap:15px;flex-wrap:wrap'><b style='padding:18px;border:1px solid #315b45;border-radius:14px'>Visits<br><big>{total}</big></b><b style='padding:18px;border:1px solid #315b45;border-radius:14px'>Share actions<br><big>{shares}</big></b></div><h2>Share channels</h2><table cellpadding=10>{rows}</table><h2>Traffic sources</h2><table cellpadding=10>{src}</table><p><a style=color:#ffd54a href='/campaign-kit'>Campaign kit →</a></p></body>"""
+
 @app.get("/participate")
 def participate():
  src=re.sub(r"[^a-zA-Z0-9_-]","",request.args.get("src","direct"))[:60]
