@@ -1,4 +1,5 @@
 import os, hashlib, re, sqlite3, base64, json, hmac, urllib.request, urllib.error, urllib.parse, secrets, time, datetime as dt, threading, io, xml.etree.ElementTree as ET, email.utils, html as html_lib
+import html
 try:
  import psycopg2
  import psycopg2.extras
