@@ -1,0 +1,23 @@
+{
+  "currency": "USD",
+  "plans": [
+    {
+      "id": "free",
+      "monthly_usd": 0
+    },
+    {
+      "id": "pro",
+      "monthly_usd": 9
+    },
+    {
+      "id": "business",
+      "monthly_usd": 29
+    },
+    {
+      "id": "agency",
+      "monthly_usd": 79
+    }
+  ],
+  "billing_status": "not_configured",
+  "checkout_enabled": false
+}
