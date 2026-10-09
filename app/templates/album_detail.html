@@ -22,6 +22,7 @@
         <h1>{{ album.title }}</h1>
         {% if album.creator_profile %}<div class="creator-line"><span>Created by</span><a href="/profile/{{ album.creator_profile.slug }}" class="creator-link">{{ album.creator_profile.stage_name }}</a></div>{% endif %}
         {% if album.description %}<p class="album-description">{{ album.description }}</p>{% else %}<p class="album-description muted">Explore the tracks included in this BeatHub release.</p>{% endif %}
+        {% if album.album_tracks|selectattr("track.slug", "equalto", "mtu-mboka-intro-wav")|list %}<div style="margin-top:22px;padding:20px;border:1px solid #b59636;border-radius:15px;background:rgba(212,175,55,.08)"><div style="color:#e8c85a;font-size:12px;font-weight:800">COMPLETE ALBUM · ONE PRICE</div><div style="font-size:32px;font-weight:950;color:#f5d66e">KSh 1,000</div><p style="font-size:12px;color:#b7b0a0">Includes all {{ album.album_tracks|length }} tracks. Album checkout is being prepared; individual tracks are not sold separately at KSh 0.</p></div>{% endif %}
         <div class="album-stats"><div class="album-stat"><strong>{{ album.album_tracks|length }}</strong><span>Tracks</span></div><div class="album-stat"><strong>{% set available_count = namespace(value=0) %}{% for at in album.album_tracks %}{% if not at.track.is_sold %}{% set available_count.value = available_count.value + 1 %}{% endif %}{% endfor %}{{ available_count.value }}</strong><span>Available</span></div></div>
       </div>
     </div>
@@ -30,13 +31,13 @@
 
     {% if album.album_tracks %}
       <div class="track-list">
-        <div class="track-list-head"><span>#</span><span>Track</span><span>Price</span><span></span></div>
+        <div class="track-list-head"><span>#</span><span>Track</span><span>Availability</span><span></span></div>
         {% for at in album.album_tracks %}
           {% set track = at.track %}
           <article class="track-row">
             <div class="track-number">{{ '%02d'|format(loop.index) }}</div>
             <div class="track-main"><a href="/track/{{ track.slug }}" class="track-title">{{ track.title }}</a><div class="track-meta">{% if track.genre %}<span>{{ track.genre }}</span>{% endif %}{% if track.bpm %}<span>{{ track.bpm }} BPM</span>{% endif %}{% if track.content_type %}<span>{{ track.content_type|upper }}</span>{% endif %}</div></div>
-            <div class="track-price">{% if track.sales_model.value == 'exclusive' and track.is_sold %}<span class="sold">SOLD</span>{% else %}KSh {{ '%.2f'|format(track.price or 0) }}{% endif %}</div>
+            <div class="track-price">{% if track.sales_model.value == 'exclusive' and track.is_sold %}<span class="sold">SOLD</span>{% elif track.price and track.price > 0 %}KSh {{ '%.2f'|format(track.price) }}{% else %}Album only{% endif %}</div>
             <a href="/track/{{ track.slug }}" class="view-button">View <span>→</span></a>
           </article>
         {% endfor %}
