@@ -34,13 +34,28 @@
 </section>
 <script>
 (function(){
-  const typeInputs=document.querySelectorAll('input[name="content_type"]');
-  const libraryTracks=document.querySelectorAll('.track');
-  const fileInput=document.getElementById('new-audio');
-  const list=document.getElementById('new-list');
-  function sync(){const selected=document.querySelector('input[name="content_type"]:checked');if(!selected)return;const wanted=selected.value==='album'?'track':'beat';libraryTracks.forEach(t=>{const ok=t.dataset.type===wanted;t.style.display=ok?'flex':'none';const cb=t.querySelector('input');if(!ok&&cb)cb.checked=false;});}
-  typeInputs.forEach(x=>x.addEventListener('change',sync)); sync();
-  fileInput.addEventListener('change',function(){list.innerHTML='';Array.from(fileInput.files||[]).forEach(function(file,index){const row=document.createElement('div');row.className='new-track';const n=document.createElement('div');n.className='new-track-number';n.textContent=String(index+1).padStart(2,'0');const input=document.createElement('input');input.type='text';input.name='new_titles';input.required=true;input.maxLength=255;input.value=file.name.replace(/\.[^.]+$/,'');input.placeholder='Track title';row.appendChild(n);row.appendChild(input);list.appendChild(row);});});
+ const fileInput=document.getElementById('new-audio'), list=document.getElementById('new-list');
+ const typeInputs=document.querySelectorAll('input[name="content_type"]');
+ const libraryTracks=document.querySelectorAll('.track');
+ let files=[];
+ function sync(){const selected=document.querySelector('input[name="content_type"]:checked');if(!selected)return;const wanted=selected.value==='album'?'track':'beat';libraryTracks.forEach(t=>{const ok=t.dataset.type===wanted;t.style.display=ok?'flex':'none';const cb=t.querySelector('input');if(!ok&&cb)cb.checked=false;});}
+ function render(){
+  const saved=Array.from(list.querySelectorAll('.new-track input')).map(x=>x.value);
+  list.innerHTML='';
+  files.forEach((file,index)=>{
+   const row=document.createElement('div');row.className='new-track';
+   const n=document.createElement('div');n.className='new-track-number';n.textContent=String(index+1).padStart(2,'0');
+   const input=document.createElement('input');input.type='text';input.name='new_titles';input.required=true;input.maxLength=255;input.value=file.title||file.name.replace(/\\.[^.]+$/,'');input.placeholder='Track title';
+   input.addEventListener('input',()=>{file.title=input.value});
+   const controls=document.createElement('div');controls.style.cssText='display:flex;gap:5px';
+   [['↑',-1],['↓',1]].forEach(([label,delta])=>{const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.setAttribute('aria-label',delta<0?'Move track up':'Move track down');btn.disabled=index+delta<0||index+delta>=files.length;btn.style.cssText='padding:8px;border:1px solid #64542c;border-radius:7px;background:#1b1a15;color:#f2d36b;cursor:pointer';btn.addEventListener('click',()=>{files[index].title=input.value;const other=index+delta;[files[index],files[other]]=[files[other],files[index]];render()});controls.appendChild(btn)});
+   row.style.gridTemplateColumns='42px minmax(0,1fr) auto';row.append(n,input,controls);list.appendChild(row);
+  });
+  const transfer=new DataTransfer();files.forEach(f=>transfer.items.add(f));fileInput.files=transfer.files;
+ }
+ fileInput.addEventListener('change',()=>{files=Array.from(fileInput.files);render()});
+ typeInputs.forEach(x=>x.addEventListener('change',sync));sync();
+ const hint=document.createElement('p');hint.style.cssText='color:#d9bd62;font-size:12px;margin:8px 0';hint.textContent='Track 01 plays first. Use ↑ and ↓ to arrange the album before publishing.';fileInput.insertAdjacentElement('afterend',hint);
 })();
 </script>
 {% endblock %}
