@@ -1,4 +1,11 @@
 from datetime import datetime
+from pathlib import Path
+import re
+import zipfile
+import zipstream
+from fastapi.responses import StreamingResponse
+from app.config import settings
+from app.services.storage import _parse_r2_path, _r2_client, r2_object_head
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -211,3 +218,84 @@ def download_album_track(
     if not url:
         raise HTTPException(status_code=404, detail="Track audio unavailable.")
     return RedirectResponse(url, status_code=303)
+
+def _album_zip_filename(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "-", value).strip("-")
+    return (cleaned or "BeatHub-Album")[:90]
+
+
+@router.get("/album/{slug}/download.zip")
+def download_album_zip(
+    slug: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    album = db.query(Album).filter(Album.slug == slug, Album.is_published.is_(True)).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found.")
+    owned = db.query(License).join(Order, License.order_id == Order.id).filter(
+        License.buyer_id == user.id, License.album_id == album.id,
+        Order.buyer_id == user.id, Order.status == OrderStatus.COMPLETED
+    ).first()
+    if not owned:
+        raise HTTPException(status_code=403, detail="Complete your purchase to download this album.")
+    members = list(album.album_tracks)
+    if not members or (slug == "time-itatell" and len(members) != 12):
+        raise HTTPException(status_code=409, detail="The album tracklist is incomplete.")
+    client = _r2_client() if any(str(at.track.audio_file_path).startswith("r2://") for at in members) else None
+    sources = []
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    for index, at in enumerate(members, 1):
+        path = str(at.track.audio_file_path or "")
+        bucket, key = _parse_r2_path(path)
+        if bucket is not None:
+            if not bucket or not key:
+                raise HTTPException(status_code=503, detail="An album track is unavailable.")
+            try:
+                client.head_object(Bucket=bucket, Key=key)
+            except Exception:
+                raise HTTPException(status_code=503, detail="An album track is unavailable.")
+            source = ("r2", bucket, key)
+        else:
+            relative = path.replace("\\", "/").lstrip("/")
+            if relative.startswith("media/"):
+                relative = relative[6:]
+            full_path = (media_root / relative).resolve()
+            if not full_path.is_relative_to(media_root) or not full_path.is_file():
+                raise HTTPException(status_code=503, detail="An album track is unavailable.")
+            source = ("local", full_path, None)
+        extension = Path(key if bucket is not None else path).suffix.lower()
+        if extension not in {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".aiff", ".mpeg"}:
+            extension = ".wav"
+        title = _album_zip_filename(at.track.title.rsplit(".", 1)[0])
+        filename = f"{index:02d} - {title}{extension}"
+        sources.append((source, filename))
+
+    def chunks(source):
+        kind, first, second = source
+        if kind == "local":
+            with open(first, "rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    yield chunk
+        else:
+            response = client.get_object(Bucket=first, Key=second)
+            body = response["Body"]
+            try:
+                for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+                    if chunk:
+                        yield chunk
+            finally:
+                body.close()
+
+    def stream_archive():
+        archive = zipstream.ZipStream(compress_type=zipfile.ZIP_STORED)
+        for source, filename in sources:
+            archive.add(chunks(source), arcname=filename)
+        yield from archive
+
+    filename = _album_zip_filename(album.title) + ".zip"
+    return StreamingResponse(
+        stream_archive(), media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                 "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
