@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.music import Album, Track
+from app.models.music import Album, AlbumTrack, Track
 from app.models.profile import Profile
 from app.routers.music import _catalog_item, _track_is_public
 from app.services.storage import media_url
@@ -37,6 +37,8 @@ def _track_type(track: Track) -> str:
 
 def _public_tracks(db: Session) -> list[Track]:
     rows = db.query(Track).filter(Track.is_published.is_(True)).order_by(Track.created_at.desc()).all()
+    album_track_ids = {row[0] for row in db.query(AlbumTrack.track_id).join(Album, Album.id == AlbumTrack.album_id).filter(Album.is_published.is_(True)).all()}
+    rows = [track for track in rows if track.id not in album_track_ids]
     return [track for track in rows if _track_is_public(track)]
 
 
@@ -173,7 +175,7 @@ def _hot_picks(beats: list[Track], tracks: list[Track], merch: list[dict]) -> li
     return picks[:6]
 
 
-def _context(request: Request, user, beats: list[Track], tracks: list[Track], producers: list[dict], merch: list[dict]):
+def _context(request: Request, user, beats: list[Track], tracks: list[Track], producers: list[dict], merch: list[dict], albums: list[Album] | None = None):
     merch_collections, standalone_merch = _merch_collections(merch)
     return {
         "request": request,
@@ -190,6 +192,7 @@ def _context(request: Request, user, beats: list[Track], tracks: list[Track], pr
         "merch_collections": merch_collections,
         "standalone_merch": standalone_merch,
         "hot_picks": _hot_picks(beats, tracks, merch),
+        "album_preview": _album_cards(albums or [])[:4],
     }
 
 
@@ -205,7 +208,8 @@ def _load(request: Request, db: Session, user: Optional[object]):
 @router.get("/marketplace")
 def marketplace(request: Request, db: Session = Depends(get_db), current_user=Depends(get_optional_user)):
     _, beats, tracks, producers, merch = _load(request, db, current_user)
-    return templates.TemplateResponse(request, "marketplace.html", _context(request, current_user, beats, tracks, producers, merch))
+    albums = db.query(Album).filter(Album.is_published.is_(True)).order_by(Album.created_at.desc()).limit(8).all()
+    return templates.TemplateResponse(request, "marketplace.html", _context(request, current_user, beats, tracks, producers, merch, albums))
 
 
 @router.get("/marketplace/producers")
