@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.music import Album, AlbumContentType, AlbumTrack, Track, TrackContentType
 from app.models.user import User
-from app.utils.deps import require_creator
+from app.utils.deps import require_creator, get_optional_user, require_user
+from app.models.order import License, Order, OrderStatus
+from app.services.storage import media_url
 from app.utils.text import unique_slug
 
 router = APIRouter(tags=["albums"])
@@ -161,6 +163,7 @@ def album_detail(
     slug: str,
     request: Request,
     db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
     album = (
         db.query(Album)
@@ -170,6 +173,7 @@ def album_detail(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found.")
 
+    purchased = bool(user and db.query(License).join(Order, License.order_id == Order.id).filter(License.buyer_id == user.id, License.album_id == album.id, Order.status == OrderStatus.COMPLETED).first())
     return templates.TemplateResponse(
         request,
         "album_detail.html",
@@ -179,5 +183,30 @@ def album_detail(
             "user": None,
             "current_year": datetime.utcnow().year,
             "album": album,
+            "purchased": purchased,
+            "viewer": user,
         },
     )
+
+@router.get("/album/{slug}/download/{track_id}")
+def download_album_track(
+    slug: str,
+    track_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    album = db.query(Album).filter(Album.slug == slug).first()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found.")
+    member = db.query(AlbumTrack).filter(AlbumTrack.album_id == album.id, AlbumTrack.track_id == track_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Track not in album.")
+    owned = db.query(License).join(Order, License.order_id == Order.id).filter(
+        License.buyer_id == user.id, License.album_id == album.id, Order.status == OrderStatus.COMPLETED
+    ).first()
+    if not owned:
+        raise HTTPException(status_code=403, detail="Purchase this album to download its tracks.")
+    url = media_url(member.track.audio_file_path, expires=300)
+    if not url:
+        raise HTTPException(status_code=404, detail="Track audio unavailable.")
+    return RedirectResponse(url, status_code=303)
