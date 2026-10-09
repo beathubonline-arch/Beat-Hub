@@ -40,7 +40,6 @@
  let files=[];
  function sync(){const selected=document.querySelector('input[name="content_type"]:checked');if(!selected)return;const wanted=selected.value==='album'?'track':'beat';libraryTracks.forEach(t=>{const ok=t.dataset.type===wanted;t.style.display=ok?'flex':'none';const cb=t.querySelector('input');if(!ok&&cb)cb.checked=false;});}
  function render(){
-  const saved=Array.from(list.querySelectorAll('.new-track input')).map(x=>x.value);
   list.innerHTML='';
   files.forEach((file,index)=>{
    const row=document.createElement('div');row.className='new-track';
@@ -49,13 +48,19 @@
    input.addEventListener('input',()=>{file.title=input.value});
    const controls=document.createElement('div');controls.style.cssText='display:flex;gap:5px';
    [['↑',-1],['↓',1]].forEach(([label,delta])=>{const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.setAttribute('aria-label',delta<0?'Move track up':'Move track down');btn.disabled=index+delta<0||index+delta>=files.length;btn.style.cssText='padding:8px;border:1px solid #64542c;border-radius:7px;background:#1b1a15;color:#f2d36b;cursor:pointer';btn.addEventListener('click',()=>{files[index].title=input.value;const other=index+delta;[files[index],files[other]]=[files[other],files[index]];render()});controls.appendChild(btn)});
+   const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.title='Remove track';remove.setAttribute('aria-label','Remove track '+(index+1));remove.style.cssText='padding:8px;border:1px solid #694040;border-radius:7px;background:#211414;color:#ffb4b4;cursor:pointer';remove.addEventListener('click',()=>{files.splice(index,1);render()});controls.appendChild(remove);
    row.style.gridTemplateColumns='42px minmax(0,1fr) auto';row.append(n,input,controls);list.appendChild(row);
   });
   const transfer=new DataTransfer();files.forEach(f=>transfer.items.add(f));fileInput.files=transfer.files;
  }
- fileInput.addEventListener('change',()=>{files=Array.from(fileInput.files);render()});
+ fileInput.addEventListener('change',()=>{
+  const chosen=Array.from(fileInput.files||[]);
+  const known=new Set(files.map(f=>[f.name,f.size,f.lastModified].join(':')));
+  for(const file of chosen){const key=[file.name,file.size,file.lastModified].join(':');if(!known.has(key)){files.push(file);known.add(key)}}
+  render();
+ });
  typeInputs.forEach(x=>x.addEventListener('change',sync));sync();
- const hint=document.createElement('p');hint.style.cssText='color:#d9bd62;font-size:12px;margin:8px 0';hint.textContent='Track 01 plays first. Use ↑ and ↓ to arrange the album before publishing.';fileInput.insertAdjacentElement('afterend',hint);
+ const hint=document.createElement('p');hint.style.cssText='color:#d9bd62;font-size:12px;margin:8px 0';hint.textContent='Add songs one by one or in batches. Existing selections stay in place. Use ↑ and ↓ to set playback order.';fileInput.insertAdjacentElement('afterend',hint);
 })();
 </script>
 {% endblock %}
