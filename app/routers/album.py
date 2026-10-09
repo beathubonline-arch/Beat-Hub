@@ -10,7 +10,7 @@ from app.models.music import Album, AlbumContentType, AlbumTrack, Track, TrackCo
 from app.models.user import User
 from app.utils.deps import require_creator, get_optional_user, require_user
 from app.models.order import License, Order, OrderStatus
-from app.services.storage import media_url
+from app.services.storage import media_url, r2_presigned_url
 from app.utils.text import unique_slug
 
 router = APIRouter(tags=["albums"])
@@ -173,6 +173,7 @@ def album_detail(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found.")
 
+    album.artwork_url = r2_presigned_url(album.artwork_path) if album.artwork_path else None
     purchased = bool(user and db.query(License).join(Order, License.order_id == Order.id).filter(License.buyer_id == user.id, License.album_id == album.id, Order.status == OrderStatus.COMPLETED).first())
     return templates.TemplateResponse(
         request,
