@@ -50,8 +50,8 @@
         {% if track.description %}<p class="track-desc">{{ track.description }}</p>{% endif %}
 
         <div class="track-price">
-          <div class="track-price-label">Price</div>
-          <div class="track-price-value">{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }} {{ track.currency|default('KES') }}</div>
+          <div class="track-price-label">{% if track.price and track.price > 0 %}Price{% else %}Individual track not currently for sale{% endif %}</div>
+          <div class="track-price-value">{% if track.price and track.price > 0 %}{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }} {{ track.currency|default('KES') }}{% else %}Album pricing pending{% endif %}</div>
         </div>
 
         <div class="track-actions">
@@ -61,8 +61,10 @@
             {% set model = track.sales_model.value if track.sales_model else 'non_exclusive' %}
             {% if model == 'exclusive' and track.is_sold %}
               <span class="track-back" style="opacity:.55;">Sold — Unavailable</span>
-            {% else %}
+            {% elif track.price and track.price > 0 %}
               <a class="track-buy" href="/checkout/track/{{ track.slug }}">Buy Now</a>
+            {% else %}
+              <span class="track-back">Individual purchase unavailable</span>
             {% endif %}
           {% endif %}
           <a class="track-session" href="/sessions/producer/{{ track.creator_profile.slug if track.creator_profile else '' }}?from_track={{ track.slug }}">Book a Session</a>
