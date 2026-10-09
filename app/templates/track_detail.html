@@ -50,7 +50,7 @@
         {% if track.description %}<p class="track-desc">{{ track.description }}</p>{% endif %}
 
         <div class="track-price">
-          <div class="track-price-label">{% if track.slug == "mtu-mboka-intro-wav" and track.album_tracks %}Full album price{% elif track.price and track.price > 0 %}Price{% else %}Individual track not currently for sale{% endif %}</div>
+          <div class="track-price-label">{% if track.album_tracks and track.album_tracks|selectattr("album.album_tracks", "defined")|list and track.album_tracks[0].album.album_tracks|selectattr("track.slug", "equalto", "mtu-mboka-intro-wav")|list %}Full album price{% elif track.price and track.price > 0 %}Price{% else %}Individual track not currently for sale{% endif %}</div>
           <div class="track-price-value">{% if track.slug == "mtu-mboka-intro-wav" and track.album_tracks %}KSh 1,000 · Complete album{% elif track.price and track.price > 0 %}{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }} {{ track.currency|default('KES') }}{% else %}Album pricing pending{% endif %}</div>
         </div>
 
