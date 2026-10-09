@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.ledger import CreatorLedgerEntry
-from app.models.music import SalesModel, Track
+from app.models.music import Album, SalesModel, Track
 from app.models.order import ExclusiveOwnershipLock, License, Order, OrderStatus
 from app.services.platform_finance import record_platform_commission
 
@@ -48,7 +48,8 @@ def _ensure_fulfillment_and_ledger(db: Session, order: Order, track: Track | Non
             )
         )
 
-    if track:
+    album = db.get(Album, order.album_id) if order.album_id else None
+    if track or album:
         existing_ledger = (
             db.query(CreatorLedgerEntry)
             .filter(CreatorLedgerEntry.order_id == order.id)
@@ -57,10 +58,10 @@ def _ensure_fulfillment_and_ledger(db: Session, order: Order, track: Track | Non
         if not existing_ledger:
             db.add(
                 CreatorLedgerEntry(
-                    creator_profile_id=track.creator_profile_id,
+                    creator_profile_id=track.creator_profile_id if track else album.creator_profile_id,
                     order_id=order.id,
                     amount=order.net_amount,
-                    description=f"Sale of '{track.title}' (order {order.order_number})",
+                    description=f"Sale of '{track.title if track else album.title}' (order {order.order_number})",
                 )
             )
 
@@ -103,6 +104,11 @@ def finalize_order(db: Session, order: Order) -> OrderFinalizationResult:
         )
 
     track = db.get(Track, order.track_id) if order.track_id else None
+
+    if order.album_id and db.get(Album, order.album_id) is None:
+        order.status = OrderStatus.REJECTED
+        db.commit()
+        return OrderFinalizationResult(OrderStatus.REJECTED, "The purchased album no longer exists.")
 
     if order.track_id and track is None:
         order.status = OrderStatus.REJECTED
