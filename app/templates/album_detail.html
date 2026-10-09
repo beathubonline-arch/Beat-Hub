@@ -30,7 +30,7 @@
 <input id="buyer-email" name="email" type="email" required value="{{ viewer.email if viewer else '' }}" placeholder="you@example.com" autocomplete="email" style="box-sizing:border-box;width:100%;padding:13px;background:#161616;border:1px solid #6f6138;color:white;border-radius:9px">
 <button type="submit" style="width:100%;padding:15px;margin-top:12px;background:#e8c85a;color:#111;border:0;border-radius:10px;font-weight:950;font-size:15px;cursor:pointer">Buy Complete Album · KSh 1,000 →</button>
 </form><p style="font-size:11px;color:#b7b0a0">M-Pesa or card via Paystack · You'll sign in first if needed.</p>
-{% else %}<p style="color:#ffcf8b">Checkout unavailable until all 12 tracks are present.</p>{% endif %></div>{% endif %}
+{% else %}<p style="color:#ffcf8b">Checkout unavailable until all 12 tracks are present.</p>{% endif %}</div>{% endif %}
         <div class="album-stats"><div class="album-stat"><strong>{{ album.album_tracks|length }}</strong><span>Tracks</span></div><div class="album-stat"><strong>{% set available_count = namespace(value=0) %}{% for at in album.album_tracks %}{% if not at.track.is_sold %}{% set available_count.value = available_count.value + 1 %}{% endif %}{% endfor %}{{ available_count.value }}</strong><span>Available</span></div></div>
       </div>
     </div>
