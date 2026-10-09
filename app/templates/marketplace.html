@@ -55,6 +55,10 @@
     {% if track_preview %}<div class="mini-grid">{% for item in track_preview %}<a class="card" href="{{ item.url }}"><div class="art">{% if item.artwork_url %}<img src="{{ item.artwork_url }}" alt="{{ item.title }}">{% endif %}</div><div class="body"><div class="title">{{ item.title }}</div><div class="by">{{ item.producer }}</div><div class="bottom"><span class="price">{{ '$' if (item.currency|default('KES')) == 'USD' else 'KSh' }} {{ "%.2f"|format(item.price or 0) }} {{ item.currency|default('KES') }}</span><span class="view">View →</span></div></div></a>{% endfor %}</div>{% else %}<div class="empty">No finished tracks have been published yet.</div>{% endif %}
   </section>
 
+  <section class="section" id="album-releases">
+    <div class="sectionhead"><div><div class="kicker">Complete releases</div><h2>Albums &amp; EPs</h2><p>One album, one price. Open a release to preview its tracks.</p></div><a class="more" href="/marketplace/albums">Browse albums →</a></div>
+    {% if album_preview %}<div class="mini-grid">{% for item in album_preview %}<a class="card" href="/album/{{ item.slug }}"><div class="art">{% if item.artwork_url %}<img src="{{ item.artwork_url }}" alt="{{ item.title }}" loading="lazy">{% endif %}</div><div class="body"><div class="title">{{ item.title }}</div><div class="by">{{ item.creator }} · {{ item.track_count }} tracks</div><div class="bottom"><span class="price">{% if item.slug == 'time-itatell' %}KSh 1,000 · Full album{% else %}View release{% endif %}</span><span class="view">Preview →</span></div></div></a>{% endfor %}</div>{% endif %}
+  </section>
   <section class="section" id="creator-tees">
     <div class="sectionhead"><div><div class="kicker">Creator culture</div><h2>Creator Tees</h2><p>Wear the sound. Rep the creator. Collections keep each creator's tees together.</p></div><a class="more" href="/merch">Shop all tees →</a></div>
 
