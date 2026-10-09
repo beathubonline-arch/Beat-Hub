@@ -28,6 +28,15 @@
       <div class="field"><label>Add tracks already in your library</label>
         {% if tracks %}<div class="tracks">{% for track in tracks %}<label class="track" data-type="{{ track.content_type }}"><input type="checkbox" name="track_ids" value="{{ track.id }}"><span class="track-info"><span class="track-title">{{ track.title }}</span><span class="track-meta">{{ track.genre or 'Uncategorized' }}{% if track.bpm %} · {{ track.bpm }} BPM{% endif %}</span></span><span class="badge">{{ 'Track' if track.content_type == 'track' else 'Beat' }}</span></label>{% endfor %}</div>{% else %}<div class="empty">No previously uploaded items yet. Use the upload box above to add tracks directly.</div>{% endif %}
       </div>
+      <div id="upload-advice" role="note" style="margin:18px 0;padding:15px 18px;border:1px solid #665522;border-radius:12px;background:#211d12;color:#f3d98a;font-size:14px;line-height:1.6">⏳ <strong>Large music uploads can take a while.</strong> WAV and FLAC files are usually much larger than MP3 files. Albums with many tracks may take several minutes or longer depending on your internet speed. After clicking Publish, please keep this tab open until BeatHub confirms completion.</div>
+      <div id="upload-status" role="status" aria-live="polite" hidden style="margin:16px 0;padding:20px;border:1px solid #9b7b30;border-radius:12px;background:#1e1a10;color:#f8e6b4">
+        <div style="font-size:18px;font-weight:800">⏳ Uploading and processing your project…</div>
+        <p id="upload-detail" style="margin:10px 0">Please wait. Large WAV albums can take several minutes or longer.</p>
+        <div style="height:8px;background:#413821;border-radius:20px;overflow:hidden;margin:12px 0"><div style="height:100%;width:35%;background:#d6af43;border-radius:20px;animation:album-wait 1.6s ease-in-out infinite alternate"></div></div>
+        <small id="upload-elapsed">Elapsed: 0 seconds</small>
+        <p style="margin:10px 0 0"><strong>Keep this tab open.</strong> Do not refresh or submit again. This animation indicates activity, not a measured upload percentage.</p>
+      </div>
+      <style>@keyframes album-wait{from{transform:translateX(-90%)}to{transform:translateX(280%)}}</style>
       <div class="actions"><a class="btn back" href="/dashboard">← Back to Dashboard</a><button class="btn submit" id="submit-btn" type="submit">Create &amp; Publish Project</button></div>
     </form>
   </div>
@@ -35,6 +44,23 @@
 <script>
 (function(){
  const fileInput=document.getElementById('new-audio'), list=document.getElementById('new-list');
+ const form=document.getElementById('project-form'),submit=document.getElementById('submit-btn'),status=document.getElementById('upload-status'),detail=document.getElementById('upload-detail'),elapsed=document.getElementById('upload-elapsed');
+ let submitting=false;
+ form.addEventListener('submit',function(){
+  if(submitting)return;
+  submitting=true;
+  const selected=Array.from(fileInput.files||[]);
+  const bytes=selected.reduce((sum,f)=>sum+f.size,0);
+  const mb=(bytes/1048576).toFixed(1);
+  const wav=selected.filter(f=>/\\.(wav|flac)$/i.test(f.name)).length;
+  detail.textContent=selected.length+' audio file(s) selected ('+mb+' MB). '+(wav?'High-quality WAV/FLAC files may take longer. ':'')+'Please wait for confirmation.';
+  status.hidden=false;submit.disabled=true;submit.textContent='Uploading — please wait…';
+  status.scrollIntoView({behavior:'smooth',block:'center'});
+  const start=Date.now();
+  setInterval(()=>{const seconds=Math.floor((Date.now()-start)/1000);elapsed.textContent='Elapsed: '+Math.floor(seconds/60)+'m '+(seconds%60)+'s';},1000);
+ });
+ window.addEventListener('beforeunload',function(e){if(submitting){e.preventDefault();e.returnValue='';}});
+
  const typeInputs=document.querySelectorAll('input[name="content_type"]');
  const libraryTracks=document.querySelectorAll('.track');
  let files=[];
