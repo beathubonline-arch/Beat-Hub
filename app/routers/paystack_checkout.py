@@ -102,6 +102,9 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     if payment.status == PaymentStatus.COMPLETED and order.status == OrderStatus.COMPLETED:
         return True
 
+    # A verified transaction must belong to this exact order/reference.
+    if str(data.get("reference") or "") != str(payment.checkout_request_id):
+        raise RuntimeError("Paystack transaction reference mismatch.")
     status = str(data.get("status", "")).lower()
     if status != "success":
         payment.status = PaymentStatus.FAILED
@@ -352,6 +355,8 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("x-paystack-signature", "")
     secret = settings.PAYSTACK_SECRET_KEY or ""
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+    if not secret:
+        raise HTTPException(status_code=503, detail="Payment verification is not configured.")
     if not signature or not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=401, detail="Invalid Paystack signature.")
     try:
