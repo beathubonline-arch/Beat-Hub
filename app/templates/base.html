@@ -78,6 +78,19 @@
         {% endif %}
       </div>
     </nav>
+    {% if current_user and current_user.role.value == 'creator' and request.url.path.startswith('/dashboard') %}
+    <nav class="beathub-creator-tabs" aria-label="Creator Studio sections">
+      <a href="/dashboard#overview">⌂ Overview</a>
+      <a href="/dashboard#music">🎵 Beats &amp; Tracks</a>
+      <a href="/dashboard/trend-dna">⚡ Trend DNA</a>
+      <a href="/dashboard#albums">💿 Albums</a>
+      <a href="/dashboard/merch">👕 Merchandise</a>
+      <a href="/dashboard/analytics">📊 Analytics</a>
+      <a href="/dashboard#earnings">💰 Earnings</a>
+      <a href="/dashboard#store">🛍 Store</a>
+      <span class="tab-manage">Creator Studio</span>
+    </nav>
+    {% endif %}
     {% set query_error = request.query_params.get('error') %}
     {% set query_success = request.query_params.get('success') %}
     {% if query_error or query_success %}
