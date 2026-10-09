@@ -177,6 +177,13 @@ def album_detail(
         .filter(Album.slug == slug, Album.is_published.is_(True))
         .first()
     )
+    # Legacy promotional URLs must survive an album being given a different slug.
+    if not album and slug == "time-itatell":
+        album = (
+            db.query(Album)
+            .filter(Album.title.ilike("TIME ITATELL"), Album.is_published.is_(True))
+            .first()
+        )
     if not album:
         raise HTTPException(status_code=404, detail="Album not found.")
 
