@@ -113,7 +113,7 @@
 <p class="form-intro">Welcome back. Enter your credentials below to continue to your BeatHub account.</p>
 {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
 {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
-<form method="post" action="/login{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" autocomplete="on">
+<form id="loginForm" method="post" action="/login{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" autocomplete="on">
 <div class="field"><label for="identifier">Email or Username</label><div class="input-wrap"><span class="input-icon">@</span><input type="text" id="identifier" name="identifier" placeholder="you@example.com" autocomplete="username" required autofocus></div></div>
 <div class="field"><label for="password">Password</label><div class="input-wrap"><span class="input-icon">•</span><input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required><button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password">SHOW</button></div></div>
 <div class="form-options"><label class="remember"><input type="checkbox" name="remember">Remember me</label><a href="/forgot-password" class="forgot">Forgot password?</a></div>
@@ -129,6 +129,9 @@
 <footer class="footer">© {{ current_year }} <span>BeatHub</span> · The home of cool beats.</footer>
 </div>
 <script>
+const loginForm=document.getElementById("loginForm");
+const loginButton=document.getElementById("loginButton");
+if(loginForm&&loginButton){loginForm.addEventListener("submit",function(){loginButton.disabled=true;loginButton.textContent="SIGNING IN…";loginButton.setAttribute("aria-busy","true");setTimeout(function(){loginButton.disabled=false;loginButton.textContent="SIGN IN TO BEATHUB";loginButton.removeAttribute("aria-busy");},15000);});}
 const passwordInput=document.getElementById("password");
 const passwordToggle=document.getElementById("passwordToggle");
 if(passwordInput&&passwordToggle){passwordToggle.addEventListener("click",function(){const isPassword=passwordInput.type==="password";passwordInput.type=isPassword?"text":"password";passwordToggle.textContent=isPassword?"HIDE":"SHOW";passwordToggle.setAttribute("aria-label",isPassword?"Hide password":"Show password");});}
