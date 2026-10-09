@@ -12,9 +12,7 @@
 
     <div class="album-hero">
       <div class="album-art">
-        {% if album.cover_art_url %}<img src="{{ album.cover_art_url }}" alt="{{ album.title }}" loading="eager">
-        {% elif album.cover_url %}<img src="{{ album.cover_url }}" alt="{{ album.title }}" loading="eager">
-        {% elif album.artwork_url %}<img src="{{ album.artwork_url }}" alt="{{ album.title }}" loading="eager">
+        {% if album.artwork_url %}<img src="{{ album.artwork_url }}" alt="{{ album.title }}" loading="eager" referrerpolicy="no-referrer">
         {% else %}<div class="album-art-fallback"><span>BH</span></div>{% endif %}
       </div>
       <div class="album-info">
