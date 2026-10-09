@@ -78,21 +78,6 @@
         {% endif %}
       </div>
     </nav>
-    {% set is_creator_dashboard = request.url.path.startswith('/dashboard') and current_user and current_user.role.value == 'creator' %}
-    {% set dashboard_path = request.url.path %}
-    {% if is_creator_dashboard and dashboard_path not in ['/dashboard', '/dashboard/'] %}
-      <nav class="beathub-creator-tabs" aria-label="Creator Studio sections">
-        <a href="/dashboard" class="{% if dashboard_path == '/dashboard' or dashboard_path == '/dashboard/' %}active{% endif %}">⌂ Overview</a>
-        <a href="/dashboard/upload" class="{% if dashboard_path.startswith('/dashboard/upload') %}active{% endif %}">🎵 Beats &amp; Tracks</a>
-        <a href="/dashboard/trend-dna" class="{% if dashboard_path.startswith('/dashboard/trend-dna') %}active{% endif %}">⚡ Trend DNA</a>
-        <a href="/dashboard/albums/new" class="{% if dashboard_path.startswith('/dashboard/albums') %}active{% endif %}">💿 Albums</a>
-        <a href="/dashboard/merch" class="{% if dashboard_path.startswith('/dashboard/merch') %}active{% endif %}">👕 Merchandise</a>
-        <a href="/dashboard/analytics" class="{% if dashboard_path.startswith('/dashboard/analytics') %}active{% endif %}">📊 Analytics</a>
-        <a href="/dashboard/withdraw" class="{% if dashboard_path.startswith('/dashboard/withdraw') %}active{% endif %}">💰 Earnings</a>
-        {% if store_url %}<a href="{{ store_url }}" target="_blank" rel="noopener noreferrer">🛍 Store</a>{% else %}<a href="/dashboard">🛍 Store</a>{% endif %}
-        <span class="tab-manage">Creator Studio</span>
-      </nav>
-    {% endif %}
     {% set query_error = request.query_params.get('error') %}
     {% set query_success = request.query_params.get('success') %}
     {% if query_error or query_success %}
