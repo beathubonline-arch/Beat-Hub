@@ -44,6 +44,7 @@ async def create_album_with_tracks(
     track_ids: List[str] = Form(default=[]),
     new_audio_files: List[UploadFile] = File(default=[]),
     new_titles: List[str] = Form(default=[]),
+    new_prices: List[str] = Form(default=[]),
 ):
     profile = user.profile
     if not profile:
@@ -70,6 +71,18 @@ async def create_album_with_tracks(
 
     if not existing and not new_audio_files:
         raise HTTPException(status_code=400, detail="Add at least one existing track or upload a new track.")
+
+    if len(new_prices) != len(new_audio_files):
+        raise HTTPException(status_code=400, detail="Enter a price for every new track before publishing.")
+    validated_prices = []
+    for raw in new_prices:
+        try:
+            value = Decimal(str(raw).strip())
+            if not value.is_finite() or value <= 0:
+                raise ValueError()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Every new track needs a valid price greater than KSh 0.")
+        validated_prices.append(value)
 
     try:
         artwork_path = None
@@ -111,7 +124,7 @@ async def create_album_with_tracks(
                 tags=None,
                 audio_file_path=audio_path,
                 cover_art_path=artwork_path,
-                price=Decimal("0"),
+                price=validated_prices[index],
                 sales_model=SalesModel.NON_EXCLUSIVE,
                 content_type=wanted_track_type,
                 is_published=True,
