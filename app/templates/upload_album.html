@@ -19,7 +19,7 @@
         <label>Upload tracks directly to this project</label>
         <div class="upload-box">
           <h3>＋ Upload multiple audio files</h3>
-          <p>Select one or many audio files. BeatHub will add each new file to this project automatically. You can edit the titles before publishing.</p>
+          <p>Select one or many audio files. BeatHub will add each new file to this project automatically. You must set a price greater than KSh 0 for every new track before publishing.</p>
           <input class="file-input" id="new-audio" type="file" name="new_audio_files" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/flac,.mp3,.wav,.m4a,.flac" multiple>
           <div id="new-list" class="new-list"></div>
         </div>
@@ -48,6 +48,8 @@
  let submitting=false;
  form.addEventListener('submit',function(){
   if(submitting)return;
+  const prices=Array.from(form.querySelectorAll('input[name="new_prices"]'));
+  if(prices.some(p=>!p.value||Number(p.value)<=0||!Number.isFinite(Number(p.value)))){alert('Set a valid price above KSh 0 for every new track before publishing.');return;}
   submitting=true;
   const selected=Array.from(fileInput.files||[]);
   const bytes=selected.reduce((sum,f)=>sum+f.size,0);
@@ -72,10 +74,11 @@
    const n=document.createElement('div');n.className='new-track-number';n.textContent=String(index+1).padStart(2,'0');
    const input=document.createElement('input');input.type='text';input.name='new_titles';input.required=true;input.maxLength=255;input.value=file.title||file.name.replace(/\\.[^.]+$/,'');input.placeholder='Track title';
    input.addEventListener('input',()=>{file.title=input.value});
+   const price=document.createElement('input');price.type='number';price.name='new_prices';price.required=true;price.min='0.01';price.step='0.01';price.placeholder='Track price (KSh) *';price.setAttribute('aria-label','Price in Kenyan shillings for track '+(index+1));price.value=file.price||'';price.style.cssText='width:155px;max-width:100%';price.addEventListener('input',()=>{file.price=price.value});
    const controls=document.createElement('div');controls.style.cssText='display:flex;gap:5px';
    [['↑',-1],['↓',1]].forEach(([label,delta])=>{const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.setAttribute('aria-label',delta<0?'Move track up':'Move track down');btn.disabled=index+delta<0||index+delta>=files.length;btn.style.cssText='padding:8px;border:1px solid #64542c;border-radius:7px;background:#1b1a15;color:#f2d36b;cursor:pointer';btn.addEventListener('click',()=>{files[index].title=input.value;const other=index+delta;[files[index],files[other]]=[files[other],files[index]];render()});controls.appendChild(btn)});
    const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.title='Remove track';remove.setAttribute('aria-label','Remove track '+(index+1));remove.style.cssText='padding:8px;border:1px solid #694040;border-radius:7px;background:#211414;color:#ffb4b4;cursor:pointer';remove.addEventListener('click',()=>{files.splice(index,1);render()});controls.appendChild(remove);
-   row.style.gridTemplateColumns='42px minmax(0,1fr) auto';row.append(n,input,controls);list.appendChild(row);
+   row.style.gridTemplateColumns='42px minmax(0,1fr) minmax(115px,155px) auto';row.append(n,input,price,controls);list.appendChild(row);
   });
   const transfer=new DataTransfer();files.forEach(f=>transfer.items.add(f));fileInput.files=transfer.files;
  }
@@ -86,7 +89,7 @@
   render();
  });
  typeInputs.forEach(x=>x.addEventListener('change',sync));sync();
- const hint=document.createElement('p');hint.style.cssText='color:#d9bd62;font-size:12px;margin:8px 0';hint.textContent='Add songs one by one or in batches. Existing selections stay in place. Use ↑ and ↓ to set playback order.';fileInput.insertAdjacentElement('afterend',hint);
+ const hint=document.createElement('p');hint.style.cssText='color:#d9bd62;font-size:12px;margin:8px 0';hint.textContent='Add songs one by one or in batches. Existing selections stay in place. Set each track price, then use ↑ and ↓ to set playback order.';fileInput.insertAdjacentElement('afterend',hint);
 })();
 </script>
 {% endblock %}
