@@ -20,7 +20,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
-from app.models.music import SalesModel, Track
+from app.models.music import Album, SalesModel, Track
 from app.models.user import User
 from app.services.merchandise_payments import complete_merchandise_payment, find_merchandise_order_id
 from app.services.orders import finalize_order
@@ -240,6 +240,76 @@ async def paystack_checkout(
     return RedirectResponse(authorization, status_code=303)
 
 
+
+@router.post("/paystack/checkout/album/{slug}")
+async def paystack_album_checkout(
+    slug: str,
+    email: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    # This release has an explicitly approved fixed total. Never trust a client amount.
+    if slug != "time-itatell":
+        raise HTTPException(status_code=404, detail="Album checkout is not configured for this release.")
+    album = db.query(Album).filter(Album.slug == slug, Album.is_published.is_(True)).first()
+    if not album or len(album.album_tracks) != 12:
+        raise HTTPException(status_code=409, detail="Album is unavailable or its 12-track catalog is incomplete.")
+    if album.creator_profile.user_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot purchase your own album.")
+    if not settings.PAYSTACK_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Paystack is not configured.")
+    customer_email = (email or "").strip().lower() or (user.email or "").strip().lower()
+    if not EMAIL_RE.fullmatch(customer_email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    price, currency = Decimal("1000.00"), "KES"
+    split = calculate_split(price)
+    order = Order(
+        id=str(uuid.uuid4()), order_number=f"BH{uuid.uuid4().hex[:10].upper()}",
+        buyer_id=user.id, track_id=None, album_id=album.id,
+        sales_model_at_purchase="non_exclusive",
+        gross_amount=price, currency=currency,
+        commission_amount=Decimal(str(split["commission_amount"])),
+        net_amount=Decimal(str(split["net_amount"])),
+        commission_percent_at_purchase=BEATHUB_COMMISSION_PERCENT,
+        status=OrderStatus.PENDING, phone_number="paystack",
+    )
+    db.add(order)
+    db.flush()
+    payload = {
+        "email": customer_email, "amount": _amount_subunit(price), "currency": currency,
+        "reference": order.order_number,
+        "callback_url": f"{settings.BASE_URL.rstrip('/')}/paystack/callback",
+        "channels": _paystack_channels(currency),
+        "metadata": {"beathub_order_id": order.id, "beathub_album_slug": slug, "buyer_id": user.id},
+    }
+    subaccount = getattr(album.creator_profile, "paystack_subaccount_code", None)
+    if subaccount:
+        payload["subaccount"] = str(subaccount)
+        payload["transaction_charge"] = _amount_subunit(Decimal(str(split["commission_amount"])))
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
+            response = await client.post(f"{settings.PAYSTACK_BASE_URL.rstrip('/')}/transaction/initialize", headers=_headers(), json=payload)
+        result = response.json()
+    except Exception:
+        db.rollback()
+        logger.exception("Album Paystack initialization failed")
+        raise HTTPException(status_code=502, detail="Payment service unavailable. No charge was made.")
+    if response.status_code >= 400 or not result.get("status"):
+        db.rollback()
+        raise HTTPException(status_code=400, detail=_paystack_rejection_message(result, currency))
+    data = result.get("data") or {}
+    if not data.get("authorization_url"):
+        db.rollback()
+        raise HTTPException(status_code=502, detail="Payment service did not provide a checkout URL.")
+    db.add(PaymentTransaction(
+        order_id=order.id, checkout_request_id=data.get("reference") or order.order_number,
+        phone_number="paystack", amount=price, currency=currency,
+        status=PaymentStatus.PENDING, result_description="Album purchase awaiting verified payment.",
+    ))
+    db.commit()
+    return RedirectResponse(data["authorization_url"], status_code=303)
+
+
 @router.get("/paystack/callback")
 async def paystack_callback(reference: str | None = None, trxref: str | None = None, db: Session = Depends(get_db)):
     ref = (reference or trxref or "").strip()
@@ -261,17 +331,19 @@ async def paystack_callback(reference: str | None = None, trxref: str | None = N
     if not order:
         return RedirectResponse("/beats?error=Payment%20order%20was%20not%20found.", 303)
     track_slug = order.track.slug if order.track else None
-    if not track_slug:
-        return RedirectResponse("/beats?error=Purchased%20track%20was%20not%20found.", 303)
+    album_slug = order.album.slug if order.album else None
+    if not track_slug and not album_slug:
+        return RedirectResponse("/beats?error=Purchased%20music%20was%20not%20found.", 303)
+    destination = f"/album/{album_slug}" if album_slug else f"/track/{track_slug}"
     try:
         data = await _verify_reference(ref)
         completed = _complete_verified_payment(db, order, payment, data)
     except Exception:
         db.rollback(); logger.exception("Paystack music callback verification failed: %s", ref)
-        return RedirectResponse(f"/track/{track_slug}?payment=pending", 303)
+        return RedirectResponse(f"{destination}?payment=pending", 303)
     if completed:
-        return RedirectResponse(f"/track/{track_slug}?payment=success", 303)
-    return RedirectResponse(f"/track/{track_slug}?payment=failed", 303)
+        return RedirectResponse(f"{destination}?payment=success", 303)
+    return RedirectResponse(f"{destination}?payment=failed", 303)
 
 
 @router.post("/paystack/webhook")
