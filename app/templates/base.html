@@ -79,8 +79,8 @@
       </div>
     </nav>
     {% set is_creator_dashboard = request.url.path.startswith('/dashboard') and current_user and current_user.role.value == 'creator' %}
-    {% if is_creator_dashboard and dashboard_path != '/dashboard' %}
-      {% set dashboard_path = request.url.path %}
+    {% set dashboard_path = request.url.path %}
+    {% if is_creator_dashboard and dashboard_path not in ['/dashboard', '/dashboard/'] %}
       <nav class="beathub-creator-tabs" aria-label="Creator Studio sections">
         <a href="/dashboard" class="{% if dashboard_path == '/dashboard' or dashboard_path == '/dashboard/' %}active{% endif %}">⌂ Overview</a>
         <a href="/dashboard/upload" class="{% if dashboard_path.startswith('/dashboard/upload') %}active{% endif %}">🎵 Beats &amp; Tracks</a>
