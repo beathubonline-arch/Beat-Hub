@@ -26,8 +26,9 @@
 <div class="easy-checkout" aria-label="Buy this album">
   <div class="easy-step"><span class="easy-step-number">1</span><div><strong>Pay KSh 1,000</strong><span>Use M-PESA or a bank card on the secure payment page.</span></div></div>
   <form action="/paystack/checkout/album/{{ album.slug }}" method="post" class="easy-payment-form" id="easy-album-payment">
-    <label for="buyer-email">Your email address <small>(for your receipt and music access)</small></label>
-    <input id="buyer-email" name="email" type="email" required autocomplete="email" inputmode="email" placeholder="e.g. yourname@gmail.com" {% if viewer and viewer.email %}value="{{ viewer.email }}"{% endif %}>
+    <label for="buyer-email">Enter the email where we should send your album</label>
+    <p style="margin:6px 0 12px;color:#c4e7c5;font-size:13px;line-height:1.55">📩 After successful payment, we’ll send your 12-song album download link to this email. You can also access your purchased music on BeatHub.</p>
+    <input id="buyer-email" name="email" type="email" required autocomplete="email" inputmode="email" placeholder="Email to receive your album" {% if viewer and viewer.email %}value="{{ viewer.email }}"{% endif %}>
     <button type="submit" class="easy-pay-button" id="easy-pay-button">Pay KSh 1,000 →</button>
     <p class="easy-secure">🔒 Secure checkout · M-PESA and card available</p>
   </form>
