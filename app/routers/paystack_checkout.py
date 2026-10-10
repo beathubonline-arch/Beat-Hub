@@ -25,6 +25,7 @@ from app.models.user import User, UserRole
 from app.utils.security import hash_password
 from app.utils.deps import get_optional_user
 from app.services.guest_album_access import COOKIE_NAME, MAX_AGE_SECONDS, issue_guest_token
+from app.services.transactional_email_notifications import send_album_delivery_email
 from app.services.merchandise_payments import complete_merchandise_payment, find_merchandise_order_id
 from app.services.orders import finalize_order
 from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency
@@ -137,6 +138,15 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     if customer.get("phone"):
         payment.phone_number = str(customer["phone"])[:20]
     result = finalize_order(db, order)
+    if result.status == OrderStatus.COMPLETED and order.album_id:
+        metadata = data.get("metadata") or {}
+        delivery_email = str(metadata.get("delivery_email") or "").strip().lower()
+        if EMAIL_RE.fullmatch(delivery_email) and not delivery_email.startswith("guest-"):
+            try:
+                send_album_delivery_email(delivery_email, order.album.title, order.id,
+                                          settings.BASE_URL.rstrip("/") + "/album/" + order.album.slug)
+            except Exception:
+                logger.exception("Album delivery email failed for order %s; payment remains fulfilled.", order.id)
     return result.status == OrderStatus.COMPLETED
 
 
@@ -315,7 +325,7 @@ async def paystack_album_checkout(
         "reference": order.order_number,
         "callback_url": f"{settings.BASE_URL.rstrip('/')}/paystack/callback",
         "channels": _paystack_channels(currency),
-        "metadata": {"beathub_order_id": order.id, "beathub_album_slug": slug, "buyer_id": user.id, "buyer_phone": normalized_phone, "guest": is_guest},
+        "metadata": {"beathub_order_id": order.id, "beathub_album_slug": slug, "buyer_id": user.id, "buyer_phone": normalized_phone, "guest": is_guest, "delivery_email": customer_email},
     }
     subaccount = getattr(album.creator_profile, "paystack_subaccount_code", None)
     if subaccount:
