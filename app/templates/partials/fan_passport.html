@@ -1,0 +1,30 @@
+{# BeatHub Fan Passport — Jinja partial. Server MUST supply authenticated fan_passport only. #}
+<link rel="stylesheet" href="/static/css/fan_passport.css">
+{% set p = fan_passport %}
+{% set levels = [('supporter','✓','Verified Supporter',1),('collector','♫','Sound Collector',3),('insider','★','BeatHub Insider',10),('legend','♛','BeatHub Legend',25)] %}
+<section class="bh-passport" aria-label="Your BeatHub Fan Passport">
+  <div class="bh-passport__eyebrow">BEATHUB • REAL MUSIC. REAL SUPPORTERS.</div>
+  <h2 class="bh-passport__heading">Fan Passport</h2>
+  <p class="bh-passport__tagline">Your support builds the culture.</p>
+  <div class="bh-passport__tiers">
+    {% for key, symbol, name, minimum in levels %}
+    <div class="bh-tier" data-tier="{{ key }}" {% if p.badge == name %}aria-current="true"{% endif %}>
+      <div class="bh-tier__medal" aria-hidden="true">{{ symbol }}</div>
+      <div class="bh-tier__name">{{ name }}</div>
+      <div class="bh-tier__milestone">{{ minimum }} {{ 'purchase' if minimum == 1 else 'purchases' }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="bh-passport__card">
+    <div class="bh-passport__avatar" aria-hidden="true">♫</div>
+    <div>
+      <div class="bh-passport__username">{{ fan_display_name }}</div>
+      <div class="bh-passport__status">{{ p.badge or 'Future Supporter' }}</div>
+      <div class="bh-passport__stats">
+        <span><strong>{{ p.purchase_count }}</strong> purchases</span>
+        <span><strong>{{ p.artists_supported }}</strong> artists backed</span>
+      </div>
+    </div>
+  </div>
+  <div class="bh-passport__footer">I support real music. I am BeatHub.</div>
+</section>
