@@ -10,7 +10,7 @@ from sqlalchemy import text
 from app.database import engine
 
 router = APIRouter(tags=["music-drops"])
-_EMAIL = re.compile(r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _READY = False
 
 def ensure_table():
