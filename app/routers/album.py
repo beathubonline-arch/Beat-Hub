@@ -18,6 +18,7 @@ from app.models.user import User
 from app.utils.deps import require_creator, get_optional_user, require_user
 from app.models.order import License, Order, OrderStatus
 from app.services.storage import media_url, r2_presigned_url
+from app.services.guest_album_access import authorized_guest_order
 from app.utils.text import unique_slug
 
 router = APIRouter(tags=["albums"])
@@ -189,6 +190,7 @@ def album_detail(
 
     album.artwork_url = r2_presigned_url(album.artwork_path) if album.artwork_path else None
     purchased = bool(user and db.query(License).join(Order, License.order_id == Order.id).filter(License.buyer_id == user.id, License.album_id == album.id, Order.status == OrderStatus.COMPLETED).first())
+    purchased = purchased or bool(authorized_guest_order(request, db, album.id))
     return templates.TemplateResponse(
         request,
         "album_detail.html",
@@ -207,8 +209,9 @@ def album_detail(
 def download_album_track(
     slug: str,
     track_id: str,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User | None = Depends(get_optional_user),
 ):
     album = db.query(Album).filter(Album.slug == slug).first()
     if not album:
@@ -216,9 +219,9 @@ def download_album_track(
     member = db.query(AlbumTrack).filter(AlbumTrack.album_id == album.id, AlbumTrack.track_id == track_id).first()
     if not member:
         raise HTTPException(status_code=404, detail="Track not in album.")
-    owned = db.query(License).join(Order, License.order_id == Order.id).filter(
+    owned = (db.query(License).join(Order, License.order_id == Order.id).filter(
         License.buyer_id == user.id, License.album_id == album.id, Order.status == OrderStatus.COMPLETED
-    ).first()
+    ).first() if user else None) or authorized_guest_order(request, db, album.id)
     if not owned:
         raise HTTPException(status_code=403, detail="Purchase this album to download its tracks.")
     url = media_url(member.track.audio_file_path, expires=300)
@@ -234,16 +237,17 @@ def _album_zip_filename(value: str) -> str:
 @router.get("/album/{slug}/download.zip")
 def download_album_zip(
     slug: str,
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User | None = Depends(get_optional_user),
 ):
     album = db.query(Album).filter(Album.slug == slug, Album.is_published.is_(True)).first()
     if not album:
         raise HTTPException(status_code=404, detail="Album not found.")
-    owned = db.query(License).join(Order, License.order_id == Order.id).filter(
+    owned = (db.query(License).join(Order, License.order_id == Order.id).filter(
         License.buyer_id == user.id, License.album_id == album.id,
         Order.buyer_id == user.id, Order.status == OrderStatus.COMPLETED
-    ).first()
+    ).first() if user else None) or authorized_guest_order(request, db, album.id)
     if not owned:
         raise HTTPException(status_code=403, detail="Complete your purchase to download this album.")
     members = list(album.album_tracks)
