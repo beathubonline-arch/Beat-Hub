@@ -369,8 +369,8 @@ async def paystack_callback(reference: str | None = None, trxref: str | None = N
     order = db.get(Order, payment.order_id)
     if not order:
         return RedirectResponse("/beats?error=Payment%20order%20was%20not%20found.", 303)
-    track_slug = order.track.slug if order.track else None
-    album_slug = order.album.slug if order.album else None
+    track_slug = order.track.slug if getattr(order, "track", None) else None
+    album_slug = order.album.slug if getattr(order, "album", None) else None
     if not track_slug and not album_slug:
         return RedirectResponse("/beats?error=Purchased%20music%20was%20not%20found.", 303)
     destination = f"/album/{album_slug}" if album_slug else f"/track/{track_slug}"
