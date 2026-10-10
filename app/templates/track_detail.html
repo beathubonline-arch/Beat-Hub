@@ -49,13 +49,30 @@
 
         {% if track.description %}<p class="track-desc">{{ track.description }}</p>{% endif %}
 
+        {% set album_offer = namespace(item=none) %}
+        {% for membership in track.album_tracks %}
+          {% if membership.album.is_published and (membership.album.slug == 'time-itatell' or membership.album.title|lower == 'time itatell') %}
+            {% set album_offer.item = membership.album %}
+          {% endif %}
+        {% endfor %}
         <div class="track-price">
-          <div class="track-price-label">{% if track.album_tracks and track.album_tracks|selectattr("album.album_tracks", "defined")|list and track.album_tracks[0].album.album_tracks|selectattr("track.slug", "equalto", "mtu-mboka-intro-wav")|list %}Full album price{% elif track.price and track.price > 0 %}Price{% else %}Individual track not currently for sale{% endif %}</div>
-          <div class="track-price-value">{% if track.slug == "mtu-mboka-intro-wav" and track.album_tracks %}KSh 1,000 · Complete album{% elif track.price and track.price > 0 %}{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }} {{ track.currency|default('KES') }}{% else %}Album pricing pending{% endif %}</div>
+          {% if album_offer.item %}
+            <div class="track-price-label">Complete album · All {{ album_offer.item.album_tracks|length }} tracks</div>
+            <div class="track-price-value">KSh 1,000</div>
+            <div class="preview-label">This song is included in TIME ITATELL. Purchase the complete album to unlock all tracks.</div>
+          {% elif track.price and track.price > 0 %}
+            <div class="track-price-label">Track price</div>
+            <div class="track-price-value">{{ '$' if (track.currency|default('KES')) == 'USD' else 'KSh' }} {{ '%.2f'|format(track.price or 0) }}</div>
+          {% else %}
+            <div class="track-price-label">Availability</div>
+            <div class="track-price-value" style="font-size:18px">Individual track not currently for sale</div>
+          {% endif %}
         </div>
 
         <div class="track-actions">
-          {% if purchased %}
+          {% if album_offer.item %}
+            <a class="track-buy" href="/album/{{ album_offer.item.slug }}">Buy Complete Album · KSh 1,000 →</a>
+          {% elif purchased %}
             <a class="track-buy" href="/account/download/{{ track.id }}">Download Your Track</a>
           {% else %}
             {% set model = track.sales_model.value if track.sales_model else 'non_exclusive' %}
@@ -64,7 +81,7 @@
             {% elif track.price and track.price > 0 %}
               <a class="track-buy" href="/checkout/track/{{ track.slug }}">Buy Now</a>
             {% else %}
-              {% if track.slug == "mtu-mboka-intro-wav" and track.album_tracks %}<a class="track-buy" href="/album/{{ track.album_tracks[0].album.slug }}">View Full Album — KSh 1,000</a>{% else %}<span class="track-back">Individual purchase unavailable</span>{% endif %}
+              <span class="track-back">Individual purchase unavailable</span>
             {% endif %}
           {% endif %}
           <a class="track-session" href="/sessions/producer/{{ track.creator_profile.slug if track.creator_profile else '' }}?from_track={{ track.slug }}">Book a Session</a>
