@@ -25,7 +25,7 @@ from app.models.user import User
 from app.services.merchandise_payments import complete_merchandise_payment, find_merchandise_order_id
 from app.services.orders import finalize_order
 from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency
-from app.utils.deps import require_user
+from app.utils.deps import require_user, get_optional_user
 
 router = APIRouter(tags=["paystack"])
 logger = logging.getLogger("beathub.paystack")
@@ -244,13 +244,22 @@ async def paystack_checkout(
 
 
 
+@router.get("/paystack/checkout/album/{slug}")
+def album_checkout_browser_link(slug: str):
+    # Address-bar visits are GET; show the checkout instead of a JSON error.
+    return RedirectResponse(f"/album/{slug}", status_code=303)
+
+
 @router.post("/paystack/checkout/album/{slug}")
 async def paystack_album_checkout(
     slug: str,
     email: str = Form(""),
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User | None = Depends(get_optional_user),
 ):
+    # Guests get a friendly account choice until verified guest checkout is deployed.
+    if user is None:
+        return RedirectResponse(f"/login?next=/album/{slug}", status_code=303)
     # This release has an explicitly approved fixed total. Never trust a client amount.
     if slug != "time-itatell":
         raise HTTPException(status_code=404, detail="Album checkout is not configured for this release.")
