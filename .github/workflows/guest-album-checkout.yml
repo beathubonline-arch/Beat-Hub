@@ -7,6 +7,8 @@ on:
       - 'app/services/guest_album_access.py'
       - 'app/templates/album_detail.html'
       - 'tests/test_guest_album_access.py'
+      - 'tests/test_album_email_delivery.py'
+      - 'app/services/transactional_email_notifications.py'
       - '.github/workflows/guest-album-checkout.yml'
   workflow_dispatch:
 jobs:
@@ -19,4 +21,4 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - run: python -m compileall -q app/routers/album.py app/routers/paystack_checkout.py app/services/guest_album_access.py
-      - run: PYTHONPATH=. python -m pytest -q tests/test_guest_album_access.py tests/test_paystack_purchase_flow.py
+      - run: PYTHONPATH=. python -m pytest -q tests/test_guest_album_access.py tests/test_album_email_delivery.py tests/test_paystack_purchase_flow.py
