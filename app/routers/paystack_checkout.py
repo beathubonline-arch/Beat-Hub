@@ -21,7 +21,11 @@ from app.database import get_db
 from app.models.order import Order, OrderStatus
 from app.models.payment import PaymentStatus, PaymentTransaction
 from app.models.music import Album, SalesModel, Track
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.utils.security import hash_password
+from app.utils.deps import get_optional_user
+from app.services.guest_album_access import COOKIE_NAME, MAX_AGE_SECONDS, issue_guest_token
+from app.services.transactional_email_notifications import send_album_delivery_email
 from app.services.merchandise_payments import complete_merchandise_payment, find_merchandise_order_id
 from app.services.orders import finalize_order
 from app.services.pricing import BEATHUB_COMMISSION_PERCENT, calculate_split, normalize_currency
@@ -134,6 +138,15 @@ def _complete_verified_payment(db: Session, order: Order, payment: PaymentTransa
     if customer.get("phone"):
         payment.phone_number = str(customer["phone"])[:20]
     result = finalize_order(db, order)
+    if result.status == OrderStatus.COMPLETED and order.album_id:
+        metadata = data.get("metadata") or {}
+        delivery_email = str(metadata.get("delivery_email") or "").strip().lower()
+        if EMAIL_RE.fullmatch(delivery_email) and not delivery_email.startswith("guest-"):
+            try:
+                send_album_delivery_email(delivery_email, order.album.title, order.id,
+                                          settings.BASE_URL.rstrip("/") + "/album/" + order.album.slug)
+            except Exception:
+                logger.exception("Album delivery email failed for order %s; payment remains fulfilled.", order.id)
     return result.status == OrderStatus.COMPLETED
 
 
@@ -244,12 +257,22 @@ async def paystack_checkout(
 
 
 
+@router.get("/paystack/checkout/album/{slug}")
+def album_checkout_get_redirect(slug: str):
+    # Browser address-bar visits are GET; checkout is initiated only via POST.
+    # Present the familiar album page, with optional sign-in/sign-up choices.
+    if slug != "time-itatell":
+        raise HTTPException(status_code=404, detail="Album checkout is not configured.")
+    return RedirectResponse(f"/album/{slug}?checkout=ready", status_code=303)
+
+
 @router.post("/paystack/checkout/album/{slug}")
 async def paystack_album_checkout(
     slug: str,
     email: str = Form(""),
+    phone: str = Form(""),
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User | None = Depends(get_optional_user),
 ):
     # This release has an explicitly approved fixed total. Never trust a client amount.
     if slug != "time-itatell":
@@ -257,13 +280,32 @@ async def paystack_album_checkout(
     album = db.query(Album).filter(Album.slug == slug, Album.is_published.is_(True)).first()
     if not album or len(album.album_tracks) != 12:
         raise HTTPException(status_code=409, detail="Album is unavailable or its 12-track catalog is incomplete.")
-    if album.creator_profile.user_id == user.id:
+    if user and album.creator_profile.user_id == user.id:
         raise HTTPException(status_code=400, detail="You cannot purchase your own album.")
     if not settings.PAYSTACK_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Paystack is not configured.")
-    customer_email = (email or "").strip().lower() or (user.email or "").strip().lower()
-    if not EMAIL_RE.fullmatch(customer_email):
-        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    # Paystack requires an email; anonymous buyers use a merchant-domain technical address.
+    normalized_phone = re.sub(r"[\\s-]", "", phone or "")
+    if normalized_phone.startswith("0") and len(normalized_phone) == 10:
+        normalized_phone = "254" + normalized_phone[1:]
+    elif normalized_phone.startswith("+254"):
+        normalized_phone = normalized_phone[1:]
+    if not re.fullmatch(r"254[17]\\d{8}", normalized_phone):
+        raise HTTPException(status_code=400, detail="Enter a valid Kenyan M-PESA number, e.g. 0712345678.")
+    customer_email = (email or "").strip().lower() or (user.email if user else "")
+    if customer_email and not EMAIL_RE.fullmatch(customer_email):
+        raise HTTPException(status_code=400, detail="Enter a valid email or leave it blank.")
+    is_guest = user is None
+    if is_guest:
+        guest_id = uuid.uuid4().hex
+        if not customer_email:
+            customer_email = f"guest-{guest_id}@mybeathub.com"
+        user = User(email=f"guest-{guest_id}@mybeathub.com",
+                    hashed_password=hash_password(uuid.uuid4().hex + uuid.uuid4().hex),
+                    role=UserRole.BUYER, is_active=False, is_verified=False)
+        db.add(user)
+        db.flush()
+
     price, currency = Decimal("1000.00"), "KES"
     split = calculate_split(price)
     order = Order(
@@ -274,7 +316,7 @@ async def paystack_album_checkout(
         commission_amount=Decimal(str(split["commission_amount"])),
         net_amount=Decimal(str(split["net_amount"])),
         commission_percent_at_purchase=BEATHUB_COMMISSION_PERCENT,
-        status=OrderStatus.PENDING, phone_number="paystack",
+        status=OrderStatus.PENDING, phone_number=normalized_phone,
     )
     db.add(order)
     db.flush()
@@ -283,7 +325,7 @@ async def paystack_album_checkout(
         "reference": order.order_number,
         "callback_url": f"{settings.BASE_URL.rstrip('/')}/paystack/callback",
         "channels": _paystack_channels(currency),
-        "metadata": {"beathub_order_id": order.id, "beathub_album_slug": slug, "buyer_id": user.id},
+        "metadata": {"beathub_order_id": order.id, "beathub_album_slug": slug, "buyer_id": user.id, "buyer_phone": normalized_phone, "guest": is_guest, "delivery_email": customer_email},
     }
     subaccount = getattr(album.creator_profile, "paystack_subaccount_code", None)
     if subaccount:
@@ -306,11 +348,15 @@ async def paystack_album_checkout(
         raise HTTPException(status_code=502, detail="Payment service did not provide a checkout URL.")
     db.add(PaymentTransaction(
         order_id=order.id, checkout_request_id=data.get("reference") or order.order_number,
-        phone_number="paystack", amount=price, currency=currency,
+        phone_number=normalized_phone, amount=price, currency=currency,
         status=PaymentStatus.PENDING, result_description="Album purchase awaiting verified payment.",
     ))
     db.commit()
-    return RedirectResponse(data["authorization_url"], status_code=303)
+    redirect = RedirectResponse(data["authorization_url"], status_code=303)
+    if is_guest:
+        redirect.set_cookie(COOKIE_NAME, issue_guest_token(order.id), max_age=MAX_AGE_SECONDS,
+                            httponly=True, secure=settings.is_production, samesite="lax", path="/")
+    return redirect
 
 
 @router.get("/paystack/callback")
@@ -333,8 +379,8 @@ async def paystack_callback(reference: str | None = None, trxref: str | None = N
     order = db.get(Order, payment.order_id)
     if not order:
         return RedirectResponse("/beats?error=Payment%20order%20was%20not%20found.", 303)
-    track_slug = order.track.slug if order.track else None
-    album_slug = order.album.slug if order.album else None
+    track_slug = order.track.slug if getattr(order, "track", None) else None
+    album_slug = order.album.slug if getattr(order, "album", None) else None
     if not track_slug and not album_slug:
         return RedirectResponse("/beats?error=Purchased%20music%20was%20not%20found.", 303)
     destination = f"/album/{album_slug}" if album_slug else f"/track/{track_slug}"

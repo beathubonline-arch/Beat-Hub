@@ -1,0 +1,22 @@
+name: Guest album checkout regression
+on:
+  pull_request:
+    paths:
+      - 'app/routers/album.py'
+      - 'app/routers/paystack_checkout.py'
+      - 'app/services/guest_album_access.py'
+      - 'app/templates/album_detail.html'
+      - 'tests/test_guest_album_access.py'
+      - '.github/workflows/guest-album-checkout.yml'
+  workflow_dispatch:
+jobs:
+  guest-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q app/routers/album.py app/routers/paystack_checkout.py app/services/guest_album_access.py
+      - run: PYTHONPATH=. python -m pytest -q tests/test_guest_album_access.py tests/test_paystack_purchase_flow.py
