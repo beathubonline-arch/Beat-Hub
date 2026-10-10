@@ -173,3 +173,24 @@ def notify_withdrawal_status(withdrawal_id: str, amount: Any, phone_number: str,
         f"Creator dashboard: {str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/dashboard\n\nBeatHub Support"
     )
     return _deliver(creator_email, f"BeatHub — {subject_text}", body, f"withdrawal-status:{withdrawal_id}:{normalized}")
+
+
+def send_album_delivery_email(recipient: str, album_title: str, order_id: str, album_url: str) -> bool:
+    """Send a verified buyer a private, expiring download-access link.
+
+    Never attach large audio files to an email. The link grants access only
+    to the completed, licensed order and expires after 90 days.
+    """
+    from urllib.parse import quote
+    from app.services.guest_album_access import issue_guest_token
+    token = issue_guest_token(order_id)
+    access_url = f"{album_url}/access?token={quote(token, safe='')}"
+    body = (
+        "Your music is ready!\\n\\n"
+        f"Album: {album_title}\\n"
+        f"Open your private album download link: {access_url}\\n\\n"
+        "This link expires in 90 days. Keep it private.\\n"
+        "If you need help, reply to this email.\\n\\nBeatHub"
+    )
+    return _deliver(recipient, f"Your BeatHub album is ready — {album_title}",
+                    body, f"album-delivery:{order_id}:{recipient.lower()}")
