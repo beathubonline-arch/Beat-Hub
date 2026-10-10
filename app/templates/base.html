@@ -136,5 +136,54 @@
     if (window.history && window.history.replaceState && (new URLSearchParams(window.location.search).has('success') || new URLSearchParams(window.location.search).has('error'))) { const params = new URLSearchParams(window.location.search); const cleanUrl = window.location.pathname + (params.has('next') ? '?next=' + encodeURIComponent(params.get('next')) : '') + window.location.hash; window.history.replaceState({}, document.title, cleanUrl); }
   })();
   </script>
+
+<style>
+#bh-vip{position:fixed;right:18px;bottom:18px;z-index:8990;width:min(350px,calc(100vw - 36px));background:linear-gradient(140deg,#242018,#100f11);border:1px solid #927b3e;border-radius:18px;padding:20px;box-shadow:0 18px 60px #000b;color:#f9f0d8;font:14px system-ui}
+#bh-vip[hidden]{display:none}#bh-vip h2{font-size:20px;line-height:1.2;margin:5px 0 8px;color:#f4d778}#bh-vip p{font-size:12px;color:#d0c6af;line-height:1.5}#bh-vip input[type=email]{box-sizing:border-box;width:100%;background:#141313;color:white;border:1px solid #746541;border-radius:9px;padding:12px}#bh-vip button[type=submit]{width:100%;padding:12px;border:0;border-radius:9px;background:#e8c85a;color:#15110a;font-weight:800;cursor:pointer}#bh-vip-close{position:absolute;right:12px;top:9px;background:transparent;border:0;color:#eee;font-size:22px;cursor:pointer}#bh-vip label{display:flex;align-items:flex-start;gap:8px;font-size:11px;color:#e1d8c5;margin:10px 0}#bh-vip-status{font-size:12px;margin-top:9px}#bh-vip-launch{position:fixed;right:16px;bottom:16px;z-index:8989;background:#e8c85a;color:#16120a;border:0;border-radius:40px;padding:12px 16px;font-weight:850;cursor:pointer;box-shadow:0 8px 30px #0008}
+</style>
+<button id="bh-vip-launch" type="button" hidden>♫ Get music drops</button>
+<aside id="bh-vip" aria-label="BeatHub VIP music drops" hidden>
+<button type="button" id="bh-vip-close" aria-label="Close">×</button>
+<div style="font-size:10px;letter-spacing:.15em;color:#e8c85a;font-weight:900">BEATHUB VIP</div>
+<h2>Get first access to fresh music</h2>
+<p>New beats, exclusive previews and release offers. Free to join. No account needed.</p>
+<form id="bh-vip-form">
+<input type="email" name="email" placeholder="Your email address" aria-label="Your email address" maxlength="255" required autocomplete="email">
+<input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+<label><input type="checkbox" name="consent" value="yes" required> Yes, email me BeatHub music releases and promotions. I can unsubscribe anytime.</label>
+<button type="submit">Unlock VIP music updates →</button>
+<div id="bh-vip-status" role="status" aria-live="polite"></div>
+</form>
+</aside>
+<script>
+(function(){
+const panel=document.getElementById('bh-vip'),launch=document.getElementById('bh-vip-launch'),close=document.getElementById('bh-vip-close'),form=document.getElementById('bh-vip-form'),status=document.getElementById('bh-vip-status');
+if(!panel||!launch||!form)return;
+const path=location.pathname;
+const eligible=path==='/'||path.startsWith('/album/')||path.startsWith('/track/')||path.startsWith('/store/')||path.startsWith('/marketplace');
+if(!eligible)return;
+const key='bh_vip_dismissed';
+function show(){panel.hidden=false;launch.hidden=true}
+function hide(){panel.hidden=true;launch.hidden=false;try{sessionStorage.setItem(key,'1')}catch(e){}}
+close.addEventListener('click',hide);launch.addEventListener('click',show);
+let dismissed=false;try{dismissed=sessionStorage.getItem(key)==='1'}catch(e){}
+launch.hidden=false;
+if(!dismissed){window.setTimeout(show,9000)}
+form.addEventListener('submit',async function(ev){
+ev.preventDefault();const btn=form.querySelector('button[type=submit]');btn.disabled=true;status.textContent='Joining…';
+try{
+const data=new FormData(form);data.set('source',location.pathname);
+const response=await fetch('/api/music-drops/subscribe',{method:'POST',body:data,credentials:'same-origin'});
+const body=await response.json();
+if(!response.ok)throw Error(body.detail||'Unable to subscribe');
+status.textContent='✓ You are on the list! Watch for new music drops.';
+form.querySelector('input[type=email]').disabled=true;btn.hidden=true;
+try{localStorage.setItem('bh_vip_subscribed','1')}catch(e){}
+}catch(e){status.textContent=e.message||'Please retry';btn.disabled=false}
+});
+try{if(localStorage.getItem('bh_vip_subscribed')==='1'){panel.hidden=true;launch.hidden=true;return}}catch(e){}
+})();
+</script>
+
 </body>
 </html>
