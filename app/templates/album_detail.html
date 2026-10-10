@@ -27,7 +27,7 @@
   <div class="easy-step"><span class="easy-step-number">1</span><div><strong>Enter your M-PESA number</strong><span>No BeatHub account needed.</span></div></div>
   <form action="/paystack/checkout/album/{{ album.slug }}" method="post" class="easy-payment-form" id="easy-album-payment">
     <label for="buyer-phone">M-PESA phone number</label>
-    <input id="buyer-phone" name="phone" type="tel" required autocomplete="tel" inputmode="tel" pattern="(0[17][0-9]{8}|254[17][0-9]{8}|\\+254[17][0-9]{8})" placeholder="e.g. 0712 345 678" title="Enter 0712345678 or 254712345678">
+    <input id="buyer-phone" name="phone" type="tel" required autocomplete="tel" inputmode="tel" placeholder="e.g. 0712 345 678" title="Enter 0712345678 or 254712345678">
     <label for="buyer-email" style="margin-top:12px">Email <small>(optional — for Paystack receipt)</small></label>
     <input id="buyer-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" {% if viewer and viewer.email %}value="{{ viewer.email }}"{% endif %}>
     <button type="submit" class="easy-pay-button" id="easy-pay-button">Pay KSh 1,000 →</button>
