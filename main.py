@@ -34,6 +34,7 @@ from app.routers import (
     merchandise_account,
     music,
     music_publish,
+    music_drops,
     notifications,
     pages,
     paystack_checkout,
@@ -161,7 +162,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class AbuseRateLimitMiddleware(BaseHTTPMiddleware):
-    RULES = {("POST", "/login"): (10, 60), ("POST", "/signup"): (5, 300), ("POST", "/forgot-password"): (5, 900), ("POST", "/reset-password"): (10, 900)}
+    RULES = {("POST", "/login"): (10, 60), ("POST", "/signup"): (5, 300), ("POST", "/api/music-drops/subscribe"): (5, 3600), ("POST", "/forgot-password"): (5, 900), ("POST", "/reset-password"): (10, 900)}
     def __init__(self, app): super().__init__(app); self._events = defaultdict(deque)
     @staticmethod
     def _client_key(request): return str(getattr(getattr(request, "client", None), "host", "unknown") or "unknown")
@@ -248,6 +249,7 @@ async def healthz_head(): return JSONResponse({"status": "ok"})
 @app.get("/merchandise", include_in_schema=False)
 async def merchandise_legacy_alias(): return RedirectResponse(url="/merch", status_code=307)
 
+app.include_router(music_drops.router)
 app.include_router(seo.router)
 app.include_router(api_v1.router)
 app.include_router(api_downloads.router)
