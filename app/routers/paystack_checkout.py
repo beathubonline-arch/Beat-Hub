@@ -249,11 +249,11 @@ async def paystack_checkout(
 
 @router.get("/paystack/checkout/album/{slug}")
 def album_checkout_get_redirect(slug: str):
-    # A payment URL opened directly in a browser is GET, not a checkout submission.
-    # Always show the album purchase form rather than a JSON auth/405 error.
+    # Browser address-bar visits are GET; checkout is initiated only via POST.
+    # Present the familiar album page, with optional sign-in/sign-up choices.
     if slug != "time-itatell":
         raise HTTPException(status_code=404, detail="Album checkout is not configured.")
-    return RedirectResponse(f"/album/{slug}", status_code=303)
+    return RedirectResponse(f"/album/{slug}?checkout=ready", status_code=303)
 
 
 @router.post("/paystack/checkout/album/{slug}")
