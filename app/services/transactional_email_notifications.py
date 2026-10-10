@@ -68,6 +68,8 @@ def notify_buyer_purchase(order, item_name: str, creator_name: str) -> bool:
     order_number = getattr(order, "order_number", order_id)
     amount = _money(getattr(order, "gross_amount", ""), getattr(order, "currency", "KES"))
     dashboard_url = f"{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/account"
+    track = getattr(order, "track", None)
+    music_url = (f"{str(getattr(settings, 'BASE_URL', 'https://mybeathub.com')).rstrip('/')}/api/v1/orders/{order_id}/download" if track else dashboard_url)
     body = (
         f"Hi {getattr(buyer, 'username', '') or 'there'},\n\nYour BeatHub purchase was completed successfully.\n\n"
         f"Item: {item_name}\nCreator: {creator_name}\nOrder: {order_number}\nAmount: {amount}\n\n"
