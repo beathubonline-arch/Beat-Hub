@@ -24,16 +24,18 @@
 {% if purchased %}<div style="color:#8ae6ad;font-weight:900;margin-top:14px">✓ Purchased · Your downloads are unlocked below.</div><a href="/album/{{ album.slug }}/download.zip" style="display:block;text-align:center;margin-top:14px;padding:15px;border-radius:10px;background:#e8c85a;color:#111;font-size:15px;font-weight:950;text-decoration:none">↓ Download Complete Album (ZIP)</a><div style="color:#b7b0a0;font-size:11px;margin-top:8px">Includes all {{ album.album_tracks|length }} original tracks. You can also download songs individually below.</div>
 {% elif album.album_tracks|length == 12 %}
 <div class="easy-checkout" aria-label="Buy this album">
-  <div class="easy-step"><span class="easy-step-number">1</span><div><strong>Pay KSh 1,000</strong><span>Use M-PESA or a bank card on the secure payment page.</span></div></div>
+  <div class="easy-step"><span class="easy-step-number">1</span><div><strong>Enter your M-PESA number</strong><span>No BeatHub account needed.</span></div></div>
   <form action="/paystack/checkout/album/{{ album.slug }}" method="post" class="easy-payment-form" id="easy-album-payment">
-    <label for="buyer-email">Your email address <small>(for your receipt and music access)</small></label>
-    <input id="buyer-email" name="email" type="email" required autocomplete="email" inputmode="email" placeholder="e.g. yourname@gmail.com" {% if viewer and viewer.email %}value="{{ viewer.email }}"{% endif %}>
+    <label for="buyer-phone">M-PESA phone number</label>
+    <input id="buyer-phone" name="phone" type="tel" required autocomplete="tel" inputmode="tel" pattern="(0[17][0-9]{8}|254[17][0-9]{8}|\\+254[17][0-9]{8})" placeholder="e.g. 0712 345 678" title="Enter 0712345678 or 254712345678">
+    <label for="buyer-email" style="margin-top:12px">Email <small>(optional — for Paystack receipt)</small></label>
+    <input id="buyer-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" {% if viewer and viewer.email %}value="{{ viewer.email }}"{% endif %}>
     <button type="submit" class="easy-pay-button" id="easy-pay-button">Pay KSh 1,000 →</button>
-    <p class="easy-secure">🔒 Secure checkout · M-PESA and card available</p>
+    <p class="easy-secure">🔒 Secure checkout · Choose M-PESA on Paystack</p>
   </form>
-  <div class="easy-step"><span class="easy-step-number">2</span><div><strong>Approve payment on your phone</strong><span>Choose M-PESA on the next page, enter your number and follow the payment instructions. Enter your PIN only in the official M-PESA prompt.</span></div></div>
-  <div class="easy-step"><span class="easy-step-number">3</span><div><strong>Download your 12 songs</strong><span>Return to BeatHub after successful payment to access your album.</span></div></div>
-  <details class="easy-help"><summary>Need help paying? Tap here</summary><p>Enter a valid email above and tap <strong>Pay KSh 1,000</strong>. On the secure payment page, select M-PESA, enter your phone number and approve the request on your phone. If the prompt does not arrive, check your network and number. If you may have been charged, don't pay again until the payment is confirmed. If sign-in is requested, complete it and return to the album.</p></details>
+  <div class="easy-step"><span class="easy-step-number">2</span><div><strong>Approve payment on your phone</strong><span>Choose M-PESA on the secure payment page and follow the instructions. Enter your PIN only in the official M-PESA prompt.</span></div></div>
+  <div class="easy-step"><span class="easy-step-number">3</span><div><strong>Download your 12 songs</strong><span>Return to this browser after payment. Your downloads unlock automatically after verification. Keep this browser available for future downloads.</span></div></div>
+  <details class="easy-help"><summary>Need help paying? Tap here</summary><p>Enter your M-PESA number above and tap <strong>Pay KSh 1,000</strong>. On the secure payment page, select M-PESA, enter your phone number and approve the request on your phone. If the prompt does not arrive, check your network and number. If you may have been charged, don't pay again until the payment is confirmed. No BeatHub sign-in is required for this album. For later access, return using the same browser within 90 days.</p></details>
 </div>
 <script>
 (function(){
