@@ -1,5 +1,5 @@
 """Separate SQLAlchemy tables for distribution drafts; no production migration yet."""
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -14,7 +14,7 @@ class DistributionRelease(DistributionBase):
     artist: Mapped[str] = mapped_column(String(255), nullable=False)
     release_type: Mapped[str] = mapped_column(String(12), nullable=False)
     artwork_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    release_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    release_date: Mapped[date] = mapped_column(Date, nullable=False)
     rights_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
