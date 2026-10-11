@@ -7,13 +7,13 @@ stored campaign schema and creator workflow.
 from __future__ import annotations
 
 
-def build_release_kit(track, *, goal: str = "", audience: str = "", release_date: str = "") -> dict:
+def build_release_kit(track, *, goal: str = "", audience: str = "", release_date: str = "", intelligence: dict | None = None) -> dict:
     title = (track.title or "New Release").strip()
     genre = (track.genre or "African music").strip()
     audience = (audience or f"listeners who love {genre}").strip()
     goal = (goal or "turn first listens into saves, shares and repeat plays").strip()
 
-    positioning = (
+    intelligence = intelligence or {}\n    intel_angle = intelligence.get("campaign_angle", "")\n\n    positioning = (
         f"{title} is positioned as a {genre} release for {audience}. "
         f"The campaign should lead with one memorable feeling or moment from the track and {goal}. "
         "Keep every post recognizable: the same artwork, short visual language and one clear call to action."

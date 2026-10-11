@@ -23,7 +23,7 @@ class ReleaseCampaign(Base):
     video_ideas_json = Column(Text, nullable=False)
     rollout_json = Column(Text, nullable=False)
     promo_copy_json = Column(Text, nullable=False)
-    checklist_json = Column(Text, nullable=False)
+    checklist_json = Column(Text, nullable=False)\n    track_intelligence_json = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
